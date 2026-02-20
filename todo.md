@@ -96,3 +96,7 @@
 - [x] Full-screen image preview with remove option
 - [x] Tappable skipped (X) calendar cells navigate to check-in
 - [x] Large full-cell red X for skipped days in calendar
+
+- [x] Fix habit delete button not working
+- [x] Add swipe-to-delete on habit rows
+- [x] Move delete action inside edit modal (remove delete button from row)

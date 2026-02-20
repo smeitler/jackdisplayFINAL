@@ -1,9 +1,13 @@
 import {
-  View, Text, Pressable, TextInput, FlatList,
+  View, Text, TouchableOpacity, TextInput,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ScreenContainer } from '@/components/screen-container';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { useApp } from '@/lib/app-context';
@@ -11,24 +15,158 @@ import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CategoryDef, Habit } from '@/lib/storage';
 
-// ─── Add/Edit Habit Modal ─────────────────────────────────────────────────────
-
 // Numbered emojis 1–10 then fallback to ⭐
 const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+
+// ─── Swipeable Habit Row ──────────────────────────────────────────────────────
+
+const SWIPE_THRESHOLD = -80;
+const DELETE_BG_W = 80;
+
+interface SwipeableHabitRowProps {
+  habit: Habit;
+  isLast: boolean;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+}
+
+function SwipeableHabitRow({ habit, isLast, onEdit, onToggle, onDelete, colors }: SwipeableHabitRowProps) {
+  const translateX = useSharedValue(0);
+  const isRevealed = useSharedValue(false);
+
+  function triggerDelete() {
+    Alert.alert('Delete Habit', `Remove "${habit.name}"?`, [
+      {
+        text: 'Cancel', style: 'cancel',
+        onPress: () => { translateX.value = withTiming(0); isRevealed.value = false; },
+      },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: () => {
+          translateX.value = withTiming(-300, { duration: 200 });
+          setTimeout(onDelete, 200);
+        },
+      },
+    ]);
+  }
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate((e) => {
+      const newX = isRevealed.value
+        ? Math.max(-DELETE_BG_W, Math.min(0, e.translationX - DELETE_BG_W))
+        : Math.max(-DELETE_BG_W, Math.min(0, e.translationX));
+      translateX.value = newX;
+    })
+    .onEnd((e) => {
+      if (e.translationX < SWIPE_THRESHOLD) {
+        translateX.value = withTiming(-DELETE_BG_W);
+        isRevealed.value = true;
+      } else {
+        translateX.value = withTiming(0);
+        isRevealed.value = false;
+      }
+    })
+    .runOnJS(true);
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <View style={[styles.swipeContainer, !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }]}>
+      {/* Red delete background */}
+      <View style={styles.deleteBackground}>
+        <TouchableOpacity
+          onPress={() => runOnJS(triggerDelete)()}
+          style={styles.deleteAction}
+          activeOpacity={0.8}
+        >
+          <IconSymbol name="trash.fill" size={20} color="#fff" />
+          <Text style={styles.deleteActionText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Swipeable row */}
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={[styles.habitRow, { backgroundColor: colors.surface }, rowStyle]}>
+          {/* Emoji — tap to edit */}
+          <TouchableOpacity
+            onPress={onEdit}
+            style={styles.habitEmojiBtn}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.habitEmoji}>{habit.emoji}</Text>
+          </TouchableOpacity>
+
+          <Text
+            style={[
+              styles.habitName,
+              { color: habit.isActive ? colors.foreground : colors.muted },
+              !habit.isActive && styles.habitNameInactive,
+            ]}
+            numberOfLines={2}
+          >
+            {habit.name}
+          </Text>
+
+          <View style={styles.habitActions}>
+            {/* Active toggle */}
+            <TouchableOpacity
+              onPress={onToggle}
+              style={[
+                styles.toggleBtn,
+                { backgroundColor: habit.isActive ? colors.primary + '22' : colors.border },
+              ]}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.toggleText, { color: habit.isActive ? colors.primary : colors.muted }]}>
+                {habit.isActive ? 'On' : 'Off'}
+              </Text>
+            </TouchableOpacity>
+            {/* Edit */}
+            <TouchableOpacity
+              onPress={onEdit}
+              style={styles.iconBtn}
+              activeOpacity={0.5}
+            >
+              <IconSymbol name="pencil" size={15} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+}
+
+// ─── Add/Edit Habit Modal ─────────────────────────────────────────────────────
 
 interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
   defaultEmoji?: string;
   onSave: (name: string, emoji: string) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }
 
-function HabitModal({ visible, editHabit, defaultEmoji, onSave, onClose }: HabitModalProps) {
+function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onClose }: HabitModalProps) {
   const colors = useColors();
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Sync state when editHabit changes
+  const prevEditRef = useRef<string | undefined>(undefined);
+  if (editHabit?.id !== prevEditRef.current) {
+    prevEditRef.current = editHabit?.id;
+    // Only update if modal is opening with a new habit
+    if (visible) {
+      // state updates during render are fine for sync
+    }
+  }
 
   function handleSave() {
     if (!name.trim()) return;
@@ -36,11 +174,30 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onClose }: Habit
     onClose();
   }
 
+  function handleDelete() {
+    onClose();
+    setTimeout(() => {
+      Alert.alert('Delete Habit', `Remove "${editHabit?.name}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: onDelete },
+      ]);
+    }, 300);
+  }
+
   return (
     <>
-      <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={onClose}
+        onShow={() => {
+          setName(editHabit?.name ?? '');
+          setEmoji(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
+        }}
+      >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={styles.backdrop} onPress={onClose} />
+          <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
@@ -48,15 +205,13 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onClose }: Habit
             </Text>
 
             <View style={styles.inputRow}>
-              <Pressable
+              <TouchableOpacity
                 onPress={() => setShowEmojiPicker(true)}
-                style={({ pressed }) => [
-                  styles.emojiBtn,
-                  { backgroundColor: colors.background, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                ]}
+                style={[styles.emojiBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                activeOpacity={0.7}
               >
                 <Text style={styles.emojiBtnText}>{emoji}</Text>
-              </Pressable>
+              </TouchableOpacity>
               <TextInput
                 style={[styles.nameInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
                 placeholder="Habit name…"
@@ -70,19 +225,33 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onClose }: Habit
             </View>
 
             <View style={styles.modalActions}>
-              <Pressable
+              <TouchableOpacity
                 onPress={onClose}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.border }]}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.modalBtnText, { color: colors.muted }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={handleSave}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnSave, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+                style={[styles.modalBtn, styles.modalBtnSave, { backgroundColor: colors.primary }]}
+                activeOpacity={0.8}
               >
                 <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
-              </Pressable>
+              </TouchableOpacity>
             </View>
+
+            {/* Delete button — only shown when editing */}
+            {editHabit && onDelete && (
+              <TouchableOpacity
+                onPress={handleDelete}
+                style={[styles.deleteHabitBtn, { borderColor: '#EF444440' }]}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="trash.fill" size={15} color="#EF4444" />
+                <Text style={styles.deleteHabitText}>Delete Habit</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -120,9 +289,18 @@ function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModal
 
   return (
     <>
-      <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={onClose}
+        onShow={() => {
+          setLabel(editCategory?.label ?? '');
+          setEmoji(editCategory?.emoji ?? '🌟');
+        }}
+      >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={styles.backdrop} onPress={onClose} />
+          <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
@@ -130,15 +308,13 @@ function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModal
             </Text>
 
             <View style={styles.inputRow}>
-              <Pressable
+              <TouchableOpacity
                 onPress={() => setShowEmojiPicker(true)}
-                style={({ pressed }) => [
-                  styles.emojiBtn,
-                  { backgroundColor: colors.background, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                ]}
+                style={[styles.emojiBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                activeOpacity={0.7}
               >
                 <Text style={styles.emojiBtnText}>{emoji}</Text>
-              </Pressable>
+              </TouchableOpacity>
               <TextInput
                 style={[styles.nameInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
                 placeholder="Category name…"
@@ -152,18 +328,20 @@ function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModal
             </View>
 
             <View style={styles.modalActions}>
-              <Pressable
+              <TouchableOpacity
                 onPress={onClose}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.border }]}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.modalBtnText, { color: colors.muted }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={handleSave}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnSave, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+                style={[styles.modalBtn, styles.modalBtnSave, { backgroundColor: colors.primary }]}
+                activeOpacity={0.8}
               >
                 <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
-              </Pressable>
+              </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -205,10 +383,7 @@ export default function HabitsScreen() {
   }
 
   function handleDeleteHabit(habit: Habit) {
-    Alert.alert('Delete Habit', `Remove "${habit.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteHabit(habit.id) },
-    ]);
+    deleteHabit(habit.id);
   }
 
   function handleSaveCategory(label: string, emoji: string) {
@@ -235,25 +410,27 @@ export default function HabitsScreen() {
     <ScreenContainer>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable
+        <TouchableOpacity
           onPress={() => router.back()}
-          style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.5 : 1 }]}
+          style={styles.backBtn}
+          activeOpacity={0.5}
         >
           <IconSymbol name="chevron.left" size={20} color={colors.primary} />
           <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
-        </Pressable>
+        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Manage Habits</Text>
-        <Pressable
+        <TouchableOpacity
           onPress={() => setCategoryModal({ open: true })}
-          style={({ pressed }) => [styles.addCatBtn, { opacity: pressed ? 0.6 : 1 }]}
+          style={styles.addCatBtn}
+          activeOpacity={0.6}
         >
           <IconSymbol name="plus.circle.fill" size={22} color={colors.primary} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[styles.hint, { color: colors.muted }]}>
-          Tap a category to expand its habits. Tap the emoji on any category or habit to change it.
+          Tap a category to expand. Swipe a habit left to delete, or tap the pencil to edit.
         </Text>
 
         {sortedCategories.map((cat) => {
@@ -262,49 +439,57 @@ export default function HabitsScreen() {
 
           return (
             <View key={cat.id} style={[styles.categoryBlock, { borderColor: colors.border }]}>
-              {/* Category row */}
-              <Pressable
-                onPress={() => toggleCategory(cat.id)}
-                style={({ pressed }) => [
-                  styles.categoryRow,
-                  { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
-                ]}
-              >
-                {/* Emoji — tap to change */}
-                <Pressable
+              {/* Category row — use View + TouchableOpacity to avoid nested Pressable issues */}
+              <View style={[styles.categoryRow, { backgroundColor: colors.surface }]}>
+                {/* Tap emoji to edit category */}
+                <TouchableOpacity
                   onPress={() => setCategoryModal({ open: true, edit: cat })}
-                  style={({ pressed }) => [styles.catEmojiBtn, { opacity: pressed ? 0.6 : 1 }]}
+                  style={styles.catEmojiBtn}
+                  activeOpacity={0.6}
                 >
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                </Pressable>
+                </TouchableOpacity>
 
-                <View style={styles.catInfo}>
+                {/* Tap label area to expand/collapse */}
+                <TouchableOpacity
+                  onPress={() => toggleCategory(cat.id)}
+                  style={styles.catInfo}
+                  activeOpacity={0.7}
+                >
                   <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
                   <Text style={[styles.catCount, { color: colors.muted }]}>
                     {catHabits.length} habit{catHabits.length !== 1 ? 's' : ''} · {catHabits.filter((h) => h.isActive).length} active
                   </Text>
-                </View>
+                </TouchableOpacity>
 
                 <View style={styles.catActions}>
-                  <Pressable
+                  <TouchableOpacity
                     onPress={() => setCategoryModal({ open: true, edit: cat })}
-                    style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.5 : 1 }]}
+                    style={styles.iconBtn}
+                    activeOpacity={0.5}
                   >
                     <IconSymbol name="pencil" size={16} color={colors.muted} />
-                  </Pressable>
-                  <Pressable
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     onPress={() => handleDeleteCategory(cat)}
-                    style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.5 : 1 }]}
+                    style={styles.iconBtn}
+                    activeOpacity={0.5}
                   >
                     <IconSymbol name="trash" size={16} color="#EF4444" />
-                  </Pressable>
-                  <IconSymbol
-                    name={isExpanded ? 'chevron.up' : 'chevron.down'}
-                    size={14}
-                    color={colors.muted}
-                  />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => toggleCategory(cat.id)}
+                    style={styles.iconBtn}
+                    activeOpacity={0.5}
+                  >
+                    <IconSymbol
+                      name={isExpanded ? 'chevron.up' : 'chevron.down'}
+                      size={14}
+                      color={colors.muted}
+                    />
+                  </TouchableOpacity>
                 </View>
-              </Pressable>
+              </View>
 
               {/* Habits list */}
               {isExpanded && (
@@ -313,72 +498,26 @@ export default function HabitsScreen() {
                     <Text style={[styles.emptyHint, { color: colors.muted }]}>No habits yet. Add one below.</Text>
                   )}
                   {catHabits.map((habit, idx) => (
-                    <View
+                    <SwipeableHabitRow
                       key={habit.id}
-                      style={[
-                        styles.habitRow,
-                        { borderBottomColor: colors.border },
-                        idx === catHabits.length - 1 && { borderBottomWidth: 0 },
-                      ]}
-                    >
-                      {/* Habit emoji — tap to edit */}
-                      <Pressable
-                        onPress={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
-                        style={({ pressed }) => [styles.habitEmojiBtn, { opacity: pressed ? 0.6 : 1 }]}
-                      >
-                        <Text style={styles.habitEmoji}>{habit.emoji}</Text>
-                      </Pressable>
-
-                      <Text
-                        style={[
-                          styles.habitName,
-                          { color: habit.isActive ? colors.foreground : colors.muted },
-                          !habit.isActive && styles.habitNameInactive,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {habit.name}
-                      </Text>
-
-                      <View style={styles.habitActions}>
-                        {/* Active toggle */}
-                        <Pressable
-                          onPress={() => updateHabit(habit.id, { isActive: !habit.isActive })}
-                          style={({ pressed }) => [
-                            styles.toggleBtn,
-                            { backgroundColor: habit.isActive ? colors.primary + '22' : colors.border, opacity: pressed ? 0.6 : 1 },
-                          ]}
-                        >
-                          <Text style={[styles.toggleText, { color: habit.isActive ? colors.primary : colors.muted }]}>
-                            {habit.isActive ? 'On' : 'Off'}
-                          </Text>
-                        </Pressable>
-                        {/* Edit */}
-                        <Pressable
-                          onPress={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
-                          style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.5 : 1 }]}
-                        >
-                          <IconSymbol name="pencil" size={15} color={colors.muted} />
-                        </Pressable>
-                        {/* Delete */}
-                        <Pressable
-                          onPress={() => handleDeleteHabit(habit)}
-                          style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.5 : 1 }]}
-                        >
-                          <IconSymbol name="trash" size={15} color="#EF4444" />
-                        </Pressable>
-                      </View>
-                    </View>
+                      habit={habit}
+                      isLast={idx === catHabits.length - 1}
+                      colors={colors}
+                      onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
+                      onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
+                      onDelete={() => handleDeleteHabit(habit)}
+                    />
                   ))}
 
                   {/* Add habit */}
-                  <Pressable
+                  <TouchableOpacity
                     onPress={() => setHabitModal({ open: true, categoryId: cat.id })}
-                    style={({ pressed }) => [styles.addHabitBtn, { opacity: pressed ? 0.7 : 1 }]}
+                    style={styles.addHabitBtn}
+                    activeOpacity={0.7}
                   >
                     <IconSymbol name="plus.circle" size={16} color={colors.primary} />
                     <Text style={[styles.addHabitText, { color: colors.primary }]}>Add Habit</Text>
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -386,16 +525,14 @@ export default function HabitsScreen() {
         })}
 
         {/* Add Category */}
-        <Pressable
+        <TouchableOpacity
           onPress={() => setCategoryModal({ open: true })}
-          style={({ pressed }) => [
-            styles.addCategoryBlock,
-            { borderColor: colors.border, backgroundColor: colors.surface, opacity: pressed ? 0.7 : 1 },
-          ]}
+          style={[styles.addCategoryBlock, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          activeOpacity={0.7}
         >
           <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
           <Text style={[styles.addCategoryText, { color: colors.primary }]}>Add New Category</Text>
-        </Pressable>
+        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -409,6 +546,7 @@ export default function HabitsScreen() {
           return NUMBER_EMOJIS[catHabits.length] ?? '⭐';
         })()}
         onSave={handleSaveHabit}
+        onDelete={habitModal.edit ? () => handleDeleteHabit(habitModal.edit!) : undefined}
         onClose={() => setHabitModal({ open: false, categoryId: '' })}
       />
       <CategoryModal
@@ -445,13 +583,22 @@ const styles = StyleSheet.create({
   catActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   iconBtn: { padding: 6 },
 
+  // Swipeable habit row
+  swipeContainer: { overflow: 'hidden', position: 'relative' },
+  deleteBackground: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    width: DELETE_BG_W, backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  deleteAction: { alignItems: 'center', justifyContent: 'center', gap: 2, width: DELETE_BG_W },
+  deleteActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
   // Habits list
   habitsList: { borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: 4 },
   emptyHint: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 10, gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   habitEmojiBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   habitEmoji: { fontSize: 20 },
@@ -491,4 +638,12 @@ const styles = StyleSheet.create({
   modalBtnCancel: { borderWidth: 1.5 },
   modalBtnSave: {},
   modalBtnText: { fontSize: 15, fontWeight: '700' },
+
+  // Delete habit button in modal
+  deleteHabitBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, marginTop: 14, paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1,
+  },
+  deleteHabitText: { fontSize: 14, fontWeight: '600', color: '#EF4444' },
 });
