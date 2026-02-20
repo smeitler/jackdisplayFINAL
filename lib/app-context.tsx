@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback } from 'react';
 import {
-  Habit, CheckInEntry, AlarmConfig,
+  Habit, CheckInEntry, AlarmConfig, Rating,
   loadHabits, saveHabits,
   loadCheckIns,
   loadAlarm,
@@ -8,7 +8,7 @@ import {
   getLastCheckInDate,
   yesterdayString,
   toDateString,
-  DEFAULT_HABITS,
+  ratingScore,
   Category,
 } from './storage';
 import { applyAlarm } from './notifications';
@@ -61,17 +61,22 @@ type AppContextValue = AppState & {
   addHabit: (name: string, category: Category) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
-  submitCheckIn: (date: string, completedIds: string[]) => Promise<void>;
+  /** Submit ratings for a date. ratingsMap: { habitId -> Rating } */
+  submitCheckIn: (date: string, ratingsMap: Record<string, Rating>) => Promise<void>;
   updateAlarm: (config: AlarmConfig) => Promise<void>;
-  /** Returns true if today's check-in (for yesterday) is pending */
+  /** Returns true if yesterday's check-in is still pending */
   isPendingCheckIn: boolean;
   /** Active habits only */
   activeHabits: Habit[];
   /** Get check-in entries for a specific date */
   getEntriesForDate: (date: string) => CheckInEntry[];
-  /** Completion rate (0–1) for a category over last N days */
+  /** Get ratings map for a date: { habitId -> Rating } */
+  getRatingsForDate: (date: string) => Record<string, Rating>;
+  /** Weighted completion rate (0–1) for a category over last N days */
   getCategoryRate: (category: Category, days?: number) => number;
-  /** Overall streak (consecutive days with at least one check-in) */
+  /** Per-rating breakdown for a category over last N days */
+  getCategoryBreakdown: (category: Category, days?: number) => { green: number; yellow: number; red: number; none: number };
+  /** Overall streak (consecutive days with at least one rated habit) */
   streak: number;
 };
 
@@ -80,7 +85,6 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Load all data on mount
   useEffect(() => {
     async function load() {
       const [habits, checkIns, alarm, lastCheckInDate] = await Promise.all([
@@ -119,10 +123,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_HABITS', habits: updated });
   }, [state.habits]);
 
-  const submitCheckIn = useCallback(async (date: string, completedIds: string[]) => {
+  const submitCheckIn = useCallback(async (date: string, ratingsMap: Record<string, Rating>) => {
     const activeIds = state.habits.filter((h) => h.isActive).map((h) => h.id);
-    await storageSubmitCheckIn(date, completedIds, activeIds);
-    const updated = await import('./storage').then((m) => m.loadCheckIns());
+    await storageSubmitCheckIn(date, ratingsMap, activeIds);
+    const updated = await loadCheckIns();
     dispatch({ type: 'SET_CHECKINS', checkIns: updated });
     dispatch({ type: 'SET_LAST_CHECKIN', date });
   }, [state.habits]);
@@ -140,29 +144,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return state.checkIns.filter((e) => e.date === date);
   }, [state.checkIns]);
 
+  const getRatingsForDate = useCallback((date: string): Record<string, Rating> => {
+    const entries = state.checkIns.filter((e) => e.date === date);
+    const map: Record<string, Rating> = {};
+    for (const e of entries) {
+      map[e.habitId] = e.rating;
+    }
+    return map;
+  }, [state.checkIns]);
+
   const getCategoryRate = useCallback((category: Category, days = 7) => {
     const habits = activeHabits.filter((h) => h.category === category);
     if (habits.length === 0) return 0;
     const habitIds = new Set(habits.map((h) => h.id));
 
-    let totalPossible = 0;
-    let totalCompleted = 0;
+    let totalWeight = 0;
+    let totalScore = 0;
 
     for (let i = 1; i <= days; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = toDateString(d);
       const entries = state.checkIns.filter((e) => e.date === dateStr && habitIds.has(e.habitId));
-      if (entries.length > 0) {
-        totalPossible += habits.length;
-        totalCompleted += entries.filter((e) => e.completed).length;
+      for (const entry of entries) {
+        const score = ratingScore(entry.rating);
+        if (score !== null) {
+          totalWeight += 1;
+          totalScore += score;
+        }
       }
     }
 
-    return totalPossible === 0 ? 0 : totalCompleted / totalPossible;
+    return totalWeight === 0 ? 0 : totalScore / totalWeight;
   }, [activeHabits, state.checkIns]);
 
-  // Streak: consecutive days (going back from yesterday) where at least 1 habit was checked in
+  const getCategoryBreakdown = useCallback((category: Category, days = 7) => {
+    const habits = activeHabits.filter((h) => h.category === category);
+    const habitIds = new Set(habits.map((h) => h.id));
+    const counts = { green: 0, yellow: 0, red: 0, none: 0 };
+
+    for (let i = 1; i <= days; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = toDateString(d);
+      const entries = state.checkIns.filter((e) => e.date === dateStr && habitIds.has(e.habitId));
+      for (const entry of entries) {
+        counts[entry.rating] = (counts[entry.rating] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [activeHabits, state.checkIns]);
+
   const streak = React.useMemo(() => {
     let count = 0;
     let i = 1;
@@ -170,7 +202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = toDateString(d);
-      const entries = state.checkIns.filter((e) => e.date === dateStr && e.completed);
+      const entries = state.checkIns.filter((e) => e.date === dateStr && e.rating !== 'none');
       if (entries.length === 0) break;
       count++;
       i++;
@@ -190,7 +222,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isPendingCheckIn,
       activeHabits,
       getEntriesForDate,
+      getRatingsForDate,
       getCategoryRate,
+      getCategoryBreakdown,
       streak,
     }}>
       {children}

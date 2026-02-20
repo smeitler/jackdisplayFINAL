@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Category = 'health' | 'relationships' | 'wealth' | 'mindset';
 
+export type Rating = 'none' | 'red' | 'yellow' | 'green';
+
 export type Habit = {
   id: string;
   name: string;
@@ -15,7 +17,7 @@ export type Habit = {
 export type CheckInEntry = {
   date: string;       // "YYYY-MM-DD" — the day being reviewed
   habitId: string;
-  completed: boolean;
+  rating: Rating;     // 'none' | 'red' | 'yellow' | 'green'
   loggedAt: string;
 };
 
@@ -25,6 +27,23 @@ export type AlarmConfig = {
   days: number[];     // 0=Sun … 6=Sat
   isEnabled: boolean;
   notificationIds: string[];
+};
+
+// ─── Rating helpers ───────────────────────────────────────────────────────────
+
+/** Weighted score for a rating: green=1, yellow=0.5, red=0, none=null (excluded) */
+export function ratingScore(rating: Rating): number | null {
+  if (rating === 'green') return 1;
+  if (rating === 'yellow') return 0.5;
+  if (rating === 'red') return 0;
+  return null; // 'none' — not rated, excluded from averages
+}
+
+export const RATING_META: Record<Rating, { label: string; color: string; emoji: string }> = {
+  none: { label: 'Not rated', color: '#9090B8', emoji: '–' },
+  red: { label: 'Failed', color: '#EF4444', emoji: '🔴' },
+  yellow: { label: 'Okay', color: '#F59E0B', emoji: '🟡' },
+  green: { label: 'Crushed it!', color: '#22C55E', emoji: '🟢' },
 };
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
@@ -61,7 +80,7 @@ export const DEFAULT_HABITS: Habit[] = [
 export const DEFAULT_ALARM: AlarmConfig = {
   hour: 8,
   minute: 0,
-  days: [1, 2, 3, 4, 5, 6, 0], // all days
+  days: [1, 2, 3, 4, 5, 6, 0],
   isEnabled: false,
   notificationIds: [],
 };
@@ -90,7 +109,15 @@ export async function saveHabits(habits: Habit[]): Promise<void> {
 export async function loadCheckIns(): Promise<CheckInEntry[]> {
   try {
     const raw = await AsyncStorage.getItem(KEYS.checkIns);
-    return raw ? (JSON.parse(raw) as CheckInEntry[]) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as any[];
+    // Migrate old boolean `completed` entries to rating format
+    return parsed.map((e) => {
+      if (typeof e.completed === 'boolean') {
+        return { ...e, rating: e.completed ? 'green' : 'red', completed: undefined } as CheckInEntry;
+      }
+      return e as CheckInEntry;
+    });
   } catch {
     return [];
   }
@@ -100,7 +127,12 @@ export async function saveCheckIns(entries: CheckInEntry[]): Promise<void> {
   await AsyncStorage.setItem(KEYS.checkIns, JSON.stringify(entries));
 }
 
-export async function submitCheckIn(date: string, completedIds: string[], allHabitIds: string[]): Promise<void> {
+/** Submit ratings for a specific date. ratingsMap: { habitId -> Rating } */
+export async function submitCheckIn(
+  date: string,
+  ratingsMap: Record<string, Rating>,
+  allHabitIds: string[],
+): Promise<void> {
   const existing = await loadCheckIns();
   // Remove any previous entries for this date
   const filtered = existing.filter((e) => e.date !== date);
@@ -108,7 +140,7 @@ export async function submitCheckIn(date: string, completedIds: string[], allHab
   const newEntries: CheckInEntry[] = allHabitIds.map((habitId) => ({
     date,
     habitId,
-    completed: completedIds.includes(habitId),
+    rating: ratingsMap[habitId] ?? 'none',
     loggedAt: now,
   }));
   await saveCheckIns([...filtered, ...newEntries]);
@@ -146,4 +178,21 @@ export function yesterdayString(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   return toDateString(d);
+}
+
+/** Offset date string: 0 = today, -1 = yesterday, -2 = two days ago, etc. */
+export function offsetDateString(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return toDateString(d);
+}
+
+/** Format a date string for display */
+export function formatDisplayDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  const today = toDateString();
+  const yesterday = yesterdayString();
+  if (dateStr === today) return 'Today';
+  if (dateStr === yesterday) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }

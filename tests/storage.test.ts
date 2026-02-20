@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mock AsyncStorage
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -12,6 +12,10 @@ import {
   toDateString,
   yesterdayString,
   DEFAULT_HABITS,
+  ratingScore,
+  Rating,
+  offsetDateString,
+  formatDisplayDate,
 } from '../lib/storage';
 
 describe('toDateString', () => {
@@ -35,6 +39,22 @@ describe('yesterdayString', () => {
     const yesterdayDate = new Date(yesterday + 'T12:00:00');
     const diff = todayDate.getTime() - yesterdayDate.getTime();
     expect(diff).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+describe('offsetDateString', () => {
+  it('offset 0 returns today', () => {
+    expect(offsetDateString(0)).toBe(toDateString());
+  });
+
+  it('offset -1 returns yesterday', () => {
+    expect(offsetDateString(-1)).toBe(yesterdayString());
+  });
+
+  it('offset -7 returns 7 days ago', () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    expect(offsetDateString(-7)).toBe(toDateString(d));
   });
 });
 
@@ -68,8 +88,37 @@ describe('DEFAULT_HABITS', () => {
   });
 });
 
+describe('ratingScore', () => {
+  it('green returns 1', () => {
+    expect(ratingScore('green')).toBe(1);
+  });
+
+  it('yellow returns 0.5', () => {
+    expect(ratingScore('yellow')).toBe(0.5);
+  });
+
+  it('red returns 0', () => {
+    expect(ratingScore('red')).toBe(0);
+  });
+
+  it('none returns null (excluded from averages)', () => {
+    expect(ratingScore('none')).toBeNull();
+  });
+
+  it('weighted average of green+yellow = 0.75', () => {
+    const scores = (['green', 'yellow'] as Rating[]).map(ratingScore).filter((s) => s !== null) as number[];
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    expect(avg).toBe(0.75);
+  });
+
+  it('weighted average of all three = 0.5', () => {
+    const scores = (['green', 'yellow', 'red'] as Rating[]).map(ratingScore).filter((s) => s !== null) as number[];
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    expect(avg).toBeCloseTo(0.5);
+  });
+});
+
 describe('formatAlarmTime (pure function)', () => {
-  // Inline the pure formatting logic to avoid Expo runtime deps in test env
   function formatAlarmTime(hour: number, minute: number): string {
     const period = hour >= 12 ? 'PM' : 'AM';
     const h = hour % 12 === 0 ? 12 : hour % 12;
