@@ -46,3 +46,5 @@
 - [x] Update check-in screen to use dynamic categories
 - [x] Update progress screen to use dynamic categories
 - [x] Update home screen category grid to use dynamic categories
+
+- [x] Calendar: show red for past days with no check-in, keep future days neutral/empty

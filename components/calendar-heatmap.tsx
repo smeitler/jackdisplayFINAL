@@ -44,18 +44,18 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
   }
 
   function cellColor(score: number | null, dateStr: string): string {
-    if (dateStr > today) return "transparent";
-    if (score === null) return colors.border;
+    if (dateStr >= today) return "transparent"; // today and future: no fill
+    if (score === null) return "#EF4444";        // past + no check-in = red (missed)
     if (score >= 0.75) return "#22C55E";
-    if (score >= 0.4) return "#F59E0B";
+    if (score >= 0.4)  return "#F59E0B";
     return "#EF4444";
   }
 
   function cellOpacity(score: number | null, dateStr: string): number {
-    if (dateStr > today) return 0;
-    if (score === null) return 1;
-    // Intensity: scale opacity 0.35–1 based on score
-    return 0.35 + score * 0.65;
+    if (dateStr >= today) return 0;  // today and future: transparent
+    if (score === null) return 0.45; // past missed: softer red so it's readable
+    // Intensity: scale opacity 0.45–1 based on score
+    return 0.45 + score * 0.55;
   }
 
   const rows: typeof cells[] = [];
@@ -105,7 +105,7 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
                   style={[
                     styles.dayText,
                     {
-                      color: score !== null && !isFuture ? "#fff" : colors.muted,
+                      color: !isFuture && dateStr < today ? "#fff" : colors.muted,
                       fontWeight: isToday ? "800" : "500",
                       opacity: isFuture ? 0.4 : 1,
                     },
@@ -127,8 +127,8 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
       {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.border }]} />
-          <Text style={[styles.legendText, { color: colors.muted }]}>No data</Text>
+          <View style={[styles.legendDot, { backgroundColor: "#EF4444", opacity: 0.45 }]} />
+          <Text style={[styles.legendText, { color: colors.muted }]}>Skipped</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
