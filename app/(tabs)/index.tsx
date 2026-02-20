@@ -1,4 +1,5 @@
 import { ScrollView, Text, View, Pressable, StyleSheet, Platform } from "react-native";
+import { useState } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
@@ -6,6 +7,9 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { yesterdayString, formatDisplayDate, toDateString, offsetDateString, Category } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
+
+const RANGES = [7, 14, 30, 60, 90] as const;
+type Range = typeof RANGES[number];
 
 const CATEGORY_META: Record<Category, { label: string; emoji: string; colorKey: string }> = {
   health: { label: 'Health', emoji: '💪', colorKey: 'health' },
@@ -27,6 +31,12 @@ export default function HomeScreen() {
   const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, streak, isLoaded } = useApp();
   const colors = useColors();
   const router = useRouter();
+  const [range, setRange] = useState<Range>(7);
+
+  function handleRangeSelect(r: Range) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRange(r);
+  }
 
   const yesterday = yesterdayString();
   const today = toDateString();
@@ -101,13 +111,37 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* 7-Day category progress */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>7-Day Progress</Text>
+        {/* Range selector + category progress */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            {range}-Day Progress
+          </Text>
+          <View style={[styles.rangeSelector, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {RANGES.map((r) => (
+              <Pressable
+                key={r}
+                onPress={() => handleRangeSelect(r)}
+                style={({ pressed }) => [
+                  styles.rangeBtn,
+                  r === range && { backgroundColor: colors.primary },
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={[
+                  styles.rangeBtnText,
+                  { color: r === range ? '#fff' : colors.muted },
+                ]}>
+                  {r}d
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
         <View style={styles.categoryGrid}>
           {CATEGORY_ORDER.map((category) => {
             const meta = CATEGORY_META[category];
-            const rate = getCategoryRate(category, 7);
-            const breakdown = getCategoryBreakdown(category, 7);
+            const rate = getCategoryRate(category, range);
+            const breakdown = getCategoryBreakdown(category, range);
             const total = breakdown.green + breakdown.yellow + breakdown.red;
             const catColor = (colors as Record<string, string>)[meta.colorKey] ?? colors.primary;
 
@@ -216,7 +250,11 @@ const styles = StyleSheet.create({
   alarmTime: { fontSize: 18, fontWeight: '700' },
   alarmEditBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   alarmEditText: { fontSize: 14, fontWeight: '600' },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '700' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  rangeSelector: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
+  rangeBtn: { paddingHorizontal: 9, paddingVertical: 5 },
+  rangeBtnText: { fontSize: 11, fontWeight: '600' },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
   categoryCard: {
     width: '47.5%', borderRadius: 14, padding: 12, borderWidth: 1, gap: 4,

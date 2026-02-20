@@ -117,3 +117,5 @@
 - [x] Redesign calendar cells: color-dominant blocks with habit number only (no emojis/labels)
 
 - [x] Remove habit emojis from all UI surfaces (rows, check-in, filter chips, edit modal)
+
+- [x] Add time range selector (7/14/30/60/90 days) to home screen progress averages
