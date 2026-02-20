@@ -4,27 +4,31 @@
  * A full-month calendar for a single category.
  *
  * Cell states:
- *  - Past, no data:   completely blank (transparent)
- *  - Past, logged:    subtle blue tint + vertical emoji+dot rows (clipped)
+ *  - Past, no data:   soft red (skipped day)
+ *  - Past, logged:    subtle blue tint + vertical emoji+dot rows
  *  - Today:           primary-color border
  *  - Future:          dimmed day number only
  *
- * Pass `containerWidth` (the available width inside the card) so cells are
- * sized correctly without relying on screen-level constants.
+ * When `selectedHabitId` is set, only that habit's row is shown per cell
+ * (used for per-habit filter mode).
+ *
+ * Pass `containerWidth` (available width inside the card) for accurate cell sizing.
  */
-import { View, Text, Pressable, StyleSheet, Dimensions } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useMemo } from "react";
 import { useColors } from "@/hooks/use-colors";
 import { toDateString, CheckInEntry, Habit } from "@/lib/storage";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
 const CELL_GAP = 3;
 const COLS = 7;
-
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
-// Fixed cell height — tall enough for ~4 habit rows, same for every cell
-const CELL_H = 58;
+// Each habit row height in pixels
+const ROW_H = 13;
+// Day number area height
+const DAY_NUM_H = 16;
+// Cell vertical padding (top + bottom)
+const CELL_PAD = 6;
 
 interface CategoryCalendarProps {
   year: number;
@@ -32,8 +36,10 @@ interface CategoryCalendarProps {
   habits: Habit[];
   checkIns: CheckInEntry[];
   onDayPress?: (date: string) => void;
-  /** Available width inside the parent card. Defaults to screen width - 80. */
+  /** Available width inside the parent card. */
   containerWidth?: number;
+  /** When set, only show this habit's row in each cell. */
+  selectedHabitId?: string | null;
 }
 
 function ratingColor(rating: string): string {
@@ -45,14 +51,20 @@ function ratingColor(rating: string): string {
 
 export function CategoryCalendar({
   year, month, habits, checkIns, onDayPress,
-  containerWidth,
+  containerWidth, selectedHabitId,
 }: CategoryCalendarProps) {
   const colors = useColors();
   const today = toDateString();
 
-  // Derive cell width from the container width passed in, or fall back to screen estimate
-  const availableWidth = containerWidth ?? (SCREEN_WIDTH - 80);
+  // Derive cell width from container width
+  const availableWidth = containerWidth ?? 320;
   const CELL_W = Math.floor((availableWidth - CELL_GAP * (COLS - 1)) / COLS);
+
+  // Cell height: enough to show all habit rows (or just one if filtered)
+  const visibleHabitCount = selectedHabitId
+    ? 1
+    : habits.length;
+  const CELL_H = DAY_NUM_H + visibleHabitCount * ROW_H + CELL_PAD;
 
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
 
@@ -82,7 +94,8 @@ export function CategoryCalendar({
   const rows: typeof cells[] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
 
-  const loggedBg = colors.primary + "22";
+  const loggedBg   = colors.primary + "22";  // subtle blue tint
+  const skippedBg  = "#EF444422";             // soft red for missed days
 
   return (
     <View style={{ width: "100%" }}>
@@ -109,11 +122,23 @@ export function CategoryCalendar({
             const hasData  = datesWithEntries.has(dateStr);
             const habitColorMap = dayHabitColors[dateStr] ?? {};
 
-            const bgColor = (isPast && hasData) ? loggedBg : "transparent";
+            // Background:
+            // - future / today: transparent
+            // - past, has data: blue tint
+            // - past, no data:  soft red (skipped)
+            let bgColor = "transparent";
+            if (isPast) {
+              bgColor = hasData ? loggedBg : skippedBg;
+            }
 
-            // Only show habits that were actually rated
+            // Which habits to show in this cell
+            const habitsToShow = selectedHabitId
+              ? habits.filter((h) => h.id === selectedHabitId)
+              : habits;
+
+            // Only show rows for habits that were actually rated (or show a grey dot if skipped in filter mode)
             const ratedHabits = (isPast && hasData)
-              ? habits.filter((h) => !!habitColorMap[h.id])
+              ? habitsToShow.filter((h) => !!habitColorMap[h.id])
               : [];
 
             return (
@@ -130,7 +155,7 @@ export function CategoryCalendar({
                   borderColor: isToday ? colors.primary : "transparent",
                   alignItems: "center",
                   justifyContent: "flex-start",
-                  paddingTop: 4,
+                  paddingTop: 3,
                   overflow: "hidden",
                 })}
               >
@@ -138,8 +163,8 @@ export function CategoryCalendar({
                 <Text
                   style={{
                     fontSize: 10,
-                    lineHeight: 13,
-                    marginBottom: 2,
+                    lineHeight: 14,
+                    marginBottom: 1,
                     color: (isPast && hasData) ? colors.foreground : colors.muted,
                     fontWeight: isToday ? "800" : "500",
                   }}
@@ -147,7 +172,7 @@ export function CategoryCalendar({
                   {day}
                 </Text>
 
-                {/* Habit rows — one per habit, clipped inside fixed cell height */}
+                {/* Habit rows */}
                 {ratedHabits.map((h) => (
                   <View
                     key={h.id}
@@ -156,7 +181,7 @@ export function CategoryCalendar({
                       alignItems: "center",
                       justifyContent: "center",
                       gap: 2,
-                      height: 11,
+                      height: ROW_H,
                     }}
                   >
                     <Text style={{ fontSize: 7, lineHeight: 10 }}>{h.emoji}</Text>
@@ -165,7 +190,7 @@ export function CategoryCalendar({
                         width: 5,
                         height: 5,
                         borderRadius: 3,
-                        backgroundColor: habitColorMap[h.id],
+                        backgroundColor: habitColorMap[h.id] ?? "transparent",
                       }}
                     />
                   </View>

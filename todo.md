@@ -80,3 +80,7 @@
 - [x] Analytics: remove habit chip list from card header (calendar is the main content)
 - [x] Analytics: fix calendar width to fill the full card (no H_PAD miscalculation)
 - [x] Analytics: fix logged day cell showing "1d" text instead of emoji+dot rows
+
+- [x] Calendar: past days with no data = red cell (skipped indicator)
+- [x] Calendar: taller cells so all habit emoji+dot rows are fully visible (no clipping)
+- [x] Analytics: habit legend below each calendar — tap a habit to filter calendar to that habit only

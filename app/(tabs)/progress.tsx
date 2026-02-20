@@ -38,11 +38,20 @@ export default function ProgressScreen() {
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [cardWidth, setCardWidth] = useState(0);
+  // Per-category selected habit filter: categoryId -> habitId | null
+  const [habitFilter, setHabitFilter] = useState<Record<string, string | null>>({});
 
   function onCardLayout(e: LayoutChangeEvent) {
     // card padding is 14px each side = 28px total
     const w = e.nativeEvent.layout.width - 28;
     if (w > 0) setCardWidth(w);
+  }
+
+  function toggleHabitFilter(catId: string, habitId: string) {
+    setHabitFilter((prev) => ({
+      ...prev,
+      [catId]: prev[catId] === habitId ? null : habitId,
+    }));
   }
 
   const totalDaysLogged = new Set(checkIns.map((e) => e.date)).size;
@@ -173,6 +182,7 @@ export default function ProgressScreen() {
                     checkIns={checkIns}
                     onDayPress={(date) => setSelectedDate(date)}
                     containerWidth={cardWidth > 0 ? cardWidth : undefined}
+                    selectedHabitId={habitFilter[cat.id] ?? null}
                   />
                 </View>
               ) : (
@@ -183,13 +193,44 @@ export default function ProgressScreen() {
                 </View>
               )}
 
+              {/* ── Habit filter legend ── */}
+              {catHabits.length > 0 && (
+                <View style={styles.habitLegend}>
+                  {catHabits.map((h) => {
+                    const isSelected = habitFilter[cat.id] === h.id;
+                    return (
+                      <Pressable
+                        key={h.id}
+                        onPress={() => toggleHabitFilter(cat.id, h.id)}
+                        style={({ pressed }) => ([
+                          styles.habitLegendChip,
+                          {
+                            backgroundColor: isSelected ? colors.primary + "33" : colors.background,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                            opacity: pressed ? 0.7 : 1,
+                          },
+                        ])}
+                      >
+                        <Text style={styles.habitLegendEmoji}>{h.emoji}</Text>
+                        <Text
+                          style={[styles.habitLegendName, { color: isSelected ? colors.primary : colors.muted }]}
+                          numberOfLines={1}
+                        >
+                          {h.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
               {/* ── Dot legend inline ── */}
               <View style={styles.inlineLegend}>
                 {[
                   { color: "#22C55E", label: "Crushed" },
                   { color: "#F59E0B", label: "Okay" },
                   { color: "#EF4444", label: "Missed" },
-                  { color: "rgba(150,150,150,0.35)", label: "Skipped" },
+                  { color: "#EF444422", label: "Skipped" },
                 ].map((item) => (
                   <View key={item.label} style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: item.color }]} />
@@ -300,4 +341,8 @@ const styles = StyleSheet.create({
 
   emptyState: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 13 },
+  habitLegend: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, marginBottom: 4 },
+  habitLegendChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  habitLegendEmoji: { fontSize: 13 },
+  habitLegendName: { fontSize: 11, fontWeight: "500", maxWidth: 90 },
 });
