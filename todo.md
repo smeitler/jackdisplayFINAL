@@ -31,3 +31,8 @@
 
 - [x] Remove per-row rating labels, keep only top legend reference
 - [x] Redesign 3 rating options as a single segmented color button (slightly separated segments)
+
+- [x] Build CalendarHeatmap component (month grid, day cells colored by score)
+- [x] Add month navigation (prev/next arrows) to calendar
+- [x] Tap a day cell to open that day's check-in review
+- [x] Integrate calendar into Progress/Analytics screen
