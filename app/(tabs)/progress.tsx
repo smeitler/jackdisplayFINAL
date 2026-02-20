@@ -182,7 +182,7 @@ export default function ProgressScreen() {
                     checkIns={checkIns}
                     onDayPress={(date) => setSelectedDate(date)}
                     containerWidth={cardWidth > 0 ? cardWidth : undefined}
-                    selectedHabitId={habitFilter[cat.id] ?? null}
+                    selectedHabitId={habitFilter[cat.id] === "__all__" ? null : (habitFilter[cat.id] ?? null)}
                   />
                 </View>
               ) : (
@@ -195,31 +195,57 @@ export default function ProgressScreen() {
 
               {/* ── Habit filter legend ── */}
               {catHabits.length > 0 && (
-                <View style={styles.habitLegend}>
-                  {catHabits.map((h) => {
-                    const isSelected = habitFilter[cat.id] === h.id;
-                    return (
-                      <Pressable
-                        key={h.id}
-                        onPress={() => toggleHabitFilter(cat.id, h.id)}
-                        style={({ pressed }) => ([
-                          styles.habitLegendChip,
-                          {
-                            backgroundColor: isSelected ? colors.primary + "33" : colors.background,
-                            borderColor: isSelected ? colors.primary : colors.border,
-                            opacity: pressed ? 0.7 : 1,
-                          },
-                        ])}
-                      >
-                        <Text style={styles.habitLegendEmoji}>{h.emoji}</Text>
-                        <Text
-                          style={[styles.habitLegendName, { color: isSelected ? colors.primary : colors.muted }]}
+                <View>
+                  {/* Select All / Clear row */}
+                  <View style={styles.legendHeader}>
+                    <Text style={[styles.legendHeaderLabel, { color: colors.muted }]}>Filter by habit</Text>
+                    <Pressable
+                      onPress={() => {
+                        const allSelected = habitFilter[cat.id] === "__all__";
+                        setHabitFilter((prev) => ({
+                          ...prev,
+                          [cat.id]: allSelected ? null : "__all__",
+                        }));
+                      }}
+                      style={({ pressed }) => [styles.selectAllBtn, { opacity: pressed ? 0.6 : 1, borderColor: habitFilter[cat.id] === "__all__" ? colors.primary : colors.border, backgroundColor: habitFilter[cat.id] === "__all__" ? colors.primary + "22" : "transparent" }]}
+                    >
+                      <Text style={[styles.selectAllText, { color: habitFilter[cat.id] === "__all__" ? colors.primary : colors.muted }]}>
+                        {habitFilter[cat.id] === "__all__" ? "Clear" : "Select All"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.habitLegend}>
+                    {catHabits.map((h) => {
+                      const isSelected = habitFilter[cat.id] === h.id || habitFilter[cat.id] === "__all__";
+                      return (
+                        <Pressable
+                          key={h.id}
+                          onPress={() => {
+                            // Clear "__all__" if active, then toggle individual
+                            setHabitFilter((prev) => ({
+                              ...prev,
+                              [cat.id]: prev[cat.id] === h.id ? null : h.id,
+                            }));
+                          }}
+                          style={({ pressed }) => ([
+                            styles.habitLegendChip,
+                            {
+                              backgroundColor: isSelected ? colors.primary + "33" : colors.background,
+                              borderColor: isSelected ? colors.primary : colors.border,
+                              opacity: pressed ? 0.7 : 1,
+                            },
+                          ])}
                         >
-                          {h.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                          <Text style={styles.habitLegendEmoji}>{h.emoji}</Text>
+                          <Text
+                            style={[styles.habitLegendName, { color: isSelected ? colors.primary : colors.muted }]}
+                          >
+                            {h.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
 
@@ -340,7 +366,11 @@ const styles = StyleSheet.create({
 
   emptyState: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 13 },
-  habitLegend: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, marginBottom: 4 },
+  legendHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10, marginBottom: 4 },
+  legendHeaderLabel: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+  selectAllBtn: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, borderWidth: 1 },
+  selectAllText: { fontSize: 11, fontWeight: "600" },
+  habitLegend: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
   habitLegendChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
   habitLegendEmoji: { fontSize: 13 },
   habitLegendName: { fontSize: 11, fontWeight: "500", flexShrink: 1 },

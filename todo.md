@@ -87,3 +87,6 @@
 
 - [x] Analytics legend: show full habit names (no numberOfLines truncation, allow wrap)
 - [x] Default habit emoji to numbered sequence (1️⃣ 2️⃣ 3️⃣ ...) based on position in category
+
+- [ ] Analytics: add Select All / Clear button to habit filter legend
+- [ ] Analytics: calendar stays same fixed size when filtering to a single habit (no shrinking)

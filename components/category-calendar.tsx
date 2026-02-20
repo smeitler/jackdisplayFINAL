@@ -60,11 +60,8 @@ export function CategoryCalendar({
   const availableWidth = containerWidth ?? 320;
   const CELL_W = Math.floor((availableWidth - CELL_GAP * (COLS - 1)) / COLS);
 
-  // Cell height: enough to show all habit rows (or just one if filtered)
-  const visibleHabitCount = selectedHabitId
-    ? 1
-    : habits.length;
-  const CELL_H = DAY_NUM_H + visibleHabitCount * ROW_H + CELL_PAD;
+  // Cell height: always based on total habits so calendar size is stable when filtering
+  const CELL_H = DAY_NUM_H + habits.length * ROW_H + CELL_PAD;
 
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
 
