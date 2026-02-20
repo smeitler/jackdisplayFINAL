@@ -50,3 +50,5 @@
 - [x] Calendar: show red for past days with no check-in, keep future days neutral/empty
 
 - [x] Calendar: on logged days show a day-detail popover with each category emoji + colored dot (red/yellow/green)
+
+- [x] Calendar: show per-category colored dots inside each logged day cell (2x2 grid, no tap required)

@@ -2,7 +2,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet, Dimensions } from "react
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
-import { CalendarHeatmap, DayScore } from "@/components/calendar-heatmap";
+import { CalendarHeatmap, DayScore, CategoryDot } from "@/components/calendar-heatmap";
 import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -61,6 +61,33 @@ export default function ProgressScreen() {
       return { date, score };
     });
   }, [checkIns, activeHabits]);
+
+  // Build per-category dot colors for each logged day
+  const calendarCategoryDots: Record<string, CategoryDot[]> = useMemo(() => {
+    const allDates = new Set(checkIns.map((e) => e.date));
+    const result: Record<string, CategoryDot[]> = {};
+    for (const date of allDates) {
+      const dateEntries = checkIns.filter((e) => e.date === date);
+      result[date] = sortedCategories.map((cat) => {
+        const catHabitIds = new Set(
+          activeHabits.filter((h) => h.category === cat.id).map((h) => h.id)
+        );
+        const catEntries = dateEntries.filter(
+          (e) => catHabitIds.has(e.habitId) && e.rating !== "none"
+        );
+        if (catEntries.length === 0) {
+          return { categoryId: cat.id, color: "rgba(255,255,255,0.25)" };
+        }
+        const green  = catEntries.filter((e) => e.rating === "green").length;
+        const yellow = catEntries.filter((e) => e.rating === "yellow").length;
+        const red    = catEntries.filter((e) => e.rating === "red").length;
+        const score  = (green * 1 + yellow * 0.5) / catEntries.length;
+        const color  = score >= 0.75 ? "#22C55E" : score >= 0.4 ? "#F59E0B" : "#EF4444";
+        return { categoryId: cat.id, color };
+      });
+    }
+    return result;
+  }, [checkIns, sortedCategories, activeHabits]);
 
   // Build per-category scores for the selected day
   const selectedDayCategoryScores: CategoryDayScore[] = useMemo(() => {
@@ -154,6 +181,7 @@ export default function ProgressScreen() {
             year={calYear}
             month={calMonth}
             scores={calendarScores}
+            categoryDots={calendarCategoryDots}
             onDayPress={(date) => setSelectedDate(date)}
           />
         </View>
