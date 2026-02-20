@@ -10,7 +10,6 @@ const SCREEN_HEIGHT = Dimensions.get("window").height;
 
 export type CategoryDayScore = {
   category: CategoryDef;
-  /** 0–1 weighted score, or null if no entries */
   score: number | null;
   green: number;
   yellow: number;
@@ -20,8 +19,8 @@ export type CategoryDayScore = {
 
 interface DayDetailSheetProps {
   visible: boolean;
-  date: string;           // YYYY-MM-DD
-  displayDate: string;    // human-readable label
+  date: string;
+  displayDate: string;
   categoryScores: CategoryDayScore[];
   onClose: () => void;
   onEdit: () => void;
@@ -29,15 +28,15 @@ interface DayDetailSheetProps {
 
 function scoreColor(score: number | null): string {
   if (score === null) return "#9BA1A6";
-  if (score >= 0.75) return "#22C55E";
-  if (score >= 0.4)  return "#F59E0B";
+  if (score >= 0.75)  return "#22C55E";
+  if (score >= 0.4)   return "#F59E0B";
   return "#EF4444";
 }
 
 function scoreLabel(score: number | null): string {
   if (score === null) return "No data";
-  if (score >= 0.75) return "Crushed it";
-  if (score >= 0.4)  return "Okay";
+  if (score >= 0.75)  return "Crushed it";
+  if (score >= 0.4)   return "Okay";
   return "Missed";
 }
 
@@ -52,53 +51,29 @@ export function DayDetailSheet({
   const colors = useColors();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+  const [rendered, setRendered] = useState(visible);
 
   useEffect(() => {
     if (visible) {
+      setRendered(true);
       Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.timing(backdropAnim, {
-          toValue: 1,
-          duration: 280,
-          useNativeDriver: true,
-        }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: SCREEN_HEIGHT,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(backdropAnim, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-      ]).start();
+        Animated.timing(slideAnim, { toValue: SCREEN_HEIGHT, duration: 220, useNativeDriver: true }),
+        Animated.timing(backdropAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]).start(() => setRendered(false));
     }
   }, [visible]);
 
-  const [rendered, setRendered] = useState(visible);
-  useEffect(() => { if (visible) setRendered(true); }, [visible]);
   if (!rendered) return null;
 
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
+    <Modal transparent visible={rendered} animationType="none" onRequestClose={onClose} statusBarTranslucent>
       {/* Backdrop */}
-      <Animated.View
-        style={[styles.backdrop, { opacity: backdropAnim }]}
-      >
+      <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
@@ -106,11 +81,8 @@ export function DayDetailSheet({
       <Animated.View
         style={[
           styles.sheet,
-          {
-            backgroundColor: colors.background,
-            borderColor: colors.border,
-            transform: [{ translateY: slideAnim }],
-          },
+          { backgroundColor: colors.background, borderColor: colors.border },
+          { transform: [{ translateY: slideAnim }] },
         ]}
       >
         {/* Handle */}
@@ -133,7 +105,7 @@ export function DayDetailSheet({
           </Pressable>
         </View>
 
-        {/* Category rows */}
+        {/* Category rows — emoji + dot side by side */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {categoryScores.map((cs, idx) => {
             const dotColor = scoreColor(cs.score);
@@ -148,44 +120,26 @@ export function DayDetailSheet({
                   !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                 ]}
               >
-                {/* Emoji + category name */}
-                <View style={styles.rowLeft}>
-                  <Text style={styles.catEmoji}>{cs.category.emoji}</Text>
-                  <Text style={[styles.catName, { color: colors.foreground }]}>{cs.category.label}</Text>
-                </View>
+                {/* Emoji */}
+                <Text style={styles.catEmoji}>{cs.category.emoji}</Text>
 
-                {/* Score indicator */}
-                <View style={styles.rowRight}>
-                  {cs.total > 0 ? (
-                    <>
-                      {/* Mini dot row: one dot per habit entry */}
-                      <View style={styles.dotRow}>
-                        {cs.green  > 0 && Array.from({ length: Math.min(cs.green,  5) }).map((_, i) => (
-                          <View key={`g${i}`} style={[styles.miniDot, { backgroundColor: "#22C55E" }]} />
-                        ))}
-                        {cs.yellow > 0 && Array.from({ length: Math.min(cs.yellow, 5) }).map((_, i) => (
-                          <View key={`y${i}`} style={[styles.miniDot, { backgroundColor: "#F59E0B" }]} />
-                        ))}
-                        {cs.red    > 0 && Array.from({ length: Math.min(cs.red,    5) }).map((_, i) => (
-                          <View key={`r${i}`} style={[styles.miniDot, { backgroundColor: "#EF4444" }]} />
-                        ))}
-                      </View>
-                      {/* Big status dot + label */}
-                      <View style={styles.statusRow}>
-                        <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-                        <Text style={[styles.statusLabel, { color: dotColor }]}>{label}</Text>
-                      </View>
-                    </>
-                  ) : (
-                    <Text style={[styles.noDataText, { color: colors.muted }]}>—</Text>
-                  )}
+                {/* Category name */}
+                <Text style={[styles.catName, { color: colors.foreground }]}>{cs.category.label}</Text>
+
+                {/* Spacer */}
+                <View style={{ flex: 1 }} />
+
+                {/* Colored dot + label */}
+                <View style={styles.dotWrap}>
+                  <View style={[styles.scoreDot, { backgroundColor: dotColor }]} />
+                  <Text style={[styles.scoreLabel, { color: dotColor }]}>{label}</Text>
                 </View>
               </View>
             );
           })}
         </View>
 
-        {/* Bottom close button */}
+        {/* Close button */}
         <Pressable
           onPress={onClose}
           style={({ pressed }) => [
@@ -196,7 +150,6 @@ export function DayDetailSheet({
           <Text style={[styles.closeBtnText, { color: colors.muted }]}>Close</Text>
         </Pressable>
 
-        {/* Bottom safe area spacer */}
         <View style={{ height: Platform.OS === "ios" ? 28 : 16 }} />
       </Animated.View>
     </Modal>
@@ -210,9 +163,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 0, left: 0, right: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -231,36 +182,44 @@ const styles = StyleSheet.create({
   },
   dateLabel: { fontSize: 20, fontWeight: "700" },
   dateSub: { fontSize: 13, marginTop: 2 },
-  editBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20,
-  },
+  editBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
   editBtnText: { fontSize: 14, fontWeight: "700" },
 
   card: {
-    borderRadius: 16, borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden", marginBottom: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    marginBottom: 12,
   },
   row: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 14,
-    gap: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    gap: 12,
   },
-  rowLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  catEmoji: { fontSize: 22 },
+  catEmoji: { fontSize: 24 },
   catName: { fontSize: 15, fontWeight: "600" },
 
-  rowRight: { alignItems: "flex-end", gap: 5 },
-  dotRow: { flexDirection: "row", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" },
-  miniDot: { width: 8, height: 8, borderRadius: 4 },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusLabel: { fontSize: 12, fontWeight: "700" },
-  noDataText: { fontSize: 15 },
+  dotWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  scoreDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  scoreLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
 
   closeBtn: {
     borderRadius: 14, paddingVertical: 14,
-    alignItems: "center", borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    borderWidth: StyleSheet.hairlineWidth,
   },
   closeBtnText: { fontSize: 15, fontWeight: "600" },
 });

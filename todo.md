@@ -52,3 +52,5 @@
 - [x] Calendar: on logged days show a day-detail popover with each category emoji + colored dot (red/yellow/green)
 
 - [x] Calendar: show per-category colored dots inside each logged day cell (2x2 grid, no tap required)
+
+- [x] Revert calendar to clean month heatmap view (remove inline category dots from cells)
