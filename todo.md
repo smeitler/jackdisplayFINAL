@@ -100,3 +100,7 @@
 - [x] Fix habit delete button not working
 - [x] Add swipe-to-delete on habit rows
 - [x] Move delete action inside edit modal (remove delete button from row)
+
+- [x] Fix habit delete stale closure bug (delete not working from edit modal)
+- [x] Add data-loss warning when deleting a habit with existing check-in history
+- [x] Offer "Deactivate instead" option to preserve history without deleting

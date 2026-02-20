@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useReducer, useCallback } 
 import {
   Habit, CheckInEntry, AlarmConfig, Rating, CategoryDef,
   loadHabits, saveHabits,
-  loadCheckIns,
+  loadCheckIns, saveCheckIns,
+  deleteCheckInsForHabit, countCheckInsForHabit,
   loadAlarm,
   loadCategories, saveCategories,
   submitCheckIn as storageSubmitCheckIn,
@@ -132,8 +133,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteHabit = useCallback(async (id: string) => {
     const updated = state.habits.filter((h) => h.id !== id);
-    await saveHabits(updated);
+    // Also purge all check-in history for this habit
+    await Promise.all([saveHabits(updated), deleteCheckInsForHabit(id)]);
+    const updatedCheckIns = await loadCheckIns();
     dispatch({ type: 'SET_HABITS', habits: updated });
+    dispatch({ type: 'SET_CHECKINS', checkIns: updatedCheckIns });
   }, [state.habits]);
 
   const addCategory = useCallback(async (label: string, emoji: string) => {

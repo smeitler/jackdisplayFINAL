@@ -203,6 +203,19 @@ export async function submitCheckIn(
   await AsyncStorage.setItem(KEYS.lastCheckIn, date);
 }
 
+/** Remove all check-in entries for a specific habit ID */
+export async function deleteCheckInsForHabit(habitId: string): Promise<void> {
+  const existing = await loadCheckIns();
+  const filtered = existing.filter((e) => e.habitId !== habitId);
+  await saveCheckIns(filtered);
+}
+
+/** Count check-in entries for a specific habit ID */
+export async function countCheckInsForHabit(habitId: string): Promise<number> {
+  const existing = await loadCheckIns();
+  return existing.filter((e) => e.habitId === habitId).length;
+}
+
 export async function getLastCheckInDate(): Promise<string | null> {
   return AsyncStorage.getItem(KEYS.lastCheckIn);
 }

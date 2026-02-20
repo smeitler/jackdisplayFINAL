@@ -2,7 +2,7 @@ import {
   View, Text, TouchableOpacity, TextInput,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -148,25 +148,28 @@ interface HabitModalProps {
   editHabit?: Habit | null;
   defaultEmoji?: string;
   onSave: (name: string, emoji: string) => void;
-  onDelete?: () => void;
+  /** Called when user confirms permanent deletion */
+  onDelete?: (habitId: string) => void;
+  /** Called when user chooses to deactivate instead of delete */
+  onDeactivate?: (habitId: string) => void;
+  /** Number of check-in entries associated with this habit */
+  entryCount?: number;
   onClose: () => void;
 }
 
-function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onClose }: HabitModalProps) {
+function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeactivate, entryCount, onClose }: HabitModalProps) {
   const colors = useColors();
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  // Sync state when editHabit changes
-  const prevEditRef = useRef<string | undefined>(undefined);
-  if (editHabit?.id !== prevEditRef.current) {
-    prevEditRef.current = editHabit?.id;
-    // Only update if modal is opening with a new habit
-    if (visible) {
-      // state updates during render are fine for sync
+  // Keep a stable ref to the current habit ID so delete always uses the right ID
+  const habitIdRef = useRef<string | undefined>(editHabit?.id);
+  useEffect(() => {
+    if (visible && editHabit?.id) {
+      habitIdRef.current = editHabit.id;
     }
-  }
+  }, [visible, editHabit?.id]);
 
   function handleSave() {
     if (!name.trim()) return;
@@ -175,13 +178,43 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onClos
   }
 
   function handleDelete() {
-    onClose();
-    setTimeout(() => {
-      Alert.alert('Delete Habit', `Remove "${editHabit?.name}"?`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: onDelete },
-      ]);
-    }, 300);
+    const id = habitIdRef.current;
+    if (!id) return;
+    const hasData = (entryCount ?? 0) > 0;
+    const dataWarning = hasData
+      ? `\n\nThis will also permanently delete ${entryCount} check-in record${entryCount === 1 ? '' : 's'} associated with this habit.`
+      : '';
+
+    const buttons: Parameters<typeof Alert.alert>[2] = [
+      { text: 'Cancel', style: 'cancel' },
+    ];
+
+    if (hasData) {
+      buttons.push({
+        text: 'Deactivate Instead',
+        style: 'default',
+        onPress: () => {
+          onClose();
+          onDeactivate?.(id);
+        },
+      });
+    }
+
+    buttons.push({
+      text: 'Delete Permanently',
+      style: 'destructive',
+      onPress: () => {
+        onClose();
+        // Use setTimeout so the modal finishes closing before state updates
+        setTimeout(() => onDelete?.(id), 100);
+      },
+    });
+
+    Alert.alert(
+      'Delete Habit',
+      `Remove "${editHabit?.name}"?${dataWarning}`,
+      buttons,
+    );
   }
 
   return (
@@ -360,7 +393,7 @@ function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModal
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function HabitsScreen() {
-  const { habits, categories, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory } = useApp();
+  const { habits, categories, checkIns, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory } = useApp();
   const colors = useColors();
   const router = useRouter();
 
@@ -382,8 +415,12 @@ export default function HabitsScreen() {
     }
   }
 
-  function handleDeleteHabit(habit: Habit) {
-    deleteHabit(habit.id);
+  function handleDeleteHabit(habitId: string) {
+    deleteHabit(habitId);
+  }
+
+  function handleDeactivateHabit(habitId: string) {
+    updateHabit(habitId, { isActive: false });
   }
 
   function handleSaveCategory(label: string, emoji: string) {
@@ -505,7 +542,7 @@ export default function HabitsScreen() {
                       colors={colors}
                       onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
                       onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
-                      onDelete={() => handleDeleteHabit(habit)}
+                      onDelete={() => handleDeleteHabit(habit.id)}
                     />
                   ))}
 
@@ -546,7 +583,9 @@ export default function HabitsScreen() {
           return NUMBER_EMOJIS[catHabits.length] ?? '⭐';
         })()}
         onSave={handleSaveHabit}
-        onDelete={habitModal.edit ? () => handleDeleteHabit(habitModal.edit!) : undefined}
+        onDelete={habitModal.edit ? handleDeleteHabit : undefined}
+        onDeactivate={habitModal.edit ? handleDeactivateHabit : undefined}
+        entryCount={habitModal.edit ? checkIns.filter((e: { habitId: string }) => e.habitId === habitModal.edit!.id).length : 0}
         onClose={() => setHabitModal({ open: false, categoryId: '' })}
       />
       <CategoryModal
