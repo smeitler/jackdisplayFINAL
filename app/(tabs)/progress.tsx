@@ -1,5 +1,5 @@
 import {
-  View, Text, ScrollView, Pressable, StyleSheet,
+  View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent,
 } from "react-native";
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
@@ -37,6 +37,13 @@ export default function ProgressScreen() {
   const [calYear,  setCalYear]  = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [cardWidth, setCardWidth] = useState(0);
+
+  function onCardLayout(e: LayoutChangeEvent) {
+    // card padding is 14px each side = 28px total
+    const w = e.nativeEvent.layout.width - 28;
+    if (w > 0) setCardWidth(w);
+  }
 
   const totalDaysLogged = new Set(checkIns.map((e) => e.date)).size;
   const overallRate = sortedCategories.length > 0
@@ -137,6 +144,7 @@ export default function ProgressScreen() {
           return (
             <View
               key={cat.id}
+              onLayout={onCardLayout}
               style={[styles.catCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
               {/* ── Category header row ── */}
@@ -155,20 +163,6 @@ export default function ProgressScreen() {
                 </View>
               </View>
 
-              {/* ── Habit key: compact horizontal chips ── */}
-              {catHabits.length > 0 && (
-                <View style={styles.habitKey}>
-                  {catHabits.map((h, idx) => (
-                    <View key={h.id} style={[styles.habitKeyChip, { backgroundColor: colors.background }]}>
-                      <Text style={styles.habitKeyEmoji}>{h.emoji}</Text>
-                      <Text style={[styles.habitKeyName, { color: colors.muted }]} numberOfLines={1}>
-                        {h.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
               {/* ── Full calendar grid ── */}
               {catHabits.length > 0 ? (
                 <View style={styles.calendarWrap}>
@@ -178,6 +172,7 @@ export default function ProgressScreen() {
                     habits={catHabits}
                     checkIns={checkIns}
                     onDayPress={(date) => setSelectedDate(date)}
+                    containerWidth={cardWidth > 0 ? cardWidth : undefined}
                   />
                 </View>
               ) : (

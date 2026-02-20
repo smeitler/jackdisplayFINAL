@@ -76,3 +76,7 @@
 - [x] Calendar: habit emoji+dot stack vertically one per row (not side by side)
 
 - [x] Calendar: fix uniform cell height — logged day emoji+dot rows must not expand the cell
+
+- [x] Analytics: remove habit chip list from card header (calendar is the main content)
+- [x] Analytics: fix calendar width to fill the full card (no H_PAD miscalculation)
+- [x] Analytics: fix logged day cell showing "1d" text instead of emoji+dot rows
