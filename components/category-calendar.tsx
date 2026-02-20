@@ -165,7 +165,7 @@ export function CategoryCalendar({
             return (
               <Pressable
                 key={dateStr}
-                onPress={() => (isPast || isToday) && onDayPress?.(dateStr)}
+                onPress={() => (isPast || isToday || showSkippedX) && onDayPress?.(dateStr)}
                 style={({ pressed }) => ({
                   width: CELL_W,
                   height: CELL_H,
@@ -180,23 +180,25 @@ export function CategoryCalendar({
                   overflow: "hidden",
                 })}
               >
-                {/* Day number */}
-                <Text
-                  style={{
-                    fontSize: 10,
-                    lineHeight: 14,
-                    marginBottom: 1,
-                    color: dayNumColor,
-                    fontWeight: isToday ? "800" : "500",
-                  }}
-                >
-                  {day}
-                </Text>
+                {/* Day number — hidden on skipped cells so the X dominates */}
+                {!showSkippedX && (
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      lineHeight: 14,
+                      marginBottom: 1,
+                      color: dayNumColor,
+                      fontWeight: isToday ? "800" : "500",
+                    }}
+                  >
+                    {day}
+                  </Text>
+                )}
 
-                {/* Red X for skipped days */}
+                {/* Red X for skipped days — fills remaining cell space */}
                 {showSkippedX && (
                   <View style={styles.xContainer}>
-                    <Text style={styles.xText}>✕</Text>
+                    <Text style={[styles.xText, { fontSize: Math.floor(CELL_W * 0.55) }]}>✕</Text>
                   </View>
                 )}
 
@@ -242,14 +244,18 @@ const styles = StyleSheet.create({
   headerText: { fontSize: 9, fontWeight: "600" },
   row: { flexDirection: "row", marginBottom: CELL_GAP },
   xContainer: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   xText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#EF4444",
-    opacity: 0.7,
+    opacity: 0.55,
+    lineHeight: undefined,
   },
 });

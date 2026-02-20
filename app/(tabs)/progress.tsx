@@ -180,7 +180,15 @@ export default function ProgressScreen() {
                     month={calMonth}
                     habits={catHabits}
                     checkIns={checkIns}
-                    onDayPress={(date) => setSelectedDate(date)}
+                    onDayPress={(date) => {
+                      // If the day has no check-in data, go straight to check-in
+                      const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
+                      if (!hasEntry) {
+                        router.push(`/checkin?date=${date}` as never);
+                      } else {
+                        setSelectedDate(date);
+                      }
+                    }}
                     containerWidth={cardWidth > 0 ? cardWidth : undefined}
                     selectedHabitId={habitFilter[cat.id] === "__all__" ? null : (habitFilter[cat.id] ?? null)}
                   />
