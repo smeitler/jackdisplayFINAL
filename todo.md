@@ -63,3 +63,6 @@
 
 - [x] Calendar: only show red for days with ZERO entries; days with partial/full data use score-based color
 - [x] Check-in: disable submit button until every active habit has been rated (no 'none' ratings remaining)
+
+- [x] Fix calendar: completed days still showing red — debug entry lookup vs stored data
+- [x] Calendar cells: show mini habit emoji + colored dot per habit (fallback to dots-only if too tight)

@@ -175,12 +175,19 @@ export async function submitCheckIn(
   // Remove any previous entries for this date
   const filtered = existing.filter((e) => e.date !== date);
   const now = new Date().toISOString();
-  const newEntries: CheckInEntry[] = allHabitIds.map((habitId) => ({
-    date,
-    habitId,
-    rating: ratingsMap[habitId] ?? 'none',
-    loggedAt: now,
-  }));
+  // Only save entries that have an actual rating — skip 'none' so the calendar
+  // can reliably distinguish "logged day" (has rated entries) from "skipped day" (no entries)
+  const newEntries: CheckInEntry[] = allHabitIds
+    .filter((habitId) => {
+      const r = ratingsMap[habitId];
+      return r && r !== 'none';
+    })
+    .map((habitId) => ({
+      date,
+      habitId,
+      rating: ratingsMap[habitId] as Rating,
+      loggedAt: now,
+    }));
   await saveCheckIns([...filtered, ...newEntries]);
   await AsyncStorage.setItem(KEYS.lastCheckIn, date);
 }

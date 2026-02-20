@@ -4,9 +4,8 @@
  * A full-month calendar for a single category. Each day cell shows:
  *  - A background tint based on overall day score (green/amber/red/soft-red for skipped)
  *  - The day number
- *  - One small dot per habit in this category, colored green/yellow/red
+ *  - Per-habit indicators: emoji + colored dot (up to 6 habits), or dots-only for more
  *
- * Dots are arranged in a wrapping row at the bottom of the cell.
  * Future days are dimmed. Tapping a past day calls onDayPress.
  */
 import { View, Text, Pressable, StyleSheet, Dimensions } from "react-native";
@@ -15,24 +14,27 @@ import { useColors } from "@/hooks/use-colors";
 import { toDateString, CheckInEntry, Habit } from "@/lib/storage";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-// The card has 14px padding on each side inside a 20px screen margin = 68px total
 const H_PAD = 68;
 const CELL_GAP = 3;
 const COLS = 7;
 const CELL_W = Math.floor((SCREEN_WIDTH - H_PAD - CELL_GAP * (COLS - 1)) / COLS);
-// Taller cells to fit dots — scale with habit count but cap at a reasonable max
-const BASE_CELL_H = CELL_W + 10;
+
+// Taller cells to accommodate habit indicators
+const BASE_CELL_H = CELL_W + 18;
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
+// Threshold: if ≤ this many habits, show emoji+dot; otherwise dots-only
+const EMOJI_THRESHOLD = 6;
+
 const DOT_SIZE = 5;
-const DOT_GAP = 2;
+const MINI_DOT = 4;
 
 interface CategoryCalendarProps {
   year: number;
   month: number; // 0-indexed
-  habits: Habit[];         // habits in this category (active only)
-  checkIns: CheckInEntry[]; // all check-ins (will be filtered)
+  habits: Habit[];
+  checkIns: CheckInEntry[];
   onDayPress?: (date: string) => void;
 }
 
@@ -50,15 +52,13 @@ function overallBg(
   hasAnyEntry: boolean,
 ): { color: string; opacity: number } {
   if (dateStr >= today) return { color: "transparent", opacity: 0 };
-  // Only show red if the day was completely skipped (zero entries saved)
-  if (!hasAnyEntry) return { color: "#EF4444", opacity: 0.25 };
-  // Day has data — score based on rated dots
+  if (!hasAnyEntry) return { color: "#EF4444", opacity: 0.22 };
   const rated = dots.filter((c) => c !== "transparent");
-  if (rated.length === 0) return { color: "#F59E0B", opacity: 0.35 }; // entries exist but all 'none'
+  if (rated.length === 0) return { color: "#F59E0B", opacity: 0.3 };
   const score =
     rated.reduce((s, c) => s + (c === "#22C55E" ? 1 : c === "#F59E0B" ? 0.5 : 0), 0) / rated.length;
   const color = score >= 0.75 ? "#22C55E" : score >= 0.4 ? "#F59E0B" : "#EF4444";
-  const opacity = 0.35 + score * 0.45;
+  const opacity = 0.3 + score * 0.4;
   return { color, opacity };
 }
 
@@ -69,16 +69,15 @@ export function CategoryCalendar({
   const today = toDateString();
 
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
+  const useEmojiMode = habits.length <= EMOJI_THRESHOLD;
 
-  // Build a lookup: date -> { habitId -> ratingColor }
-  // Also track which dates have ANY saved entry (even if rating=none) for this category
   const { dayHabitColors, datesWithEntries } = useMemo(() => {
     const map: Record<string, Record<string, string>> = {};
     const withEntries = new Set<string>();
     for (const entry of checkIns) {
       if (!habitIds.includes(entry.habitId)) continue;
-      withEntries.add(entry.date);
       if (entry.rating === "none") continue;
+      withEntries.add(entry.date);
       if (!map[entry.date]) map[entry.date] = {};
       map[entry.date][entry.habitId] = ratingColor(entry.rating);
     }
@@ -113,17 +112,15 @@ export function CategoryCalendar({
         <View key={ri} style={styles.row}>
           {row.map((cell, ci) => {
             if (cell.type === "blank") {
-              return <View key={`b-${ci}`} style={styles.cell} />;
+              return <View key={`b-${ci}`} style={[styles.cell, { height: BASE_CELL_H }]} />;
             }
             const { day, dateStr } = cell;
             const isToday  = dateStr === today;
             const isFuture = dateStr > today;
             const isPast   = dateStr < today;
 
-            // Dots: one per habit in order, colored by rating (transparent if not rated)
             const habitColorMap = dayHabitColors[dateStr] ?? {};
             const dots = habits.map((h) => habitColorMap[h.id] ?? "transparent");
-            const visibleDots = isPast ? dots : [];
 
             const hasAnyEntry = datesWithEntries.has(dateStr);
             const { color: bgColor, opacity: bgOpacity } = overallBg(dots, dateStr, today, hasAnyEntry);
@@ -136,6 +133,7 @@ export function CategoryCalendar({
                   styles.cell,
                   styles.dayCell,
                   {
+                    height: BASE_CELL_H,
                     backgroundColor: bgColor,
                     opacity: isFuture ? 0.12 : pressed ? 0.7 : bgOpacity === 0 ? 1 : bgOpacity,
                     borderWidth: isToday ? 1.5 : 0,
@@ -157,23 +155,43 @@ export function CategoryCalendar({
                   {day}
                 </Text>
 
-                {/* Habit dots */}
-                {visibleDots.length > 0 && (
-                  <View style={styles.dotsWrap}>
-                    {visibleDots.map((dotColor, di) =>
-                      dotColor !== "transparent" ? (
-                        <View
-                          key={di}
-                          style={[styles.dot, { backgroundColor: dotColor }]}
-                        />
-                      ) : (
-                        // Unrated habit: tiny ghost dot
-                        <View
-                          key={di}
-                          style={[styles.dot, { backgroundColor: "rgba(255,255,255,0.25)" }]}
-                        />
-                      )
-                    )}
+                {/* Habit indicators — only for past days */}
+                {isPast && habits.length > 0 && (
+                  <View style={styles.indicatorsWrap}>
+                    {useEmojiMode
+                      ? habits.map((h) => {
+                          const dotColor = habitColorMap[h.id] ?? "transparent";
+                          const hasRating = dotColor !== "transparent";
+                          return (
+                            <View key={h.id} style={styles.emojiRow}>
+                              <Text style={styles.habitEmoji}>{h.emoji}</Text>
+                              <View
+                                style={[
+                                  styles.miniDot,
+                                  {
+                                    backgroundColor: hasRating
+                                      ? dotColor
+                                      : "rgba(255,255,255,0.2)",
+                                  },
+                                ]}
+                              />
+                            </View>
+                          );
+                        })
+                      : dots.map((dotColor, di) => (
+                          <View
+                            key={di}
+                            style={[
+                              styles.dot,
+                              {
+                                backgroundColor:
+                                  dotColor !== "transparent"
+                                    ? dotColor
+                                    : "rgba(255,255,255,0.2)",
+                              },
+                            ]}
+                          />
+                        ))}
                   </View>
                 )}
               </Pressable>
@@ -181,7 +199,7 @@ export function CategoryCalendar({
           })}
           {row.length < 7 &&
             Array.from({ length: 7 - row.length }).map((_, i) => (
-              <View key={`t-${i}`} style={styles.cell} />
+              <View key={`t-${i}`} style={[styles.cell, { height: BASE_CELL_H }]} />
             ))}
         </View>
       ))}
@@ -198,23 +216,41 @@ const styles = StyleSheet.create({
   },
   headerText: { fontSize: 9, fontWeight: "600" },
   row: { flexDirection: "row", gap: CELL_GAP, marginBottom: CELL_GAP },
-  cell: { width: CELL_W, height: BASE_CELL_H },
+  cell: { width: CELL_W },
   dayCell: {
-    borderRadius: CELL_W * 0.2,
+    borderRadius: CELL_W * 0.18,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 4,
+    paddingTop: 3,
+    paddingHorizontal: 2,
     overflow: "hidden",
   },
-  dayText: { fontSize: 10, lineHeight: 13 },
-  dotsWrap: {
+  dayText: { fontSize: 9, lineHeight: 12 },
+  indicatorsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: DOT_GAP,
-    paddingHorizontal: 2,
+    alignItems: "center",
+    gap: 1,
     marginTop: 2,
+    paddingHorizontal: 1,
   },
+  // Emoji mode: tiny emoji + mini dot side by side
+  emojiRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+  },
+  habitEmoji: {
+    fontSize: 7,
+    lineHeight: 9,
+  },
+  miniDot: {
+    width: MINI_DOT,
+    height: MINI_DOT,
+    borderRadius: MINI_DOT / 2,
+  },
+  // Dots-only mode
   dot: {
     width: DOT_SIZE,
     height: DOT_SIZE,
