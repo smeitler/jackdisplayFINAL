@@ -1,15 +1,17 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback } from 'react';
 import {
-  Habit, CheckInEntry, AlarmConfig, Rating,
+  Habit, CheckInEntry, AlarmConfig, Rating, CategoryDef,
   loadHabits, saveHabits,
   loadCheckIns,
   loadAlarm,
+  loadCategories, saveCategories,
   submitCheckIn as storageSubmitCheckIn,
   getLastCheckInDate,
   yesterdayString,
   toDateString,
   ratingScore,
   Category,
+  DEFAULT_CATEGORIES,
 } from './storage';
 import { applyAlarm } from './notifications';
 
@@ -17,6 +19,7 @@ import { applyAlarm } from './notifications';
 
 type AppState = {
   habits: Habit[];
+  categories: CategoryDef[];
   checkIns: CheckInEntry[];
   alarm: AlarmConfig;
   lastCheckInDate: string | null;
@@ -24,8 +27,9 @@ type AppState = {
 };
 
 type Action =
-  | { type: 'LOADED'; habits: Habit[]; checkIns: CheckInEntry[]; alarm: AlarmConfig; lastCheckInDate: string | null }
+  | { type: 'LOADED'; habits: Habit[]; categories: CategoryDef[]; checkIns: CheckInEntry[]; alarm: AlarmConfig; lastCheckInDate: string | null }
   | { type: 'SET_HABITS'; habits: Habit[] }
+  | { type: 'SET_CATEGORIES'; categories: CategoryDef[] }
   | { type: 'SET_CHECKINS'; checkIns: CheckInEntry[] }
   | { type: 'SET_ALARM'; alarm: AlarmConfig }
   | { type: 'SET_LAST_CHECKIN'; date: string };
@@ -33,9 +37,11 @@ type Action =
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'LOADED':
-      return { ...state, habits: action.habits, checkIns: action.checkIns, alarm: action.alarm, lastCheckInDate: action.lastCheckInDate, isLoaded: true };
+      return { ...state, habits: action.habits, categories: action.categories, checkIns: action.checkIns, alarm: action.alarm, lastCheckInDate: action.lastCheckInDate, isLoaded: true };
     case 'SET_HABITS':
       return { ...state, habits: action.habits };
+    case 'SET_CATEGORIES':
+      return { ...state, categories: action.categories };
     case 'SET_CHECKINS':
       return { ...state, checkIns: action.checkIns };
     case 'SET_ALARM':
@@ -49,6 +55,7 @@ function reducer(state: AppState, action: Action): AppState {
 
 const initialState: AppState = {
   habits: [],
+  categories: DEFAULT_CATEGORIES,
   checkIns: [],
   alarm: { hour: 8, minute: 0, days: [0,1,2,3,4,5,6], isEnabled: false, notificationIds: [] },
   lastCheckInDate: null,
@@ -58,9 +65,13 @@ const initialState: AppState = {
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 type AppContextValue = AppState & {
-  addHabit: (name: string, category: Category) => Promise<void>;
+  addHabit: (name: string, emoji: string, category: Category) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
+  addCategory: (label: string, emoji: string) => Promise<void>;
+  updateCategory: (id: string, updates: Partial<CategoryDef>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  reorderCategories: (cats: CategoryDef[]) => Promise<void>;
   /** Submit ratings for a date. ratingsMap: { habitId -> Rating } */
   submitCheckIn: (date: string, ratingsMap: Record<string, Rating>) => Promise<void>;
   updateAlarm: (config: AlarmConfig) => Promise<void>;
@@ -87,21 +98,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function load() {
-      const [habits, checkIns, alarm, lastCheckInDate] = await Promise.all([
+      const [habits, categories, checkIns, alarm, lastCheckInDate] = await Promise.all([
         loadHabits(),
+        loadCategories(),
         loadCheckIns(),
         loadAlarm(),
         getLastCheckInDate(),
       ]);
-      dispatch({ type: 'LOADED', habits, checkIns, alarm, lastCheckInDate });
+      dispatch({ type: 'LOADED', habits, categories, checkIns, alarm, lastCheckInDate });
     }
     load();
   }, []);
 
-  const addHabit = useCallback(async (name: string, category: Category) => {
+  const addHabit = useCallback(async (name: string, emoji: string, category: Category) => {
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
       name,
+      emoji,
       category,
       isActive: true,
       createdAt: new Date().toISOString(),
@@ -122,6 +135,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await saveHabits(updated);
     dispatch({ type: 'SET_HABITS', habits: updated });
   }, [state.habits]);
+
+  const addCategory = useCallback(async (label: string, emoji: string) => {
+    const newCat: CategoryDef = {
+      id: `custom_${Date.now()}`,
+      label,
+      emoji,
+      order: state.categories.length,
+    };
+    const updated = [...state.categories, newCat];
+    await saveCategories(updated);
+    dispatch({ type: 'SET_CATEGORIES', categories: updated });
+  }, [state.categories]);
+
+  const updateCategory = useCallback(async (id: string, updates: Partial<CategoryDef>) => {
+    const updated = state.categories.map((c) => c.id === id ? { ...c, ...updates } : c);
+    await saveCategories(updated);
+    dispatch({ type: 'SET_CATEGORIES', categories: updated });
+  }, [state.categories]);
+
+  const deleteCategory = useCallback(async (id: string) => {
+    // Remove category and all its habits
+    const updatedCats = state.categories.filter((c) => c.id !== id);
+    const updatedHabits = state.habits.filter((h) => h.category !== id);
+    await Promise.all([saveCategories(updatedCats), saveHabits(updatedHabits)]);
+    dispatch({ type: 'SET_CATEGORIES', categories: updatedCats });
+    dispatch({ type: 'SET_HABITS', habits: updatedHabits });
+  }, [state.categories, state.habits]);
+
+  const reorderCategories = useCallback(async (cats: CategoryDef[]) => {
+    const reordered = cats.map((c, i) => ({ ...c, order: i }));
+    await saveCategories(reordered);
+    dispatch({ type: 'SET_CATEGORIES', categories: reordered });
+  }, []);
 
   const submitCheckIn = useCallback(async (date: string, ratingsMap: Record<string, Rating>) => {
     const activeIds = state.habits.filter((h) => h.isActive).map((h) => h.id);
@@ -217,6 +263,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addHabit,
       updateHabit,
       deleteHabit,
+      addCategory,
+      updateCategory,
+      deleteCategory,
+      reorderCategories,
       submitCheckIn,
       updateAlarm,
       isPendingCheckIn,

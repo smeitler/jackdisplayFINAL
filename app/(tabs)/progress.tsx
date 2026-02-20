@@ -6,17 +6,9 @@ import { CalendarHeatmap, DayScore } from "@/components/calendar-heatmap";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { toDateString, Category } from "@/lib/storage";
+import { toDateString } from "@/lib/storage";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-
-const CATEGORY_META: Record<Category, { label: string; emoji: string; colorKey: string }> = {
-  health:        { label: "Health",        emoji: "💪", colorKey: "health" },
-  relationships: { label: "Relationships", emoji: "❤️", colorKey: "relationships" },
-  wealth:        { label: "Wealth",        emoji: "💰", colorKey: "wealth" },
-  mindset:       { label: "Mindset",       emoji: "🧠", colorKey: "mindset" },
-};
-const CATEGORY_ORDER: Category[] = ["health", "relationships", "wealth", "mindset"];
 
 type TimeRange = "7d" | "30d" | "90d";
 
@@ -26,7 +18,8 @@ const MONTH_NAMES = [
 ];
 
 export default function ProgressScreen() {
-  const { getCategoryRate, getCategoryBreakdown, streak, checkIns, activeHabits, isLoaded } = useApp();
+  const { getCategoryRate, getCategoryBreakdown, streak, checkIns, activeHabits, categories, isLoaded } = useApp();
+  const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
   const colors = useColors();
   const router = useRouter();
 
@@ -36,7 +29,9 @@ export default function ProgressScreen() {
   const [timeRange, setTimeRange] = useState<TimeRange>("7d");
 
   const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
-  const overallRate = CATEGORY_ORDER.reduce((s, c) => s + getCategoryRate(c, days), 0) / 4;
+  const overallRate = sortedCategories.length > 0
+    ? sortedCategories.reduce((s, c) => s + getCategoryRate(c.id, days), 0) / sortedCategories.length
+    : 0;
   const totalDaysLogged = new Set(checkIns.map((e) => e.date)).size;
 
   // Build per-day scores for the calendar
@@ -153,17 +148,15 @@ export default function ProgressScreen() {
 
         {/* ── Category cards ── */}
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>By Category</Text>
-        {CATEGORY_ORDER.map((category) => {
-          const meta      = CATEGORY_META[category];
-          const rate      = getCategoryRate(category, days);
-          const breakdown = getCategoryBreakdown(category, days);
+        {sortedCategories.map((cat) => {
+          const rate      = getCategoryRate(cat.id, days);
+          const breakdown = getCategoryBreakdown(cat.id, days);
           const total     = breakdown.green + breakdown.yellow + breakdown.red;
-          const catColor  = (colors as Record<string, string>)[meta.colorKey] ?? colors.primary;
-          const catHabits = activeHabits.filter((h) => h.category === category);
+          const catHabits = activeHabits.filter((h) => h.category === cat.id);
 
           return (
             <Pressable
-              key={category}
+              key={cat.id}
               onPress={() => router.push("/checkin" as never)}
               style={({ pressed }) => [
                 styles.categoryCard,
@@ -171,11 +164,11 @@ export default function ProgressScreen() {
               ]}
             >
               <View style={styles.categoryCardTop}>
-                <View style={[styles.categoryIconWrap, { backgroundColor: catColor + "22" }]}>
-                  <Text style={styles.categoryEmoji}>{meta.emoji}</Text>
+                <View style={[styles.categoryIconWrap, { backgroundColor: colors.primary + "22" }]}>
+                  <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
                 </View>
                 <View style={styles.categoryInfo}>
-                  <Text style={[styles.categoryName, { color: colors.foreground }]}>{meta.label}</Text>
+                  <Text style={[styles.categoryName, { color: colors.foreground }]}>{cat.label}</Text>
                   <Text style={[styles.categoryHabitCount, { color: colors.muted }]}>
                     {catHabits.length} habit{catHabits.length !== 1 ? "s" : ""}
                   </Text>

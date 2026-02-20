@@ -36,3 +36,13 @@
 - [x] Add month navigation (prev/next arrows) to calendar
 - [x] Tap a day cell to open that day's check-in review
 - [x] Integrate calendar into Progress/Analytics screen
+
+- [x] Update Category type to support custom categories (id, label, emoji) stored in AsyncStorage
+- [x] Seed default categories (Health 💪, Relationships ❤️, Wealth 💰, Mindset 🧠)
+- [x] Build EmojiPicker component (grid of common emojis, searchable by group)
+- [x] Rebuild Manage Habits screen: list categories, tap to expand habits, add/edit/delete habits
+- [x] Add emoji picker to habit edit (swap emoji per habit)
+- [x] Add category management: add new category, rename, change emoji, delete (with confirmation)
+- [x] Update check-in screen to use dynamic categories
+- [x] Update progress screen to use dynamic categories
+- [x] Update home screen category grid to use dynamic categories

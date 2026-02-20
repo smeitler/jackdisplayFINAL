@@ -13,15 +13,6 @@ import {
 } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 
-const CATEGORY_ORDER: Category[] = ['health', 'relationships', 'wealth', 'mindset'];
-
-const CATEGORY_META: Record<Category, { label: string; emoji: string; colorKey: string }> = {
-  health:        { label: 'Health',        emoji: '💪', colorKey: 'health' },
-  relationships: { label: 'Relationships', emoji: '❤️', colorKey: 'relationships' },
-  wealth:        { label: 'Wealth',        emoji: '💰', colorKey: 'wealth' },
-  mindset:       { label: 'Mindset',       emoji: '🧠', colorKey: 'mindset' },
-};
-
 // Modern, minimal rating config — no emoji circles, just clean color + label
 const RATINGS: Rating[] = ['red', 'yellow', 'green'];
 
@@ -38,7 +29,8 @@ const RATING_CONFIG: Record<Rating, {
 };
 
 export default function CheckInScreen() {
-  const { activeHabits, submitCheckIn, getRatingsForDate } = useApp();
+  const { activeHabits, categories, submitCheckIn, getRatingsForDate } = useApp();
+  const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
   const colors = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
@@ -62,12 +54,14 @@ export default function CheckInScreen() {
   }
 
   const habitsByCategory = useMemo(() => {
-    const map: Record<Category, typeof activeHabits> = {
-      health: [], relationships: [], wealth: [], mindset: [],
-    };
-    for (const h of activeHabits) map[h.category].push(h);
+    const map: Record<string, typeof activeHabits> = {};
+    for (const cat of categories) map[cat.id] = [];
+    for (const h of activeHabits) {
+      if (!map[h.category]) map[h.category] = [];
+      map[h.category].push(h);
+    }
     return map;
-  }, [activeHabits]);
+  }, [activeHabits, categories]);
 
   function setRating(habitId: string, rating: Rating) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -173,18 +167,17 @@ export default function CheckInScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {CATEGORY_ORDER.map((category) => {
-          const habits = habitsByCategory[category];
+        {sortedCategories.map((cat) => {
+          const habits = habitsByCategory[cat.id] ?? [];
           if (habits.length === 0) return null;
-          const meta = CATEGORY_META[category];
-          const catColor = (colors as Record<string, string>)[meta.colorKey] ?? colors.primary;
+          const catColor = colors.primary;
 
           return (
-            <View key={category} style={styles.section}>
+            <View key={cat.id} style={styles.section}>
               {/* Category label */}
               <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: catColor }]} />
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{meta.label}</Text>
+                <Text style={styles.sectionEmoji}>{cat.emoji}</Text>
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
               </View>
 
               {/* Habits */}
@@ -305,6 +298,7 @@ const styles = StyleSheet.create({
   section: { marginBottom: 18 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
   sectionDot: { width: 8, height: 8, borderRadius: 4 },
+  sectionEmoji: { fontSize: 16 },
   sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
 
   // Card
