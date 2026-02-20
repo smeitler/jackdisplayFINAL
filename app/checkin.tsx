@@ -206,35 +206,30 @@ export default function CheckInScreen() {
                         {habit.name}
                       </Text>
 
-                      {/* Rating selector — three slim pills */}
-                      <View style={styles.ratingGroup}>
-                        {RATINGS.map((rating) => {
+                      {/* Segmented color button */}
+                      <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
+                        {RATINGS.map((rating, idx) => {
                           const cfg = RATING_CONFIG[rating];
                           const isSelected = current === rating;
+                          const isFirst = idx === 0;
+                          const isLast = idx === RATINGS.length - 1;
 
                           return (
                             <Pressable
                               key={rating}
                               onPress={() => setRating(habit.id, rating)}
                               style={({ pressed }) => [
-                                styles.ratingPill,
-                                isSelected
-                                  ? { backgroundColor: cfg.activeColor, borderColor: cfg.activeColor }
-                                  : { backgroundColor: 'transparent', borderColor: colors.border },
-                                { transform: [{ scale: pressed ? 0.93 : 1 }] },
+                                styles.segment,
+                                isFirst && styles.segmentFirst,
+                                isLast && styles.segmentLast,
+                                {
+                                  backgroundColor: isSelected
+                                    ? cfg.activeColor
+                                    : cfg.dotColor + '28',
+                                  opacity: pressed ? 0.75 : 1,
+                                },
                               ]}
-                            >
-                              <View style={[
-                                styles.ratingDot,
-                                { backgroundColor: isSelected ? cfg.activeLabelColor : cfg.dotColor },
-                              ]} />
-                              <Text style={[
-                                styles.ratingPillLabel,
-                                { color: isSelected ? cfg.activeLabelColor : colors.muted },
-                              ]}>
-                                {cfg.label.split(' ')[0]}
-                              </Text>
-                            </Pressable>
+                            />
                           );
                         })}
                       </View>
@@ -322,16 +317,21 @@ const styles = StyleSheet.create({
   },
   habitName: { flex: 1, fontSize: 15, lineHeight: 20 },
 
-  // Rating pills — slim, modern
-  ratingGroup: { flexDirection: 'row', gap: 5 },
-  ratingPill: {
-    width: 44, height: 36, borderRadius: 10,
-    borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center',
-    gap: 3,
+  // Segmented color button
+  segmentedBtn: {
+    flexDirection: 'row',
+    borderRadius: 11,
+    overflow: 'hidden',
+    gap: 2,
+    padding: 2,
   },
-  ratingDot: { width: 8, height: 8, borderRadius: 4 },
-  ratingPillLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
+  segment: {
+    width: 36,
+    height: 34,
+    borderRadius: 8,
+  },
+  segmentFirst: { borderTopLeftRadius: 9, borderBottomLeftRadius: 9 },
+  segmentLast:  { borderTopRightRadius: 9, borderBottomRightRadius: 9 },
 
   // Footer
   footer: {

@@ -28,3 +28,6 @@
 - [x] Clean up check-in screen layout: tighter spacing, better typography, remove visual clutter
 - [x] Update rating summary badges to match new design language
 - [x] Polish Today screen category cards to match new rating style
+
+- [x] Remove per-row rating labels, keep only top legend reference
+- [x] Redesign 3 rating options as a single segmented color button (slightly separated segments)
