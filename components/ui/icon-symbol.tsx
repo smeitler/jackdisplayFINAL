@@ -8,23 +8,47 @@ import { OpaqueColorValue, type StyleProp, type TextStyle } from "react-native";
 type IconMapping = Record<SymbolViewProps["name"], ComponentProps<typeof MaterialIcons>["name"]>;
 type IconSymbolName = keyof typeof MAPPING;
 
-/**
- * Add your SF Symbols to Material Icons mappings here.
- * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
- * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
- */
 const MAPPING = {
+  // Navigation
   "house.fill": "home",
+  "chart.bar.fill": "bar-chart",
+  "bell.fill": "notifications",
+  "gearshape.fill": "settings",
+  // Actions
   "paperplane.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
+  "chevron.left": "chevron-left",
+  "chevron.down": "expand-more",
+  "plus": "add",
+  "plus.circle.fill": "add-circle",
+  "minus.circle.fill": "remove-circle",
+  "trash.fill": "delete",
+  "pencil": "edit",
+  "checkmark": "check",
+  "checkmark.circle.fill": "check-circle",
+  "checkmark.circle": "radio-button-unchecked",
+  "xmark": "close",
+  "xmark.circle.fill": "cancel",
+  // Content
+  "heart.fill": "favorite",
+  "star.fill": "star",
+  "flame.fill": "local-fire-department",
+  "calendar": "calendar-today",
+  "clock.fill": "access-time",
+  "list.bullet": "list",
+  "person.fill": "person",
+  "person.2.fill": "group",
+  "dollarsign.circle.fill": "attach-money",
+  "brain.head.profile": "psychology",
+  "figure.walk": "directions-walk",
+  "arrow.right": "arrow-forward",
+  "info.circle": "info",
+  "trophy.fill": "emoji-events",
+  "circle.fill": "circle",
+  "circle": "radio-button-unchecked",
 } as IconMapping;
 
-/**
- * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
- * This ensures a consistent look across platforms, and optimal resource usage.
- * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
- */
 export function IconSymbol({
   name,
   size = 24,

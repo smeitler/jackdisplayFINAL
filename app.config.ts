@@ -28,11 +28,11 @@ const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
   // App branding - update these values directly (do not use env vars)
-  appName: "DayCheck – Daily Alarm & Progress Tracker",
+  appName: "DayCheck",
   appSlug: "daily-progress-alarm",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "https://private-us-east-1.manuscdn.com/sessionFile/bxaBGTIaIiBRhmtNWFSdiZ/sandbox/PrQxSf9wSwTj5O79R9jMm3-img-1_1771618705000_na1fn_ZGF5Y2hlY2staWNvbg.png?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvYnhhQkdUSWFJaUJSaG10TldGU2RpWi9zYW5kYm94L1ByUXhTZjl3U3dUajVPNzlSOWpNbTMtaW1nLTFfMTc3MTYxODcwNTAwMF9uYTFmbl9aR0Y1WTJobFkyc3RhV052YmcucG5nP3gtb3NzLXByb2Nlc3M9aW1hZ2UvcmVzaXplLHdfMTkyMCxoXzE5MjAvZm9ybWF0LHdlYnAvcXVhbGl0eSxxXzgwIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzk4NzYxNjAwfX19XX0_&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=ie803W4jZ4sEkfXbiiPXtdxjuecMnIE1V62pOkY1vsIL7OkpqDp1XKzjZ3DuqfWWFHHKcEjX~nbb260ive6VclUM3hucn9JPnAwbqrRB5~HHRrTtzAS3Ixgq5jRz-HzjUYQqoNCSCpngm3dtwMsESXypoQo5fu6b8Hb9oGU1mBBZgs7~z7PyEpsSc6AyK3S9g-gmsNhJ7-6UGRZoC6-xFWFVgLm9IJK2PdChrVlmloFqg7TF02O~9gtsOstOCrasWt9uezkvONqm-WhhJCuVjEJ98Yzh2GNjNRyDZvlejl1ZbzcxKMGXGdVAcIGPU5FDP6jw-~PcZyTjeZ~7pZGvCw__",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
