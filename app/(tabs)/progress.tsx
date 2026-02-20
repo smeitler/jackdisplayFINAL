@@ -36,8 +36,6 @@ export default function ProgressScreen() {
   const today = new Date();
   const [calYear,  setCalYear]  = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth());
-
-  // Day detail sheet
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const totalDaysLogged = new Set(checkIns.map((e) => e.date)).size;
@@ -45,7 +43,6 @@ export default function ProgressScreen() {
     ? sortedCategories.reduce((s, c) => s + getCategoryRate(c.id, 30), 0) / sortedCategories.length
     : 0;
 
-  // Per-category scores for the selected day (for the detail sheet)
   const selectedDayCategoryScores: CategoryDayScore[] = useMemo(() => {
     if (!selectedDate) return [];
     const dateEntries = checkIns.filter((e) => e.date === selectedDate);
@@ -90,7 +87,7 @@ export default function ProgressScreen() {
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* ── Header ── */}
+        {/* ── Page title ── */}
         <Text style={[styles.pageTitle, { color: colors.foreground }]}>Analytics</Text>
 
         {/* ── Summary row ── */}
@@ -112,7 +109,7 @@ export default function ProgressScreen() {
           </View>
         </View>
 
-        {/* ── Month navigation (shared across all calendars) ── */}
+        {/* ── Month navigation ── */}
         <View style={[styles.monthNav, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Pressable
             onPress={prevMonth}
@@ -131,38 +128,18 @@ export default function ProgressScreen() {
           </Pressable>
         </View>
 
-        {/* ── Dot legend ── */}
-        <View style={[styles.dotLegend, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "#22C55E" }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>Crushed</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>Okay</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>Missed</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "rgba(150,150,150,0.3)" }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>Not rated</Text>
-          </View>
-        </View>
-
-        {/* ── One calendar card per category ── */}
+        {/* ── One category card per category ── */}
         {sortedCategories.map((cat) => {
           const catHabits = activeHabits.filter((h) => h.category === cat.id);
           const rate = getCategoryRate(cat.id, 30);
-          const rateColor = rate >= 0.75 ? "#22C55E" : rate >= 0.4 ? "#F59E0B" : rate > 0 ? "#EF4444" : colors.muted;
+          const rateColor = rate >= 0.75 ? "#22C55E" : rate >= 0.4 ? "#F59E0B" : rate > 0 ? "#EF4444" : colors.muted as string;
 
           return (
             <View
               key={cat.id}
               style={[styles.catCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
-              {/* Category header */}
+              {/* ── Category header row ── */}
               <View style={styles.catHeader}>
                 <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 <View style={styles.catInfo}>
@@ -178,29 +155,31 @@ export default function ProgressScreen() {
                 </View>
               </View>
 
-              {/* Habit dot key */}
+              {/* ── Habit key: compact horizontal chips ── */}
               {catHabits.length > 0 && (
                 <View style={styles.habitKey}>
-                  {catHabits.map((h) => (
-                    <View key={h.id} style={styles.habitKeyItem}>
-                      <View style={[styles.habitKeyDot, { backgroundColor: colors.primary }]} />
-                      <Text style={[styles.habitKeyText, { color: colors.muted }]}>
-                        {h.emoji} {h.name}
+                  {catHabits.map((h, idx) => (
+                    <View key={h.id} style={[styles.habitKeyChip, { backgroundColor: colors.background }]}>
+                      <Text style={styles.habitKeyEmoji}>{h.emoji}</Text>
+                      <Text style={[styles.habitKeyName, { color: colors.muted }]} numberOfLines={1}>
+                        {h.name}
                       </Text>
                     </View>
                   ))}
                 </View>
               )}
 
-              {/* Calendar */}
+              {/* ── Full calendar grid ── */}
               {catHabits.length > 0 ? (
-                <CategoryCalendar
-                  year={calYear}
-                  month={calMonth}
-                  habits={catHabits}
-                  checkIns={checkIns}
-                  onDayPress={(date) => setSelectedDate(date)}
-                />
+                <View style={styles.calendarWrap}>
+                  <CategoryCalendar
+                    year={calYear}
+                    month={calMonth}
+                    habits={catHabits}
+                    checkIns={checkIns}
+                    onDayPress={(date) => setSelectedDate(date)}
+                  />
+                </View>
               ) : (
                 <View style={styles.emptyState}>
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
@@ -208,6 +187,21 @@ export default function ProgressScreen() {
                   </Text>
                 </View>
               )}
+
+              {/* ── Dot legend inline ── */}
+              <View style={styles.inlineLegend}>
+                {[
+                  { color: "#22C55E", label: "Crushed" },
+                  { color: "#F59E0B", label: "Okay" },
+                  { color: "#EF4444", label: "Missed" },
+                  { color: "rgba(150,150,150,0.35)", label: "Skipped" },
+                ].map((item) => (
+                  <View key={item.label} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                    <Text style={[styles.legendText, { color: colors.muted }]}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           );
         })}
@@ -215,7 +209,6 @@ export default function ProgressScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Day Detail Sheet ── */}
       <DayDetailSheet
         visible={selectedDate !== null}
         date={selectedDate ?? ""}
@@ -246,39 +239,28 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 20, fontWeight: "700" },
   summaryLabel: { fontSize: 10, fontWeight: "500", textAlign: "center" },
 
-  // Month nav bar
   monthNav: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between",
     borderRadius: 14, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 10,
-    marginBottom: 10,
+    marginBottom: 16,
   },
   monthNavBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   monthTitle: { fontSize: 16, fontWeight: "700" },
 
-  // Dot legend
-  dotLegend: {
-    flexDirection: "row", justifyContent: "center", gap: 14,
-    borderRadius: 12, borderWidth: 1,
-    paddingVertical: 8, marginBottom: 16,
-  },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 11 },
-
   // Category card
   catCard: {
     borderRadius: 18, borderWidth: 1,
-    padding: 14, marginBottom: 16,
+    padding: 14, marginBottom: 20,
   },
   catHeader: {
     flexDirection: "row", alignItems: "center",
     gap: 10, marginBottom: 10,
   },
-  catEmoji: { fontSize: 26 },
+  catEmoji: { fontSize: 28 },
   catInfo: { flex: 1 },
-  catName: { fontSize: 17, fontWeight: "700" },
+  catName: { fontSize: 18, fontWeight: "700" },
   catSub: { fontSize: 12, marginTop: 1 },
   rateChip: {
     paddingHorizontal: 10, paddingVertical: 4,
@@ -286,17 +268,40 @@ const styles = StyleSheet.create({
   },
   rateText: { fontSize: 13, fontWeight: "700" },
 
-  // Habit key
+  // Habit key — compact horizontal wrapping chips
   habitKey: {
-    flexDirection: "column",
-    gap: 4, marginBottom: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 12,
   },
-  habitKeyItem: {
-    flexDirection: "row", alignItems: "center",
-    gap: 8,
+  habitKeyChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
   },
-  habitKeyDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
-  habitKeyText: { fontSize: 13, flexShrink: 1, flexWrap: "wrap" },
+  habitKeyEmoji: { fontSize: 12 },
+  habitKeyName: { fontSize: 11, maxWidth: 100 },
+
+  // Calendar wrapper — no height restriction, let it expand naturally
+  calendarWrap: {
+    width: "100%",
+  },
+
+  // Inline legend below calendar
+  inlineLegend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 10,
+    flexWrap: "wrap",
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 10 },
 
   emptyState: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 13 },

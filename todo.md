@@ -66,3 +66,7 @@
 
 - [x] Fix calendar: completed days still showing red — debug entry lookup vs stored data
 - [x] Calendar cells: show mini habit emoji + colored dot per habit (fallback to dots-only if too tight)
+
+- [x] Analytics: fix category card to show full-size month calendar grid (not a tiny strip)
+- [x] Analytics: fix habit emojis showing as ⭐ instead of their actual emoji
+- [x] Analytics: remove the habit list from the card header — calendar IS the main content
