@@ -58,3 +58,5 @@
 - [x] Build CategoryCalendar component: month grid where each day shows one dot per habit (green/yellow/red)
 - [x] Rebuild Analytics screen: one CategoryCalendar per category, stacked vertically, scroll to browse
 - [x] Keep summary stats (streak, days logged, overall %) at the top of Analytics
+
+- [x] Analytics: show full habit names in the habit key (remove truncation, allow wrapping)

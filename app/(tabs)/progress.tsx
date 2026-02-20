@@ -184,7 +184,7 @@ export default function ProgressScreen() {
                   {catHabits.map((h) => (
                     <View key={h.id} style={styles.habitKeyItem}>
                       <View style={[styles.habitKeyDot, { backgroundColor: colors.primary }]} />
-                      <Text style={[styles.habitKeyText, { color: colors.muted }]} numberOfLines={1}>
+                      <Text style={[styles.habitKeyText, { color: colors.muted }]}>
                         {h.emoji} {h.name}
                       </Text>
                     </View>
@@ -288,17 +288,15 @@ const styles = StyleSheet.create({
 
   // Habit key
   habitKey: {
-    flexDirection: "row", flexWrap: "wrap",
-    gap: 6, marginBottom: 12,
+    flexDirection: "column",
+    gap: 4, marginBottom: 12,
   },
   habitKeyItem: {
     flexDirection: "row", alignItems: "center",
-    gap: 4, backgroundColor: "rgba(128,128,128,0.08)",
-    paddingHorizontal: 7, paddingVertical: 3,
-    borderRadius: 10,
+    gap: 8,
   },
-  habitKeyDot: { width: 5, height: 5, borderRadius: 3 },
-  habitKeyText: { fontSize: 11, maxWidth: 100 },
+  habitKeyDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
+  habitKeyText: { fontSize: 13, flexShrink: 1, flexWrap: "wrap" },
 
   emptyState: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 13 },
