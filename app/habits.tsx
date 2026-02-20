@@ -13,17 +13,21 @@ import { CategoryDef, Habit } from '@/lib/storage';
 
 // ─── Add/Edit Habit Modal ─────────────────────────────────────────────────────
 
+// Numbered emojis 1–10 then fallback to ⭐
+const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+
 interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
+  defaultEmoji?: string;
   onSave: (name: string, emoji: string) => void;
   onClose: () => void;
 }
 
-function HabitModal({ visible, editHabit, onSave, onClose }: HabitModalProps) {
+function HabitModal({ visible, editHabit, defaultEmoji, onSave, onClose }: HabitModalProps) {
   const colors = useColors();
   const [name, setName] = useState(editHabit?.name ?? '');
-  const [emoji, setEmoji] = useState(editHabit?.emoji ?? '⭐');
+  const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   function handleSave() {
@@ -400,6 +404,10 @@ export default function HabitsScreen() {
       <HabitModal
         visible={habitModal.open}
         editHabit={habitModal.edit}
+        defaultEmoji={(() => {
+          const catHabits = habits.filter((h) => h.category === habitModal.categoryId);
+          return NUMBER_EMOJIS[catHabits.length] ?? '⭐';
+        })()}
         onSave={handleSaveHabit}
         onClose={() => setHabitModal({ open: false, categoryId: '' })}
       />

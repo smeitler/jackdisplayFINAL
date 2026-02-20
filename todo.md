@@ -84,3 +84,6 @@
 - [x] Calendar: past days with no data = red cell (skipped indicator)
 - [x] Calendar: taller cells so all habit emoji+dot rows are fully visible (no clipping)
 - [x] Analytics: habit legend below each calendar — tap a habit to filter calendar to that habit only
+
+- [x] Analytics legend: show full habit names (no numberOfLines truncation, allow wrap)
+- [x] Default habit emoji to numbered sequence (1️⃣ 2️⃣ 3️⃣ ...) based on position in category

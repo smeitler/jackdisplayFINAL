@@ -214,7 +214,6 @@ export default function ProgressScreen() {
                         <Text style={styles.habitLegendEmoji}>{h.emoji}</Text>
                         <Text
                           style={[styles.habitLegendName, { color: isSelected ? colors.primary : colors.muted }]}
-                          numberOfLines={1}
                         >
                           {h.name}
                         </Text>
@@ -344,5 +343,5 @@ const styles = StyleSheet.create({
   habitLegend: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, marginBottom: 4 },
   habitLegendChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
   habitLegendEmoji: { fontSize: 13 },
-  habitLegendName: { fontSize: 11, fontWeight: "500", maxWidth: 90 },
+  habitLegendName: { fontSize: 11, fontWeight: "500", flexShrink: 1 },
 });
