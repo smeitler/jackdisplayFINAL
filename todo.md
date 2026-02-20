@@ -122,5 +122,3 @@
 
 - [x] Redesign check-in screen: large tap targets, color-fill rating buttons, animated press feedback
 - [x] Add satisfying completion animation when all habits in a category are rated
-
-- [x] Ultra-fast check-in: one habit at a time, 3-zone full-screen tap, auto-advance, auto-save
