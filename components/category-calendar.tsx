@@ -119,22 +119,28 @@ export function CategoryCalendar({
             const hasData  = datesWithEntries.has(dateStr);
             const habitColorMap = dayHabitColors[dateStr] ?? {};
 
-            // Background:
-            // - future / today: transparent
-            // - past, has data: blue tint
-            // - past, no data:  soft red (skipped)
-            let bgColor = "transparent";
-            if (isPast) {
-              bgColor = hasData ? loggedBg : skippedBg;
-            }
-
             // Which habits to show in this cell
             const habitsToShow = selectedHabitId
               ? habits.filter((h) => h.id === selectedHabitId)
               : habits;
 
-            // Only show rows for habits that were actually rated (or show a grey dot if skipped in filter mode)
-            const ratedHabits = (isPast && hasData)
+            // Whether this day has data for the habits currently shown
+            // When filtering, only count the selected habit's data (not all habits)
+            const hasVisibleData = selectedHabitId
+              ? !!habitColorMap[selectedHabitId]
+              : hasData;
+
+            // Background:
+            // - future / today: transparent
+            // - past, has visible data: blue tint
+            // - past, no visible data: soft red (skipped)
+            let bgColor = "transparent";
+            if (isPast) {
+              bgColor = hasVisibleData ? loggedBg : skippedBg;
+            }
+
+            // Only show rows for habits that were actually rated
+            const ratedHabits = (isPast && hasVisibleData)
               ? habitsToShow.filter((h) => !!habitColorMap[h.id])
               : [];
 

@@ -7,6 +7,7 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 // Curated emoji list grouped by theme
 const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
+  { label: 'Numbers', emojis: ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔢','#️⃣','*️⃣','0️⃣'] },
   { label: 'Health & Body', emojis: ['💪','🏋️','🧘','🏃','🚴','🤸','🥗','🥦','💧','😴','🧠','❤️','🫀','🦷','👁️','🩺','💊','🏥','🌿','🍎'] },
   { label: 'Mind & Growth', emojis: ['📚','📖','✍️','🎯','🏆','⭐','💡','🔬','🎓','🧩','🎨','🎭','🎵','🎤','🎸','🎹','📝','🗒️','📓','🔭'] },
   { label: 'Wealth & Work', emojis: ['💰','💵','📈','💼','🏦','💳','🪙','📊','🏢','🤝','📱','💻','🖥️','⌨️','🛠️','🔧','⚙️','🚀','✈️','🌐'] },

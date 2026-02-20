@@ -123,6 +123,8 @@ export async function saveCategories(cats: CategoryDef[]): Promise<void> {
 
 // ─── Habits ───────────────────────────────────────────────────────────────────
 
+const NUMBER_EMOJIS_STORAGE = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+
 export async function loadHabits(): Promise<Habit[]> {
   try {
     const raw = await AsyncStorage.getItem(KEYS.habits);
@@ -130,9 +132,18 @@ export async function loadHabits(): Promise<Habit[]> {
       await AsyncStorage.setItem(KEYS.habits, JSON.stringify(DEFAULT_HABITS));
       return DEFAULT_HABITS;
     }
-    // Migrate old habits that don't have an emoji field
+    // Migrate old habits: assign numbered emoji by position within category if missing or is the old ⭐ fallback
     const parsed = JSON.parse(raw) as any[];
-    return parsed.map((h) => ({ emoji: '⭐', ...h })) as Habit[];
+    const catCounts: Record<string, number> = {};
+    return parsed.map((h) => {
+      const needsMigration = !h.emoji || h.emoji === '⭐';
+      if (needsMigration) {
+        const idx = catCounts[h.category] ?? 0;
+        catCounts[h.category] = idx + 1;
+        return { ...h, emoji: NUMBER_EMOJIS_STORAGE[idx] ?? '⭐' } as Habit;
+      }
+      return h as Habit;
+    });
   } catch {
     return DEFAULT_HABITS;
   }
