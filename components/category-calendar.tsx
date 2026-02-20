@@ -43,10 +43,18 @@ function ratingColor(rating: string): string {
   return "transparent";
 }
 
-function overallBg(dots: string[], dateStr: string, today: string): { color: string; opacity: number } {
+function overallBg(
+  dots: string[],
+  dateStr: string,
+  today: string,
+  hasAnyEntry: boolean,
+): { color: string; opacity: number } {
   if (dateStr >= today) return { color: "transparent", opacity: 0 };
+  // Only show red if the day was completely skipped (zero entries saved)
+  if (!hasAnyEntry) return { color: "#EF4444", opacity: 0.25 };
+  // Day has data — score based on rated dots
   const rated = dots.filter((c) => c !== "transparent");
-  if (rated.length === 0) return { color: "#EF4444", opacity: 0.25 }; // skipped = soft red
+  if (rated.length === 0) return { color: "#F59E0B", opacity: 0.35 }; // entries exist but all 'none'
   const score =
     rated.reduce((s, c) => s + (c === "#22C55E" ? 1 : c === "#F59E0B" ? 0.5 : 0), 0) / rated.length;
   const color = score >= 0.75 ? "#22C55E" : score >= 0.4 ? "#F59E0B" : "#EF4444";
@@ -63,15 +71,18 @@ export function CategoryCalendar({
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
 
   // Build a lookup: date -> { habitId -> ratingColor }
-  const dayHabitColors = useMemo(() => {
+  // Also track which dates have ANY saved entry (even if rating=none) for this category
+  const { dayHabitColors, datesWithEntries } = useMemo(() => {
     const map: Record<string, Record<string, string>> = {};
+    const withEntries = new Set<string>();
     for (const entry of checkIns) {
       if (!habitIds.includes(entry.habitId)) continue;
+      withEntries.add(entry.date);
       if (entry.rating === "none") continue;
       if (!map[entry.date]) map[entry.date] = {};
       map[entry.date][entry.habitId] = ratingColor(entry.rating);
     }
-    return map;
+    return { dayHabitColors: map, datesWithEntries: withEntries };
   }, [checkIns, habitIds]);
 
   const firstDow = new Date(year, month, 1).getDay();
@@ -114,7 +125,8 @@ export function CategoryCalendar({
             const dots = habits.map((h) => habitColorMap[h.id] ?? "transparent");
             const visibleDots = isPast ? dots : [];
 
-            const { color: bgColor, opacity: bgOpacity } = overallBg(dots, dateStr, today);
+            const hasAnyEntry = datesWithEntries.has(dateStr);
+            const { color: bgColor, opacity: bgOpacity } = overallBg(dots, dateStr, today, hasAnyEntry);
 
             return (
               <Pressable

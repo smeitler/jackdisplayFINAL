@@ -76,6 +76,10 @@ export default function CheckInScreen() {
     setTimeout(() => router.back(), 1600);
   }
 
+  // All active habits must be rated before saving
+  const allRated = activeHabits.length > 0 &&
+    activeHabits.every((h) => ratings[h.id] && ratings[h.id] !== 'none');
+
   const ratedEntries = Object.values(ratings).filter((r) => r !== 'none' && r !== undefined);
   const greenCount  = ratedEntries.filter((r) => r === 'green').length;
   const yellowCount = ratedEntries.filter((r) => r === 'yellow').length;
@@ -250,13 +254,19 @@ export default function CheckInScreen() {
         )}
 
         <Pressable
-          onPress={handleSubmit}
+          onPress={allRated ? handleSubmit : undefined}
           style={({ pressed }) => [
             styles.saveBtn,
-            { backgroundColor: colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }] },
+            {
+              backgroundColor: allRated ? colors.primary : colors.border,
+              transform: [{ scale: allRated && pressed ? 0.97 : 1 }],
+              opacity: allRated ? 1 : 0.55,
+            },
           ]}
         >
-          <Text style={styles.saveBtnText}>Save Review</Text>
+          <Text style={[styles.saveBtnText, { color: allRated ? '#fff' : colors.muted }]}>
+            {allRated ? 'Save Review' : `Rate all habits (${ratedEntries.length}/${totalActive})`}
+          </Text>
         </Pressable>
       </View>
     </ScreenContainer>
