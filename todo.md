@@ -109,3 +109,7 @@
 - [x] Move category delete button inside the category edit modal
 
 - [x] Replace Alert.alert with inline confirm UI in HabitModal and CategoryModal (Alert blocked by web modal overlay)
+
+- [x] Add character limit (20 chars) to habit name input with live counter
+- [x] Add optional description field to habit edit modal
+- [x] Persist habit description in storage

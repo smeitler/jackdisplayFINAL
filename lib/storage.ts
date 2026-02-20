@@ -18,6 +18,7 @@ export type Habit = {
   id: string;
   name: string;
   emoji: string;    // per-habit emoji, e.g. "🏋️"
+  description?: string; // optional user-written description
   category: Category;
   isActive: boolean;
   createdAt: string;

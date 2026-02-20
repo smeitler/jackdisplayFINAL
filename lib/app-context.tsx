@@ -66,7 +66,7 @@ const initialState: AppState = {
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 type AppContextValue = AppState & {
-  addHabit: (name: string, emoji: string, category: Category) => Promise<void>;
+  addHabit: (name: string, emoji: string, category: Category, description?: string) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   addCategory: (label: string, emoji: string) => Promise<void>;
@@ -111,11 +111,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     load();
   }, []);
 
-  const addHabit = useCallback(async (name: string, emoji: string, category: Category) => {
+  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string) => {
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
       name,
       emoji,
+      description,
       category,
       isActive: true,
       createdAt: new Date().toISOString(),

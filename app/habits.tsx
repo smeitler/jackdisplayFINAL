@@ -139,22 +139,25 @@ interface HabitModalProps {
   editHabit?: Habit | null;
   defaultEmoji?: string;
   entryCount: number;
-  onSave: (name: string, emoji: string) => void;
+  onSave: (name: string, emoji: string, description?: string) => void;
   onDelete: (habitId: string) => void;
   onDeactivate: (habitId: string) => void;
   onClose: () => void;
 }
 
+const NAME_LIMIT = 20;
+
 function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDelete, onDeactivate, onClose }: HabitModalProps) {
   const colors = useColors();
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
+  const [description, setDescription] = useState(editHabit?.description ?? '');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!name.trim()) return;
-    onSave(name.trim(), emoji);
+    onSave(name.trim(), emoji, description.trim() || undefined);
     onClose();
   }
 
@@ -188,6 +191,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
         onShow={() => {
           setName(editHabit?.name ?? '');
           setEmoji(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
+          setDescription(editHabit?.description ?? '');
           setConfirmDelete(false);
         }}
       >
@@ -207,17 +211,36 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
               >
                 <Text style={styles.emojiBtnText}>{emoji}</Text>
               </TouchableOpacity>
-              <TextInput
-                style={[styles.nameInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
-                placeholder="Habit name…"
-                placeholderTextColor={colors.muted}
-                value={name}
-                onChangeText={setName}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleSave}
-              />
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  style={[styles.nameInput, { backgroundColor: colors.background, borderColor: name.length >= NAME_LIMIT ? '#F59E0B' : colors.border, color: colors.foreground }]}
+                  placeholder="Habit name…"
+                  placeholderTextColor={colors.muted}
+                  value={name}
+                  onChangeText={(t) => setName(t.slice(0, NAME_LIMIT))}
+                  maxLength={NAME_LIMIT}
+                  autoFocus
+                  returnKeyType="next"
+                />
+                <Text style={[styles.charCounter, { color: name.length >= NAME_LIMIT ? '#F59E0B' : colors.muted }]}>
+                  {name.length}/{NAME_LIMIT}
+                </Text>
+              </View>
             </View>
+
+            {/* Optional description */}
+            <TextInput
+              style={[styles.descInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+              placeholder="Description (optional)…"
+              placeholderTextColor={colors.muted}
+              value={description}
+              onChangeText={(t) => setDescription(t.slice(0, 120))}
+              maxLength={120}
+              multiline
+              numberOfLines={2}
+              returnKeyType="done"
+              blurOnSubmit
+            />
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -457,11 +480,11 @@ export default function HabitsScreen() {
     setExpandedCat((prev) => (prev === id ? null : id));
   }
 
-  function handleSaveHabit(name: string, emoji: string) {
+  function handleSaveHabit(name: string, emoji: string, description?: string) {
     if (habitModal.edit) {
-      updateHabit(habitModal.edit.id, { name, emoji });
+      updateHabit(habitModal.edit.id, { name, emoji, description });
     } else {
-      addHabit(name, emoji, habitModal.categoryId);
+      addHabit(name, emoji, habitModal.categoryId, description);
     }
   }
 
@@ -721,4 +744,10 @@ const styles = StyleSheet.create({
   confirmBtns: { flexDirection: 'row', gap: 8, marginTop: 4 },
   confirmBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   confirmBtnText: { fontSize: 13, fontWeight: '600' },
+
+  charCounter: { fontSize: 11, textAlign: 'right', marginTop: 2 },
+  descInput: {
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, marginBottom: 14, minHeight: 60, textAlignVertical: 'top',
+  },
 });
