@@ -48,3 +48,5 @@
 - [x] Update home screen category grid to use dynamic categories
 
 - [x] Calendar: show red for past days with no check-in, keep future days neutral/empty
+
+- [x] Calendar: on logged days show a day-detail popover with each category emoji + colored dot (red/yellow/green)

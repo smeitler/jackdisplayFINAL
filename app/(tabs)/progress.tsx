@@ -1,8 +1,9 @@
-import { ScrollView, Text, View, Pressable, StyleSheet, Dimensions } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet, Dimensions } from "react-native";
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { CalendarHeatmap, DayScore } from "@/components/calendar-heatmap";
+import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -17,6 +18,15 @@ const MONTH_NAMES = [
   "July","August","September","October","November","December",
 ];
 
+function formatDisplayDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  const today = new Date();
+  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+  if (dateStr === toDateString(today)) return "Today";
+  if (dateStr === toDateString(yesterday)) return "Yesterday";
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
 export default function ProgressScreen() {
   const { getCategoryRate, getCategoryBreakdown, streak, checkIns, activeHabits, categories, isLoaded } = useApp();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
@@ -28,6 +38,9 @@ export default function ProgressScreen() {
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [timeRange, setTimeRange] = useState<TimeRange>("7d");
 
+  // Day detail sheet state
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
   const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
   const overallRate = sortedCategories.length > 0
     ? sortedCategories.reduce((s, c) => s + getCategoryRate(c.id, days), 0) / sortedCategories.length
@@ -36,7 +49,6 @@ export default function ProgressScreen() {
 
   // Build per-day scores for the calendar
   const calendarScores: DayScore[] = useMemo(() => {
-    // Collect all unique dates that have check-ins
     const allDates = new Set(checkIns.map((e) => e.date));
     return Array.from(allDates).map((date) => {
       const entries = checkIns.filter((e) => e.date === date);
@@ -49,6 +61,25 @@ export default function ProgressScreen() {
       return { date, score };
     });
   }, [checkIns, activeHabits]);
+
+  // Build per-category scores for the selected day
+  const selectedDayCategoryScores: CategoryDayScore[] = useMemo(() => {
+    if (!selectedDate) return [];
+    const dateEntries = checkIns.filter((e) => e.date === selectedDate);
+    return sortedCategories.map((cat) => {
+      const catHabitIds = new Set(
+        activeHabits.filter((h) => h.category === cat.id).map((h) => h.id)
+      );
+      const catEntries = dateEntries.filter((e) => catHabitIds.has(e.habitId) && e.rating !== "none");
+      const green  = catEntries.filter((e) => e.rating === "green").length;
+      const yellow = catEntries.filter((e) => e.rating === "yellow").length;
+      const red    = catEntries.filter((e) => e.rating === "red").length;
+      const total  = green + yellow + red;
+      const score  = total === 0 ? null
+        : (green * 1 + yellow * 0.5 + red * 0) / total;
+      return { category: cat, score, green, yellow, red, total };
+    });
+  }, [selectedDate, checkIns, sortedCategories, activeHabits]);
 
   function prevMonth() {
     if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
@@ -123,7 +154,7 @@ export default function ProgressScreen() {
             year={calYear}
             month={calMonth}
             scores={calendarScores}
-            onDayPress={(date) => router.push(`/checkin?date=${date}` as never)}
+            onDayPress={(date) => setSelectedDate(date)}
           />
         </View>
 
@@ -207,13 +238,28 @@ export default function ProgressScreen() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      {/* ── Day Detail Sheet ── */}
+      <DayDetailSheet
+        visible={selectedDate !== null}
+        date={selectedDate ?? ""}
+        displayDate={selectedDate ? formatDisplayDate(selectedDate) : ""}
+        categoryScores={selectedDayCategoryScores}
+        onClose={() => setSelectedDate(null)}
+        onEdit={() => {
+          const d = selectedDate;
+          setSelectedDate(null);
+          setTimeout(() => router.push(`/checkin?date=${d}` as never), 100);
+        }}
+      />
     </ScreenContainer>
   );
 }
 
-function rateColor(rate: number, colors: any): string {
-  if (rate >= 0.75) return colors.success ?? "#22C55E";
-  if (rate >= 0.4)  return colors.warning ?? "#F59E0B";
+function rateColor(rate: number, colors: ReturnType<typeof useColors>): string {
+  if (rate === 0)    return colors.muted;
+  if (rate >= 0.75)  return colors.success ?? "#22C55E";
+  if (rate >= 0.4)   return colors.warning ?? "#F59E0B";
   return colors.error ?? "#EF4444";
 }
 
