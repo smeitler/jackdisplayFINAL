@@ -1,14 +1,12 @@
 /**
  * CategoryCalendar
  *
- * A full-month calendar for a single category. Each day cell:
- *  - Past, no data:   completely blank (transparent background, no fill)
- *  - Past, logged:    subtle blue/primary tinted background
- *                     + one row per habit: emoji on left, colored dot on right
+ * A full-month calendar for a single category. All cells share a fixed uniform height.
+ * Each day cell:
+ *  - Past, no data:   completely blank (transparent)
+ *  - Past, logged:    subtle blue tint + vertical emoji+dot rows (clipped to cell)
  *  - Today:           primary-color border
  *  - Future:          dimmed day number only
- *
- * Tapping a past day calls onDayPress.
  */
 import { View, Text, Pressable, StyleSheet, Dimensions } from "react-native";
 import { useMemo } from "react";
@@ -16,18 +14,13 @@ import { useColors } from "@/hooks/use-colors";
 import { toDateString, CheckInEntry, Habit } from "@/lib/storage";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const H_PAD = 68;        // card horizontal padding (14px each side) + screen margin (20px each side)
+const H_PAD = 68;
 const CELL_GAP = 3;
 const COLS = 7;
 const CELL_W = Math.floor((SCREEN_WIDTH - H_PAD - CELL_GAP * (COLS - 1)) / COLS);
 
-// Cell height scales with number of habits: day number + per-habit rows
-// Each habit row is ~12px; minimum cell height = CELL_W
-function cellHeight(habitCount: number): number {
-  const rowH = 12;
-  const padding = 8; // top + bottom padding
-  return Math.max(CELL_W, 20 + habitCount * rowH + padding);
-}
+// Fixed cell height — tall enough for up to ~4 habit rows, same for every cell
+const CELL_H = CELL_W + 24;
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -51,12 +44,9 @@ export function CategoryCalendar({
 }: CategoryCalendarProps) {
   const colors = useColors();
   const today = toDateString();
-  const CELL_H = cellHeight(habits.length);
 
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
 
-  // Build lookup: date -> { habitId -> ratingColor }
-  // Only count entries with real ratings (not 'none')
   const { dayHabitColors, datesWithEntries } = useMemo(() => {
     const map: Record<string, Record<string, string>> = {};
     const withEntries = new Set<string>();
@@ -83,8 +73,7 @@ export function CategoryCalendar({
   const rows: typeof cells[] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
 
-  // Primary color with low opacity for logged-day background
-  const loggedBg = colors.primary + "22"; // ~13% opacity blue tint
+  const loggedBg = colors.primary + "22";
 
   return (
     <View style={styles.container}>
@@ -109,14 +98,14 @@ export function CategoryCalendar({
             const isFuture = dateStr > today;
             const isPast   = dateStr < today;
             const hasData  = datesWithEntries.has(dateStr);
-
             const habitColorMap = dayHabitColors[dateStr] ?? {};
 
-            // Background logic:
-            // - future / today (no data): transparent
-            // - past, no data: transparent (blank)
-            // - past, has data: subtle blue tint
             const bgColor = (isPast && hasData) ? loggedBg : "transparent";
+
+            // Only show habits that were actually rated
+            const ratedHabits = isPast && hasData
+              ? habits.filter((h) => !!habitColorMap[h.id])
+              : [];
 
             return (
               <Pressable
@@ -147,21 +136,25 @@ export function CategoryCalendar({
                   {day}
                 </Text>
 
-                {/* Habit rows — one per habit, stacked vertically */}
-                {isPast && hasData && habits.map((h) => {
-                  const dotColor = habitColorMap[h.id];
-                  if (!dotColor) return null; // not rated — skip row entirely
-                  return (
-                    <View key={h.id} style={styles.habitRow}>
-                      <Text style={styles.habitEmoji}>{h.emoji}</Text>
-                      <View style={[styles.dot, { backgroundColor: dotColor }]} />
-                    </View>
-                  );
-                })}
+                {/* Habit rows — clipped inside the fixed cell height */}
+                {ratedHabits.length > 0 && (
+                  <View style={styles.habitsContainer}>
+                    {ratedHabits.map((h) => (
+                      <View key={h.id} style={styles.habitRow}>
+                        <Text style={styles.habitEmoji}>{h.emoji}</Text>
+                        <View
+                          style={[
+                            styles.dot,
+                            { backgroundColor: habitColorMap[h.id] },
+                          ]}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                )}
               </Pressable>
             );
           })}
-          {/* Fill remaining cells in last row */}
           {row.length < 7 &&
             Array.from({ length: 7 - row.length }).map((_, i) => (
               <View key={`t-${i}`} style={{ width: CELL_W, height: CELL_H }} />
@@ -184,22 +177,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 3,
-    paddingBottom: 3,
-    overflow: "hidden",
+    paddingHorizontal: 1,
+    overflow: "hidden", // clips content that exceeds fixed height
   },
   dayText: {
     fontSize: 9,
-    lineHeight: 13,
+    lineHeight: 12,
     marginBottom: 1,
   },
 
-  // One row per habit: emoji + colored dot
+  // Container for habit rows — fills remaining space, clips overflow
+  habitsContainer: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    overflow: "hidden",
+    gap: 1,
+  },
+
+  // One row per habit: emoji + dot side by side, centered
   habitRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    height: 12,
   },
   habitEmoji: {
     fontSize: 7,
@@ -209,5 +210,6 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
+    flexShrink: 0,
   },
 });

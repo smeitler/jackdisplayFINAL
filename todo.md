@@ -74,3 +74,5 @@
 - [x] Calendar: past days with no data = completely blank cell (no red, no fill)
 - [x] Calendar: logged days = subtle blue/primary tinted background
 - [x] Calendar: habit emoji+dot stack vertically one per row (not side by side)
+
+- [x] Calendar: fix uniform cell height — logged day emoji+dot rows must not expand the cell
