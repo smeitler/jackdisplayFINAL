@@ -70,3 +70,7 @@
 - [x] Analytics: fix category card to show full-size month calendar grid (not a tiny strip)
 - [x] Analytics: fix habit emojis showing as ⭐ instead of their actual emoji
 - [x] Analytics: remove the habit list from the card header — calendar IS the main content
+
+- [x] Calendar: past days with no data = completely blank cell (no red, no fill)
+- [x] Calendar: logged days = subtle blue/primary tinted background
+- [x] Calendar: habit emoji+dot stack vertically one per row (not side by side)
