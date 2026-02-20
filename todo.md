@@ -113,3 +113,5 @@
 - [x] Add character limit (20 chars) to habit name input with live counter
 - [x] Add optional description field to habit edit modal
 - [x] Persist habit description in storage
+
+- [x] Redesign calendar cells: color-dominant blocks with habit number only (no emojis/labels)
