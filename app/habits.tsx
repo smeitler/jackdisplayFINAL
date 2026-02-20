@@ -150,6 +150,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!name.trim()) return;
@@ -158,44 +159,23 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
   }
 
   function handleDeletePress() {
-    // Capture ID immediately — do NOT close modal first
+    setConfirmDelete(true);
+  }
+
+  function confirmDoDelete() {
     const id = editHabit?.id;
     if (!id) return;
+    setConfirmDelete(false);
+    onClose();
+    onDelete(id);
+  }
 
-    const hasData = entryCount > 0;
-    const dataWarning = hasData
-      ? `\n\nThis will also permanently delete ${entryCount} check-in record${entryCount === 1 ? '' : 's'}.`
-      : '';
-
-    const buttons: Parameters<typeof Alert.alert>[2] = [
-      { text: 'Cancel', style: 'cancel' },
-    ];
-
-    if (hasData) {
-      buttons.push({
-        text: 'Deactivate Instead',
-        style: 'default',
-        onPress: () => {
-          onClose();
-          onDeactivate(id);
-        },
-      });
-    }
-
-    buttons.push({
-      text: 'Delete Permanently',
-      style: 'destructive',
-      onPress: () => {
-        onClose();
-        onDelete(id);
-      },
-    });
-
-    Alert.alert(
-      'Delete Habit',
-      `Remove "${editHabit?.name}"?${dataWarning}`,
-      buttons,
-    );
+  function confirmDeactivate() {
+    const id = editHabit?.id;
+    if (!id) return;
+    setConfirmDelete(false);
+    onClose();
+    onDeactivate(id);
   }
 
   return (
@@ -208,6 +188,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
         onShow={() => {
           setName(editHabit?.name ?? '');
           setEmoji(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
+          setConfirmDelete(false);
         }}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -256,7 +237,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
             </View>
 
             {/* Delete button — only shown when editing */}
-            {editHabit && (
+            {editHabit && !confirmDelete && (
               <TouchableOpacity
                 onPress={handleDeletePress}
                 style={[styles.deleteHabitBtn, { borderColor: '#EF444440' }]}
@@ -265,6 +246,43 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
                 <IconSymbol name="trash.fill" size={15} color="#EF4444" />
                 <Text style={styles.deleteHabitText}>Delete Habit</Text>
               </TouchableOpacity>
+            )}
+
+            {/* Inline confirm panel */}
+            {confirmDelete && (
+              <View style={[styles.confirmPanel, { backgroundColor: '#EF444415', borderColor: '#EF444440' }]}>
+                <Text style={[styles.confirmTitle, { color: colors.foreground }]}>Delete "{editHabit?.name}"?</Text>
+                {entryCount > 0 && (
+                  <Text style={[styles.confirmSub, { color: colors.muted }]}>
+                    This will permanently delete {entryCount} check-in record{entryCount !== 1 ? 's' : ''}.
+                  </Text>
+                )}
+                <View style={styles.confirmBtns}>
+                  <TouchableOpacity
+                    onPress={() => setConfirmDelete(false)}
+                    style={[styles.confirmBtn, { borderColor: colors.border }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.confirmBtnText, { color: colors.muted }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  {entryCount > 0 && (
+                    <TouchableOpacity
+                      onPress={confirmDeactivate}
+                      style={[styles.confirmBtn, { borderColor: colors.primary, backgroundColor: colors.primary + '20' }]}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.confirmBtnText, { color: colors.primary }]}>Deactivate</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={confirmDoDelete}
+                    style={[styles.confirmBtn, { backgroundColor: '#EF4444', borderColor: '#EF4444' }]}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.confirmBtnText, { color: '#fff' }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
           </View>
         </KeyboardAvoidingView>
@@ -296,6 +314,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
   const [label, setLabel] = useState(editCategory?.label ?? '');
   const [emoji, setEmoji] = useState(editCategory?.emoji ?? '🌟');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!label.trim()) return;
@@ -303,24 +322,12 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
     onClose();
   }
 
-  function handleDeletePress() {
+  function confirmDoDelete() {
     const id = editCategory?.id;
     if (!id) return;
-    Alert.alert(
-      'Delete Category',
-      `Remove "${editCategory?.label}"${habitCount > 0 ? ` and its ${habitCount} habit${habitCount !== 1 ? 's' : ''}` : ''}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onClose();
-            onDelete(id);
-          },
-        },
-      ],
-    );
+    setConfirmDelete(false);
+    onClose();
+    onDelete(id);
   }
 
   return (
@@ -381,15 +388,43 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
             </View>
 
             {/* Delete button — only shown when editing an existing category */}
-            {editCategory && (
+            {editCategory && !confirmDelete && (
               <TouchableOpacity
-                onPress={handleDeletePress}
+                onPress={() => setConfirmDelete(true)}
                 style={[styles.deleteHabitBtn, { borderColor: '#EF444440' }]}
                 activeOpacity={0.7}
               >
                 <IconSymbol name="trash.fill" size={15} color="#EF4444" />
                 <Text style={styles.deleteHabitText}>Delete Category</Text>
               </TouchableOpacity>
+            )}
+
+            {/* Inline confirm panel */}
+            {confirmDelete && (
+              <View style={[styles.confirmPanel, { backgroundColor: '#EF444415', borderColor: '#EF444440' }]}>
+                <Text style={[styles.confirmTitle, { color: colors.foreground }]}>Delete "{editCategory?.label}"?</Text>
+                {habitCount > 0 && (
+                  <Text style={[styles.confirmSub, { color: colors.muted }]}>
+                    This will also delete {habitCount} habit{habitCount !== 1 ? 's' : ''} in this category.
+                  </Text>
+                )}
+                <View style={styles.confirmBtns}>
+                  <TouchableOpacity
+                    onPress={() => setConfirmDelete(false)}
+                    style={[styles.confirmBtn, { borderColor: colors.border }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.confirmBtnText, { color: colors.muted }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={confirmDoDelete}
+                    style={[styles.confirmBtn, { backgroundColor: '#EF4444', borderColor: '#EF4444' }]}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.confirmBtnText, { color: '#fff' }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
           </View>
         </KeyboardAvoidingView>
@@ -678,4 +713,12 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1,
   },
   deleteHabitText: { fontSize: 14, fontWeight: '600', color: '#EF4444' },
+
+  // Inline confirm panel
+  confirmPanel: { marginTop: 14, borderRadius: 12, borderWidth: 1, padding: 14, gap: 8 },
+  confirmTitle: { fontSize: 15, fontWeight: '700' },
+  confirmSub: { fontSize: 13, lineHeight: 18 },
+  confirmBtns: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  confirmBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  confirmBtnText: { fontSize: 13, fontWeight: '600' },
 });

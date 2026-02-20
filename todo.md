@@ -107,3 +107,5 @@
 
 - [x] Fix habit delete still not working from edit modal
 - [x] Move category delete button inside the category edit modal
+
+- [x] Replace Alert.alert with inline confirm UI in HabitModal and CategoryModal (Alert blocked by web modal overlay)
