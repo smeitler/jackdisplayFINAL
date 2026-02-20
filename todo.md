@@ -23,3 +23,8 @@
 - [x] Add "History" entry point on Today screen and Progress screen to browse past days
 - [x] Update progress bar colors to reflect green/yellow/red distribution
 - [x] Update 7-day bar chart to use weighted scores
+
+- [x] Redesign rating buttons: replace emoji circles with modern pill/chip color selectors
+- [x] Clean up check-in screen layout: tighter spacing, better typography, remove visual clutter
+- [x] Update rating summary badges to match new design language
+- [x] Polish Today screen category cards to match new rating style

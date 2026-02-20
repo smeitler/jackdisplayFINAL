@@ -8,34 +8,33 @@ import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
-  yesterdayString, offsetDateString, formatDisplayDate, toDateString,
-  Rating, Category, RATING_META,
+  yesterdayString, formatDisplayDate, toDateString,
+  Rating, Category,
 } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 
-const CATEGORY_META: Record<Category, { label: string; icon: any; colorKey: string; emoji: string }> = {
-  health: { label: 'Health', icon: 'figure.walk', colorKey: 'health', emoji: '💪' },
-  relationships: { label: 'Relationships', icon: 'person.2.fill', colorKey: 'relationships', emoji: '❤️' },
-  wealth: { label: 'Wealth', icon: 'dollarsign.circle.fill', colorKey: 'wealth', emoji: '💰' },
-  mindset: { label: 'Mindset', icon: 'brain.head.profile', colorKey: 'mindset', emoji: '🧠' },
-};
-
 const CATEGORY_ORDER: Category[] = ['health', 'relationships', 'wealth', 'mindset'];
 
-const RATINGS: Rating[] = ['red', 'yellow', 'green'];
-
-const RATING_DISPLAY: Record<Rating, { emoji: string; label: string; bg: string; border: string }> = {
-  none: { emoji: '–', label: 'Skip', bg: 'transparent', border: '#9090B8' },
-  red: { emoji: '🔴', label: 'Failed', bg: '#FEE2E2', border: '#EF4444' },
-  yellow: { emoji: '🟡', label: 'Okay', bg: '#FEF3C7', border: '#F59E0B' },
-  green: { emoji: '🟢', label: 'Crushed it!', bg: '#DCFCE7', border: '#22C55E' },
+const CATEGORY_META: Record<Category, { label: string; emoji: string; colorKey: string }> = {
+  health:        { label: 'Health',        emoji: '💪', colorKey: 'health' },
+  relationships: { label: 'Relationships', emoji: '❤️', colorKey: 'relationships' },
+  wealth:        { label: 'Wealth',        emoji: '💰', colorKey: 'wealth' },
+  mindset:       { label: 'Mindset',       emoji: '🧠', colorKey: 'mindset' },
 };
 
-const RATING_DISPLAY_DARK: Record<Rating, { bg: string; border: string }> = {
-  none: { bg: 'transparent', border: '#9090B8' },
-  red: { bg: '#450A0A', border: '#EF4444' },
-  yellow: { bg: '#451A03', border: '#F59E0B' },
-  green: { bg: '#052E16', border: '#22C55E' },
+// Modern, minimal rating config — no emoji circles, just clean color + label
+const RATINGS: Rating[] = ['red', 'yellow', 'green'];
+
+const RATING_CONFIG: Record<Rating, {
+  label: string;
+  activeColor: string;      // solid fill when selected
+  activeLabelColor: string; // text when selected
+  dotColor: string;         // small dot indicator
+}> = {
+  none:   { label: '–',          activeColor: '#E5E7EB', activeLabelColor: '#6B7280', dotColor: '#9CA3AF' },
+  red:    { label: 'Missed',     activeColor: '#EF4444', activeLabelColor: '#fff',    dotColor: '#EF4444' },
+  yellow: { label: 'Okay',       activeColor: '#F59E0B', activeLabelColor: '#fff',    dotColor: '#F59E0B' },
+  green:  { label: 'Crushed it', activeColor: '#22C55E', activeLabelColor: '#fff',    dotColor: '#22C55E' },
 };
 
 export default function CheckInScreen() {
@@ -44,22 +43,19 @@ export default function CheckInScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
 
-  // Support navigating to a specific date via query param, default to yesterday
   const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
   const [submitted, setSubmitted] = useState(false);
 
   const today = toDateString();
-  const isToday = currentDate === today;
-  // Can't go forward past yesterday
   const canGoForward = currentDate < yesterdayString();
 
   function navigateDate(direction: -1 | 1) {
     const d = new Date(currentDate + 'T12:00:00');
     d.setDate(d.getDate() + direction);
     const newDate = toDateString(d);
-    // Don't allow going to today or future
     if (newDate >= today) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCurrentDate(newDate);
     setRatings(getRatingsForDate(newDate));
     setSubmitted(false);
@@ -69,40 +65,45 @@ export default function CheckInScreen() {
     const map: Record<Category, typeof activeHabits> = {
       health: [], relationships: [], wealth: [], mindset: [],
     };
-    for (const h of activeHabits) {
-      map[h.category].push(h);
-    }
+    for (const h of activeHabits) map[h.category].push(h);
     return map;
   }, [activeHabits]);
 
   function setRating(habitId: string, rating: Rating) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRatings((prev) => ({ ...prev, [habitId]: rating }));
+    // Tap same rating to deselect
+    setRatings((prev) => ({ ...prev, [habitId]: prev[habitId] === rating ? 'none' : rating }));
   }
 
   async function handleSubmit() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
-    setTimeout(() => router.back(), 1400);
+    setTimeout(() => router.back(), 1600);
   }
 
-  // Summary counts
-  const ratedCount = Object.values(ratings).filter((r) => r !== 'none' && r !== undefined).length;
-  const greenCount = Object.values(ratings).filter((r) => r === 'green').length;
-  const yellowCount = Object.values(ratings).filter((r) => r === 'yellow').length;
-  const redCount = Object.values(ratings).filter((r) => r === 'red').length;
+  const ratedEntries = Object.values(ratings).filter((r) => r !== 'none' && r !== undefined);
+  const greenCount  = ratedEntries.filter((r) => r === 'green').length;
+  const yellowCount = ratedEntries.filter((r) => r === 'yellow').length;
+  const redCount    = ratedEntries.filter((r) => r === 'red').length;
+  const totalActive = activeHabits.length;
+  const progress    = totalActive > 0 ? ratedEntries.length / totalActive : 0;
 
   if (submitted) {
     return (
       <ScreenContainer>
         <View style={styles.successContainer}>
-          <Text style={styles.successEmoji}>🎉</Text>
-          <Text style={[styles.successTitle, { color: colors.foreground }]}>Saved!</Text>
-          <View style={styles.successStats}>
-            {greenCount > 0 && <Text style={styles.successStat}>🟢 {greenCount} crushed</Text>}
-            {yellowCount > 0 && <Text style={styles.successStat}>🟡 {yellowCount} okay</Text>}
-            {redCount > 0 && <Text style={styles.successStat}>🔴 {redCount} missed</Text>}
+          <View style={[styles.successIconWrap, { backgroundColor: colors.surface }]}>
+            <Text style={styles.successIcon}>✓</Text>
+          </View>
+          <Text style={[styles.successTitle, { color: colors.foreground }]}>Saved</Text>
+          <Text style={[styles.successSub, { color: colors.muted }]}>
+            {formatDisplayDate(currentDate)} reviewed
+          </Text>
+          <View style={styles.successPills}>
+            {greenCount  > 0 && <View style={[styles.successPill, { backgroundColor: '#22C55E' }]}><Text style={styles.successPillText}>{greenCount} crushed</Text></View>}
+            {yellowCount > 0 && <View style={[styles.successPill, { backgroundColor: '#F59E0B' }]}><Text style={styles.successPillText}>{yellowCount} okay</Text></View>}
+            {redCount    > 0 && <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}><Text style={styles.successPillText}>{redCount} missed</Text></View>}
           </View>
         </View>
       </ScreenContainer>
@@ -111,60 +112,66 @@ export default function CheckInScreen() {
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
-      {/* Header */}
+
+      {/* ── Header ── */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
-          style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
+          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.5 : 1 }]}
         >
-          <IconSymbol name="xmark" size={18} color={colors.muted} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Daily Review</Text>
-        <View style={styles.closeBtn} />
-      </View>
-
-      {/* Date navigation */}
-      <View style={[styles.dateNav, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <Pressable
-          onPress={() => navigateDate(-1)}
-          style={({ pressed }) => [styles.dateNavBtn, { opacity: pressed ? 0.6 : 1 }]}
-        >
-          <IconSymbol name="chevron.left" size={20} color={colors.primary} />
+          <IconSymbol name="xmark" size={16} color={colors.muted} />
         </Pressable>
 
-        <View style={styles.dateNavCenter}>
-          <Text style={[styles.dateNavLabel, { color: colors.foreground }]}>
-            {formatDisplayDate(currentDate)}
-          </Text>
-          <Text style={[styles.dateNavSub, { color: colors.muted }]}>
-            {new Date(currentDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-          </Text>
+        {/* Date nav */}
+        <View style={styles.dateRow}>
+          <Pressable
+            onPress={() => navigateDate(-1)}
+            style={({ pressed }) => [styles.arrowBtn, { opacity: pressed ? 0.5 : 1 }]}
+          >
+            <IconSymbol name="chevron.left" size={16} color={colors.primary} />
+          </Pressable>
+          <View style={styles.dateLabelWrap}>
+            <Text style={[styles.dateLabel, { color: colors.foreground }]}>
+              {formatDisplayDate(currentDate)}
+            </Text>
+            <Text style={[styles.dateSub, { color: colors.muted }]}>
+              {new Date(currentDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => canGoForward ? navigateDate(1) : undefined}
+            style={({ pressed }) => [styles.arrowBtn, { opacity: canGoForward ? (pressed ? 0.5 : 1) : 0.2 }]}
+          >
+            <IconSymbol name="chevron.right" size={16} color={colors.primary} />
+          </Pressable>
         </View>
 
-        <Pressable
-          onPress={() => canGoForward ? navigateDate(1) : undefined}
-          style={({ pressed }) => [
-            styles.dateNavBtn,
-            { opacity: canGoForward ? (pressed ? 0.6 : 1) : 0.2 },
-          ]}
-        >
-          <IconSymbol name="chevron.right" size={20} color={colors.primary} />
-        </Pressable>
+        <View style={styles.headerBtn} />
       </View>
 
-      {/* Rating legend */}
-      <View style={[styles.legend, { backgroundColor: colors.background }]}>
-        {RATINGS.map((r) => (
-          <View key={r} style={styles.legendItem}>
-            <Text style={styles.legendEmoji}>{RATING_DISPLAY[r].emoji}</Text>
-            <Text style={[styles.legendLabel, { color: colors.muted }]}>{RATING_DISPLAY[r].label}</Text>
-          </View>
-        ))}
+      {/* ── Progress bar ── */}
+      <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+        <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
       </View>
 
+      {/* ── Rating legend ── */}
+      <View style={[styles.legendRow, { borderBottomColor: colors.border }]}>
+        {RATINGS.map((r) => {
+          const cfg = RATING_CONFIG[r];
+          return (
+            <View key={r} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: cfg.dotColor }]} />
+              <Text style={[styles.legendText, { color: colors.muted }]}>{cfg.label}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* ── Habit list ── */}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {CATEGORY_ORDER.map((category) => {
           const habits = habitsByCategory[category];
@@ -173,19 +180,17 @@ export default function CheckInScreen() {
           const catColor = (colors as Record<string, string>)[meta.colorKey] ?? colors.primary;
 
           return (
-            <View key={category} style={styles.categorySection}>
-              {/* Category header */}
-              <View style={styles.categoryHeader}>
-                <View style={[styles.categoryIconWrap, { backgroundColor: catColor + '22' }]}>
-                  <Text style={styles.categoryEmoji}>{meta.emoji}</Text>
-                </View>
-                <Text style={[styles.categoryTitle, { color: colors.foreground }]}>{meta.label}</Text>
+            <View key={category} style={styles.section}>
+              {/* Category label */}
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionDot, { backgroundColor: catColor }]} />
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{meta.label}</Text>
               </View>
 
-              {/* Habit rating rows */}
-              <View style={[styles.habitList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {/* Habits */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 {habits.map((habit, idx) => {
-                  const currentRating: Rating = ratings[habit.id] ?? 'none';
+                  const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
 
                   return (
@@ -193,37 +198,42 @@ export default function CheckInScreen() {
                       key={habit.id}
                       style={[
                         styles.habitRow,
-                        !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                       ]}
                     >
+                      {/* Habit name */}
                       <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
                         {habit.name}
                       </Text>
-                      <View style={styles.ratingButtons}>
+
+                      {/* Rating selector — three slim pills */}
+                      <View style={styles.ratingGroup}>
                         {RATINGS.map((rating) => {
-                          const isSelected = currentRating === rating;
-                          const display = RATING_DISPLAY[rating];
-                          const darkDisplay = RATING_DISPLAY_DARK[rating];
-                          const isDark = colors.background === '#0F0E1A';
-                          const bgColor = isSelected
-                            ? (isDark ? darkDisplay.bg : display.bg)
-                            : 'transparent';
-                          const borderColor = isSelected ? display.border : colors.border;
+                          const cfg = RATING_CONFIG[rating];
+                          const isSelected = current === rating;
 
                           return (
                             <Pressable
                               key={rating}
-                              onPress={() => setRating(habit.id, isSelected ? 'none' : rating)}
+                              onPress={() => setRating(habit.id, rating)}
                               style={({ pressed }) => [
-                                styles.ratingBtn,
-                                {
-                                  backgroundColor: bgColor,
-                                  borderColor,
-                                  transform: [{ scale: pressed ? 0.9 : isSelected ? 1.08 : 1 }],
-                                },
+                                styles.ratingPill,
+                                isSelected
+                                  ? { backgroundColor: cfg.activeColor, borderColor: cfg.activeColor }
+                                  : { backgroundColor: 'transparent', borderColor: colors.border },
+                                { transform: [{ scale: pressed ? 0.93 : 1 }] },
                               ]}
                             >
-                              <Text style={styles.ratingBtnEmoji}>{display.emoji}</Text>
+                              <View style={[
+                                styles.ratingDot,
+                                { backgroundColor: isSelected ? cfg.activeLabelColor : cfg.dotColor },
+                              ]} />
+                              <Text style={[
+                                styles.ratingPillLabel,
+                                { color: isSelected ? cfg.activeLabelColor : colors.muted },
+                              ]}>
+                                {cfg.label.split(' ')[0]}
+                              </Text>
                             </Pressable>
                           );
                         })}
@@ -236,39 +246,29 @@ export default function CheckInScreen() {
           );
         })}
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: 16 }} />
       </ScrollView>
 
-      {/* Summary + Submit */}
-      <View style={[styles.submitWrap, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        {ratedCount > 0 && (
-          <View style={styles.summaryRow}>
-            {greenCount > 0 && (
-              <View style={[styles.summaryBadge, { backgroundColor: '#DCFCE7' }]}>
-                <Text style={styles.summaryBadgeText}>🟢 {greenCount}</Text>
-              </View>
-            )}
-            {yellowCount > 0 && (
-              <View style={[styles.summaryBadge, { backgroundColor: '#FEF3C7' }]}>
-                <Text style={styles.summaryBadgeText}>🟡 {yellowCount}</Text>
-              </View>
-            )}
-            {redCount > 0 && (
-              <View style={[styles.summaryBadge, { backgroundColor: '#FEE2E2' }]}>
-                <Text style={styles.summaryBadgeText}>🔴 {redCount}</Text>
-              </View>
-            )}
+      {/* ── Footer ── */}
+      <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        {/* Mini tally */}
+        {ratedEntries.length > 0 && (
+          <View style={styles.tally}>
+            {greenCount  > 0 && <View style={[styles.tallyPill, { backgroundColor: '#22C55E18' }]}><View style={[styles.tallyDot, { backgroundColor: '#22C55E' }]} /><Text style={[styles.tallyText, { color: '#22C55E' }]}>{greenCount}</Text></View>}
+            {yellowCount > 0 && <View style={[styles.tallyPill, { backgroundColor: '#F59E0B18' }]}><View style={[styles.tallyDot, { backgroundColor: '#F59E0B' }]} /><Text style={[styles.tallyText, { color: '#F59E0B' }]}>{yellowCount}</Text></View>}
+            {redCount    > 0 && <View style={[styles.tallyPill, { backgroundColor: '#EF444418' }]}><View style={[styles.tallyDot, { backgroundColor: '#EF4444' }]} /><Text style={[styles.tallyText, { color: '#EF4444' }]}>{redCount}</Text></View>}
+            <Text style={[styles.tallyOf, { color: colors.muted }]}>{ratedEntries.length}/{totalActive} rated</Text>
           </View>
         )}
+
         <Pressable
           onPress={handleSubmit}
           style={({ pressed }) => [
-            styles.submitBtn,
+            styles.saveBtn,
             { backgroundColor: colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }] },
           ]}
         >
-          <IconSymbol name="checkmark.circle.fill" size={20} color="#fff" />
-          <Text style={styles.submitText}>Save Review</Text>
+          <Text style={styles.saveBtnText}>Save Review</Text>
         </Pressable>
       </View>
     </ScreenContainer>
@@ -276,73 +276,92 @@ export default function CheckInScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Header
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  closeBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700' },
+  headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  dateRow: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  arrowBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  dateLabelWrap: { alignItems: 'center', minWidth: 140 },
+  dateLabel: { fontSize: 15, fontWeight: '700' },
+  dateSub: { fontSize: 11, marginTop: 1 },
 
-  dateNav: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 8,
-    borderBottomWidth: 1,
-  },
-  dateNavBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  dateNavCenter: { flex: 1, alignItems: 'center' },
-  dateNavLabel: { fontSize: 17, fontWeight: '700' },
-  dateNavSub: { fontSize: 12, marginTop: 1 },
+  // Progress
+  progressTrack: { height: 2 },
+  progressFill: { height: 2, borderRadius: 1 },
 
-  legend: {
+  // Legend
+  legendRow: {
     flexDirection: 'row', justifyContent: 'center', gap: 20,
-    paddingVertical: 8, paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendEmoji: { fontSize: 14 },
-  legendLabel: { fontSize: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 12, fontWeight: '500' },
 
-  scroll: { padding: 16, paddingBottom: 20 },
+  // Scroll
+  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
 
-  categorySection: { marginBottom: 20 },
-  categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  categoryIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  categoryEmoji: { fontSize: 18 },
-  categoryTitle: { fontSize: 16, fontWeight: '700' },
+  // Section
+  section: { marginBottom: 18 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  sectionDot: { width: 8, height: 8, borderRadius: 4 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
 
-  habitList: { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+  // Card
+  card: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+
+  // Habit row
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
+    paddingHorizontal: 14, paddingVertical: 13, gap: 12,
   },
-  habitName: { flex: 1, fontSize: 14, lineHeight: 20 },
+  habitName: { flex: 1, fontSize: 15, lineHeight: 20 },
 
-  ratingButtons: { flexDirection: 'row', gap: 8 },
-  ratingBtn: {
-    width: 40, height: 40, borderRadius: 12, borderWidth: 1.5,
+  // Rating pills — slim, modern
+  ratingGroup: { flexDirection: 'row', gap: 5 },
+  ratingPill: {
+    width: 44, height: 36, borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+    gap: 3,
+  },
+  ratingDot: { width: 8, height: 8, borderRadius: 4 },
+  ratingPillLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
+
+  // Footer
+  footer: {
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28,
+    borderTopWidth: StyleSheet.hairlineWidth, gap: 10,
+  },
+  tally: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tallyPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20,
+  },
+  tallyDot: { width: 6, height: 6, borderRadius: 3 },
+  tallyText: { fontSize: 13, fontWeight: '700' },
+  tallyOf: { fontSize: 12, marginLeft: 4 },
+  saveBtn: {
+    borderRadius: 14, paddingVertical: 15,
     alignItems: 'center', justifyContent: 'center',
   },
-  ratingBtnEmoji: { fontSize: 18 },
+  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
 
-  submitWrap: {
-    padding: 16, paddingBottom: 24,
-    borderTopWidth: 1, gap: 10,
+  // Success
+  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 },
+  successIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
   },
-  summaryRow: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
-  summaryBadge: {
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: 20,
-  },
-  summaryBadgeText: { fontSize: 13, fontWeight: '700' },
-  submitBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 14, paddingVertical: 16,
-  },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-
-  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  successEmoji: { fontSize: 64 },
-  successTitle: { fontSize: 24, fontWeight: '700' },
-  successStats: { flexDirection: 'row', gap: 12 },
-  successStat: { fontSize: 15, fontWeight: '600' },
+  successIcon: { fontSize: 32, color: '#22C55E' },
+  successTitle: { fontSize: 26, fontWeight: '700' },
+  successSub: { fontSize: 14 },
+  successPills: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  successPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  successPillText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });
