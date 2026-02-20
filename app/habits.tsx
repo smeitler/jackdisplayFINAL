@@ -2,7 +2,7 @@ import {
   View, Text, TouchableOpacity, TextInput,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -13,7 +13,7 @@ import { EmojiPicker } from '@/components/emoji-picker';
 import { useApp } from '@/lib/app-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { CategoryDef, Habit } from '@/lib/storage';
+import { CategoryDef, Habit, CheckInEntry } from '@/lib/storage';
 
 // Numbered emojis 1–10 then fallback to ⭐
 const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
@@ -101,38 +101,29 @@ function SwipeableHabitRow({ habit, isLast, onEdit, onToggle, onDelete, colors }
             <Text style={styles.habitEmoji}>{habit.emoji}</Text>
           </TouchableOpacity>
 
-          <Text
-            style={[
-              styles.habitName,
-              { color: habit.isActive ? colors.foreground : colors.muted },
-              !habit.isActive && styles.habitNameInactive,
-            ]}
-            numberOfLines={2}
-          >
-            {habit.name}
-          </Text>
+          {/* Name + status */}
+          <TouchableOpacity onPress={onEdit} style={styles.habitInfo} activeOpacity={0.7}>
+            <Text style={[styles.habitName, { color: habit.isActive ? colors.foreground : colors.muted }]}>
+              {habit.name}
+            </Text>
+            {!habit.isActive && (
+              <Text style={[styles.habitInactive, { color: colors.muted }]}>Inactive</Text>
+            )}
+          </TouchableOpacity>
 
+          {/* Actions */}
           <View style={styles.habitActions}>
-            {/* Active toggle */}
-            <TouchableOpacity
-              onPress={onToggle}
-              style={[
-                styles.toggleBtn,
-                { backgroundColor: habit.isActive ? colors.primary + '22' : colors.border },
-              ]}
-              activeOpacity={0.6}
-            >
-              <Text style={[styles.toggleText, { color: habit.isActive ? colors.primary : colors.muted }]}>
-                {habit.isActive ? 'On' : 'Off'}
-              </Text>
+            {/* Toggle active */}
+            <TouchableOpacity onPress={onToggle} style={styles.iconBtn} activeOpacity={0.6}>
+              <IconSymbol
+                name={habit.isActive ? 'checkmark.circle.fill' : 'circle'}
+                size={20}
+                color={habit.isActive ? colors.primary : colors.muted}
+              />
             </TouchableOpacity>
             {/* Edit */}
-            <TouchableOpacity
-              onPress={onEdit}
-              style={styles.iconBtn}
-              activeOpacity={0.5}
-            >
-              <IconSymbol name="pencil" size={15} color={colors.muted} />
+            <TouchableOpacity onPress={onEdit} style={styles.iconBtn} activeOpacity={0.6}>
+              <IconSymbol name="pencil" size={16} color={colors.muted} />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -147,29 +138,18 @@ interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
   defaultEmoji?: string;
+  entryCount: number;
   onSave: (name: string, emoji: string) => void;
-  /** Called when user confirms permanent deletion */
-  onDelete?: (habitId: string) => void;
-  /** Called when user chooses to deactivate instead of delete */
-  onDeactivate?: (habitId: string) => void;
-  /** Number of check-in entries associated with this habit */
-  entryCount?: number;
+  onDelete: (habitId: string) => void;
+  onDeactivate: (habitId: string) => void;
   onClose: () => void;
 }
 
-function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeactivate, entryCount, onClose }: HabitModalProps) {
+function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDelete, onDeactivate, onClose }: HabitModalProps) {
   const colors = useColors();
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-
-  // Keep a stable ref to the current habit ID so delete always uses the right ID
-  const habitIdRef = useRef<string | undefined>(editHabit?.id);
-  useEffect(() => {
-    if (visible && editHabit?.id) {
-      habitIdRef.current = editHabit.id;
-    }
-  }, [visible, editHabit?.id]);
 
   function handleSave() {
     if (!name.trim()) return;
@@ -177,12 +157,14 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeac
     onClose();
   }
 
-  function handleDelete() {
-    const id = habitIdRef.current;
+  function handleDeletePress() {
+    // Capture ID immediately — do NOT close modal first
+    const id = editHabit?.id;
     if (!id) return;
-    const hasData = (entryCount ?? 0) > 0;
+
+    const hasData = entryCount > 0;
     const dataWarning = hasData
-      ? `\n\nThis will also permanently delete ${entryCount} check-in record${entryCount === 1 ? '' : 's'} associated with this habit.`
+      ? `\n\nThis will also permanently delete ${entryCount} check-in record${entryCount === 1 ? '' : 's'}.`
       : '';
 
     const buttons: Parameters<typeof Alert.alert>[2] = [
@@ -195,7 +177,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeac
         style: 'default',
         onPress: () => {
           onClose();
-          onDeactivate?.(id);
+          onDeactivate(id);
         },
       });
     }
@@ -205,8 +187,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeac
       style: 'destructive',
       onPress: () => {
         onClose();
-        // Use setTimeout so the modal finishes closing before state updates
-        setTimeout(() => onDelete?.(id), 100);
+        onDelete(id);
       },
     });
 
@@ -275,9 +256,9 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeac
             </View>
 
             {/* Delete button — only shown when editing */}
-            {editHabit && onDelete && (
+            {editHabit && (
               <TouchableOpacity
-                onPress={handleDelete}
+                onPress={handleDeletePress}
                 style={[styles.deleteHabitBtn, { borderColor: '#EF444440' }]}
                 activeOpacity={0.7}
               >
@@ -304,11 +285,13 @@ function HabitModal({ visible, editHabit, defaultEmoji, onSave, onDelete, onDeac
 interface CategoryModalProps {
   visible: boolean;
   editCategory?: CategoryDef | null;
+  habitCount: number;
   onSave: (label: string, emoji: string) => void;
+  onDelete: (catId: string) => void;
   onClose: () => void;
 }
 
-function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModalProps) {
+function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, onClose }: CategoryModalProps) {
   const colors = useColors();
   const [label, setLabel] = useState(editCategory?.label ?? '');
   const [emoji, setEmoji] = useState(editCategory?.emoji ?? '🌟');
@@ -318,6 +301,26 @@ function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModal
     if (!label.trim()) return;
     onSave(label.trim(), emoji);
     onClose();
+  }
+
+  function handleDeletePress() {
+    const id = editCategory?.id;
+    if (!id) return;
+    Alert.alert(
+      'Delete Category',
+      `Remove "${editCategory?.label}"${habitCount > 0 ? ` and its ${habitCount} habit${habitCount !== 1 ? 's' : ''}` : ''}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            onClose();
+            onDelete(id);
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -376,6 +379,18 @@ function CategoryModal({ visible, editCategory, onSave, onClose }: CategoryModal
                 <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Delete button — only shown when editing an existing category */}
+            {editCategory && (
+              <TouchableOpacity
+                onPress={handleDeletePress}
+                style={[styles.deleteHabitBtn, { borderColor: '#EF444440' }]}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="trash.fill" size={15} color="#EF4444" />
+                <Text style={styles.deleteHabitText}>Delete Category</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -415,32 +430,12 @@ export default function HabitsScreen() {
     }
   }
 
-  function handleDeleteHabit(habitId: string) {
-    deleteHabit(habitId);
-  }
-
-  function handleDeactivateHabit(habitId: string) {
-    updateHabit(habitId, { isActive: false });
-  }
-
   function handleSaveCategory(label: string, emoji: string) {
     if (categoryModal.edit) {
       updateCategory(categoryModal.edit.id, { label, emoji });
     } else {
       addCategory(label, emoji);
     }
-  }
-
-  function handleDeleteCategory(cat: CategoryDef) {
-    const habitCount = habits.filter((h) => h.category === cat.id).length;
-    Alert.alert(
-      'Delete Category',
-      `Remove "${cat.label}"${habitCount > 0 ? ` and its ${habitCount} habit${habitCount > 1 ? 's' : ''}` : ''}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteCategory(cat.id) },
-      ],
-    );
   }
 
   return (
@@ -476,7 +471,7 @@ export default function HabitsScreen() {
 
           return (
             <View key={cat.id} style={[styles.categoryBlock, { borderColor: colors.border }]}>
-              {/* Category row — use View + TouchableOpacity to avoid nested Pressable issues */}
+              {/* Category row */}
               <View style={[styles.categoryRow, { backgroundColor: colors.surface }]}>
                 {/* Tap emoji to edit category */}
                 <TouchableOpacity
@@ -500,6 +495,7 @@ export default function HabitsScreen() {
                 </TouchableOpacity>
 
                 <View style={styles.catActions}>
+                  {/* Edit (pencil) — delete is inside this modal */}
                   <TouchableOpacity
                     onPress={() => setCategoryModal({ open: true, edit: cat })}
                     style={styles.iconBtn}
@@ -507,13 +503,7 @@ export default function HabitsScreen() {
                   >
                     <IconSymbol name="pencil" size={16} color={colors.muted} />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleDeleteCategory(cat)}
-                    style={styles.iconBtn}
-                    activeOpacity={0.5}
-                  >
-                    <IconSymbol name="trash" size={16} color="#EF4444" />
-                  </TouchableOpacity>
+                  {/* Expand/collapse chevron */}
                   <TouchableOpacity
                     onPress={() => toggleCategory(cat.id)}
                     style={styles.iconBtn}
@@ -542,7 +532,7 @@ export default function HabitsScreen() {
                       colors={colors}
                       onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
                       onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
-                      onDelete={() => handleDeleteHabit(habit.id)}
+                      onDelete={() => deleteHabit(habit.id)}
                     />
                   ))}
 
@@ -582,16 +572,18 @@ export default function HabitsScreen() {
           const catHabits = habits.filter((h) => h.category === habitModal.categoryId);
           return NUMBER_EMOJIS[catHabits.length] ?? '⭐';
         })()}
+        entryCount={habitModal.edit ? (checkIns as CheckInEntry[]).filter((e) => e.habitId === habitModal.edit!.id).length : 0}
         onSave={handleSaveHabit}
-        onDelete={habitModal.edit ? handleDeleteHabit : undefined}
-        onDeactivate={habitModal.edit ? handleDeactivateHabit : undefined}
-        entryCount={habitModal.edit ? checkIns.filter((e: { habitId: string }) => e.habitId === habitModal.edit!.id).length : 0}
+        onDelete={(id) => deleteHabit(id)}
+        onDeactivate={(id) => updateHabit(id, { isActive: false })}
         onClose={() => setHabitModal({ open: false, categoryId: '' })}
       />
       <CategoryModal
         visible={categoryModal.open}
         editCategory={categoryModal.edit}
+        habitCount={categoryModal.edit ? habits.filter((h) => h.category === categoryModal.edit!.id).length : 0}
         onSave={handleSaveCategory}
+        onDelete={(id) => deleteCategory(id)}
         onClose={() => setCategoryModal({ open: false })}
       />
     </ScreenContainer>
@@ -629,56 +621,57 @@ const styles = StyleSheet.create({
     width: DELETE_BG_W, backgroundColor: '#EF4444',
     alignItems: 'center', justifyContent: 'center',
   },
-  deleteAction: { alignItems: 'center', justifyContent: 'center', gap: 2, width: DELETE_BG_W },
-  deleteActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  deleteAction: { alignItems: 'center', justifyContent: 'center', flex: 1, width: '100%', gap: 4 },
+  deleteActionText: { color: '#fff', fontSize: 11, fontWeight: '600' },
 
-  // Habits list
-  habitsList: { borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: 4 },
-  emptyHint: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
   habitRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 10, gap: 10,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10,
   },
-  habitEmojiBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
-  habitEmoji: { fontSize: 20 },
-  habitName: { flex: 1, fontSize: 14, lineHeight: 18 },
-  habitNameInactive: { textDecorationLine: 'line-through' },
+  habitEmojiBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  habitEmoji: { fontSize: 22 },
+  habitInfo: { flex: 1 },
+  habitName: { fontSize: 15, fontWeight: '500' },
+  habitInactive: { fontSize: 11, marginTop: 1 },
   habitActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  toggleBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginRight: 2 },
-  toggleText: { fontSize: 12, fontWeight: '700' },
 
-  // Add habit
-  addHabitBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12 },
-  addHabitText: { fontSize: 14, fontWeight: '600' },
+  habitsList: { borderTopWidth: StyleSheet.hairlineWidth },
+  emptyHint: { fontSize: 13, padding: 14 },
+  addHabitBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  addHabitText: { fontSize: 14, fontWeight: '500' },
 
-  // Add category
   addCategoryBlock: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed',
-    paddingVertical: 16, marginTop: 4,
+    gap: 8, padding: 16, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed',
   },
-  addCategoryText: { fontSize: 15, fontWeight: '700' },
+  addCategoryText: { fontSize: 15, fontWeight: '600' },
 
-  // Modals
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  // Modal
+  backdrop: { flex: 1 },
   modalSheet: {
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1,
-    padding: 20, paddingBottom: 36,
+    borderWidth: 1, padding: 20, paddingBottom: 36,
   },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  inputRow: { flexDirection: 'row', gap: 10, marginBottom: 20, alignItems: 'center' },
-  emojiBtn: { width: 52, height: 52, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  inputRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  emojiBtn: {
+    width: 48, height: 48, borderRadius: 10, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
   emojiBtnText: { fontSize: 26 },
-  nameInput: { flex: 1, height: 52, borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 14, fontSize: 16 },
+  nameInput: {
+    flex: 1, height: 48, borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, fontSize: 15,
+  },
   modalActions: { flexDirection: 'row', gap: 10 },
-  modalBtn: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  modalBtnCancel: { borderWidth: 1.5 },
+  modalBtn: { flex: 1, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  modalBtnCancel: { borderWidth: 1 },
   modalBtnSave: {},
-  modalBtnText: { fontSize: 15, fontWeight: '700' },
+  modalBtnText: { fontSize: 15, fontWeight: '600' },
 
-  // Delete habit button in modal
   deleteHabitBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, marginTop: 14, paddingVertical: 12,

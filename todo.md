@@ -104,3 +104,6 @@
 - [x] Fix habit delete stale closure bug (delete not working from edit modal)
 - [x] Add data-loss warning when deleting a habit with existing check-in history
 - [x] Offer "Deactivate instead" option to preserve history without deleting
+
+- [x] Fix habit delete still not working from edit modal
+- [x] Move category delete button inside the category edit modal
