@@ -2,7 +2,8 @@ import {
   ScrollView, Text, View, Pressable, StyleSheet, Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } from "react-native-reanimated";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -13,20 +14,153 @@ import {
 } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 
-// Modern, minimal rating config — no emoji circles, just clean color + label
-const RATINGS: Rating[] = ['red', 'yellow', 'green'];
+const RATINGS = ['red', 'yellow', 'green'] as const;
+type ActiveRating = 'red' | 'yellow' | 'green';
 
-const RATING_CONFIG: Record<Rating, {
+const RATING_CONFIG: Record<ActiveRating, {
   label: string;
-  activeColor: string;      // solid fill when selected
-  activeLabelColor: string; // text when selected
-  dotColor: string;         // small dot indicator
+  emoji: string;
+  activeColor: string;
+  bgColor: string;
 }> = {
-  none:   { label: '–',          activeColor: '#E5E7EB', activeLabelColor: '#6B7280', dotColor: '#9CA3AF' },
-  red:    { label: 'Missed',     activeColor: '#EF4444', activeLabelColor: '#fff',    dotColor: '#EF4444' },
-  yellow: { label: 'Okay',       activeColor: '#F59E0B', activeLabelColor: '#fff',    dotColor: '#F59E0B' },
-  green:  { label: 'Crushed it', activeColor: '#22C55E', activeLabelColor: '#fff',    dotColor: '#22C55E' },
+  red:    { label: 'Missed',      emoji: '😔', activeColor: '#EF4444', bgColor: '#EF444415' },
+  yellow: { label: 'Okay',        emoji: '😐', activeColor: '#F59E0B', bgColor: '#F59E0B15' },
+  green:  { label: 'Crushed it!', emoji: '🔥', activeColor: '#22C55E', bgColor: '#22C55E15' },
 };
+
+// Animated habit card
+function HabitCard({
+  habit,
+  habitIndex,
+  current,
+  onRate,
+  colors,
+}: {
+  habit: { id: string; name: string; description?: string };
+  habitIndex: number;
+  current: Rating;
+  onRate: (rating: Rating) => void;
+  colors: ReturnType<typeof import("@/hooks/use-colors").useColors>;
+}) {
+  const isRated = current !== 'none';
+  const ratedCfg = isRated ? RATING_CONFIG[current as ActiveRating] : null;
+
+  // Scale animation for the card when rated
+  const cardScale = useSharedValue(1);
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cardScale.value }],
+  }));
+
+  function handleRate(rating: Rating) {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(
+        rating === 'green'
+          ? Haptics.ImpactFeedbackStyle.Medium
+          : Haptics.ImpactFeedbackStyle.Light
+      );
+    }
+    // Bounce the card
+    cardScale.value = withSpring(0.97, { damping: 12, stiffness: 300 }, () => {
+      cardScale.value = withSpring(1, { damping: 14, stiffness: 280 });
+    });
+    onRate(rating);
+  }
+
+  const borderColor = ratedCfg ? ratedCfg.activeColor + '80' : colors.border;
+  const cardBg = ratedCfg ? ratedCfg.bgColor : colors.surface;
+
+  return (
+    <Animated.View style={[cardStyle, styles.habitCard, { backgroundColor: cardBg, borderColor }]}>
+      {/* Habit header */}
+      <View style={styles.habitCardHeader}>
+        <View style={[styles.habitNumBadge, {
+          backgroundColor: ratedCfg ? ratedCfg.activeColor + '22' : colors.primary + '22',
+          borderColor: ratedCfg ? ratedCfg.activeColor + '55' : colors.primary + '44',
+        }]}>
+          <Text style={[styles.habitNumText, { color: ratedCfg ? ratedCfg.activeColor : colors.primary }]}>
+            {habitIndex + 1}
+          </Text>
+        </View>
+        <View style={styles.habitCardTitleWrap}>
+          <Text style={[styles.habitCardName, { color: colors.foreground }]} numberOfLines={2}>
+            {habit.name}
+          </Text>
+          {habit.description ? (
+            <Text style={[styles.habitCardDesc, { color: colors.muted }]} numberOfLines={2}>
+              {habit.description}
+            </Text>
+          ) : null}
+        </View>
+        {isRated && (
+          <View style={[styles.checkBadge, { backgroundColor: ratedCfg!.activeColor }]}>
+            <Text style={styles.checkBadgeText}>✓</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Rating buttons */}
+      <View style={styles.ratingRow}>
+        {RATINGS.map((rating) => {
+          const cfg = RATING_CONFIG[rating as Exclude<Rating, 'none'>];
+          const isSelected = current === rating;
+          return (
+            <RatingButton
+              key={rating}
+              cfg={cfg}
+              isSelected={isSelected}
+              onPress={() => handleRate(rating)}
+              colors={colors}
+            />
+          );
+        })}
+      </View>
+    </Animated.View>
+  );
+}
+
+function RatingButton({
+  cfg,
+  isSelected,
+  onPress,
+  colors,
+}: {
+  cfg: { label: string; emoji: string; activeColor: string; bgColor: string };
+  isSelected: boolean;
+  onPress: () => void;
+  colors: ReturnType<typeof import("@/hooks/use-colors").useColors>;
+}) {
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  function handlePress() {
+    scale.value = withTiming(0.94, { duration: 70 }, () => {
+      scale.value = withSpring(1, { damping: 10, stiffness: 300 });
+    });
+    onPress();
+  }
+
+  return (
+    <Animated.View style={[styles.ratingBtnWrap, animStyle]}>
+      <Pressable
+        onPress={handlePress}
+        style={[
+          styles.ratingBtn,
+          {
+            backgroundColor: isSelected ? cfg.activeColor : cfg.bgColor,
+            borderColor: isSelected ? cfg.activeColor : cfg.activeColor + '30',
+          },
+        ]}
+      >
+        <Text style={styles.ratingBtnEmoji}>{cfg.emoji}</Text>
+        <Text style={[styles.ratingBtnLabel, { color: isSelected ? '#fff' : cfg.activeColor }]}>
+          {cfg.label}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export default function CheckInScreen() {
   const { activeHabits, categories, submitCheckIn, getRatingsForDate } = useApp();
@@ -34,6 +168,7 @@ export default function CheckInScreen() {
   const colors = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
 
   const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
@@ -51,6 +186,7 @@ export default function CheckInScreen() {
     setCurrentDate(newDate);
     setRatings(getRatingsForDate(newDate));
     setSubmitted(false);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
   }
 
   const habitsByCategory = useMemo(() => {
@@ -64,8 +200,6 @@ export default function CheckInScreen() {
   }, [activeHabits, categories]);
 
   function setRating(habitId: string, rating: Rating) {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Tap same rating to deselect
     setRatings((prev) => ({ ...prev, [habitId]: prev[habitId] === rating ? 'none' : rating }));
   }
 
@@ -73,10 +207,9 @@ export default function CheckInScreen() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
-    setTimeout(() => router.back(), 1600);
+    setTimeout(() => router.back(), 2000);
   }
 
-  // All active habits must be rated before saving
   const allRated = activeHabits.length > 0 &&
     activeHabits.every((h) => ratings[h.id] && ratings[h.id] !== 'none');
 
@@ -88,20 +221,42 @@ export default function CheckInScreen() {
   const progress    = totalActive > 0 ? ratedEntries.length / totalActive : 0;
 
   if (submitted) {
+    const score = totalActive > 0
+      ? Math.round(((greenCount * 1 + yellowCount * 0.5) / totalActive) * 100)
+      : 0;
+    const scoreColor = score >= 70 ? '#22C55E' : score >= 40 ? '#F59E0B' : '#EF4444';
     return (
       <ScreenContainer>
         <View style={styles.successContainer}>
-          <View style={[styles.successIconWrap, { backgroundColor: colors.surface }]}>
-            <Text style={styles.successIcon}>✓</Text>
-          </View>
-          <Text style={[styles.successTitle, { color: colors.foreground }]}>Saved</Text>
-          <Text style={[styles.successSub, { color: colors.muted }]}>
-            {formatDisplayDate(currentDate)} reviewed
+          <Text style={styles.successEmoji}>
+            {score >= 70 ? '🎉' : score >= 40 ? '💪' : '🙏'}
           </Text>
+          <Text style={[styles.successTitle, { color: colors.foreground }]}>
+            {score >= 70 ? 'Crushed it!' : score >= 40 ? 'Good effort!' : 'Keep going!'}
+          </Text>
+          <Text style={[styles.successDate, { color: colors.muted }]}>
+            {formatDisplayDate(currentDate)}
+          </Text>
+          <View style={[styles.successScoreWrap, { backgroundColor: scoreColor + '18', borderColor: scoreColor + '40' }]}>
+            <Text style={[styles.successScore, { color: scoreColor }]}>{score}%</Text>
+            <Text style={[styles.successScoreLabel, { color: scoreColor }]}>overall</Text>
+          </View>
           <View style={styles.successPills}>
-            {greenCount  > 0 && <View style={[styles.successPill, { backgroundColor: '#22C55E' }]}><Text style={styles.successPillText}>{greenCount} crushed</Text></View>}
-            {yellowCount > 0 && <View style={[styles.successPill, { backgroundColor: '#F59E0B' }]}><Text style={styles.successPillText}>{yellowCount} okay</Text></View>}
-            {redCount    > 0 && <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}><Text style={styles.successPillText}>{redCount} missed</Text></View>}
+            {greenCount  > 0 && (
+              <View style={[styles.successPill, { backgroundColor: '#22C55E' }]}>
+                <Text style={styles.successPillText}>🔥 {greenCount} crushed</Text>
+              </View>
+            )}
+            {yellowCount > 0 && (
+              <View style={[styles.successPill, { backgroundColor: '#F59E0B' }]}>
+                <Text style={styles.successPillText}>😐 {yellowCount} okay</Text>
+              </View>
+            )}
+            {redCount > 0 && (
+              <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}>
+                <Text style={styles.successPillText}>😔 {redCount} missed</Text>
+              </View>
+            )}
           </View>
         </View>
       </ScreenContainer>
@@ -152,21 +307,20 @@ export default function CheckInScreen() {
         <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
       </View>
 
-      {/* ── Rating legend ── */}
-      <View style={[styles.legendRow, { borderBottomColor: colors.border }]}>
-        {RATINGS.map((r) => {
-          const cfg = RATING_CONFIG[r];
-          return (
-            <View key={r} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: cfg.dotColor }]} />
-              <Text style={[styles.legendText, { color: colors.muted }]}>{cfg.label}</Text>
-            </View>
-          );
-        })}
-      </View>
+      {/* ── Progress label ── */}
+      {totalActive > 0 && (
+        <View style={[styles.progressLabel, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.progressLabelText, { color: colors.muted }]}>
+            {ratedEntries.length === totalActive
+              ? '✓ All rated — tap Save to finish'
+              : `${ratedEntries.length} of ${totalActive} rated`}
+          </Text>
+        </View>
+      )}
 
-      {/* ── Habit list ── */}
+      {/* ── Habit cards ── */}
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -174,7 +328,6 @@ export default function CheckInScreen() {
         {sortedCategories.map((cat) => {
           const habits = habitsByCategory[cat.id] ?? [];
           if (habits.length === 0) return null;
-          const catColor = colors.primary;
 
           return (
             <View key={cat.id} style={styles.section}>
@@ -184,61 +337,16 @@ export default function CheckInScreen() {
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
               </View>
 
-              {/* Habits */}
-              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                {habits.map((habit, idx) => {
-                  const current: Rating = ratings[habit.id] ?? 'none';
-                  const isLast = idx === habits.length - 1;
-
-                  return (
-                    <View
-                      key={habit.id}
-                      style={[
-                        styles.habitRow,
-                        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-                      ]}
-                    >
-                      {/* Habit name with number badge */}
-                      <View style={styles.habitNameRow}>
-                        <View style={[styles.habitNumBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44' }]}>
-                          <Text style={[styles.habitNumText, { color: colors.primary }]}>{idx + 1}</Text>
-                        </View>
-                        <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
-                          {habit.name}
-                        </Text>
-                      </View>
-
-                      {/* Segmented color button */}
-                      <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
-                        {RATINGS.map((rating, idx) => {
-                          const cfg = RATING_CONFIG[rating];
-                          const isSelected = current === rating;
-                          const isFirst = idx === 0;
-                          const isLast = idx === RATINGS.length - 1;
-
-                          return (
-                            <Pressable
-                              key={rating}
-                              onPress={() => setRating(habit.id, rating)}
-                              style={({ pressed }) => [
-                                styles.segment,
-                                isFirst && styles.segmentFirst,
-                                isLast && styles.segmentLast,
-                                {
-                                  backgroundColor: isSelected
-                                    ? cfg.activeColor
-                                    : cfg.dotColor + '28',
-                                  opacity: pressed ? 0.75 : 1,
-                                },
-                              ]}
-                            />
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
+              {habits.map((habit, idx) => (
+                <HabitCard
+                  key={habit.id}
+                  habit={habit}
+                  habitIndex={idx}
+                  current={ratings[habit.id] ?? 'none'}
+                  onRate={(rating) => setRating(habit.id, rating)}
+                  colors={colors}
+                />
+              ))}
             </View>
           );
         })}
@@ -248,13 +356,12 @@ export default function CheckInScreen() {
 
       {/* ── Footer ── */}
       <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        {/* Mini tally */}
         {ratedEntries.length > 0 && (
           <View style={styles.tally}>
-            {greenCount  > 0 && <View style={[styles.tallyPill, { backgroundColor: '#22C55E18' }]}><View style={[styles.tallyDot, { backgroundColor: '#22C55E' }]} /><Text style={[styles.tallyText, { color: '#22C55E' }]}>{greenCount}</Text></View>}
-            {yellowCount > 0 && <View style={[styles.tallyPill, { backgroundColor: '#F59E0B18' }]}><View style={[styles.tallyDot, { backgroundColor: '#F59E0B' }]} /><Text style={[styles.tallyText, { color: '#F59E0B' }]}>{yellowCount}</Text></View>}
-            {redCount    > 0 && <View style={[styles.tallyPill, { backgroundColor: '#EF444418' }]}><View style={[styles.tallyDot, { backgroundColor: '#EF4444' }]} /><Text style={[styles.tallyText, { color: '#EF4444' }]}>{redCount}</Text></View>}
-            <Text style={[styles.tallyOf, { color: colors.muted }]}>{ratedEntries.length}/{totalActive} rated</Text>
+            {greenCount  > 0 && <View style={[styles.tallyPill, { backgroundColor: '#22C55E18' }]}><Text style={[styles.tallyText, { color: '#22C55E' }]}>🔥 {greenCount}</Text></View>}
+            {yellowCount > 0 && <View style={[styles.tallyPill, { backgroundColor: '#F59E0B18' }]}><Text style={[styles.tallyText, { color: '#F59E0B' }]}>😐 {yellowCount}</Text></View>}
+            {redCount    > 0 && <View style={[styles.tallyPill, { backgroundColor: '#EF444418' }]}><Text style={[styles.tallyText, { color: '#EF4444' }]}>😔 {redCount}</Text></View>}
+            <Text style={[styles.tallyOf, { color: colors.muted }]}>{ratedEntries.length}/{totalActive}</Text>
           </View>
         )}
 
@@ -270,7 +377,7 @@ export default function CheckInScreen() {
           ]}
         >
           <Text style={[styles.saveBtnText, { color: allRated ? '#fff' : colors.muted }]}>
-            {allRated ? 'Save Review' : `Rate all habits (${ratedEntries.length}/${totalActive})`}
+            {allRated ? '🎉 Save Review' : `Rate all habits (${ratedEntries.length}/${totalActive})`}
           </Text>
         </Pressable>
       </View>
@@ -293,57 +400,65 @@ const styles = StyleSheet.create({
   dateSub: { fontSize: 11, marginTop: 1 },
 
   // Progress
-  progressTrack: { height: 2 },
-  progressFill: { height: 2, borderRadius: 1 },
-
-  // Legend
-  legendRow: {
-    flexDirection: 'row', justifyContent: 'center', gap: 20,
-    paddingVertical: 10,
+  progressTrack: { height: 3 },
+  progressFill: { height: 3, borderRadius: 1.5 },
+  progressLabel: {
+    paddingHorizontal: 16, paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 7, height: 7, borderRadius: 4 },
-  legendText: { fontSize: 12, fontWeight: '500' },
+  progressLabelText: { fontSize: 12, fontWeight: '500' },
 
   // Scroll
   scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
 
   // Section
-  section: { marginBottom: 18 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
-  sectionDot: { width: 8, height: 8, borderRadius: 4 },
-  sectionEmoji: { fontSize: 16 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
+  section: { marginBottom: 20 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
+  sectionEmoji: { fontSize: 18 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
 
-  // Card
-  card: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-
-  // Habit row
-  habitRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 13, gap: 12,
+  // Habit card
+  habitCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 10,
+    gap: 12,
   },
-  habitNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  habitNumBadge: { width: 26, height: 26, borderRadius: 7, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  habitNumText: { fontSize: 12, fontWeight: '700' },
-  habitName: { flex: 1, fontSize: 15, lineHeight: 20 },
-
-  // Segmented color button
-  segmentedBtn: {
+  habitCardHeader: {
     flexDirection: 'row',
-    borderRadius: 11,
-    overflow: 'hidden',
-    gap: 2,
-    padding: 2,
+    alignItems: 'flex-start',
+    gap: 10,
   },
-  segment: {
-    width: 36,
-    height: 34,
-    borderRadius: 8,
+  habitNumBadge: {
+    width: 30, height: 30, borderRadius: 8, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  segmentFirst: { borderTopLeftRadius: 9, borderBottomLeftRadius: 9 },
-  segmentLast:  { borderTopRightRadius: 9, borderBottomRightRadius: 9 },
+  habitNumText: { fontSize: 13, fontWeight: '800' },
+  habitCardTitleWrap: { flex: 1, gap: 2 },
+  habitCardName: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
+  habitCardDesc: { fontSize: 12, lineHeight: 16 },
+  checkBadge: {
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  checkBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+
+  // Rating buttons
+  ratingRow: { flexDirection: 'row', gap: 8 },
+  ratingBtnWrap: { flex: 1 },
+  ratingBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  ratingBtnEmoji: { fontSize: 20 },
+  ratingBtnLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
 
   // Footer
   footer: {
@@ -355,7 +470,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20,
   },
-  tallyDot: { width: 6, height: 6, borderRadius: 3 },
   tallyText: { fontSize: 13, fontWeight: '700' },
   tallyOf: { fontSize: 12, marginLeft: 4 },
   saveBtn: {
@@ -365,15 +479,18 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
 
   // Success
-  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 },
-  successIconWrap: {
-    width: 72, height: 72, borderRadius: 36,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  successEmoji: { fontSize: 64 },
+  successTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  successDate: { fontSize: 14 },
+  successScoreWrap: {
+    borderRadius: 20, borderWidth: 1.5,
+    paddingHorizontal: 28, paddingVertical: 14,
+    alignItems: 'center', marginVertical: 4,
   },
-  successIcon: { fontSize: 32, color: '#22C55E' },
-  successTitle: { fontSize: 26, fontWeight: '700' },
-  successSub: { fontSize: 14 },
-  successPills: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  successPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  successScore: { fontSize: 48, fontWeight: '900', letterSpacing: -1 },
+  successScoreLabel: { fontSize: 13, fontWeight: '600', marginTop: -4 },
+  successPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
+  successPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
   successPillText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

@@ -119,3 +119,6 @@
 - [x] Remove habit emojis from all UI surfaces (rows, check-in, filter chips, edit modal)
 
 - [x] Add time range selector (7/14/30/60/90 days) to home screen progress averages
+
+- [x] Redesign check-in screen: large tap targets, color-fill rating buttons, animated press feedback
+- [x] Add satisfying completion animation when all habits in a category are rated
