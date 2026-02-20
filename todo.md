@@ -54,3 +54,7 @@
 - [x] Calendar: show per-category colored dots inside each logged day cell (2x2 grid, no tap required)
 
 - [x] Revert calendar to clean month heatmap view (remove inline category dots from cells)
+
+- [x] Build CategoryCalendar component: month grid where each day shows one dot per habit (green/yellow/red)
+- [x] Rebuild Analytics screen: one CategoryCalendar per category, stacked vertically, scroll to browse
+- [x] Keep summary stats (streak, days logged, overall %) at the top of Analytics
