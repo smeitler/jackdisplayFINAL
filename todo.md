@@ -90,3 +90,9 @@
 
 - [ ] Analytics: add Select All / Clear button to habit filter legend
 - [ ] Analytics: calendar stays same fixed size when filtering to a single habit (no shrinking)
+
+- [x] Vision Board tab with per-category image grids
+- [x] Add photos from camera roll (multi-select)
+- [x] Full-screen image preview with remove option
+- [x] Tappable skipped (X) calendar cells navigate to check-in
+- [x] Large full-cell red X for skipped days in calendar

@@ -222,6 +222,26 @@ export async function saveAlarm(config: AlarmConfig): Promise<void> {
   await AsyncStorage.setItem(KEYS.alarm, JSON.stringify(config));
 }
 
+// ─── Vision Board ────────────────────────────────────────────────────────────
+
+/** Map of categoryId -> array of local image URIs */
+export type VisionBoard = Record<string, string[]>;
+
+const VISION_BOARD_KEY = 'daycheck:visionboard';
+
+export async function loadVisionBoard(): Promise<VisionBoard> {
+  try {
+    const raw = await AsyncStorage.getItem(VISION_BOARD_KEY);
+    return raw ? (JSON.parse(raw) as VisionBoard) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveVisionBoard(board: VisionBoard): Promise<void> {
+  await AsyncStorage.setItem(VISION_BOARD_KEY, JSON.stringify(board));
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Returns "YYYY-MM-DD" for a given Date (or today). */

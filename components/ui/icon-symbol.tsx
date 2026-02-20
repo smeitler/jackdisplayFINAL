@@ -47,6 +47,8 @@ const MAPPING = {
   "trophy.fill": "emoji-events",
   "circle.fill": "circle",
   "circle": "radio-button-unchecked",
+  "photo.stack.fill": "photo-library",
+  "sparkles": "auto-awesome",
 } as IconMapping;
 
 export function IconSymbol({
