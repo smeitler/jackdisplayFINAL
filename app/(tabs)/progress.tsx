@@ -223,13 +223,12 @@ export default function ProgressScreen() {
                     </Pressable>
                   </View>
                   <View style={styles.habitLegend}>
-                    {catHabits.map((h) => {
+                    {catHabits.map((h, hIdx) => {
                       const isSelected = habitFilter[cat.id] === h.id || habitFilter[cat.id] === "__all__";
                       return (
                         <Pressable
                           key={h.id}
                           onPress={() => {
-                            // Clear "__all__" if active, then toggle individual
                             setHabitFilter((prev) => ({
                               ...prev,
                               [cat.id]: prev[cat.id] === h.id ? null : h.id,
@@ -244,7 +243,9 @@ export default function ProgressScreen() {
                             },
                           ])}
                         >
-                          <Text style={styles.habitLegendEmoji}>{h.emoji}</Text>
+                          <View style={[styles.habitLegendBadge, { backgroundColor: isSelected ? colors.primary : colors.muted + "44" }]}>
+                            <Text style={[styles.habitLegendBadgeText, { color: isSelected ? "#fff" : colors.muted }]}>{hIdx + 1}</Text>
+                          </View>
                           <Text
                             style={[styles.habitLegendName, { color: isSelected ? colors.primary : colors.muted }]}
                           >
@@ -380,6 +381,7 @@ const styles = StyleSheet.create({
   selectAllText: { fontSize: 11, fontWeight: "600" },
   habitLegend: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
   habitLegendChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
-  habitLegendEmoji: { fontSize: 13 },
+  habitLegendBadge: { width: 18, height: 18, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  habitLegendBadgeText: { fontSize: 10, fontWeight: '700' },
   habitLegendName: { fontSize: 11, fontWeight: "500", flexShrink: 1 },
 });

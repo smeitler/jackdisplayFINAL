@@ -115,3 +115,5 @@
 - [x] Persist habit description in storage
 
 - [x] Redesign calendar cells: color-dominant blocks with habit number only (no emojis/labels)
+
+- [x] Remove habit emojis from all UI surfaces (rows, check-in, filter chips, edit modal)

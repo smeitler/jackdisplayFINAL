@@ -198,10 +198,15 @@ export default function CheckInScreen() {
                         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                       ]}
                     >
-                      {/* Habit name */}
-                      <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
-                        {habit.name}
-                      </Text>
+                      {/* Habit name with number badge */}
+                      <View style={styles.habitNameRow}>
+                        <View style={[styles.habitNumBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44' }]}>
+                          <Text style={[styles.habitNumText, { color: colors.primary }]}>{idx + 1}</Text>
+                        </View>
+                        <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
+                          {habit.name}
+                        </Text>
+                      </View>
 
                       {/* Segmented color button */}
                       <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
@@ -319,6 +324,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 13, gap: 12,
   },
+  habitNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  habitNumBadge: { width: 26, height: 26, borderRadius: 7, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  habitNumText: { fontSize: 12, fontWeight: '700' },
   habitName: { flex: 1, fontSize: 15, lineHeight: 20 },
 
   // Segmented color button

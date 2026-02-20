@@ -25,6 +25,7 @@ const DELETE_BG_W = 80;
 
 interface SwipeableHabitRowProps {
   habit: Habit;
+  habitIndex: number;
   isLast: boolean;
   onEdit: () => void;
   onToggle: () => void;
@@ -32,7 +33,7 @@ interface SwipeableHabitRowProps {
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
 }
 
-function SwipeableHabitRow({ habit, isLast, onEdit, onToggle, onDelete, colors }: SwipeableHabitRowProps) {
+function SwipeableHabitRow({ habit, habitIndex, isLast, onEdit, onToggle, onDelete, colors }: SwipeableHabitRowProps) {
   const translateX = useSharedValue(0);
   const isRevealed = useSharedValue(false);
 
@@ -92,13 +93,15 @@ function SwipeableHabitRow({ habit, isLast, onEdit, onToggle, onDelete, colors }
       {/* Swipeable row */}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.habitRow, { backgroundColor: colors.surface }, rowStyle]}>
-          {/* Emoji — tap to edit */}
+          {/* Numbered badge */}
           <TouchableOpacity
             onPress={onEdit}
             style={styles.habitEmojiBtn}
             activeOpacity={0.6}
           >
-            <Text style={styles.habitEmoji}>{habit.emoji}</Text>
+            <View style={[styles.habitNumBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44' }]}>
+              <Text style={[styles.habitNumText, { color: colors.primary }]}>{habitIndex + 1}</Text>
+            </View>
           </TouchableOpacity>
 
           {/* Name + status */}
@@ -204,13 +207,6 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
             </Text>
 
             <View style={styles.inputRow}>
-              <TouchableOpacity
-                onPress={() => setShowEmojiPicker(true)}
-                style={[styles.emojiBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.emojiBtnText}>{emoji}</Text>
-              </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <TextInput
                   style={[styles.nameInput, { backgroundColor: colors.background, borderColor: name.length >= NAME_LIMIT ? '#F59E0B' : colors.border, color: colors.foreground }]}
@@ -586,6 +582,7 @@ export default function HabitsScreen() {
                     <SwipeableHabitRow
                       key={habit.id}
                       habit={habit}
+                      habitIndex={idx}
                       isLast={idx === catHabits.length - 1}
                       colors={colors}
                       onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
@@ -745,6 +742,8 @@ const styles = StyleSheet.create({
   confirmBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   confirmBtnText: { fontSize: 13, fontWeight: '600' },
 
+  habitNumBadge: { width: 28, height: 28, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  habitNumText: { fontSize: 13, fontWeight: '700' },
   charCounter: { fontSize: 11, textAlign: 'right', marginTop: 2 },
   descInput: {
     borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
