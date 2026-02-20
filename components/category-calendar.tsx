@@ -4,13 +4,14 @@
  * A full-month calendar for a single category.
  *
  * Cell states:
- *  - Past, no data:   soft red (skipped day)
- *  - Past, logged:    subtle blue tint + vertical emoji+dot rows
+ *  - Past, no data (skipped):  transparent bg + red ✕ in center
+ *  - Past, logged (all habits): subtle blue tint + vertical emoji+dot rows
+ *  - Past, logged (filter mode): full solid rating color background + day number
  *  - Today:           primary-color border
  *  - Future:          dimmed day number only
  *
  * When `selectedHabitId` is set, only that habit's row is shown per cell
- * (used for per-habit filter mode).
+ * and the cell background fills with that habit's rating color.
  *
  * Pass `containerWidth` (available width inside the card) for accurate cell sizing.
  */
@@ -91,8 +92,7 @@ export function CategoryCalendar({
   const rows: typeof cells[] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
 
-  const loggedBg   = colors.primary + "22";  // subtle blue tint
-  const skippedBg  = "#EF444422";             // soft red for missed days
+  const loggedBg = colors.primary + "22"; // subtle blue tint (all-habits mode)
 
   return (
     <View style={{ width: "100%" }}>
@@ -125,24 +125,42 @@ export function CategoryCalendar({
               : habits;
 
             // Whether this day has data for the habits currently shown
-            // When filtering, only count the selected habit's data (not all habits)
             const hasVisibleData = selectedHabitId
               ? !!habitColorMap[selectedHabitId]
               : hasData;
 
+            // In filter mode, get the single habit's rating color for full-cell fill
+            const filterRatingColor = selectedHabitId
+              ? (habitColorMap[selectedHabitId] ?? null)
+              : null;
+
             // Background:
             // - future / today: transparent
-            // - past, has visible data: blue tint
-            // - past, no visible data: soft red (skipped)
+            // - filter mode + rated: full solid rating color (e.g. solid green/yellow/red)
+            // - filter mode + not rated: transparent (X will show)
+            // - all-habits mode + has data: blue tint
+            // - all-habits mode + no data: transparent (X will show)
             let bgColor = "transparent";
             if (isPast) {
-              bgColor = hasVisibleData ? loggedBg : skippedBg;
+              if (selectedHabitId) {
+                bgColor = filterRatingColor ? filterRatingColor + "CC" : "transparent";
+              } else {
+                bgColor = hasVisibleData ? loggedBg : "transparent";
+              }
             }
 
-            // Only show rows for habits that were actually rated
-            const ratedHabits = (isPast && hasVisibleData)
+            // Show red X for skipped days (past, no visible data)
+            const showSkippedX = isPast && !hasVisibleData && !isToday;
+
+            // Only show habit rows in all-habits mode (not filter mode — cell bg handles it)
+            const ratedHabits = (!selectedHabitId && isPast && hasVisibleData)
               ? habitsToShow.filter((h) => !!habitColorMap[h.id])
               : [];
+
+            // Day number color: white on solid-color cells, normal otherwise
+            const dayNumColor = (selectedHabitId && filterRatingColor && isPast)
+              ? "rgba(255,255,255,0.9)"
+              : (isPast && hasData) ? colors.foreground : colors.muted;
 
             return (
               <Pressable
@@ -168,14 +186,21 @@ export function CategoryCalendar({
                     fontSize: 10,
                     lineHeight: 14,
                     marginBottom: 1,
-                    color: (isPast && hasData) ? colors.foreground : colors.muted,
+                    color: dayNumColor,
                     fontWeight: isToday ? "800" : "500",
                   }}
                 >
                   {day}
                 </Text>
 
-                {/* Habit rows */}
+                {/* Red X for skipped days */}
+                {showSkippedX && (
+                  <View style={styles.xContainer}>
+                    <Text style={styles.xText}>✕</Text>
+                  </View>
+                )}
+
+                {/* Habit rows (all-habits mode only) */}
                 {ratedHabits.map((h) => (
                   <View
                     key={h.id}
@@ -216,4 +241,15 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", marginBottom: CELL_GAP },
   headerText: { fontSize: 9, fontWeight: "600" },
   row: { flexDirection: "row", marginBottom: CELL_GAP },
+  xContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  xText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#EF4444",
+    opacity: 0.7,
+  },
 });
