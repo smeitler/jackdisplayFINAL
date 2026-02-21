@@ -122,3 +122,5 @@
 
 - [x] Redesign check-in screen: large tap targets, color-fill rating buttons, animated press feedback
 - [x] Add satisfying completion animation when all habits in a category are rated
+
+- [x] Add per-category bulk-rate buttons (red/yellow/green) and global rate-all row to check-in screen

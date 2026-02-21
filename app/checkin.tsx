@@ -61,6 +61,25 @@ export default function CheckInScreen() {
     setRatings((prev) => ({ ...prev, [habitId]: prev[habitId] === rating ? 'none' : rating }));
   }
 
+  function rateCategory(categoryId: string, rating: ActiveRating) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const habits = habitsByCategory[categoryId] ?? [];
+    setRatings((prev) => {
+      const next = { ...prev };
+      for (const h of habits) next[h.id] = rating;
+      return next;
+    });
+  }
+
+  function rateAll(rating: ActiveRating) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setRatings((prev) => {
+      const next = { ...prev };
+      for (const h of activeHabits) next[h.id] = rating;
+      return next;
+    });
+  }
+
   async function handleSubmit() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await submitCheckIn(currentDate, ratings);
@@ -164,6 +183,25 @@ export default function CheckInScreen() {
         ))}
       </View>
 
+      {/* ── Global rate-all row ── */}
+      <View style={[styles.rateAllRow, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[styles.rateAllLabel, { color: colors.muted }]}>Rate All</Text>
+        <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
+          {RATINGS.map((r, i) => (
+            <Pressable
+              key={r}
+              onPress={() => rateAll(r)}
+              style={({ pressed }) => [
+                styles.segment,
+                i === 0 && styles.segmentFirst,
+                i === RATINGS.length - 1 && styles.segmentLast,
+                { backgroundColor: RATING_COLORS[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
       {/* ── Habit list ── */}
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -179,6 +217,22 @@ export default function CheckInScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionEmoji}>{cat.emoji}</Text>
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
+                <View style={{ flex: 1 }} />
+                <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
+                  {RATINGS.map((r, i) => (
+                    <Pressable
+                      key={r}
+                      onPress={() => rateCategory(cat.id, r)}
+                      style={({ pressed }) => [
+                        styles.segment,
+                        styles.segmentSmall,
+                        i === 0 && styles.segmentFirst,
+                        i === RATINGS.length - 1 && styles.segmentLast,
+                        { backgroundColor: RATING_COLORS[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
+                      ]}
+                    />
+                  ))}
+                </View>
               </View>
 
               <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -334,6 +388,14 @@ const styles = StyleSheet.create({
   },
   segmentFirst: { borderTopLeftRadius: 9, borderBottomLeftRadius: 9 },
   segmentLast:  { borderTopRightRadius: 9, borderBottomRightRadius: 9 },
+  segmentSmall: { width: 28, height: 26 },
+
+  rateAllRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rateAllLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
 
   footer: {
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28,
