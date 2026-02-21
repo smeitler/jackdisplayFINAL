@@ -32,10 +32,12 @@ export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const [range, setRange] = useState<Range>(7);
+  const [rangeOpen, setRangeOpen] = useState(false);
 
   function handleRangeSelect(r: Range) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRange(r);
+    setRangeOpen(false);
   }
 
   const yesterday = yesterdayString();
@@ -116,25 +118,40 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
             {range}-Day Progress
           </Text>
-          <View style={[styles.rangeSelector, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {RANGES.map((r) => (
-              <Pressable
-                key={r}
-                onPress={() => handleRangeSelect(r)}
-                style={({ pressed }) => [
-                  styles.rangeBtn,
-                  r === range && { backgroundColor: colors.primary },
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Text style={[
-                  styles.rangeBtnText,
-                  { color: r === range ? '#fff' : colors.muted },
-                ]}>
-                  {r}d
-                </Text>
-              </Pressable>
-            ))}
+          <View>
+            <Pressable
+              onPress={() => setRangeOpen((o) => !o)}
+              style={({ pressed }) => [
+                styles.rangeChip,
+                { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44', opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Text style={[styles.rangeChipText, { color: colors.primary }]}>{range}d</Text>
+              <IconSymbol name={rangeOpen ? 'chevron.up' : 'chevron.down'} size={11} color={colors.primary} />
+            </Pressable>
+            {rangeOpen && (
+              <View style={[styles.rangeDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                {RANGES.map((r) => (
+                  <Pressable
+                    key={r}
+                    onPress={() => handleRangeSelect(r)}
+                    style={({ pressed }) => [
+                      styles.rangeDropdownItem,
+                      r === range && { backgroundColor: colors.primary + '18' },
+                      { opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Text style={[
+                      styles.rangeDropdownText,
+                      { color: r === range ? colors.primary : colors.foreground, fontWeight: r === range ? '700' : '500' },
+                    ]}>
+                      {r} days
+                    </Text>
+                    {r === range && <IconSymbol name="checkmark" size={13} color={colors.primary} />}
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         </View>
         <View style={styles.categoryGrid}>
@@ -252,9 +269,24 @@ const styles = StyleSheet.create({
   alarmEditText: { fontSize: 14, fontWeight: '600' },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  rangeSelector: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
-  rangeBtn: { paddingHorizontal: 9, paddingVertical: 5 },
-  rangeBtnText: { fontSize: 11, fontWeight: '600' },
+  rangeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 20, borderWidth: 1,
+  },
+  rangeChipText: { fontSize: 13, fontWeight: '700' },
+  rangeDropdown: {
+    position: 'absolute', right: 0, top: 34, zIndex: 100,
+    borderRadius: 12, borderWidth: 1,
+    minWidth: 120, overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  rangeDropdownItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 11,
+  },
+  rangeDropdownText: { fontSize: 14 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
   categoryCard: {
     width: '47.5%', borderRadius: 14, padding: 12, borderWidth: 1, gap: 4,

@@ -124,3 +124,5 @@
 - [x] Add satisfying completion animation when all habits in a category are rated
 
 - [x] Add per-category bulk-rate buttons (red/yellow/green) and global rate-all row to check-in screen
+
+- [x] Replace 5-button range selector with single tappable chip + dropdown on home screen
