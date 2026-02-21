@@ -196,7 +196,7 @@ export default function ProgressScreen() {
               ) : (
                 <View style={styles.emptyState}>
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
-                    No active habits in this category yet.
+                    No active habits in this goal yet.
                   </Text>
                 </View>
               )}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback } from 'react';
 import {
-  Habit, CheckInEntry, AlarmConfig, Rating, CategoryDef,
+  Habit, CheckInEntry, AlarmConfig, Rating, CategoryDef, LifeArea,
   loadHabits, saveHabits,
   loadCheckIns, saveCheckIns,
   deleteCheckInsForHabit, countCheckInsForHabit,
@@ -69,7 +69,7 @@ type AppContextValue = AppState & {
   addHabit: (name: string, emoji: string, category: Category, description?: string) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
-  addCategory: (label: string, emoji: string) => Promise<void>;
+  addCategory: (label: string, emoji: string, lifeArea?: LifeArea) => Promise<void>;
   updateCategory: (id: string, updates: Partial<CategoryDef>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (cats: CategoryDef[]) => Promise<void>;
@@ -141,12 +141,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_CHECKINS', checkIns: updatedCheckIns });
   }, [state.habits]);
 
-  const addCategory = useCallback(async (label: string, emoji: string) => {
+  const addCategory = useCallback(async (label: string, emoji: string, lifeArea?: LifeArea) => {
     const newCat: CategoryDef = {
       id: `custom_${Date.now()}`,
       label,
       emoji,
       order: state.categories.length,
+      lifeArea,
     };
     const updated = [...state.categories, newCat];
     await saveCategories(updated);

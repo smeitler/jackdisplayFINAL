@@ -13,7 +13,7 @@ import { EmojiPicker } from '@/components/emoji-picker';
 import { useApp } from '@/lib/app-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { CategoryDef, Habit, CheckInEntry } from '@/lib/storage';
+import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/storage';
 
 // Numbered emojis 1–10 then fallback to ⭐
 const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
@@ -323,7 +323,7 @@ interface CategoryModalProps {
   visible: boolean;
   editCategory?: CategoryDef | null;
   habitCount: number;
-  onSave: (label: string, emoji: string) => void;
+  onSave: (label: string, emoji: string, lifeArea?: LifeArea) => void;
   onDelete: (catId: string) => void;
   onClose: () => void;
 }
@@ -332,12 +332,13 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
   const colors = useColors();
   const [label, setLabel] = useState(editCategory?.label ?? '');
   const [emoji, setEmoji] = useState(editCategory?.emoji ?? '🌟');
+  const [lifeArea, setLifeArea] = useState<LifeArea | undefined>(editCategory?.lifeArea);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!label.trim()) return;
-    onSave(label.trim(), emoji);
+    onSave(label.trim(), emoji, lifeArea);
     onClose();
   }
 
@@ -359,6 +360,8 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
         onShow={() => {
           setLabel(editCategory?.label ?? '');
           setEmoji(editCategory?.emoji ?? '🌟');
+          setLifeArea(editCategory?.lifeArea);
+          setConfirmDelete(false);
         }}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -366,7 +369,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-              {editCategory ? 'Edit Category' : 'New Category'}
+              {editCategory ? 'Edit Goal' : 'New Goal'}
             </Text>
 
             <View style={styles.inputRow}>
@@ -379,7 +382,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
               </TouchableOpacity>
               <TextInput
                 style={[styles.nameInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
-                placeholder="Category name…"
+                placeholder="Goal name…"
                 placeholderTextColor={colors.muted}
                 value={label}
                 onChangeText={setLabel}
@@ -406,7 +409,31 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
               </TouchableOpacity>
             </View>
 
-            {/* Delete button — only shown when editing an existing category */}
+            {/* Life area picker */}
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Life Area</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {LIFE_AREAS.map((area) => (
+                  <TouchableOpacity
+                    key={area.id}
+                    onPress={() => setLifeArea(lifeArea === area.id ? undefined : area.id as LifeArea)}
+                    style={[
+                      styles.lifeAreaChip,
+                      { borderColor: lifeArea === area.id ? colors.primary : colors.border,
+                        backgroundColor: lifeArea === area.id ? colors.primary + '22' : colors.surface },
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 14 }}>{area.emoji}</Text>
+                    <Text style={[styles.lifeAreaChipText, { color: lifeArea === area.id ? colors.primary : colors.muted }]}>
+                      {area.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Delete button — only shown when editing an existing goal */}
             {editCategory && !confirmDelete && (
               <TouchableOpacity
                 onPress={() => setConfirmDelete(true)}
@@ -414,7 +441,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
                 activeOpacity={0.7}
               >
                 <IconSymbol name="trash.fill" size={15} color="#EF4444" />
-                <Text style={styles.deleteHabitText}>Delete Category</Text>
+                <Text style={styles.deleteHabitText}>Delete Goal</Text>
               </TouchableOpacity>
             )}
 
@@ -424,7 +451,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
                 <Text style={[styles.confirmTitle, { color: colors.foreground }]}>Delete "{editCategory?.label}"?</Text>
                 {habitCount > 0 && (
                   <Text style={[styles.confirmSub, { color: colors.muted }]}>
-                    This will also delete {habitCount} habit{habitCount !== 1 ? 's' : ''} in this category.
+                    This will also delete {habitCount} habit{habitCount !== 1 ? 's' : ''} in this goal.
                   </Text>
                 )}
                 <View style={styles.confirmBtns}>
@@ -484,11 +511,11 @@ export default function HabitsScreen() {
     }
   }
 
-  function handleSaveCategory(label: string, emoji: string) {
+  function handleSaveCategory(label: string, emoji: string, lifeArea?: LifeArea) {
     if (categoryModal.edit) {
-      updateCategory(categoryModal.edit.id, { label, emoji });
+      updateCategory(categoryModal.edit.id, { label, emoji, lifeArea });
     } else {
-      addCategory(label, emoji);
+      addCategory(label, emoji, lifeArea);
     }
   }
 
@@ -504,7 +531,7 @@ export default function HabitsScreen() {
           <IconSymbol name="chevron.left" size={20} color={colors.primary} />
           <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Manage Habits</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Manage Goals</Text>
         <TouchableOpacity
           onPress={() => setCategoryModal({ open: true })}
           style={styles.addCatBtn}
@@ -516,7 +543,7 @@ export default function HabitsScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[styles.hint, { color: colors.muted }]}>
-          Tap a category to expand. Swipe a habit left to delete, or tap the pencil to edit.
+          Tap a goal to expand. Swipe a habit left to delete, or tap the pencil to edit.
         </Text>
 
         {sortedCategories.map((cat) => {
@@ -613,7 +640,7 @@ export default function HabitsScreen() {
           activeOpacity={0.7}
         >
           <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
-          <Text style={[styles.addCategoryText, { color: colors.primary }]}>Add New Category</Text>
+          <Text style={[styles.addCategoryText, { color: colors.primary }]}>Add New Goal</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -702,6 +729,9 @@ const styles = StyleSheet.create({
     gap: 8, padding: 16, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed',
   },
   addCategoryText: { fontSize: 15, fontWeight: '600' },
+  fieldLabel: { fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  lifeAreaChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  lifeAreaChipText: { fontSize: 12, fontWeight: '600' },
 
   // Modal
   backdrop: { flex: 1 },

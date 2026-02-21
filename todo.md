@@ -126,3 +126,8 @@
 - [x] Add per-category bulk-rate buttons (red/yellow/green) and global rate-all row to check-in screen
 
 - [x] Replace 5-button range selector with single tappable chip + dropdown on home screen
+
+- [x] Rename "Categories" to "Goals" throughout the app
+- [x] Expand category system to 8 life areas: Body, Mind, Relationships, Focus, Career, Money, Contribution, Spirituality
+- [x] Show life area label under each goal card on home screen
+- [x] Update seed data to use new 8 life areas

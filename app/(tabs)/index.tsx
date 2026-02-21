@@ -5,20 +5,13 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, toDateString, offsetDateString, Category } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, toDateString, offsetDateString, LIFE_AREAS } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 
 const RANGES = [7, 14, 30, 60, 90] as const;
 type Range = typeof RANGES[number];
 
-const CATEGORY_META: Record<Category, { label: string; emoji: string; colorKey: string }> = {
-  health: { label: 'Health', emoji: '💪', colorKey: 'health' },
-  relationships: { label: 'Relationships', emoji: '❤️', colorKey: 'relationships' },
-  wealth: { label: 'Wealth', emoji: '💰', colorKey: 'wealth' },
-  mindset: { label: 'Mindset', emoji: '🧠', colorKey: 'mindset' },
-};
-
-const CATEGORY_ORDER: Category[] = ['health', 'relationships', 'wealth', 'mindset'];
+const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -28,7 +21,7 @@ function getGreeting(): string {
 }
 
 export default function HomeScreen() {
-  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, streak, isLoaded } = useApp();
+  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, streak, isLoaded, categories } = useApp();
   const colors = useColors();
   const router = useRouter();
   const [range, setRange] = useState<Range>(7);
@@ -113,10 +106,10 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Range selector + category progress */}
+        {/* Range selector + goals progress */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            {range}-Day Progress
+            {range}-Day Goals
           </Text>
           <View>
             <Pressable
@@ -155,27 +148,29 @@ export default function HomeScreen() {
           </View>
         </View>
         <View style={styles.categoryGrid}>
-          {CATEGORY_ORDER.map((category) => {
-            const meta = CATEGORY_META[category];
-            const rate = getCategoryRate(category, range);
-            const breakdown = getCategoryBreakdown(category, range);
+          {categories.map((cat) => {
+            const rate = getCategoryRate(cat.id, range);
+            const breakdown = getCategoryBreakdown(cat.id, range);
             const total = breakdown.green + breakdown.yellow + breakdown.red;
-            const catColor = (colors as Record<string, string>)[meta.colorKey] ?? colors.primary;
+            const lifeArea = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
 
             return (
               <Pressable
-                key={category}
+                key={cat.id}
                 onPress={() => handleCheckIn(yesterday)}
                 style={({ pressed }) => [
                   styles.categoryCard,
                   { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
                 ]}
               >
-                <View style={[styles.catIconWrap, { backgroundColor: catColor + '22' }]}>
-                  <Text style={styles.catEmoji}>{meta.emoji}</Text>
+                <View style={[styles.catIconWrap, { backgroundColor: colors.primary + '22' }]}>
+                  <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </View>
-                <Text style={[styles.catLabel, { color: colors.muted }]}>{meta.label}</Text>
-                <Text style={[styles.catScore, { color: catColor }]}>{Math.round(rate * 100)}%</Text>
+                <Text style={[styles.catLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+                {lifeArea && (
+                  <Text style={[styles.catLifeArea, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
+                )}
+                <Text style={[styles.catScore, { color: colors.primary }]}>{Math.round(rate * 100)}%</Text>
 
                 {/* Stacked bar */}
                 {total > 0 ? (
@@ -293,7 +288,8 @@ const styles = StyleSheet.create({
   },
   catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   catEmoji: { fontSize: 20 },
-  catLabel: { fontSize: 12 },
+  catLabel: { fontSize: 13, fontWeight: '600' },
+  catLifeArea: { fontSize: 11, marginTop: -2 },
   catScore: { fontSize: 20, fontWeight: '800' },
   catBar: { height: 5, borderRadius: 3, overflow: 'hidden', flexDirection: 'row', marginTop: 4 },
   catBarSeg: { height: 5 },
