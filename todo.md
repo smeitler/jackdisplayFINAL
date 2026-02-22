@@ -139,4 +139,6 @@
 - [x] Add user authentication (login screen with Manus OAuth)
 - [x] Protect app routes — redirect to login if not authenticated
 - [x] Add logout option in Settings
-- [ ] Sync user data to server per account (cross-device)
+- [x] Sync user data to server per account (cross-device)
+
+- [ ] Fix iOS/Expo Go OAuth login: redirect URI uses exp:// scheme instead of allowed manus* scheme
