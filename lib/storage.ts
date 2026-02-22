@@ -36,6 +36,7 @@ export type Habit = {
   description?: string; // optional user-written description
   category: Category;
   isActive: boolean;
+  order: number;    // sort order within the category
   createdAt: string;
   weeklyGoal?: number; // target days per week (1-7), optional
 };
@@ -97,30 +98,30 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 
 export const DEFAULT_HABITS: Habit[] = [
   // Body
-  { id: 'h1', name: 'Exercise / Workout',        emoji: '1️⃣', category: 'body',          isActive: true, createdAt: new Date().toISOString() },
-  { id: 'h2', name: 'Drink 8 glasses of water',  emoji: '2️⃣', category: 'body',          isActive: true, createdAt: new Date().toISOString() },
-  { id: 'h3', name: 'Sleep 7+ hours',            emoji: '3️⃣', category: 'body',          isActive: true, createdAt: new Date().toISOString() },
+  { id: 'h1', name: 'Exercise / Workout',        emoji: '1️⃣', category: 'body',          isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'h2', name: 'Drink 8 glasses of water',  emoji: '2️⃣', category: 'body',          isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'h3', name: 'Sleep 7+ hours',            emoji: '3️⃣', category: 'body',          isActive: true, order: 2, createdAt: new Date().toISOString() },
   // Mind
-  { id: 'm1', name: 'Meditate or breathe',       emoji: '1️⃣', category: 'mind',          isActive: true, createdAt: new Date().toISOString() },
-  { id: 'm2', name: 'Read 20+ minutes',          emoji: '2️⃣', category: 'mind',          isActive: true, createdAt: new Date().toISOString() },
-  { id: 'm3', name: 'Journal / reflect',         emoji: '3️⃣', category: 'mind',          isActive: true, createdAt: new Date().toISOString() },
+  { id: 'm1', name: 'Meditate or breathe',       emoji: '1️⃣', category: 'mind',          isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'm2', name: 'Read 20+ minutes',          emoji: '2️⃣', category: 'mind',          isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'm3', name: 'Journal / reflect',         emoji: '3️⃣', category: 'mind',          isActive: true, order: 2, createdAt: new Date().toISOString() },
   // Relationships
-  { id: 'r1', name: 'Reach out to a friend',     emoji: '1️⃣', category: 'relationships', isActive: true, createdAt: new Date().toISOString() },
-  { id: 'r2', name: 'Quality time w/ loved ones',emoji: '2️⃣', category: 'relationships', isActive: true, createdAt: new Date().toISOString() },
+  { id: 'r1', name: 'Reach out to a friend',     emoji: '1️⃣', category: 'relationships', isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'r2', name: 'Quality time w/ loved ones',emoji: '2️⃣', category: 'relationships', isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Focus
-  { id: 'f1', name: 'Deep work block (2h+)',     emoji: '1️⃣', category: 'focus',         isActive: true, createdAt: new Date().toISOString() },
-  { id: 'f2', name: 'No phone first 30 min',     emoji: '2️⃣', category: 'focus',         isActive: true, createdAt: new Date().toISOString() },
+  { id: 'f1', name: 'Deep work block (2h+)',     emoji: '1️⃣', category: 'focus',         isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'f2', name: 'No phone first 30 min',     emoji: '2️⃣', category: 'focus',         isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Career
-  { id: 'c1', name: 'Work on main goal',         emoji: '1️⃣', category: 'career',        isActive: true, createdAt: new Date().toISOString() },
-  { id: 'c2', name: 'Learn a new skill',         emoji: '2️⃣', category: 'career',        isActive: true, createdAt: new Date().toISOString() },
+  { id: 'c1', name: 'Work on main goal',         emoji: '1️⃣', category: 'career',        isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'c2', name: 'Learn a new skill',         emoji: '2️⃣', category: 'career',        isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Money
-  { id: 'mo1', name: 'Track expenses',           emoji: '1️⃣', category: 'money',         isActive: true, createdAt: new Date().toISOString() },
-  { id: 'mo2', name: 'Review financial goals',   emoji: '2️⃣', category: 'money',         isActive: true, createdAt: new Date().toISOString() },
+  { id: 'mo1', name: 'Track expenses',           emoji: '1️⃣', category: 'money',         isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'mo2', name: 'Review financial goals',   emoji: '2️⃣', category: 'money',         isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Contribution
-  { id: 'co1', name: 'Help someone today',       emoji: '1️⃣', category: 'contribution',  isActive: true, createdAt: new Date().toISOString() },
+  { id: 'co1', name: 'Help someone today',       emoji: '1️⃣', category: 'contribution',  isActive: true, order: 0, createdAt: new Date().toISOString() },
   // Spirituality
-  { id: 'sp1', name: 'Gratitude practice',       emoji: '1️⃣', category: 'spirituality',  isActive: true, createdAt: new Date().toISOString() },
-  { id: 'sp2', name: 'Prayer or reflection',     emoji: '2️⃣', category: 'spirituality',  isActive: true, createdAt: new Date().toISOString() },
+  { id: 'sp1', name: 'Gratitude practice',       emoji: '1️⃣', category: 'spirituality',  isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'sp2', name: 'Prayer or reflection',     emoji: '2️⃣', category: 'spirituality',  isActive: true, order: 1, createdAt: new Date().toISOString() },
 ];
 
 export const DEFAULT_ALARM: AlarmConfig = {

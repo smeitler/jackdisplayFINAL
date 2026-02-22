@@ -89,6 +89,7 @@ export const appRouter = router({
         emoji: z.string().max(16).default("⭐"),
         description: z.string().max(500).optional().nullable(),
         isActive: z.boolean().default(true),
+        order: z.number().int().min(0).default(0),
         weeklyGoal: z.number().int().min(1).max(7).optional().nullable(),
       }))
       .mutation(({ ctx, input }) =>
@@ -100,6 +101,7 @@ export const appRouter = router({
           emoji: input.emoji,
           description: input.description ?? null,
           isActive: input.isActive,
+          order: input.order,
           weeklyGoal: input.weeklyGoal ?? null,
         })
       ),
@@ -118,6 +120,7 @@ export const appRouter = router({
         emoji: z.string().max(16).default("⭐"),
         description: z.string().max(500).optional().nullable(),
         isActive: z.boolean().default(true),
+        order: z.number().int().min(0).default(0),
         weeklyGoal: z.number().int().min(1).max(7).optional().nullable(),
       })))
       .mutation(({ ctx, input }) =>
@@ -129,9 +132,18 @@ export const appRouter = router({
           emoji: h.emoji,
           description: h.description ?? null,
           isActive: h.isActive,
+          order: h.order,
           weeklyGoal: h.weeklyGoal ?? null,
         })))
       ),
+
+    reorder: protectedProcedure
+      .input(z.array(z.object({ clientId: z.string(), order: z.number().int().min(0) })))
+      .mutation(async ({ ctx, input }) => {
+        for (const item of input) {
+          await db.updateHabitOrder(ctx.user.id, item.clientId, item.order);
+        }
+      }),
   }),
 
   // ─── Check-ins ───────────────────────────────────────────────────────────────

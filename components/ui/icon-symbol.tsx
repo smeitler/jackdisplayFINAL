@@ -54,6 +54,8 @@ const MAPPING = {
   "sparkles": "auto-awesome",
   "alarm.fill": "alarm",
   "arrow.right.circle.fill": "arrow-circle-right",
+  "arrow.up.arrow.down": "swap-vert",
+  "line.3.horizontal": "drag-handle",
 } as IconMapping;
 
 export function IconSymbol({

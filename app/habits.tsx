@@ -632,11 +632,12 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function HabitsScreen() {
-  const { habits, categories, checkIns, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory } = useApp();
+  const { habits, categories, checkIns, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
 
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
+  const [reorderingCat, setReorderingCat] = useState<string | null>(null);
   const [habitModal, setHabitModal] = useState<{ open: boolean; categoryId: string; edit?: Habit | null }>({ open: false, categoryId: '' });
   const [categoryModal, setCategoryModal] = useState<{ open: boolean; edit?: CategoryDef | null }>({ open: false });
 
@@ -644,6 +645,15 @@ export default function HabitsScreen() {
 
   function toggleCategory(id: string) {
     setExpandedCat((prev) => (prev === id ? null : id));
+  }
+
+  function moveHabit(catId: string, fromIdx: number, toIdx: number) {
+    const catHabits = [...habits.filter((h) => h.category === catId)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    if (toIdx < 0 || toIdx >= catHabits.length) return;
+    const moved = [...catHabits];
+    const [item] = moved.splice(fromIdx, 1);
+    moved.splice(toIdx, 0, item);
+    reorderHabits(catId, moved);
   }
 
   function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number) {
@@ -690,8 +700,9 @@ export default function HabitsScreen() {
         </Text>
 
         {sortedCategories.map((cat) => {
-          const catHabits = habits.filter((h) => h.category === cat.id);
+          const catHabits = [...habits.filter((h) => h.category === cat.id)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
           const isExpanded = expandedCat === cat.id;
+          const isReordering = reorderingCat === cat.id;
 
           return (
             <View key={cat.id} style={[styles.categoryBlock, { borderColor: colors.border }]}>
@@ -727,9 +738,19 @@ export default function HabitsScreen() {
                   >
                     <IconSymbol name="pencil" size={16} color={colors.muted} />
                   </TouchableOpacity>
+                  {/* Reorder toggle (only when expanded and has >1 habit) */}
+                  {isExpanded && catHabits.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => setReorderingCat(isReordering ? null : cat.id)}
+                      style={[styles.iconBtn, isReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}
+                      activeOpacity={0.5}
+                    >
+                      <IconSymbol name="arrow.up.arrow.down" size={14} color={isReordering ? colors.primary : colors.muted} />
+                    </TouchableOpacity>
+                  )}
                   {/* Expand/collapse chevron */}
                   <TouchableOpacity
-                    onPress={() => toggleCategory(cat.id)}
+                    onPress={() => { toggleCategory(cat.id); if (isReordering) setReorderingCat(null); }}
                     style={styles.iconBtn}
                     activeOpacity={0.5}
                   >
@@ -749,16 +770,44 @@ export default function HabitsScreen() {
                     <Text style={[styles.emptyHint, { color: colors.muted }]}>No habits yet. Add one below.</Text>
                   )}
                   {catHabits.map((habit, idx) => (
-                    <SwipeableHabitRow
-                      key={habit.id}
-                      habit={habit}
-                      habitIndex={idx}
-                      isLast={idx === catHabits.length - 1}
-                      colors={colors}
-                      onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
-                      onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
-                      onDelete={() => deleteHabit(habit.id)}
-                    />
+                    isReordering ? (
+                      <View
+                        key={habit.id}
+                        style={[styles.reorderRow, { borderBottomColor: colors.border, backgroundColor: colors.surface }, idx === catHabits.length - 1 && { borderBottomWidth: 0 }]}
+                      >
+                        <IconSymbol name="line.3.horizontal" size={18} color={colors.muted} style={{ marginRight: 10 }} />
+                        <Text style={[styles.habitName, { color: habit.isActive ? colors.foreground : colors.muted, flex: 1 }]}>{habit.name}</Text>
+                        <View style={{ flexDirection: 'row', gap: 4 }}>
+                          <TouchableOpacity
+                            onPress={() => moveHabit(cat.id, idx, idx - 1)}
+                            style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}
+                            activeOpacity={0.5}
+                            disabled={idx === 0}
+                          >
+                            <IconSymbol name="chevron.up" size={16} color={colors.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => moveHabit(cat.id, idx, idx + 1)}
+                            style={[styles.iconBtn, { opacity: idx === catHabits.length - 1 ? 0.3 : 1 }]}
+                            activeOpacity={0.5}
+                            disabled={idx === catHabits.length - 1}
+                          >
+                            <IconSymbol name="chevron.down" size={16} color={colors.primary} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <SwipeableHabitRow
+                        key={habit.id}
+                        habit={habit}
+                        habitIndex={idx}
+                        isLast={idx === catHabits.length - 1}
+                        colors={colors}
+                        onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
+                        onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
+                        onDelete={() => deleteHabit(habit.id)}
+                      />
+                    )
                   ))}
 
                   {/* Add habit */}
@@ -941,4 +990,11 @@ const styles = StyleSheet.create({
   weeklyGoalDay: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weeklyGoalDayText: { fontSize: 13, fontWeight: '600' },
   weeklyGoalHint: { fontSize: 11, marginTop: 6 },
+  reorderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
 });

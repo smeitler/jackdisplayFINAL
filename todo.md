@@ -151,3 +151,6 @@
 
 - [x] Show goal deadline on home screen goal cards and vision board
 - [x] Add weekly frequency goal per habit (e.g. "3x/week") with progress indicator on home screen and vision board
+
+- [x] Add drag-to-reorder habits within a goal in the Manage Goals screen
+- [x] Ensure goals and habits are always displayed in priority order across all screens

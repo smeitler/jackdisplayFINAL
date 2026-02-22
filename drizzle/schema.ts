@@ -63,6 +63,7 @@ export const habits = mysqlTable("habits", {
   emoji: varchar("emoji", { length: 16 }).notNull().default("⭐"),
   description: text("description"),
   isActive: boolean("isActive").notNull().default(true),
+  order: int("order").notNull().default(0),
   weeklyGoal: int("weeklyGoal"), // target days per week (1-7), nullable = no goal set
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

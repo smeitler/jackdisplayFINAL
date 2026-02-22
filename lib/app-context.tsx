@@ -83,7 +83,7 @@ function serverCatToLocal(row: { clientId: string; label: string; emoji: string;
   };
 }
 
-function serverHabitToLocal(row: { clientId: string; categoryClientId: string; name: string; emoji: string; description?: string | null; isActive: boolean; weeklyGoal?: number | null; createdAt: Date }): Habit {
+function serverHabitToLocal(row: { clientId: string; categoryClientId: string; name: string; emoji: string; description?: string | null; isActive: boolean; order?: number | null; weeklyGoal?: number | null; createdAt: Date }): Habit {
   return {
     id: row.clientId,
     name: row.name,
@@ -91,6 +91,7 @@ function serverHabitToLocal(row: { clientId: string; categoryClientId: string; n
     description: row.description ?? undefined,
     category: row.categoryClientId,
     isActive: row.isActive,
+    order: row.order ?? 0,
     weeklyGoal: row.weeklyGoal ?? undefined,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
@@ -125,6 +126,7 @@ type AppContextValue = AppState & {
   updateCategory: (id: string, updates: Partial<CategoryDef>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (cats: CategoryDef[]) => Promise<void>;
+  reorderHabits: (catId: string, habits: Habit[]) => Promise<void>;
   submitCheckIn: (date: string, ratingsMap: Record<string, Rating>) => Promise<void>;
   updateAlarm: (config: AlarmConfig) => Promise<void>;
   isPendingCheckIn: boolean;
@@ -195,6 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               emoji: h.emoji,
               description: h.description ?? null,
               isActive: h.isActive,
+              order: h.order,
               weeklyGoal: h.weeklyGoal ?? null,
             }))),
             utils.client.checkIns.bulkSync.mutate(localCheckIns.map((e) => ({
@@ -251,6 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number) => {
+    const catHabits = state.habits.filter((h) => h.category === category);
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
       name,
@@ -258,6 +262,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       description,
       category,
       isActive: true,
+      order: catHabits.length,
       weeklyGoal,
       createdAt: new Date().toISOString(),
     };
@@ -274,6 +279,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           emoji: newHabit.emoji,
           description: newHabit.description ?? null,
           isActive: newHabit.isActive,
+          order: newHabit.order,
           weeklyGoal: newHabit.weeklyGoal ?? null,
         });
       } catch (err) {
@@ -298,6 +304,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             emoji: habit.emoji,
             description: habit.description ?? null,
             isActive: habit.isActive,
+            order: habit.order,
             weeklyGoal: habit.weeklyGoal ?? null,
           });
         } catch (err) {
@@ -403,6 +410,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.categories, state.habits, utils]);
 
+  const reorderHabits = useCallback(async (catId: string, reorderedCatHabits: Habit[]) => {
+    // Assign new order values within the category
+    const reordered = reorderedCatHabits.map((h, i) => ({ ...h, order: i }));
+    // Merge with habits from other categories
+    const otherHabits = state.habits.filter((h) => h.category !== catId);
+    const allHabits = [...otherHabits, ...reordered];
+    await saveHabits(allHabits);
+    dispatch({ type: 'SET_HABITS', habits: allHabits });
+
+    if (isAuthenticated.current) {
+      try {
+        await utils.client.habits.reorder.mutate(
+          reordered.map((h) => ({ clientId: h.id, order: h.order }))
+        );
+      } catch (err) {
+        console.warn('[AppContext] Failed to sync reordered habits:', err);
+      }
+    }
+  }, [state.habits, utils]);
+
   const reorderCategories = useCallback(async (cats: CategoryDef[]) => {
     const reordered = cats.map((c, i) => ({ ...c, order: i }));
     await saveCategories(reordered);
@@ -475,7 +502,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  const activeHabits = state.habits.filter((h) => h.isActive);
+  const activeHabits = state.habits.filter((h) => h.isActive).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const isPendingCheckIn = state.lastCheckInDate !== yesterdayString();
 
   const getEntriesForDate = useCallback((date: string) =>
@@ -554,7 +581,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       ...state,
       addHabit, updateHabit, deleteHabit,
-      addCategory, updateCategory, deleteCategory, reorderCategories,
+      addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits,
       submitCheckIn, updateAlarm,
       isPendingCheckIn, activeHabits,
       getEntriesForDate, getRatingsForDate,

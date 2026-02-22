@@ -1,0 +1,1 @@
+ALTER TABLE `habits` ADD `order` int DEFAULT 0 NOT NULL;

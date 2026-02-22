@@ -123,9 +123,16 @@ export async function upsertHabit(data: InsertHabit) {
       emoji: data.emoji,
       description: data.description ?? null,
       isActive: data.isActive,
+      order: data.order ?? 0,
       weeklyGoal: data.weeklyGoal ?? null,
     },
   });
+}
+
+export async function updateHabitOrder(userId: number, clientId: string, order: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(habits).set({ order }).where(and(eq(habits.userId, userId), eq(habits.clientId, clientId)));
 }
 
 export async function deleteHabitByClientId(userId: number, clientId: string) {
@@ -141,7 +148,7 @@ export async function bulkUpsertHabits(userId: number, hs: InsertHabit[]) {
   if (!db) throw new Error("Database not available");
   for (const h of hs) {
     await db.insert(habits).values({ ...h, userId }).onDuplicateKeyUpdate({
-      set: { categoryClientId: h.categoryClientId, name: h.name, emoji: h.emoji, description: h.description ?? null, isActive: h.isActive, weeklyGoal: h.weeklyGoal ?? null },
+      set: { categoryClientId: h.categoryClientId, name: h.name, emoji: h.emoji, description: h.description ?? null, isActive: h.isActive, order: h.order ?? 0, weeklyGoal: h.weeklyGoal ?? null },
     });
   }
 }
