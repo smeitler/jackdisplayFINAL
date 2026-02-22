@@ -123,6 +123,7 @@ export async function upsertHabit(data: InsertHabit) {
       emoji: data.emoji,
       description: data.description ?? null,
       isActive: data.isActive,
+      weeklyGoal: data.weeklyGoal ?? null,
     },
   });
 }
@@ -140,7 +141,7 @@ export async function bulkUpsertHabits(userId: number, hs: InsertHabit[]) {
   if (!db) throw new Error("Database not available");
   for (const h of hs) {
     await db.insert(habits).values({ ...h, userId }).onDuplicateKeyUpdate({
-      set: { categoryClientId: h.categoryClientId, name: h.name, emoji: h.emoji, description: h.description ?? null, isActive: h.isActive },
+      set: { categoryClientId: h.categoryClientId, name: h.name, emoji: h.emoji, description: h.description ?? null, isActive: h.isActive, weeklyGoal: h.weeklyGoal ?? null },
     });
   }
 }

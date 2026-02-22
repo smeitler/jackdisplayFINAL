@@ -89,6 +89,7 @@ export const appRouter = router({
         emoji: z.string().max(16).default("⭐"),
         description: z.string().max(500).optional().nullable(),
         isActive: z.boolean().default(true),
+        weeklyGoal: z.number().int().min(1).max(7).optional().nullable(),
       }))
       .mutation(({ ctx, input }) =>
         db.upsertHabit({
@@ -99,6 +100,7 @@ export const appRouter = router({
           emoji: input.emoji,
           description: input.description ?? null,
           isActive: input.isActive,
+          weeklyGoal: input.weeklyGoal ?? null,
         })
       ),
 
@@ -116,6 +118,7 @@ export const appRouter = router({
         emoji: z.string().max(16).default("⭐"),
         description: z.string().max(500).optional().nullable(),
         isActive: z.boolean().default(true),
+        weeklyGoal: z.number().int().min(1).max(7).optional().nullable(),
       })))
       .mutation(({ ctx, input }) =>
         db.bulkUpsertHabits(ctx.user.id, input.map((h) => ({
@@ -126,6 +129,7 @@ export const appRouter = router({
           emoji: h.emoji,
           description: h.description ?? null,
           isActive: h.isActive,
+          weeklyGoal: h.weeklyGoal ?? null,
         })))
       ),
   }),

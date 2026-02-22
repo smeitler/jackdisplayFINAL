@@ -83,7 +83,7 @@ function serverCatToLocal(row: { clientId: string; label: string; emoji: string;
   };
 }
 
-function serverHabitToLocal(row: { clientId: string; categoryClientId: string; name: string; emoji: string; description?: string | null; isActive: boolean; createdAt: Date }): Habit {
+function serverHabitToLocal(row: { clientId: string; categoryClientId: string; name: string; emoji: string; description?: string | null; isActive: boolean; weeklyGoal?: number | null; createdAt: Date }): Habit {
   return {
     id: row.clientId,
     name: row.name,
@@ -91,6 +91,7 @@ function serverHabitToLocal(row: { clientId: string; categoryClientId: string; n
     description: row.description ?? undefined,
     category: row.categoryClientId,
     isActive: row.isActive,
+    weeklyGoal: row.weeklyGoal ?? undefined,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
 }
@@ -117,7 +118,7 @@ function serverAlarmToLocal(row: { hour: number; minute: number; days: string; e
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 type AppContextValue = AppState & {
-  addHabit: (name: string, emoji: string, category: Category, description?: string) => Promise<void>;
+  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   addCategory: (label: string, emoji: string, lifeArea?: LifeArea) => Promise<void>;
@@ -132,6 +133,7 @@ type AppContextValue = AppState & {
   getRatingsForDate: (date: string) => Record<string, Rating>;
   getCategoryRate: (category: Category, days?: number) => number;
   getCategoryBreakdown: (category: Category, days?: number) => { green: number; yellow: number; red: number; none: number };
+  getHabitWeeklyDone: (habitId: string) => number; // count of days this week (Mon-Sun) with green or yellow rating
   streak: number;
 };
 
@@ -193,6 +195,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               emoji: h.emoji,
               description: h.description ?? null,
               isActive: h.isActive,
+              weeklyGoal: h.weeklyGoal ?? null,
             }))),
             utils.client.checkIns.bulkSync.mutate(localCheckIns.map((e) => ({
               habitClientId: e.habitId,
@@ -247,7 +250,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string) => {
+  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number) => {
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
       name,
@@ -255,6 +258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       description,
       category,
       isActive: true,
+      weeklyGoal,
       createdAt: new Date().toISOString(),
     };
     const updated = [...state.habits, newHabit];
@@ -270,6 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           emoji: newHabit.emoji,
           description: newHabit.description ?? null,
           isActive: newHabit.isActive,
+          weeklyGoal: newHabit.weeklyGoal ?? null,
         });
       } catch (err) {
         console.warn('[AppContext] Failed to sync new habit:', err);
@@ -293,6 +298,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             emoji: habit.emoji,
             description: habit.description ?? null,
             isActive: habit.isActive,
+            weeklyGoal: habit.weeklyGoal ?? null,
           });
         } catch (err) {
           console.warn('[AppContext] Failed to sync updated habit:', err);
@@ -500,6 +506,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return totalWeight === 0 ? 0 : totalScore / totalWeight;
   }, [activeHabits, state.checkIns]);
 
+  // Count how many days in the current Mon-Sun week a habit was completed (green or yellow)
+  const getHabitWeeklyDone = useCallback((habitId: string) => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon...
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dateStr = toDateString(d);
+      const entry = state.checkIns.find((e) => e.habitId === habitId && e.date === dateStr);
+      if (entry && (entry.rating === 'green' || entry.rating === 'yellow')) count++;
+    }
+    return count;
+  }, [state.checkIns]);
+
   const getCategoryBreakdown = useCallback((category: Category, days = 7) => {
     const habits = activeHabits.filter((h) => h.category === category);
     const habitIds = new Set(habits.map((h) => h.id));
@@ -534,7 +558,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       submitCheckIn, updateAlarm,
       isPendingCheckIn, activeHabits,
       getEntriesForDate, getRatingsForDate,
-      getCategoryRate, getCategoryBreakdown,
+      getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone,
       streak,
     }}>
       {children}

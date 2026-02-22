@@ -1,5 +1,5 @@
 import {
-  View, Text, TouchableOpacity, TextInput,
+  View, Text, TouchableOpacity, TextInput, Pressable,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useState } from 'react';
@@ -214,7 +214,7 @@ interface HabitModalProps {
   editHabit?: Habit | null;
   defaultEmoji?: string;
   entryCount: number;
-  onSave: (name: string, emoji: string, description?: string) => void;
+  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number) => void;
   onDelete: (habitId: string) => void;
   onDeactivate: (habitId: string) => void;
   onClose: () => void;
@@ -227,12 +227,13 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [description, setDescription] = useState(editHabit?.description ?? '');
+  const [weeklyGoal, setWeeklyGoal] = useState<number | undefined>(editHabit?.weeklyGoal);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!name.trim()) return;
-    onSave(name.trim(), emoji, description.trim() || undefined);
+    onSave(name.trim(), emoji, description.trim() || undefined, weeklyGoal);
     onClose();
   }
 
@@ -267,6 +268,7 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
           setName(editHabit?.name ?? '');
           setEmoji(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
           setDescription(editHabit?.description ?? '');
+          setWeeklyGoal(editHabit?.weeklyGoal);
           setConfirmDelete(false);
         }}
       >
@@ -309,6 +311,32 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
               returnKeyType="done"
               blurOnSubmit
             />
+
+            {/* Weekly goal selector */}
+            <View style={styles.weeklyGoalRow}>
+              <Text style={[styles.weeklyGoalLabel, { color: colors.foreground }]}>Weekly goal</Text>
+              <View style={styles.weeklyGoalBtns}>
+                {[1,2,3,4,5,6,7].map((d) => (
+                  <Pressable
+                    key={d}
+                    onPress={() => setWeeklyGoal(weeklyGoal === d ? undefined : d)}
+                    style={({ pressed }) => ([
+                      styles.weeklyGoalDay,
+                      {
+                        backgroundColor: weeklyGoal === d ? colors.primary : colors.background,
+                        borderColor: weeklyGoal === d ? colors.primary : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      },
+                    ])}
+                  >
+                    <Text style={[styles.weeklyGoalDayText, { color: weeklyGoal === d ? '#fff' : colors.muted }]}>{d}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={[styles.weeklyGoalHint, { color: colors.muted }]}>
+                {weeklyGoal ? `${weeklyGoal}x per week` : 'No goal set'}
+              </Text>
+            </View>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -618,11 +646,11 @@ export default function HabitsScreen() {
     setExpandedCat((prev) => (prev === id ? null : id));
   }
 
-  function handleSaveHabit(name: string, emoji: string, description?: string) {
+  function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number) {
     if (habitModal.edit) {
-      updateHabit(habitModal.edit.id, { name, emoji, description });
+      updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal });
     } else {
-      addHabit(name, emoji, habitModal.categoryId, description);
+      addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal);
     }
   }
 
@@ -907,4 +935,10 @@ const styles = StyleSheet.create({
   datePickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   datePickerDay: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   datePickerDayText: { fontSize: 13, fontWeight: '500' },
+  weeklyGoalRow: { marginTop: 12, marginBottom: 4 },
+  weeklyGoalLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  weeklyGoalBtns: { flexDirection: 'row', gap: 6 },
+  weeklyGoalDay: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  weeklyGoalDayText: { fontSize: 13, fontWeight: '600' },
+  weeklyGoalHint: { fontSize: 11, marginTop: 6 },
 });

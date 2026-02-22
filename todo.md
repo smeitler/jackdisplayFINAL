@@ -148,3 +148,6 @@
 
 - [x] Fix incorrect active habit count shown in Settings (orphaned habits from deleted categories cleaned up)
 - [x] Add Select All / Clear buttons to Analytics habit filter legend (already implemented)
+
+- [x] Show goal deadline on home screen goal cards and vision board
+- [x] Add weekly frequency goal per habit (e.g. "3x/week") with progress indicator on home screen and vision board

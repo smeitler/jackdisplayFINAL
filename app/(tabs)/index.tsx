@@ -21,7 +21,7 @@ function getGreeting(): string {
 }
 
 export default function HomeScreen() {
-  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, streak, isLoaded, categories } = useApp();
+  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, streak, isLoaded, categories, activeHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
   const [range, setRange] = useState<Range>(7);
@@ -153,6 +153,8 @@ export default function HomeScreen() {
             const breakdown = getCategoryBreakdown(cat.id, range);
             const total = breakdown.green + breakdown.yellow + breakdown.red;
             const lifeArea = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
+            // Habits with a weekly goal for this category
+            const habitsWithGoal = activeHabits.filter((h) => h.category === cat.id && h.weeklyGoal);
 
             return (
               <Pressable
@@ -183,6 +185,30 @@ export default function HomeScreen() {
                     return <Text style={[styles.deadlineTag, { color, borderColor: color + '44', backgroundColor: color + '18' }]}>{label}</Text>;
                   })()}
                 </View>
+
+                {/* Weekly habit goals */}
+                {habitsWithGoal.length > 0 && (
+                  <View style={styles.weeklyGoalList}>
+                    {habitsWithGoal.map((h) => {
+                      const done = getHabitWeeklyDone(h.id);
+                      const goal = h.weeklyGoal!;
+                      const met = done >= goal;
+                      const pct = Math.min(done / goal, 1);
+                      return (
+                        <View key={h.id} style={styles.weeklyGoalItem}>
+                          <Text style={[styles.weeklyGoalName, { color: colors.muted }]} numberOfLines={1}>{h.emoji} {h.name}</Text>
+                          <View style={styles.weeklyGoalBarWrap}>
+                            <View style={[styles.weeklyGoalBarBg, { backgroundColor: colors.border }]}>
+                              <View style={[styles.weeklyGoalBarFill, { flex: pct, backgroundColor: met ? '#22C55E' : colors.primary }]} />
+                              {pct < 1 && <View style={{ flex: 1 - pct }} />}
+                            </View>
+                            <Text style={[styles.weeklyGoalCount, { color: met ? '#22C55E' : colors.primary }]}>{done}/{goal}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
 
                 {/* Stacked bar */}
                 {total > 0 ? (
@@ -318,4 +344,11 @@ const styles = StyleSheet.create({
   manageBtnText: { flex: 1, fontSize: 15, fontWeight: '600' },
   catScoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   deadlineTag: { fontSize: 11, fontWeight: '700', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, overflow: 'hidden' },
+  weeklyGoalList: { marginTop: 8, gap: 5 },
+  weeklyGoalItem: { gap: 2 },
+  weeklyGoalName: { fontSize: 11, fontWeight: '500' },
+  weeklyGoalBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  weeklyGoalBarBg: { flex: 1, height: 5, borderRadius: 3, flexDirection: 'row', overflow: 'hidden' },
+  weeklyGoalBarFill: { borderRadius: 3 },
+  weeklyGoalCount: { fontSize: 11, fontWeight: '700', minWidth: 24, textAlign: 'right' },
 });

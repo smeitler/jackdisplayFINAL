@@ -37,6 +37,7 @@ export type Habit = {
   category: Category;
   isActive: boolean;
   createdAt: string;
+  weeklyGoal?: number; // target days per week (1-7), optional
 };
 
 export type CheckInEntry = {

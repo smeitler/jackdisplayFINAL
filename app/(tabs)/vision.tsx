@@ -18,7 +18,7 @@ const COLS = 3;
 const IMG_SIZE = Math.floor((SCREEN_W - PADDING * 2 - GAP * (COLS - 1)) / COLS);
 
 export default function VisionBoardScreen() {
-  const { categories } = useApp();
+  const { categories, activeHabits, getHabitWeeklyDone } = useApp();
   const colors = useColors();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
@@ -82,6 +82,17 @@ export default function VisionBoardScreen() {
 
         {sortedCategories.map((cat) => {
           const images = board[cat.id] ?? [];
+          const habitsWithGoal = activeHabits.filter((h) => h.category === cat.id && h.weeklyGoal);
+          // Deadline calculation
+          let deadlineLabel: string | null = null;
+          let deadlineColor = colors.muted;
+          if (cat.deadline) {
+            const dl = new Date(cat.deadline + 'T12:00:00');
+            const now = new Date(); now.setHours(0, 0, 0, 0);
+            const diffDays = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
+            deadlineLabel = diffDays < 0 ? 'Overdue' : diffDays === 0 ? 'Due today' : `${diffDays}d left`;
+            deadlineColor = diffDays < 0 ? '#EF4444' : diffDays <= 7 ? '#F59E0B' : colors.muted;
+          }
           return (
             <View
               key={cat.id}
@@ -90,7 +101,12 @@ export default function VisionBoardScreen() {
               {/* Category header */}
               <View style={styles.catHeader}>
                 <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
+                  {deadlineLabel && (
+                    <Text style={[styles.visionDeadline, { color: deadlineColor }]}>{deadlineLabel}</Text>
+                  )}
+                </View>
                 <Pressable
                   onPress={() => pickImage(cat.id)}
                   style={({ pressed }) => [
@@ -138,6 +154,30 @@ export default function VisionBoardScreen() {
                   >
                     <IconSymbol name="plus" size={22} color={colors.muted} />
                   </Pressable>
+                </View>
+              )}
+
+              {/* Weekly habit goals */}
+              {habitsWithGoal.length > 0 && (
+                <View style={[styles.visionWeeklyList, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 }]}>
+                  {habitsWithGoal.map((h) => {
+                    const done = getHabitWeeklyDone(h.id);
+                    const goal = h.weeklyGoal!;
+                    const met = done >= goal;
+                    const pct = Math.min(done / goal, 1);
+                    return (
+                      <View key={h.id} style={styles.visionWeeklyItem}>
+                        <Text style={[styles.visionWeeklyName, { color: colors.muted }]} numberOfLines={1}>{h.emoji} {h.name}</Text>
+                        <View style={styles.visionWeeklyBarWrap}>
+                          <View style={[styles.visionWeeklyBarBg, { backgroundColor: colors.border }]}>
+                            <View style={[styles.visionWeeklyBarFill, { flex: pct, backgroundColor: met ? '#22C55E' : colors.primary }]} />
+                            {pct < 1 && <View style={{ flex: 1 - pct }} />}
+                          </View>
+                          <Text style={[styles.visionWeeklyCount, { color: met ? '#22C55E' : colors.primary }]}>{done}/{goal}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -295,4 +335,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+  visionDeadline: { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  visionWeeklyList: { marginTop: 10, gap: 6 },
+  visionWeeklyItem: { gap: 2 },
+  visionWeeklyName: { fontSize: 11, fontWeight: '500' },
+  visionWeeklyBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  visionWeeklyBarBg: { flex: 1, height: 5, borderRadius: 3, flexDirection: 'row', overflow: 'hidden' },
+  visionWeeklyBarFill: { borderRadius: 3 },
+  visionWeeklyCount: { fontSize: 11, fontWeight: '700', minWidth: 24, textAlign: 'right' },
 });
