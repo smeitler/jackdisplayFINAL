@@ -24,6 +24,7 @@ export type CategoryDef = {
   emoji: string;      // e.g. "💪"
   order: number;      // sort order
   lifeArea?: LifeArea; // which of the 8 life areas this goal belongs to
+  deadline?: string;   // ISO date string YYYY-MM-DD, optional goal deadline
 };
 
 export type Rating = 'none' | 'red' | 'yellow' | 'green';

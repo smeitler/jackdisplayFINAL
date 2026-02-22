@@ -52,6 +52,8 @@ const MAPPING = {
   "circle": "radio-button-unchecked",
   "photo.stack.fill": "photo-library",
   "sparkles": "auto-awesome",
+  "alarm.fill": "alarm",
+  "arrow.right.circle.fill": "arrow-circle-right",
 } as IconMapping;
 
 export function IconSymbol({

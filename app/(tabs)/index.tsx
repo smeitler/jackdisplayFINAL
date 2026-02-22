@@ -170,7 +170,19 @@ export default function HomeScreen() {
                 {lifeArea && (
                   <Text style={[styles.catLifeArea, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
                 )}
-                <Text style={[styles.catScore, { color: colors.primary }]}>{Math.round(rate * 100)}%</Text>
+                <View style={styles.catScoreRow}>
+                  <Text style={[styles.catScore, { color: colors.primary }]}>{Math.round(rate * 100)}%</Text>
+                  {cat.deadline && (() => {
+                    const dl = new Date(cat.deadline + 'T12:00:00');
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    const diffMs = dl.getTime() - now.getTime();
+                    const days = Math.ceil(diffMs / 86400000);
+                    const label = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d left`;
+                    const color = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : colors.muted;
+                    return <Text style={[styles.deadlineTag, { color, borderColor: color + '44', backgroundColor: color + '18' }]}>{label}</Text>;
+                  })()}
+                </View>
 
                 {/* Stacked bar */}
                 {total > 0 ? (
@@ -304,4 +316,6 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 16, borderWidth: 1,
   },
   manageBtnText: { flex: 1, fontSize: 15, fontWeight: '600' },
+  catScoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  deadlineTag: { fontSize: 11, fontWeight: '700', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, overflow: 'hidden' },
 });

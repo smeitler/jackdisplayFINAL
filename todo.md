@@ -131,3 +131,12 @@
 - [x] Expand category system to 8 life areas: Body, Mind, Relationships, Focus, Career, Money, Contribution, Spirituality
 - [x] Show life area label under each goal card on home screen
 - [x] Update seed data to use new 8 life areas
+
+- [x] Add optional deadline date field to CategoryDef (goal)
+- [x] Add date picker to goal edit modal for setting/clearing deadline
+- [x] Show deadline countdown on home screen goal cards
+
+- [x] Add user authentication (login screen with Manus OAuth)
+- [x] Protect app routes — redirect to login if not authenticated
+- [x] Add logout option in Settings
+- [ ] Sync user data to server per account (cross-device)

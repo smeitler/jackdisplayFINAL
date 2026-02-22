@@ -109,6 +109,7 @@ export default function RootLayout() {
           <NotificationHandler />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="login" options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="oauth/callback" />
             <Stack.Screen name="checkin" options={{ presentation: 'modal' }} />
             <Stack.Screen name="habits" options={{ presentation: 'modal' }} />

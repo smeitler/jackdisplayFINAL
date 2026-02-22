@@ -18,6 +18,78 @@ import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/st
 // Numbered emojis 1–10 then fallback to ⭐
 const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
 
+// ─── Inline Date Picker ─────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function InlineDatePicker({
+  value, minDate, onChange, colors,
+}: {
+  value: Date;
+  minDate: Date;
+  onChange: (d: Date) => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const [viewYear, setViewYear] = useState(value.getFullYear());
+  const [viewMonth, setViewMonth] = useState(value.getMonth());
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const minDay = new Date(minDate);
+  minDay.setHours(0, 0, 0, 0);
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  }
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  return (
+    <View>
+      <View style={styles.datePickerNav}>
+        <TouchableOpacity onPress={prevMonth} style={{ padding: 4 }} activeOpacity={0.7}>
+          <IconSymbol name="chevron.left" size={18} color={colors.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.datePickerNavText, { color: colors.foreground }]}>
+          {MONTH_NAMES[viewMonth]} {viewYear}
+        </Text>
+        <TouchableOpacity onPress={nextMonth} style={{ padding: 4 }} activeOpacity={0.7}>
+          <IconSymbol name="chevron.right" size={18} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.datePickerGrid}>
+        {cells.map((day, i) => {
+          if (!day) return <View key={`e${i}`} style={styles.datePickerDay} />;
+          const d = new Date(viewYear, viewMonth, day);
+          d.setHours(0, 0, 0, 0);
+          const disabled = d < minDay;
+          const selected = value.getFullYear() === viewYear && value.getMonth() === viewMonth && value.getDate() === day;
+          return (
+            <TouchableOpacity
+              key={day}
+              onPress={() => !disabled && onChange(new Date(viewYear, viewMonth, day))}
+              style={[styles.datePickerDay, selected && { backgroundColor: colors.primary }, disabled && { opacity: 0.3 }]}
+              activeOpacity={disabled ? 1 : 0.7}
+            >
+              <Text style={[styles.datePickerDayText, { color: selected ? '#fff' : colors.foreground }]}>{day}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // ─── Swipeable Habit Row ──────────────────────────────────────────────────────
 
 const SWIPE_THRESHOLD = -80;
@@ -323,7 +395,7 @@ interface CategoryModalProps {
   visible: boolean;
   editCategory?: CategoryDef | null;
   habitCount: number;
-  onSave: (label: string, emoji: string, lifeArea?: LifeArea) => void;
+  onSave: (label: string, emoji: string, lifeArea?: LifeArea, deadline?: string) => void;
   onDelete: (catId: string) => void;
   onClose: () => void;
 }
@@ -333,12 +405,14 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
   const [label, setLabel] = useState(editCategory?.label ?? '');
   const [emoji, setEmoji] = useState(editCategory?.emoji ?? '🌟');
   const [lifeArea, setLifeArea] = useState<LifeArea | undefined>(editCategory?.lifeArea);
+  const [deadline, setDeadline] = useState<string | undefined>(editCategory?.deadline);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!label.trim()) return;
-    onSave(label.trim(), emoji, lifeArea);
+    onSave(label.trim(), emoji, lifeArea, deadline);
     onClose();
   }
 
@@ -361,7 +435,9 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
           setLabel(editCategory?.label ?? '');
           setEmoji(editCategory?.emoji ?? '🌟');
           setLifeArea(editCategory?.lifeArea);
+          setDeadline(editCategory?.deadline);
           setConfirmDelete(false);
+          setShowDatePicker(false);
         }}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -432,6 +508,45 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
                 ))}
               </View>
             </ScrollView>
+
+            {/* Deadline picker */}
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Deadline (optional)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <TouchableOpacity
+                onPress={() => setShowDatePicker(!showDatePicker)}
+                style={[styles.deadlineBtn, { backgroundColor: colors.background, borderColor: deadline ? colors.primary : colors.border }]}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="calendar" size={16} color={deadline ? colors.primary : colors.muted} />
+                <Text style={[styles.deadlineBtnText, { color: deadline ? colors.primary : colors.muted }]}>
+                  {deadline ? new Date(deadline + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Set deadline…'}
+                </Text>
+              </TouchableOpacity>
+              {deadline && (
+                <TouchableOpacity
+                  onPress={() => { setDeadline(undefined); setShowDatePicker(false); }}
+                  style={[styles.clearDeadlineBtn, { borderColor: colors.border }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.clearDeadlineText, { color: colors.muted }]}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {showDatePicker && (
+              <View style={[styles.inlineDatePicker, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                {/* Simple inline date selector — month/year + day grid */}
+                <InlineDatePicker
+                  value={deadline ? new Date(deadline + 'T12:00:00') : new Date()}
+                  minDate={new Date()}
+                  onChange={(d) => {
+                    const iso = d.toISOString().split('T')[0];
+                    setDeadline(iso);
+                    setShowDatePicker(false);
+                  }}
+                  colors={colors}
+                />
+              </View>
+            )}
 
             {/* Delete button — only shown when editing an existing goal */}
             {editCategory && !confirmDelete && (
@@ -511,9 +626,9 @@ export default function HabitsScreen() {
     }
   }
 
-  function handleSaveCategory(label: string, emoji: string, lifeArea?: LifeArea) {
+  function handleSaveCategory(label: string, emoji: string, lifeArea?: LifeArea, deadline?: string) {
     if (categoryModal.edit) {
-      updateCategory(categoryModal.edit.id, { label, emoji, lifeArea });
+      updateCategory(categoryModal.edit.id, { label, emoji, lifeArea, deadline });
     } else {
       addCategory(label, emoji, lifeArea);
     }
@@ -779,4 +894,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 14, marginBottom: 14, minHeight: 60, textAlignVertical: 'top',
   },
+  deadlineBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    height: 44, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12,
+  },
+  deadlineBtnText: { fontSize: 14, flex: 1 },
+  clearDeadlineBtn: { height: 44, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  clearDeadlineText: { fontSize: 13, fontWeight: '600' },
+  inlineDatePicker: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 16 },
+  datePickerNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  datePickerNavText: { fontSize: 15, fontWeight: '700' },
+  datePickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  datePickerDay: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  datePickerDayText: { fontSize: 13, fontWeight: '500' },
 });

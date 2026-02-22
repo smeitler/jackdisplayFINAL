@@ -7,6 +7,7 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { DAY_LABELS, formatAlarmTime } from "@/lib/notifications";
 import * as Haptics from "expo-haptics";
+import { useAuth } from "@/hooks/use-auth";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
@@ -15,6 +16,7 @@ export default function SettingsScreen() {
   const { alarm, updateAlarm, activeHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const [hour, setHour] = useState(alarm.hour);
   const [minute, setMinute] = useState(alarm.minute);
@@ -221,6 +223,37 @@ export default function SettingsScreen() {
             <IconSymbol name="chevron.right" size={16} color={colors.muted} />
           </Pressable>
         </View>
+
+        {/* Account section */}
+        {isAuthenticated && (
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
+                <IconSymbol name="person.fill" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account</Text>
+                {user?.email && (
+                  <Text style={[{ fontSize: 12, color: colors.muted }]}>{user.email}</Text>
+                )}
+              </View>
+            </View>
+            <Pressable
+              onPress={async () => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                await logout();
+                router.replace('/login');
+              }}
+              style={({ pressed }) => [
+                styles.manageHabitsBtn,
+                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Text style={[styles.manageHabitsBtnText, { color: '#EF4444' }]}>Sign Out</Text>
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            </Pressable>
+          </View>
+        )}
 
         {/* Info */}
         <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
