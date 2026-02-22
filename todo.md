@@ -142,3 +142,6 @@
 - [x] Sync user data to server per account (cross-device)
 
 - [ ] Fix iOS/Expo Go OAuth login: redirect URI uses exp:// scheme instead of allowed manus* scheme
+
+- [x] Fix goal (category) delete not working after server sync migration
+- [x] Fix duplicate goals/habits appearing after server sync

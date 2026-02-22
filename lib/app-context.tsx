@@ -17,7 +17,6 @@ import {
 } from './storage';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
-import * as Auth from './_core/auth';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -158,22 +157,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ]);
       dispatch({ type: 'LOADED', habits: localHabits, categories: localCategories, checkIns: localCheckIns, alarm: localAlarm, lastCheckInDate });
 
-      // 2. Check if user is authenticated; if so, sync with server
-      const token = await Auth.getSessionToken();
-      const user = await Auth.getUserInfo();
-      if (!token && !user) return; // Not logged in — use local data only
-
-      isAuthenticated.current = true;
+      // 2. Try to fetch server data — if it succeeds, user is authenticated
       dispatch({ type: 'SET_SYNCING', syncing: true });
 
       try {
-        // Fetch all user data from server in parallel
+        // Fetch all user data from server in parallel.
+        // If the user is not authenticated, this will throw a 401/403 error.
         const [serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
           utils.categories.list.fetch(),
           utils.habits.list.fetch(),
           utils.checkIns.list.fetch(),
           utils.alarm.get.fetch(),
         ]);
+
+        // If we reach here, the user is authenticated
+        isAuthenticated.current = true;
 
         const isFirstLogin = serverCats.length === 0 && serverHabits.length === 0;
 
@@ -231,8 +229,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             saveAlarm(alarm),
           ]);
         }
-      } catch (err) {
-        console.warn('[AppContext] Server sync failed, using local data:', err);
+      } catch (err: any) {
+        // If the error is a 401/403 (not authenticated), silently fall back to local data
+        const isAuthError = err?.data?.httpStatus === 401 || err?.data?.httpStatus === 403
+          || err?.message?.includes('UNAUTHORIZED') || err?.message?.includes('FORBIDDEN');
+        if (!isAuthError) {
+          console.warn('[AppContext] Server sync failed, using local data:', err);
+        }
+        // isAuthenticated.current remains false — mutations will use local storage only
       } finally {
         dispatch({ type: 'SET_SYNCING', syncing: false });
       }

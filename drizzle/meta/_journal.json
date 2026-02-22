@@ -15,6 +15,13 @@
       "when": 1771739260727,
       "tag": "0001_wandering_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1771740237216,
+      "tag": "0002_talented_skullbuster",
+      "breakpoints": true
     }
   ]
 }

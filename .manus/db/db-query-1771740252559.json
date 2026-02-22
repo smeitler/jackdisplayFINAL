@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE `categories` ADD CONSTRAINT `categories_userId_clientId_idx` UNIQUE(`userId`,`clientId`);\nALTER TABLE `checkIns` ADD CONSTRAINT `checkIns_userId_habitClientId_date_idx` UNIQUE(`userId`,`habitClientId`,`date`);\nALTER TABLE `habits` ADD CONSTRAINT `habits_userId_clientId_idx` UNIQUE(`userId`,`clientId`);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute \nALTER TABLE `categories` ADD CONSTRAINT `categories_userId_clientId_idx` UNIQUE(`userId`,`clientId`);\nALTER TABLE `checkIns` ADD CONSTRAINT `checkIns_userId_habitClientId_date_idx` UNIQUE(`userId`,`habitClientId`,`date`);\nALTER TABLE `habits` ADD CONSTRAINT `habits_userId_clientId_idx` UNIQUE(`userId`,`clientId`);\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1427
+}
