@@ -1,0 +1,16 @@
+{
+  "query": "\nSELECT u.id, u.email, COUNT(h.id) as total_habits, SUM(h.isActive) as active_habits\nFROM users u\nLEFT JOIN habits h ON h.userId = u.id\nGROUP BY u.id, u.email;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute \nSELECT u.id, u.email, COUNT(h.id) as total_habits, SUM(h.isActive) as active_habits\nFROM users u\nLEFT JOIN habits h ON h.userId = u.id\nGROUP BY u.id, u.email;\n",
+  "rows": [
+    {
+      "id": "1",
+      "email": "steve@ceohero.com",
+      "total_habits": "13",
+      "active_habits": "13"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\temail\ttotal_habits\tactive_habits\n1\tsteve@ceohero.com\t13\t13\n",
+  "stderr": "",
+  "execution_time_ms": 81
+}

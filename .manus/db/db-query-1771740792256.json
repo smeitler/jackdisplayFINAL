@@ -1,0 +1,13 @@
+{
+  "query": "\nSELECT COUNT(*) as remaining_habits FROM habits h\nWHERE NOT EXISTS (\n  SELECT 1 FROM categories c\n  WHERE c.userId = h.userId AND c.clientId = h.categoryClientId\n);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute \nSELECT COUNT(*) as remaining_habits FROM habits h\nWHERE NOT EXISTS (\n  SELECT 1 FROM categories c\n  WHERE c.userId = h.userId AND c.clientId = h.categoryClientId\n);\n",
+  "rows": [
+    {
+      "remaining_habits": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "remaining_habits\n0\n",
+  "stderr": "",
+  "execution_time_ms": 53
+}

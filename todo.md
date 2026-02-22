@@ -145,3 +145,6 @@
 
 - [x] Fix goal (category) delete not working after server sync migration
 - [x] Fix duplicate goals/habits appearing after server sync
+
+- [x] Fix incorrect active habit count shown in Settings (orphaned habits from deleted categories cleaned up)
+- [x] Add Select All / Clear buttons to Analytics habit filter legend (already implemented)

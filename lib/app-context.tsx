@@ -374,6 +374,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.categories, utils]);
 
   const deleteCategory = useCallback(async (id: string) => {
+    // Find habits that belong to this category before filtering them out
+    const habitsToDelete = state.habits.filter((h) => h.category === id);
     const updatedCats = state.categories.filter((c) => c.id !== id);
     const updatedHabits = state.habits.filter((h) => h.category !== id);
     await Promise.all([saveCategories(updatedCats), saveHabits(updatedHabits)]);
@@ -382,7 +384,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (isAuthenticated.current) {
       try {
-        await utils.client.categories.delete.mutate({ clientId: id });
+        // Delete the category and all its habits from the server
+        await Promise.all([
+          utils.client.categories.delete.mutate({ clientId: id }),
+          ...habitsToDelete.map((h) =>
+            utils.client.habits.delete.mutate({ clientId: h.id })
+          ),
+        ]);
       } catch (err) {
         console.warn('[AppContext] Failed to sync category deletion:', err);
       }

@@ -1,0 +1,52 @@
+{
+  "query": "\nSELECT h.clientId, h.name, h.categoryClientId, h.isActive\nFROM habits h\nWHERE NOT EXISTS (\n  SELECT 1 FROM categories c\n  WHERE c.userId = h.userId AND c.clientId = h.categoryClientId\n);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute \nSELECT h.clientId, h.name, h.categoryClientId, h.isActive\nFROM habits h\nWHERE NOT EXISTS (\n  SELECT 1 FROM categories c\n  WHERE c.userId = h.userId AND c.clientId = h.categoryClientId\n);\n",
+  "rows": [
+    {
+      "clientId": "h1",
+      "name": "Exercise / Workout",
+      "categoryClientId": "health",
+      "isActive": "1"
+    },
+    {
+      "clientId": "h2",
+      "name": "Drink 8 glasses of water",
+      "categoryClientId": "health",
+      "isActive": "1"
+    },
+    {
+      "clientId": "h3",
+      "name": "Sleep 7+ hours",
+      "categoryClientId": "health",
+      "isActive": "1"
+    },
+    {
+      "clientId": "h4",
+      "name": "Eat healthy meals",
+      "categoryClientId": "health",
+      "isActive": "1"
+    },
+    {
+      "clientId": "r1",
+      "name": "Reach out to a friend or family",
+      "categoryClientId": "relationships",
+      "isActive": "1"
+    },
+    {
+      "clientId": "r2",
+      "name": "Quality time with loved ones",
+      "categoryClientId": "relationships",
+      "isActive": "1"
+    },
+    {
+      "clientId": "r3",
+      "name": "Express gratitude to someone",
+      "categoryClientId": "relationships",
+      "isActive": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "clientId\tname\tcategoryClientId\tisActive\nh1\tExercise / Workout\thealth\t1\nh2\tDrink 8 glasses of water\thealth\t1\nh3\tSleep 7+ hours\thealth\t1\nh4\tEat healthy meals\thealth\t1\nr1\tReach out to a friend or family\trelationships\t1\nr2\tQuality time with loved ones\trelationships\t1\nr3\tExpress gratitude to someone\trelationships\t1\n",
+  "stderr": "",
+  "execution_time_ms": 50
+}

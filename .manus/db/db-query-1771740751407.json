@@ -1,0 +1,101 @@
+{
+  "query": "\nSELECT h.clientId, h.name, h.isActive, h.categoryClientId, u.email\nFROM habits h\nJOIN users u ON u.id = h.userId\nORDER BY h.categoryClientId, h.name;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute \nSELECT h.clientId, h.name, h.isActive, h.categoryClientId, u.email\nFROM habits h\nJOIN users u ON u.id = h.userId\nORDER BY h.categoryClientId, h.name;\n",
+  "rows": [
+    {
+      "clientId": "h2",
+      "name": "Drink 8 glasses of water",
+      "isActive": "1",
+      "categoryClientId": "health",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "h4",
+      "name": "Eat healthy meals",
+      "isActive": "1",
+      "categoryClientId": "health",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "h1",
+      "name": "Exercise / Workout",
+      "isActive": "1",
+      "categoryClientId": "health",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "h3",
+      "name": "Sleep 7+ hours",
+      "isActive": "1",
+      "categoryClientId": "health",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "m3",
+      "name": "Journal / reflect",
+      "isActive": "1",
+      "categoryClientId": "mindset",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "m1",
+      "name": "Meditate or breathe deeply",
+      "isActive": "1",
+      "categoryClientId": "mindset",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "m2",
+      "name": "Read for 20+ minutes",
+      "isActive": "1",
+      "categoryClientId": "mindset",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "r3",
+      "name": "Express gratitude to someone",
+      "isActive": "1",
+      "categoryClientId": "relationships",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "r2",
+      "name": "Quality time with loved ones",
+      "isActive": "1",
+      "categoryClientId": "relationships",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "r1",
+      "name": "Reach out to a friend or family",
+      "isActive": "1",
+      "categoryClientId": "relationships",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "w2",
+      "name": "Learn a new skill",
+      "isActive": "1",
+      "categoryClientId": "wealth",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "w3",
+      "name": "Track expenses / budget",
+      "isActive": "1",
+      "categoryClientId": "wealth",
+      "email": "steve@ceohero.com"
+    },
+    {
+      "clientId": "w1",
+      "name": "Work on main income source",
+      "isActive": "1",
+      "categoryClientId": "wealth",
+      "email": "steve@ceohero.com"
+    }
+  ],
+  "messages": [],
+  "stdout": "clientId\tname\tisActive\tcategoryClientId\temail\nh2\tDrink 8 glasses of water\t1\thealth\tsteve@ceohero.com\nh4\tEat healthy meals\t1\thealth\tsteve@ceohero.com\nh1\tExercise / Workout\t1\thealth\tsteve@ceohero.com\nh3\tSleep 7+ hours\t1\thealth\tsteve@ceohero.com\nm3\tJournal / reflect\t1\tmindset\tsteve@ceohero.com\nm1\tMeditate or breathe deeply\t1\tmindset\tsteve@ceohero.com\nm2\tRead for 20+ minutes\t1\tmindset\tsteve@ceohero.com\nr3\tExpress gratitude to someone\t1\trelationships\tsteve@ceohero.com\nr2\tQuality time with loved ones\t1\trelationships\tsteve@ceohero.com\nr1\tReach out to a friend or family\t1\trelationships\tsteve@ceohero.com\nw2\tLearn a new skill\t1\twealth\tsteve@ceohero.com\nw3\tTrack expenses / budget\t1\twealth\tsteve@ceohero.com\nw1\tWork on main income source\t1\twealth\tsteve@ceohero.com\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}
