@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, desc, gte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -7,6 +7,11 @@ import {
   habits,
   checkIns,
   alarmConfigs,
+  teams,
+  teamMembers,
+  sharedGoals,
+  teamMessages,
+  referrals,
   InsertCategory,
   InsertHabit,
   InsertCheckIn,
@@ -202,4 +207,258 @@ export async function upsertAlarm(data: InsertAlarmConfig) {
   await db.insert(alarmConfigs).values(data).onDuplicateKeyUpdate({
     set: { hour: data.hour, minute: data.minute, days: data.days, enabled: data.enabled },
   });
+}
+
+
+// ─── Community: Teams ─────────────────────────────────────────────────────────
+
+/** Generate a random alphanumeric join code */
+export function generateJoinCode(length = 8): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < length; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+/** Generate a referral code for a user (userId-based + random suffix) */
+export function generateReferralCode(userId: number): string {
+  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `REF${userId}${suffix}`;
+}
+
+export async function createTeam(data: { name: string; description?: string; creatorId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  let joinCode = generateJoinCode();
+  // Ensure uniqueness
+  for (let i = 0; i < 5; i++) {
+    const existing = await db.select({ id: teams.id }).from(teams).where(eq(teams.joinCode, joinCode));
+    if (existing.length === 0) break;
+    joinCode = generateJoinCode();
+  }
+  const result = await db.insert(teams).values({ name: data.name, description: data.description ?? null, joinCode, creatorId: data.creatorId });
+  const teamId = result[0].insertId;
+  // Add creator as owner member
+  await db.insert(teamMembers).values({ teamId, userId: data.creatorId, role: "owner" });
+  return { teamId, joinCode };
+}
+
+export async function getTeamByJoinCode(joinCode: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(teams).where(eq(teams.joinCode, joinCode.toUpperCase()));
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getTeamById(teamId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(teams).where(eq(teams.id, teamId));
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getUserTeams(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const memberships = await db.select({ teamId: teamMembers.teamId, role: teamMembers.role })
+    .from(teamMembers).where(eq(teamMembers.userId, userId));
+  if (memberships.length === 0) return [];
+  const teamIds = memberships.map((m) => m.teamId);
+  const teamList = await db.select().from(teams).where(inArray(teams.id, teamIds));
+  return teamList.map((t) => ({
+    ...t,
+    role: memberships.find((m) => m.teamId === t.id)?.role ?? "member",
+  }));
+}
+
+export async function joinTeam(teamId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(teamMembers).values({ teamId, userId, role: "member" })
+    .onDuplicateKeyUpdate({ set: { role: "member" } });
+}
+
+export async function leaveTeam(teamId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+}
+
+export async function deleteTeam(teamId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(teamMessages).where(eq(teamMessages.teamId, teamId));
+  await db.delete(sharedGoals).where(eq(sharedGoals.teamId, teamId));
+  await db.delete(teamMembers).where(eq(teamMembers.teamId, teamId));
+  await db.delete(teams).where(eq(teams.id, teamId));
+}
+
+export async function getTeamMembers(teamId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const members = await db.select({
+    userId: teamMembers.userId,
+    role: teamMembers.role,
+    joinedAt: teamMembers.joinedAt,
+    name: users.name,
+    email: users.email,
+  }).from(teamMembers)
+    .leftJoin(users, eq(teamMembers.userId, users.id))
+    .where(eq(teamMembers.teamId, teamId));
+  return members;
+}
+
+export async function isTeamMember(teamId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select({ id: teamMembers.id }).from(teamMembers)
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  return result.length > 0;
+}
+
+// ─── Community: Shared Goals ──────────────────────────────────────────────────
+
+export async function setSharedGoals(userId: number, teamId: number, categoryClientIds: string[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Remove all existing shared goals for this user+team
+  await db.delete(sharedGoals).where(and(eq(sharedGoals.userId, userId), eq(sharedGoals.teamId, teamId)));
+  if (categoryClientIds.length > 0) {
+    await db.insert(sharedGoals).values(categoryClientIds.map((cid) => ({ userId, teamId, categoryClientId: cid })));
+  }
+}
+
+export async function getSharedGoalsForUser(userId: number, teamId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.select({ categoryClientId: sharedGoals.categoryClientId })
+    .from(sharedGoals).where(and(eq(sharedGoals.userId, userId), eq(sharedGoals.teamId, teamId)));
+  return result.map((r) => r.categoryClientId);
+}
+
+// ─── Community: Member Stats ──────────────────────────────────────────────────
+
+/** Get stats for a member's shared goals in a team: yesterday, last 7 days, last 30 days */
+export async function getMemberStats(memberId: number, teamId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const today = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const thirtyDaysAgo = new Date(today); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const yesterdayStr = toDateStr(yesterday);
+  const sevenDaysAgoStr = toDateStr(sevenDaysAgo);
+  const thirtyDaysAgoStr = toDateStr(thirtyDaysAgo);
+
+  // Get shared goal category client IDs
+  const sharedCatIds = await getSharedGoalsForUser(memberId, teamId);
+  if (sharedCatIds.length === 0) return { sharedGoals: [], yesterdayScore: null, sevenDayScore: null, thirtyDayScore: null };
+
+  // Get habits for those categories
+  const memberHabits = await db.select({ clientId: habits.clientId, categoryClientId: habits.categoryClientId, name: habits.name })
+    .from(habits).where(and(eq(habits.userId, memberId), eq(habits.isActive, true)));
+  const relevantHabits = memberHabits.filter((h) => sharedCatIds.includes(h.categoryClientId));
+  if (relevantHabits.length === 0) return { sharedGoals: sharedCatIds, yesterdayScore: null, sevenDayScore: null, thirtyDayScore: null };
+
+  const habitIds = relevantHabits.map((h) => h.clientId);
+
+  // Get check-ins for the last 30 days
+  const recentCheckIns = await db.select({ habitClientId: checkIns.habitClientId, date: checkIns.date, rating: checkIns.rating })
+    .from(checkIns).where(and(eq(checkIns.userId, memberId), gte(checkIns.date, thirtyDaysAgoStr), inArray(checkIns.habitClientId, habitIds)));
+
+  const scoreForRange = (from: string, to: string) => {
+    const entries = recentCheckIns.filter((c) => c.date >= from && c.date <= to);
+    if (entries.length === 0) return null;
+    const total = entries.length;
+    const scored = entries.reduce((sum, c) => sum + (c.rating === "green" ? 1 : c.rating === "yellow" ? 0.5 : 0), 0);
+    return Math.round((scored / total) * 100);
+  };
+
+  const yesterdayScore = scoreForRange(yesterdayStr, yesterdayStr);
+  const sevenDayScore = scoreForRange(sevenDaysAgoStr, yesterdayStr);
+  const thirtyDayScore = scoreForRange(thirtyDaysAgoStr, yesterdayStr);
+
+  // Get shared goal category details
+  const memberCategories = await db.select({ clientId: categories.clientId, label: categories.label, emoji: categories.emoji })
+    .from(categories).where(and(eq(categories.userId, memberId), inArray(categories.clientId, sharedCatIds)));
+
+  return { sharedGoals: memberCategories, yesterdayScore, sevenDayScore, thirtyDayScore };
+}
+
+// ─── Community: Messages ──────────────────────────────────────────────────────
+
+export async function getTeamMessages(teamId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const msgs = await db.select({
+    id: teamMessages.id,
+    message: teamMessages.message,
+    sentAt: teamMessages.sentAt,
+    userId: teamMessages.userId,
+    name: users.name,
+    email: users.email,
+  }).from(teamMessages)
+    .leftJoin(users, eq(teamMessages.userId, users.id))
+    .where(eq(teamMessages.teamId, teamId))
+    .orderBy(desc(teamMessages.sentAt))
+    .limit(limit);
+  return msgs.reverse(); // oldest first
+}
+
+export async function sendTeamMessage(teamId: number, userId: number, message: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(teamMessages).values({ teamId, userId, message });
+  return result[0].insertId;
+}
+
+// ─── Community: Referrals ─────────────────────────────────────────────────────
+
+export async function getOrCreateReferralCode(userId: number): Promise<string> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Check if user already has a referral code (as referrer)
+  const existing = await db.select({ referralCode: referrals.referralCode })
+    .from(referrals).where(eq(referrals.referrerId, userId)).limit(1);
+  if (existing.length > 0) return existing[0].referralCode;
+  // Generate a unique code for this user (stored on first use)
+  return generateReferralCode(userId);
+}
+
+export async function applyReferralCode(referralCode: string, newUserId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  // Find referrer by code pattern (REF{userId}{suffix})
+  const match = referralCode.match(/^REF(\d+)/);
+  if (!match) return false;
+  const referrerId = parseInt(match[1]);
+  if (referrerId === newUserId) return false; // can't refer yourself
+  // Check if already referred
+  const alreadyReferred = await db.select({ id: referrals.id }).from(referrals).where(eq(referrals.referredId, newUserId));
+  if (alreadyReferred.length > 0) return false;
+  await db.insert(referrals).values({ referrerId, referredId: newUserId, referralCode, creditMonths: 6 });
+  return true;
+}
+
+export async function getReferralStats(userId: number) {
+  const db = await getDb();
+  if (!db) return { referralCode: generateReferralCode(userId), totalReferrals: 0, totalCreditMonths: 0, referrals: [] };
+  const code = await getOrCreateReferralCode(userId);
+  const userReferrals = await db.select({
+    id: referrals.id,
+    referredId: referrals.referredId,
+    creditMonths: referrals.creditMonths,
+    createdAt: referrals.createdAt,
+    name: users.name,
+    email: users.email,
+  }).from(referrals)
+    .leftJoin(users, eq(referrals.referredId, users.id))
+    .where(eq(referrals.referrerId, userId));
+  const totalCreditMonths = userReferrals.reduce((sum, r) => sum + r.creditMonths, 0);
+  return { referralCode: code, totalReferrals: userReferrals.length, totalCreditMonths, referrals: userReferrals };
 }

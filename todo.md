@@ -154,3 +154,12 @@
 
 - [x] Add drag-to-reorder habits within a goal in the Manage Goals screen
 - [x] Ensure goals and habits are always displayed in priority order across all screens
+
+- [x] Community tab: add to bottom navigation
+- [x] Teams: create team, join by code, leave team
+- [x] Teams: team detail screen showing members and their shared goal stats (yesterday, 7-day, monthly)
+- [x] Shared goals: per-goal privacy toggle to allow sharing with teams
+- [x] Team messaging: in-team chat screen
+- [x] Refer-a-friend: referral link/code at top of Community tab, 6-month credit tracking
+- [x] DB schema: teams, team_members, team_messages, shared_goals, referrals tables
+- [x] tRPC API: team CRUD, join/leave, member stats, messaging, referrals

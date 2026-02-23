@@ -216,6 +216,105 @@ export const appRouter = router({
         })
       ),
   }),
+
+  // ─── Community: Teams ────────────────────────────────────────────────────────
+  teams: router({
+    list: protectedProcedure.query(({ ctx }) =>
+      db.getUserTeams(ctx.user.id)
+    ),
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(100),
+        description: z.string().max(500).optional(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.createTeam({ name: input.name, description: input.description, creatorId: ctx.user.id })
+      ),
+    join: protectedProcedure
+      .input(z.object({ joinCode: z.string().min(1).max(12) }))
+      .mutation(async ({ ctx, input }) => {
+        const team = await db.getTeamByJoinCode(input.joinCode);
+        if (!team) throw new Error("Team not found. Check the join code and try again.");
+        await db.joinTeam(team.id, ctx.user.id);
+        return team;
+      }),
+    leave: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .mutation(({ ctx, input }) =>
+        db.leaveTeam(input.teamId, ctx.user.id)
+      ),
+    delete: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const team = await db.getTeamById(input.teamId);
+        if (!team || team.creatorId !== ctx.user.id) throw new Error("Not authorized");
+        await db.deleteTeam(input.teamId);
+      }),
+    members: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamMembers(input.teamId);
+      }),
+    memberStats: protectedProcedure
+      .input(z.object({ teamId: z.number(), memberId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getMemberStats(input.memberId, input.teamId);
+      }),
+  }),
+
+  // ─── Community: Shared Goals ────────────────────────────────────────────────
+  sharedGoals: router({
+    get: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(({ ctx, input }) =>
+        db.getSharedGoalsForUser(ctx.user.id, input.teamId)
+      ),
+    set: protectedProcedure
+      .input(z.object({
+        teamId: z.number(),
+        categoryClientIds: z.array(z.string()),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.setSharedGoals(ctx.user.id, input.teamId, input.categoryClientIds)
+      ),
+  }),
+
+  // ─── Community: Messages ────────────────────────────────────────────────────
+  messages: router({
+    list: protectedProcedure
+      .input(z.object({ teamId: z.number(), limit: z.number().int().min(1).max(100).optional() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamMessages(input.teamId, input.limit ?? 50);
+      }),
+    send: protectedProcedure
+      .input(z.object({
+        teamId: z.number(),
+        message: z.string().min(1).max(2000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.sendTeamMessage(input.teamId, ctx.user.id, input.message);
+      }),
+  }),
+
+  // ─── Community: Referrals ──────────────────────────────────────────────────
+  referrals: router({
+    stats: protectedProcedure.query(({ ctx }) =>
+      db.getReferralStats(ctx.user.id)
+    ),
+    useCode: protectedProcedure
+      .input(z.object({ referralCode: z.string().min(1).max(32) }))
+      .mutation(({ ctx, input }) =>
+        db.applyReferralCode(input.referralCode, ctx.user.id)
+      ),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

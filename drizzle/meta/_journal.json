@@ -36,6 +36,13 @@
       "when": 1771741548430,
       "tag": "0004_wide_human_robot",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1771875521990,
+      "tag": "0005_peaceful_tombstone",
+      "breakpoints": true
     }
   ]
 }

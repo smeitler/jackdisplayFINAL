@@ -56,6 +56,13 @@ const MAPPING = {
   "arrow.right.circle.fill": "arrow-circle-right",
   "arrow.up.arrow.down": "swap-vert",
   "line.3.horizontal": "drag-handle",
+  "person.3.fill": "groups",
+  "bubble.left.fill": "chat",
+  "link": "link",
+  "square.and.arrow.up": "share",
+  "gift.fill": "card-giftcard",
+  "lock.fill": "lock",
+  "lock.open.fill": "lock-open",
 } as IconMapping;
 
 export function IconSymbol({

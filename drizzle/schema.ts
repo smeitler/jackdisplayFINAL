@@ -107,3 +107,86 @@ export const alarmConfigs = mysqlTable("alarmConfigs", {
 
 export type AlarmConfig = typeof alarmConfigs.$inferSelect;
 export type InsertAlarmConfig = typeof alarmConfigs.$inferInsert;
+
+/**
+ * Teams — accountability groups created by users.
+ * joinCode is a short unique code others use to join.
+ */
+export const teams = mysqlTable("teams", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  joinCode: varchar("joinCode", { length: 12 }).notNull().unique(),
+  creatorId: int("creatorId").notNull(), // userId of creator
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = typeof teams.$inferInsert;
+
+/**
+ * Team memberships — one row per user per team.
+ * role: 'owner' | 'member'
+ */
+export const teamMembers = mysqlTable("teamMembers", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["owner", "member"]).notNull().default("member"),
+  joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+}, (t) => ({
+  teamUserIdx: uniqueIndex("teamMembers_teamId_userId_idx").on(t.teamId, t.userId),
+}));
+
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;
+
+/**
+ * Shared goals — which goals a user shares with which team.
+ * A user can share a specific goal (category) with a specific team.
+ */
+export const sharedGoals = mysqlTable("sharedGoals", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  teamId: int("teamId").notNull(),
+  categoryClientId: varchar("categoryClientId", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  userTeamCatIdx: uniqueIndex("sharedGoals_userId_teamId_cat_idx").on(t.userId, t.teamId, t.categoryClientId),
+}));
+
+export type SharedGoal = typeof sharedGoals.$inferSelect;
+export type InsertSharedGoal = typeof sharedGoals.$inferInsert;
+
+/**
+ * Team messages — in-team chat.
+ */
+export const teamMessages = mysqlTable("teamMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  userId: int("userId").notNull(),
+  message: text("message").notNull(),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+});
+
+export type TeamMessage = typeof teamMessages.$inferSelect;
+export type InsertTeamMessage = typeof teamMessages.$inferInsert;
+
+/**
+ * Referrals — tracks who referred whom and credit status.
+ * referrerId: the user who shared the referral link
+ * referredId: the user who signed up via the link
+ * creditMonths: how many months of credit earned (default 6)
+ */
+export const referrals = mysqlTable("referrals", {
+  id: int("id").autoincrement().primaryKey(),
+  referrerId: int("referrerId").notNull(),
+  referredId: int("referredId").notNull().unique(), // each user can only be referred once
+  referralCode: varchar("referralCode", { length: 32 }).notNull(),
+  creditMonths: int("creditMonths").notNull().default(6),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Referral = typeof referrals.$inferSelect;
+export type InsertReferral = typeof referrals.$inferInsert;
