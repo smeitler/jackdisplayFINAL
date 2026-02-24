@@ -39,20 +39,10 @@ export default function ProgressScreen() {
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [cardWidth, setCardWidth] = useState(0);
-  // Per-category selected habit filter: categoryId -> habitId | null
-  const [habitFilter, setHabitFilter] = useState<Record<string, string | null>>({});
-
   function onCardLayout(e: LayoutChangeEvent) {
     // card padding is 14px each side = 28px total
     const w = e.nativeEvent.layout.width - 28;
     if (w > 0) setCardWidth(w);
-  }
-
-  function toggleHabitFilter(catId: string, habitId: string) {
-    setHabitFilter((prev) => ({
-      ...prev,
-      [catId]: prev[catId] === habitId ? null : habitId,
-    }));
   }
 
   const totalDaysLogged = new Set(checkIns.map((e) => e.date)).size;
@@ -191,7 +181,7 @@ export default function ProgressScreen() {
                       }
                     }}
                     containerWidth={cardWidth > 0 ? cardWidth : undefined}
-                    selectedHabitId={habitFilter[cat.id] === "__all__" ? null : (habitFilter[cat.id] ?? null)}
+                    selectedHabitId={null}
                   />
                 </View>
               ) : (
@@ -202,65 +192,36 @@ export default function ProgressScreen() {
                 </View>
               )}
 
-              {/* ── Habit filter legend ── */}
+              {/* ── Habit list — tap to view detail ── */}
               {catHabits.length > 0 && (
                 <View>
-                  {/* Select All / Clear row */}
-                  <View style={styles.legendHeader}>
-                    <Text style={[styles.legendHeaderLabel, { color: colors.muted }]}>Filter by habit</Text>
-                    <Pressable
-                      onPress={() => {
-                        const allSelected = habitFilter[cat.id] === "__all__";
-                        setHabitFilter((prev) => ({
-                          ...prev,
-                          [cat.id]: allSelected ? null : "__all__",
-                        }));
-                      }}
-                      style={({ pressed }) => [styles.selectAllBtn, { opacity: pressed ? 0.6 : 1, borderColor: habitFilter[cat.id] === "__all__" ? colors.primary : colors.border, backgroundColor: habitFilter[cat.id] === "__all__" ? colors.primary + "22" : "transparent" }]}
-                    >
-                      <Text style={[styles.selectAllText, { color: habitFilter[cat.id] === "__all__" ? colors.primary : colors.muted }]}>
-                        {habitFilter[cat.id] === "__all__" ? "Clear" : "Select All"}
-                      </Text>
-                    </Pressable>
-                  </View>
+                  <Text style={[styles.legendHeaderLabel, { color: colors.muted, marginBottom: 8 }]}>Habits</Text>
                   <View style={styles.habitLegend}>
-                    {catHabits.map((h, hIdx) => {
-                      const isSelected = habitFilter[cat.id] === h.id || habitFilter[cat.id] === "__all__";
-                      return (
-                        <Pressable
-                          key={h.id}
-                          onPress={() => {
-                            setHabitFilter((prev) => ({
-                              ...prev,
-                              [cat.id]: prev[cat.id] === h.id ? null : h.id,
-                            }));
-                          }}
-                          onLongPress={() => {
-                            if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            router.push(`/habit-detail?habitId=${h.id}` as never);
-                          }}
-                          style={({ pressed }) => ([
-                            styles.habitLegendChip,
-                            {
-                              backgroundColor: isSelected ? colors.primary + "33" : colors.background,
-                              borderColor: isSelected ? colors.primary : colors.border,
-                              opacity: pressed ? 0.7 : 1,
-                            },
-                          ])}
-                        >
-                          <View style={[styles.habitLegendBadge, { backgroundColor: isSelected ? colors.primary : colors.muted + "44" }]}>
-                            <Text style={[styles.habitLegendBadgeText, { color: isSelected ? "#fff" : colors.muted }]}>{hIdx + 1}</Text>
-                          </View>
-                          <Text
-                            style={[styles.habitLegendName, { color: isSelected ? colors.primary : colors.muted }]}
-                          >
-                            {h.name}
-                          </Text>
-                          {/* Detail arrow */}
-                          <IconSymbol name="chevron.right" size={11} color={isSelected ? colors.primary : colors.muted} />
-                        </Pressable>
-                      );
-                    })}
+                    {catHabits.map((h, hIdx) => (
+                      <Pressable
+                        key={h.id}
+                        onPress={() => {
+                          if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          router.push(`/habit-detail?habitId=${h.id}` as never);
+                        }}
+                        style={({ pressed }) => ([
+                          styles.habitLegendChip,
+                          {
+                            backgroundColor: colors.background,
+                            borderColor: colors.border,
+                            opacity: pressed ? 0.7 : 1,
+                          },
+                        ])}
+                      >
+                        <View style={[styles.habitLegendBadge, { backgroundColor: colors.primary + "33" }]}>
+                          <Text style={[styles.habitLegendBadgeText, { color: colors.primary }]}>{hIdx + 1}</Text>
+                        </View>
+                        <Text style={[styles.habitLegendName, { color: colors.foreground }]}>
+                          {h.emoji} {h.name}
+                        </Text>
+                        <IconSymbol name="chevron.right" size={11} color={colors.muted} />
+                      </Pressable>
+                    ))}
                   </View>
                 </View>
               )}

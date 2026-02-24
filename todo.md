@@ -177,3 +177,4 @@
 - [x] On-track habits: bold green glow, filled progress bar, celebratory feel on home screen goal cards
 - [x] Build habit detail screen: calendar heatmap, streak stats, green/yellow/red breakdown, goal progress
 - [x] Wire tap from analytics month view habit list to habit detail screen
+- [x] Replace habit filter chips in analytics with direct single-tap navigation to habit detail screen
