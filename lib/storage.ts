@@ -102,30 +102,30 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 
 export const DEFAULT_HABITS: Habit[] = [
   // Body
-  { id: 'h1', name: 'Exercise / Workout',        emoji: '1️⃣', category: 'body',          isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'h2', name: 'Drink 8 glasses of water',  emoji: '2️⃣', category: 'body',          isActive: true, order: 1, createdAt: new Date().toISOString() },
-  { id: 'h3', name: 'Sleep 7+ hours',            emoji: '3️⃣', category: 'body',          isActive: true, order: 2, createdAt: new Date().toISOString() },
+  { id: 'h1', name: 'Exercise / Workout',        emoji: '💪', category: 'body',          isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'h2', name: 'Drink 8 glasses of water',  emoji: '💧', category: 'body',          isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'h3', name: 'Sleep 7+ hours',            emoji: '😴', category: 'body',          isActive: true, order: 2, createdAt: new Date().toISOString() },
   // Mind
-  { id: 'm1', name: 'Meditate or breathe',       emoji: '1️⃣', category: 'mind',          isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'm2', name: 'Read 20+ minutes',          emoji: '2️⃣', category: 'mind',          isActive: true, order: 1, createdAt: new Date().toISOString() },
-  { id: 'm3', name: 'Journal / reflect',         emoji: '3️⃣', category: 'mind',          isActive: true, order: 2, createdAt: new Date().toISOString() },
+  { id: 'm1', name: 'Meditate or breathe',       emoji: '🧘', category: 'mind',          isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'm2', name: 'Read 20+ minutes',          emoji: '📖', category: 'mind',          isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'm3', name: 'Journal / reflect',         emoji: '✍️', category: 'mind',          isActive: true, order: 2, createdAt: new Date().toISOString() },
   // Relationships
-  { id: 'r1', name: 'Reach out to a friend',     emoji: '1️⃣', category: 'relationships', isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'r2', name: 'Quality time w/ loved ones',emoji: '2️⃣', category: 'relationships', isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'r1', name: 'Reach out to a friend',     emoji: '📱', category: 'relationships', isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'r2', name: 'Quality time w/ loved ones',emoji: '❤️', category: 'relationships', isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Focus
-  { id: 'f1', name: 'Deep work block (2h+)',     emoji: '1️⃣', category: 'focus',         isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'f2', name: 'No phone first 30 min',     emoji: '2️⃣', category: 'focus',         isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'f1', name: 'Deep work block (2h+)',     emoji: '🎯', category: 'focus',         isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'f2', name: 'No phone first 30 min',     emoji: '📵', category: 'focus',         isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Career
-  { id: 'c1', name: 'Work on main goal',         emoji: '1️⃣', category: 'career',        isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'c2', name: 'Learn a new skill',         emoji: '2️⃣', category: 'career',        isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'c1', name: 'Work on main goal',         emoji: '🚀', category: 'career',        isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'c2', name: 'Learn a new skill',         emoji: '📚', category: 'career',        isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Money
-  { id: 'mo1', name: 'Track expenses',           emoji: '1️⃣', category: 'money',         isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'mo2', name: 'Review financial goals',   emoji: '2️⃣', category: 'money',         isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'mo1', name: 'Track expenses',           emoji: '💰', category: 'money',         isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'mo2', name: 'Review financial goals',   emoji: '📈', category: 'money',         isActive: true, order: 1, createdAt: new Date().toISOString() },
   // Contribution
-  { id: 'co1', name: 'Help someone today',       emoji: '1️⃣', category: 'contribution',  isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'co1', name: 'Help someone today',       emoji: '🤝', category: 'contribution',  isActive: true, order: 0, createdAt: new Date().toISOString() },
   // Spirituality
-  { id: 'sp1', name: 'Gratitude practice',       emoji: '1️⃣', category: 'spirituality',  isActive: true, order: 0, createdAt: new Date().toISOString() },
-  { id: 'sp2', name: 'Prayer or reflection',     emoji: '2️⃣', category: 'spirituality',  isActive: true, order: 1, createdAt: new Date().toISOString() },
+  { id: 'sp1', name: 'Gratitude practice',       emoji: '🙏', category: 'spirituality',  isActive: true, order: 0, createdAt: new Date().toISOString() },
+  { id: 'sp2', name: 'Prayer or reflection',     emoji: '✨', category: 'spirituality',  isActive: true, order: 1, createdAt: new Date().toISOString() },
 ];
 
 export const DEFAULT_ALARM: AlarmConfig = {
@@ -291,9 +291,12 @@ export async function saveVisionBoard(board: VisionBoard): Promise<void> {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Returns "YYYY-MM-DD" for a given Date (or today). */
+/** Returns "YYYY-MM-DD" for a given Date (or today) using LOCAL timezone. */
 export function toDateString(d: Date = new Date()): string {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Yesterday's date string */
