@@ -241,6 +241,21 @@ export default function HomeScreen() {
                   })()}
                 </View>
 
+                {/* Stacked green/yellow/red breakdown bar */}
+                {total > 0 && (
+                  <View style={[styles.catBar, { marginTop: 6, marginBottom: 2 }]}>
+                    {breakdown.green > 0 && (
+                      <View style={[styles.catBarSeg, { flex: breakdown.green / total, backgroundColor: '#22C55E' }]} />
+                    )}
+                    {breakdown.yellow > 0 && (
+                      <View style={[styles.catBarSeg, { flex: breakdown.yellow / total, backgroundColor: '#F59E0B' }]} />
+                    )}
+                    {breakdown.red > 0 && (
+                      <View style={[styles.catBarSeg, { flex: breakdown.red / total, backgroundColor: '#EF4444' }]} />
+                    )}
+                  </View>
+                )}
+
                 {/* Habit goal progress bars */}
                 {habitsWithGoal.length > 0 && (
                   <View style={styles.weeklyGoalList}>

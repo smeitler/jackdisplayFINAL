@@ -196,3 +196,4 @@
 - [x] Wire home screen card tap to category detail screen
 - [x] Wire analytics category header tap to category detail screen
 - [x] Remove purple stacked bar from home screen goal cards
+- [x] Restore color progress bar on home screen goal cards (removed accidentally with purple bar fix)
