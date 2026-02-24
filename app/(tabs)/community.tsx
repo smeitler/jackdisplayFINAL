@@ -138,6 +138,21 @@ function ReferralBanner() {
 
 function TeamCard({ team, onPress }: { team: TeamItem; onPress: () => void }) {
   const colors = useColors();
+  const { data: rankData } = trpc.teams.myRank.useQuery({ teamId: team.id });
+
+  const rankLabel = rankData
+    ? `#${rankData.rank} of ${rankData.total}`
+    : null;
+
+  const rankEmoji =
+    rankData?.rank === 1 ? "🥇" :
+    rankData?.rank === 2 ? "🥈" :
+    rankData?.rank === 3 ? "🥉" : null;
+
+  const scoreColor =
+    (rankData?.weeklyScore ?? 0) >= 70 ? "#22C55E" :
+    (rankData?.weeklyScore ?? 0) >= 40 ? "#F59E0B" : colors.muted;
+
   return (
     <TouchableOpacity
       style={[styles.teamCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -155,7 +170,16 @@ function TeamCard({ team, onPress }: { team: TeamItem; onPress: () => void }) {
         <Text style={[styles.teamCardCode, { color: colors.muted }]}>Code: {team.joinCode}</Text>
       </View>
       <View style={styles.teamCardRight}>
-        {team.role === "owner" && (
+        {rankData && (
+          <View style={styles.rankBadge}>
+            {rankEmoji ? (
+              <Text style={styles.rankEmoji}>{rankEmoji}</Text>
+            ) : null}
+            <Text style={[styles.rankLabel, { color: scoreColor }]}>{rankLabel}</Text>
+            <Text style={[styles.rankScore, { color: scoreColor }]}>{rankData.weeklyScore}%</Text>
+          </View>
+        )}
+        {team.role === "owner" && !rankData && (
           <View style={[styles.ownerBadge, { backgroundColor: colors.primary + "20" }]}>
             <Text style={[styles.ownerBadgeText, { color: colors.primary }]}>Owner</Text>
           </View>
@@ -406,6 +430,10 @@ const styles = StyleSheet.create({
   teamCardDesc: { fontSize: 13 },
   teamCardCode: { fontSize: 12 },
   teamCardRight: { alignItems: "center", gap: 4 },
+  rankBadge: { alignItems: "center", gap: 1 },
+  rankEmoji: { fontSize: 18 },
+  rankLabel: { fontSize: 11, fontWeight: "700" },
+  rankScore: { fontSize: 13, fontWeight: "800" },
   ownerBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   ownerBadgeText: { fontSize: 11, fontWeight: "700" },
 

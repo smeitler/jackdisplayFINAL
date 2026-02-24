@@ -264,6 +264,18 @@ export const appRouter = router({
         if (!isMember) throw new Error("Not a member of this team");
         return db.getMemberStats(input.memberId, input.teamId);
       }),
+    myRank: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const board = await db.getTeamLeaderboard(input.teamId);
+        const idx = board.findIndex((m) => m.userId === ctx.user.id);
+        if (idx === -1) return null;
+        return {
+          rank: idx + 1,
+          total: board.length,
+          weeklyScore: board[idx].weeklyScore,
+        };
+      }),
   }),
 
   // ─── Community: Shared Goals ────────────────────────────────────────────────
