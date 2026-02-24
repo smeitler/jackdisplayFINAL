@@ -7,7 +7,10 @@ import type { ExpoConfig } from "expo/config";
 // Bundle ID can only contain letters, numbers, and dots
 // Android requires each dot-separated segment to start with a letter
 const bundleId = "com.jackalarm.app";
-const schemeFromBundleId = "jackalarm";
+// OAuth requires a manus* scheme — restore the original one from project creation timestamp
+const manusScheme = "manus20260220151145";
+// jackalarm is kept as the primary app scheme for deep links; manus scheme is used only for OAuth
+const schemeFromBundleId = manusScheme;
 
 const env = {
   // App branding - update these values directly (do not use env vars)

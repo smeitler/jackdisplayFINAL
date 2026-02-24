@@ -181,3 +181,4 @@
 - [x] Fix weekly goal count not updating on home screen
 - [x] Modernize habit number badge in analytics (remove big emoji style, use clean small number)
 - [x] Fix number emoji (1️⃣ etc) still showing on habit detail and analytics — migrate stored habits and replace with clean display
+- [x] Fix OAuth redirect URI: app scheme must use manus* pattern not jackalarm

@@ -1,8 +1,8 @@
 import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
 
-// Deep link scheme matching app.config.ts
-const schemeFromBundleId = "jackalarm";
+// Deep link scheme matching app.config.ts — must be manus* for OAuth to work
+const schemeFromBundleId = "manus20260220151145";
 
 const env = {
   portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL ?? "",
