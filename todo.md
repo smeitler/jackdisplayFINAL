@@ -199,3 +199,13 @@
 - [x] Restore color progress bar on home screen goal cards (removed accidentally with purple bar fix)
 - [x] Fix "Create or Join a Team" button to be full-width on Teams screen
 - [x] Add proper close/exit button (X) to the Create/Join Team modal
+- [ ] Team streak: fire counter showing consecutive days all members checked in
+- [ ] Team streak: per-member check-in status today (green check or grey circle)
+- [x] Weekly leaderboard: ranked list of members by weekly score %, current week only
+- [ ] Team feed: social post cards (text, photo, or auto check-in summary)
+- [ ] Team feed: "Share to team" toggle on check-in completion
+- [ ] Team feed: emoji reactions on posts (fire, muscle, clap, heart)
+- [ ] Team feed: text/emoji comments on posts
+- [ ] Team feed: photo upload in post composer
+- [ ] DB schema: team_posts, team_post_reactions, team_post_comments tables
+- [ ] tRPC API: posts CRUD, reactions toggle, comments CRUD

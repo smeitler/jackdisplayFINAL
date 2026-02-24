@@ -43,6 +43,13 @@
       "when": 1771875521990,
       "tag": "0005_peaceful_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1771973556812,
+      "tag": "0006_thin_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

@@ -462,3 +462,220 @@ export async function getReferralStats(userId: number) {
   const totalCreditMonths = userReferrals.reduce((sum, r) => sum + r.creditMonths, 0);
   return { referralCode: code, totalReferrals: userReferrals.length, totalCreditMonths, referrals: userReferrals };
 }
+
+// ─── Team Feed: Posts ─────────────────────────────────────────────────────────
+
+import {
+  teamPosts,
+  teamPostReactions,
+  teamPostComments,
+  InsertTeamPost,
+} from "../drizzle/schema";
+
+export async function createTeamPost(data: InsertTeamPost) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(teamPosts).values(data);
+  return result[0].insertId as number;
+}
+
+export async function getTeamFeed(teamId: number, limit = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  const posts = await db
+    .select({
+      id: teamPosts.id,
+      teamId: teamPosts.teamId,
+      userId: teamPosts.userId,
+      type: teamPosts.type,
+      content: teamPosts.content,
+      imageUrl: teamPosts.imageUrl,
+      checkinScore: teamPosts.checkinScore,
+      checkinDate: teamPosts.checkinDate,
+      createdAt: teamPosts.createdAt,
+      authorName: users.name,
+      authorEmail: users.email,
+    })
+    .from(teamPosts)
+    .leftJoin(users, eq(teamPosts.userId, users.id))
+    .where(eq(teamPosts.teamId, teamId))
+    .orderBy(desc(teamPosts.createdAt))
+    .limit(limit);
+
+  // Attach reactions and comments counts
+  const postIds = posts.map((p) => p.id);
+  if (postIds.length === 0) return [];
+
+  const reactions = await db
+    .select({ postId: teamPostReactions.postId, emoji: teamPostReactions.emoji, userId: teamPostReactions.userId })
+    .from(teamPostReactions)
+    .where(inArray(teamPostReactions.postId, postIds));
+
+  const comments = await db
+    .select({
+      id: teamPostComments.id,
+      postId: teamPostComments.postId,
+      userId: teamPostComments.userId,
+      content: teamPostComments.content,
+      createdAt: teamPostComments.createdAt,
+      authorName: users.name,
+    })
+    .from(teamPostComments)
+    .leftJoin(users, eq(teamPostComments.userId, users.id))
+    .where(inArray(teamPostComments.postId, postIds))
+    .orderBy(teamPostComments.createdAt);
+
+  return posts.map((post) => ({
+    ...post,
+    reactions: reactions.filter((r) => r.postId === post.id),
+    comments: comments.filter((c) => c.postId === post.id),
+  }));
+}
+
+export async function deleteTeamPost(postId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(teamPosts).where(and(eq(teamPosts.id, postId), eq(teamPosts.userId, userId)));
+}
+
+// ─── Team Feed: Reactions ─────────────────────────────────────────────────────
+
+export async function toggleTeamPostReaction(postId: number, userId: number, emoji: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select({ id: teamPostReactions.id, emoji: teamPostReactions.emoji })
+    .from(teamPostReactions)
+    .where(and(eq(teamPostReactions.postId, postId), eq(teamPostReactions.userId, userId)));
+
+  if (existing.length > 0) {
+    if (existing[0].emoji === emoji) {
+      // Same emoji — remove reaction
+      await db.delete(teamPostReactions).where(eq(teamPostReactions.id, existing[0].id));
+      return null;
+    } else {
+      // Different emoji — update
+      await db.update(teamPostReactions).set({ emoji }).where(eq(teamPostReactions.id, existing[0].id));
+      return emoji;
+    }
+  } else {
+    await db.insert(teamPostReactions).values({ postId, userId, emoji });
+    return emoji;
+  }
+}
+
+// ─── Team Feed: Comments ──────────────────────────────────────────────────────
+
+export async function addTeamPostComment(postId: number, userId: number, content: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(teamPostComments).values({ postId, userId, content });
+  return result[0].insertId as number;
+}
+
+export async function deleteTeamPostComment(commentId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(teamPostComments).where(and(eq(teamPostComments.id, commentId), eq(teamPostComments.userId, userId)));
+}
+
+// ─── Team Streak ──────────────────────────────────────────────────────────────
+
+export async function getTeamStreak(teamId: number) {
+  const db = await getDb();
+  if (!db) return { streak: 0, todayStatus: [] as { userId: number; name: string | null; checkedIn: boolean }[] };
+
+  const members = await db
+    .select({ userId: teamMembers.userId, name: users.name })
+    .from(teamMembers)
+    .leftJoin(users, eq(teamMembers.userId, users.id))
+    .where(eq(teamMembers.teamId, teamId));
+
+  if (members.length === 0) return { streak: 0, todayStatus: [] };
+
+  const memberIds = members.map((m) => m.userId);
+
+  // Build today status
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const todayCheckIns = await db
+    .select({ userId: checkIns.userId })
+    .from(checkIns)
+    .where(and(inArray(checkIns.userId, memberIds), eq(checkIns.date, todayStr)));
+
+  const checkedInToday = new Set(todayCheckIns.map((c) => c.userId));
+  const todayStatus = members.map((m) => ({ userId: m.userId, name: m.name, checkedIn: checkedInToday.has(m.userId) }));
+
+  // Calculate streak: how many consecutive past days ALL members checked in
+  let streak = 0;
+  let checkDate = new Date(today);
+  checkDate.setDate(checkDate.getDate() - 1); // start from yesterday
+
+  for (let i = 0; i < 365; i++) {
+    const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
+    const dayCheckIns = await db
+      .select({ userId: checkIns.userId })
+      .from(checkIns)
+      .where(and(inArray(checkIns.userId, memberIds), eq(checkIns.date, dateStr)));
+    const checkedIn = new Set(dayCheckIns.map((c) => c.userId));
+    const allCheckedIn = memberIds.every((id) => checkedIn.has(id));
+    if (!allCheckedIn) break;
+    streak++;
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+
+  return { streak, todayStatus };
+}
+
+// ─── Weekly Leaderboard ───────────────────────────────────────────────────────
+
+export async function getTeamLeaderboard(teamId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const members = await db
+    .select({ userId: teamMembers.userId, name: users.name, email: users.email })
+    .from(teamMembers)
+    .leftJoin(users, eq(teamMembers.userId, users.id))
+    .where(eq(teamMembers.teamId, teamId));
+
+  if (members.length === 0) return [];
+
+  // Get start of current week (Monday)
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - daysFromMonday);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekDates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    if (d <= now) {
+      weekDates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+  }
+
+  if (weekDates.length === 0) return members.map((m) => ({ ...m, weeklyScore: 0, checkInsCount: 0 }));
+
+  const memberIds = members.map((m) => m.userId);
+  const weekCheckIns = await db
+    .select({ userId: checkIns.userId, rating: checkIns.rating })
+    .from(checkIns)
+    .where(and(inArray(checkIns.userId, memberIds), inArray(checkIns.date, weekDates)));
+
+  return members.map((m) => {
+    const myCheckIns = weekCheckIns.filter((c) => c.userId === m.userId);
+    const total = myCheckIns.length;
+    if (total === 0) return { ...m, weeklyScore: 0, checkInsCount: 0 };
+    const score = myCheckIns.reduce((sum, c) => {
+      if (c.rating === "green") return sum + 1;
+      if (c.rating === "yellow") return sum + 0.5;
+      return sum;
+    }, 0);
+    return { ...m, weeklyScore: Math.round((score / total) * 100), checkInsCount: total };
+  }).sort((a, b) => b.weeklyScore - a.weeklyScore);
+}

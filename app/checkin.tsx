@@ -11,6 +11,7 @@ import {
   yesterdayString, formatDisplayDate, toDateString, Rating,
 } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
+import { trpc } from "@/lib/trpc";
 
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
@@ -31,6 +32,11 @@ export default function CheckInScreen() {
   const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
   const [submitted, setSubmitted] = useState(false);
+  const [shareToTeam, setShareToTeam] = useState(true);
+  const [shared, setShared] = useState(false);
+
+  const { data: myTeams } = trpc.teams.list.useQuery();
+  const createPost = trpc.teamFeed.createPost.useMutation();
 
   const today = toDateString();
   const canGoForward = currentDate < yesterdayString();
@@ -84,7 +90,6 @@ export default function CheckInScreen() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
-    setTimeout(() => router.back(), 1600);
   }
 
   const allRated = activeHabits.length > 0 &&
@@ -102,6 +107,23 @@ export default function CheckInScreen() {
       ? Math.round(((greenCount * 1 + yellowCount * 0.5) / totalActive) * 100)
       : 0;
     const scoreColor = score >= 70 ? '#22C55E' : score >= 40 ? '#F59E0B' : '#EF4444';
+    const hasTeams = myTeams && myTeams.length > 0;
+
+    const handleShareToTeams = async () => {
+      if (!myTeams) return;
+      for (const team of myTeams) {
+        await createPost.mutateAsync({
+          teamId: team.id,
+          type: 'checkin',
+          content: score >= 70 ? 'Crushed it today! 🔥' : score >= 40 ? 'Solid effort today 💪' : 'Showing up every day 🙏',
+          checkinScore: score,
+          checkinDate: currentDate,
+        });
+      }
+      setShared(true);
+      setTimeout(() => router.back(), 1200);
+    };
+
     return (
       <ScreenContainer>
         <View style={styles.successContainer}>
@@ -120,6 +142,37 @@ export default function CheckInScreen() {
             {yellowCount > 0 && <View style={[styles.successPill, { backgroundColor: '#F59E0B' }]}><Text style={styles.successPillText}>{yellowCount} okay</Text></View>}
             {redCount    > 0 && <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}><Text style={styles.successPillText}>{redCount} missed</Text></View>}
           </View>
+
+          {hasTeams && !shared && (
+            <View style={[styles.shareTeamBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.shareTeamTitle, { color: colors.foreground }]}>Share with your team?</Text>
+              <Text style={[styles.shareTeamSub, { color: colors.muted }]}>Post your check-in score to your team feed</Text>
+              <View style={styles.shareTeamBtns}>
+                <Pressable
+                  style={({ pressed }) => [styles.shareTeamSkip, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+                  onPress={() => { setTimeout(() => router.back(), 300); }}
+                >
+                  <Text style={[styles.shareTeamSkipText, { color: colors.muted }]}>Skip</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.shareTeamBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+                  onPress={handleShareToTeams}
+                  disabled={createPost.isPending}
+                >
+                  <Text style={styles.shareTeamBtnText}>{createPost.isPending ? 'Sharing...' : '🔥 Share'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {(!hasTeams || shared) && (
+            <Pressable
+              style={({ pressed }) => [styles.successDoneBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.successDoneBtnText}>{shared ? '✅ Shared!' : 'Done'}</Text>
+            </Pressable>
+          )}
         </View>
       </ScreenContainer>
     );
@@ -427,4 +480,14 @@ const styles = StyleSheet.create({
   successPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 },
   successPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
   successPillText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  shareTeamBox: { borderRadius: 16, borderWidth: 1, padding: 16, width: '100%', gap: 8, marginTop: 12 },
+  shareTeamTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  shareTeamSub: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  shareTeamBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  shareTeamSkip: { flex: 1, borderRadius: 12, borderWidth: 1, paddingVertical: 12, alignItems: 'center' },
+  shareTeamSkipText: { fontSize: 14, fontWeight: '600' },
+  shareTeamBtn: { flex: 2, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  shareTeamBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  successDoneBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40, alignItems: 'center', marginTop: 16 },
+  successDoneBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

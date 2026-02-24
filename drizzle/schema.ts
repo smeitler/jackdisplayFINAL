@@ -190,3 +190,56 @@ export const referrals = mysqlTable("referrals", {
 
 export type Referral = typeof referrals.$inferSelect;
 export type InsertReferral = typeof referrals.$inferInsert;
+
+/**
+ * Team posts — social feed posts within a team.
+ * type: 'text' | 'checkin' | 'photo'
+ * checkinScore: 0-100, only set for checkin posts
+ * imageUrl: S3 URL, only set for photo posts
+ */
+export const teamPosts = mysqlTable("teamPosts", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["text", "checkin", "photo"]).notNull().default("text"),
+  content: text("content"),
+  imageUrl: text("imageUrl"),
+  checkinScore: int("checkinScore"),
+  checkinDate: varchar("checkinDate", { length: 10 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TeamPost = typeof teamPosts.$inferSelect;
+export type InsertTeamPost = typeof teamPosts.$inferInsert;
+
+/**
+ * Team post reactions — emoji reactions on feed posts.
+ * emoji: one of the allowed reaction emojis
+ * Unique per (postId, userId) — one reaction per user per post.
+ */
+export const teamPostReactions = mysqlTable("teamPostReactions", {
+  id: int("id").autoincrement().primaryKey(),
+  postId: int("postId").notNull(),
+  userId: int("userId").notNull(),
+  emoji: varchar("emoji", { length: 8 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  postUserIdx: uniqueIndex("teamPostReactions_postId_userId_idx").on(t.postId, t.userId),
+}));
+
+export type TeamPostReaction = typeof teamPostReactions.$inferSelect;
+export type InsertTeamPostReaction = typeof teamPostReactions.$inferInsert;
+
+/**
+ * Team post comments — text/emoji comments on feed posts.
+ */
+export const teamPostComments = mysqlTable("teamPostComments", {
+  id: int("id").autoincrement().primaryKey(),
+  postId: int("postId").notNull(),
+  userId: int("userId").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TeamPostComment = typeof teamPostComments.$inferSelect;
+export type InsertTeamPostComment = typeof teamPostComments.$inferInsert;

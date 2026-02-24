@@ -304,6 +304,72 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Community: Team Feed ────────────────────────────────────────────────────
+  teamFeed: router({
+    list: protectedProcedure
+      .input(z.object({ teamId: z.number(), limit: z.number().int().min(1).max(50).optional() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamFeed(input.teamId, input.limit ?? 30);
+      }),
+
+    createPost: protectedProcedure
+      .input(z.object({
+        teamId: z.number(),
+        type: z.enum(["text", "checkin", "photo"]),
+        content: z.string().max(2000).optional(),
+        imageUrl: z.string().url().optional(),
+        checkinScore: z.number().int().min(0).max(100).optional(),
+        checkinDate: z.string().max(10).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.createTeamPost({
+          teamId: input.teamId,
+          userId: ctx.user.id,
+          type: input.type,
+          content: input.content ?? null,
+          imageUrl: input.imageUrl ?? null,
+          checkinScore: input.checkinScore ?? null,
+          checkinDate: input.checkinDate ?? null,
+        });
+      }),
+
+    deletePost: protectedProcedure
+      .input(z.object({ postId: z.number() }))
+      .mutation(({ ctx, input }) => db.deleteTeamPost(input.postId, ctx.user.id)),
+
+    toggleReaction: protectedProcedure
+      .input(z.object({ postId: z.number(), emoji: z.string().max(8) }))
+      .mutation(({ ctx, input }) => db.toggleTeamPostReaction(input.postId, ctx.user.id, input.emoji)),
+
+    addComment: protectedProcedure
+      .input(z.object({ postId: z.number(), content: z.string().min(1).max(500) }))
+      .mutation(({ ctx, input }) => db.addTeamPostComment(input.postId, ctx.user.id, input.content)),
+
+    deleteComment: protectedProcedure
+      .input(z.object({ commentId: z.number() }))
+      .mutation(({ ctx, input }) => db.deleteTeamPostComment(input.commentId, ctx.user.id)),
+
+    streak: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamStreak(input.teamId);
+      }),
+
+    leaderboard: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamLeaderboard(input.teamId);
+      }),
+  }),
+
   // ─── Community: Referrals ──────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>

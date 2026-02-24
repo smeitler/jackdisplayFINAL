@@ -64,6 +64,14 @@ const MAPPING = {
   "lock.fill": "lock",
   "lock.open.fill": "lock-open",
   "line.3.horizontal.decrease": "menu",
+  "camera.fill": "camera-alt",
+  "photo.fill": "photo",
+  "text.bubble.fill": "comment",
+  "hand.thumbsup.fill": "thumb-up",
+  "ellipsis": "more-horiz",
+  "crown.fill": "workspace-premium",
+  "medal.fill": "military-tech",
+  "arrow.up.right": "north-east",
 } as IconMapping;
 
 export function IconSymbol({
