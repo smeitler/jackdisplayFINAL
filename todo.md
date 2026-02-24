@@ -188,3 +188,11 @@
 - [x] Fix habit detail streak: count consecutive days with any check-in (not just crushed)
 - [x] Change Best Streak icon to green trophy on habit detail screen
 - [x] Remove 1/5wk weekly goal count label from home screen goal cards
+- [ ] Build category goal detail screen: all habits in category, stats, progress, breakdown
+- [ ] Wire tap on home screen goal cards to navigate to category detail screen
+- [ ] Wire tap on analytics category cards to navigate to category detail screen
+- [ ] Remove purple bar from home screen goal cards
+- [x] Build category goal detail screen with habits, stats, breakdown
+- [x] Wire home screen card tap to category detail screen
+- [x] Wire analytics category header tap to category detail screen
+- [x] Remove purple stacked bar from home screen goal cards

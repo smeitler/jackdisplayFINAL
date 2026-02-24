@@ -147,8 +147,14 @@ export default function ProgressScreen() {
               onLayout={onCardLayout}
               style={[styles.catCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
-              {/* ── Category header row ── */}
-              <View style={styles.catHeader}>
+              {/* ── Category header row — tap to view detail ── */}
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/category-detail?categoryId=${cat.id}` as never);
+                }}
+                style={({ pressed }) => [styles.catHeader, { opacity: pressed ? 0.75 : 1 }]}
+              >
                 <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 <View style={styles.catInfo}>
                   <Text style={[styles.catName, { color: colors.foreground }]}>{cat.label}</Text>
@@ -156,12 +162,15 @@ export default function ProgressScreen() {
                     {catHabits.length} habit{catHabits.length !== 1 ? "s" : ""}
                   </Text>
                 </View>
-                <View style={[styles.rateChip, { borderColor: rateColor + "55", backgroundColor: rateColor + "18" }]}>
-                  <Text style={[styles.rateText, { color: rateColor }]}>
-                    {Math.round(rate * 100)}%
-                  </Text>
+                <View style={styles.catHeaderRight}>
+                  <View style={[styles.rateChip, { borderColor: rateColor + "55", backgroundColor: rateColor + "18" }]}>
+                    <Text style={[styles.rateText, { color: rateColor }]}>
+                      {Math.round(rate * 100)}%
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={14} color={colors.muted} />
                 </View>
-              </View>
+              </Pressable>
 
               {/* ── Full calendar grid ── */}
               {catHabits.length > 0 ? (
@@ -295,6 +304,9 @@ const styles = StyleSheet.create({
   catHeader: {
     flexDirection: "row", alignItems: "center",
     gap: 10, marginBottom: 10,
+  },
+  catHeaderRight: {
+    flexDirection: "row", alignItems: "center", gap: 6, marginLeft: "auto",
   },
   catEmoji: { fontSize: 28 },
   catInfo: { flex: 1 },

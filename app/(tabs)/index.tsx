@@ -193,7 +193,7 @@ export default function HomeScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }
                   }
-                  handleCheckIn(yesterday);
+                  router.push((`/category-detail?categoryId=${cat.id}`) as never);
                 }}
                 style={({ pressed }) => [
                   styles.categoryCard,
@@ -281,30 +281,7 @@ export default function HomeScreen() {
                   </View>
                 )}
 
-                {/* Stacked bar */}
-                {total > 0 ? (
-                  <View style={[styles.catBar, {
-                    backgroundColor: colors.border,
-                    ...(isOnTrack ? {
-                      shadowColor: '#22C55E',
-                      shadowOpacity: 0.3,
-                      shadowRadius: 4,
-                      shadowOffset: { width: 0, height: 0 },
-                    } : {}),
-                  }]}>
-                    {breakdown.green > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.green, backgroundColor: '#22C55E' }]} />
-                    )}
-                    {breakdown.yellow > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.yellow, backgroundColor: '#F59E0B' }]} />
-                    )}
-                    {breakdown.red > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.red, backgroundColor: '#EF4444' }]} />
-                    )}
-                  </View>
-                ) : (
-                  <View style={[styles.catBar, { backgroundColor: colors.border }]} />
-                )}
+
               </Pressable>
             );
           })}
