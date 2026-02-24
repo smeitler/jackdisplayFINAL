@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
@@ -202,7 +203,7 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
         {/* Header */}
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.modalTitle, { color: colors.foreground }]}>Teams</Text>
@@ -287,7 +288,7 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
             </View>
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
