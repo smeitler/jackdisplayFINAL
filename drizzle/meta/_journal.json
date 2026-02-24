@@ -57,6 +57,13 @@
       "when": 1771975275685,
       "tag": "0007_soft_luckman",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1771976367073,
+      "tag": "0008_magenta_falcon",
+      "breakpoints": true
     }
   ]
 }

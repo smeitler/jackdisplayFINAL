@@ -213,3 +213,6 @@
 - [ ] team_goal_proposals DB table with votes
 - [ ] Goal proposal card in Feed with Accept/Decline buttons
 - [ ] Accept adds goal to user's personal habits list
+- [x] Rename "Propose Team Goal" to "Propose Team Habit"
+- [x] Remove category fields from proposal form — habit-only (name, emoji, description, frequency)
+- [x] When accepting a proposal, show goal picker so member chooses which personal goal to file it under

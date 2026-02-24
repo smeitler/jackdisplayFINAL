@@ -690,8 +690,6 @@ export async function createTeamGoalProposal(data: {
   habitName: string;
   habitEmoji: string;
   habitDescription?: string;
-  categoryLabel: string;
-  categoryEmoji: string;
   lifeArea?: string;
 }) {
   const db = await getDb();
@@ -702,8 +700,6 @@ export async function createTeamGoalProposal(data: {
     habitName: data.habitName,
     habitEmoji: data.habitEmoji,
     habitDescription: data.habitDescription ?? null,
-    categoryLabel: data.categoryLabel,
-    categoryEmoji: data.categoryEmoji,
     lifeArea: data.lifeArea ?? null,
   });
   return result[0].insertId;

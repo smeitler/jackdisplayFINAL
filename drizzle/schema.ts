@@ -255,8 +255,6 @@ export const teamGoalProposals = mysqlTable("teamGoalProposals", {
   habitName: varchar("habitName", { length: 100 }).notNull(),
   habitEmoji: varchar("habitEmoji", { length: 16 }).notNull().default("⭐"),
   habitDescription: text("habitDescription"),
-  categoryLabel: varchar("categoryLabel", { length: 100 }).notNull(),
-  categoryEmoji: varchar("categoryEmoji", { length: 16 }).notNull().default("📋"),
   lifeArea: varchar("lifeArea", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

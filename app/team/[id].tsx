@@ -494,16 +494,12 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(undefined);
   const [showHabitEmojiPicker, setShowHabitEmojiPicker] = useState(false);
 
-  // Category fields
-  const [catLabel, setCatLabel] = useState("");
-  const [catEmoji, setCatEmoji] = useState("🌟");
   const [lifeArea, setLifeArea] = useState<string | undefined>(undefined);
-  const [showCatEmojiPicker, setShowCatEmojiPicker] = useState(false);
 
   function resetForm() {
     setHabitName(""); setHabitEmoji("⭐"); setHabitDesc("");
     setFrequencyType("weekly"); setWeeklyGoal(undefined); setMonthlyGoal(undefined);
-    setCatLabel(""); setCatEmoji("🌟"); setLifeArea(undefined);
+    setLifeArea(undefined);
   }
 
   const createMutation = trpc.goalProposals.create.useMutation({
@@ -517,17 +513,14 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
 
   const handleCreate = useCallback(() => {
     if (!habitName.trim()) { Alert.alert("Required", "Please enter a habit name."); return; }
-    if (!catLabel.trim()) { Alert.alert("Required", "Please enter a goal/category name."); return; }
     createMutation.mutate({
       teamId,
       habitName: habitName.trim(),
       habitEmoji,
       habitDescription: habitDesc.trim() || undefined,
-      categoryLabel: catLabel.trim(),
-      categoryEmoji: catEmoji,
       lifeArea,
     });
-  }, [teamId, habitName, habitEmoji, habitDesc, catLabel, catEmoji, lifeArea, createMutation]);
+  }, [teamId, habitName, habitEmoji, habitDesc, lifeArea, createMutation]);
 
   return (
     <>
@@ -547,29 +540,9 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
           }, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {/* Handle */}
             <View style={[{ width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginTop: 12, marginBottom: 4 }, { backgroundColor: colors.border }]} />
-            <Text style={[{ fontSize: 18, fontWeight: "700", marginBottom: 4, paddingHorizontal: 20, paddingTop: 8 }, { color: colors.foreground }]}>Propose Team Goal</Text>
+            <Text style={[{ fontSize: 18, fontWeight: "700", marginBottom: 4, paddingHorizontal: 20, paddingTop: 8 }, { color: colors.foreground }]}>Propose Team Habit</Text>
 
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
-
-              {/* ── Goal / Category ── */}
-              <Text style={[{ fontSize: 11, fontWeight: "700", marginTop: 16, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }, { color: colors.muted }]}>Goal</Text>
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-                <TouchableOpacity
-                  onPress={() => setShowCatEmojiPicker(true)}
-                  style={[{ width: 48, height: 48, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" }, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontSize: 26 }}>{catEmoji}</Text>
-                </TouchableOpacity>
-                <TextInput
-                  style={[{ flex: 1, height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 15 }, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
-                  placeholder="Goal name (e.g. Health)"
-                  placeholderTextColor={colors.muted}
-                  value={catLabel}
-                  onChangeText={setCatLabel}
-                  returnKeyType="next"
-                />
-              </View>
 
               {/* Life area picker */}
               <Text style={[{ fontSize: 11, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }, { color: colors.muted }]}>Life Area</Text>
@@ -722,7 +695,7 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
               >
                 {createMutation.isPending
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={{ fontSize: 15, fontWeight: "600", color: "#fff" }}>Propose Goal</Text>
+                  : <Text style={{ fontSize: 15, fontWeight: "600", color: "#fff" }}>Propose Habit</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -735,12 +708,6 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
         currentEmoji={habitEmoji}
         onSelect={(e) => setHabitEmoji(e)}
         onClose={() => setShowHabitEmojiPicker(false)}
-      />
-      <EmojiPicker
-        visible={showCatEmojiPicker}
-        currentEmoji={catEmoji}
-        onSelect={(e) => setCatEmoji(e)}
-        onClose={() => setShowCatEmojiPicker(false)}
       />
     </>
   );
@@ -755,8 +722,6 @@ type GoalProposal = {
   habitName: string;
   habitEmoji: string;
   habitDescription: string | null;
-  categoryLabel: string;
-  categoryEmoji: string;
   lifeArea: string | null;
   createdAt: Date | string;
   myVote: "accept" | "decline" | null;
@@ -767,27 +732,20 @@ type GoalProposal = {
 function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId: number }) {
   const colors = useColors();
   const utils = trpc.useUtils();
-  const { addHabit, addCategory, categories } = useApp();
+  const { addHabit, categories } = useApp();
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   const voteMutation = trpc.goalProposals.vote.useMutation({
     onSuccess: () => utils.goalProposals.list.invalidate({ teamId }),
     onError: (err) => Alert.alert("Error", err.message),
   });
 
-  const handleAccept = useCallback(async () => {
-    // Find or create the category
-    let cat = categories.find((c) => c.label.toLowerCase() === proposal.categoryLabel.toLowerCase());
-    if (!cat) {
-      await addCategory(proposal.categoryLabel, proposal.categoryEmoji, proposal.lifeArea as any);
-      // After adding, find it by label
-      cat = categories.find((c) => c.label.toLowerCase() === proposal.categoryLabel.toLowerCase());
-    }
-    // Add the habit to that category
-    const catId = cat?.id ?? `custom_${Date.now()}`;
-    await addHabit(proposal.habitName, proposal.habitEmoji, catId, proposal.habitDescription ?? undefined);
+  const handleAcceptWithGoal = useCallback(async (categoryId: string) => {
+    setShowGoalPicker(false);
+    await addHabit(proposal.habitName, proposal.habitEmoji, categoryId, proposal.habitDescription ?? undefined);
     voteMutation.mutate({ proposalId: proposal.id, teamId, vote: "accept" });
-    Alert.alert("Goal Added! 🎯", `"${proposal.habitName}" has been added to your habits.`);
-  }, [proposal, categories, addCategory, addHabit, voteMutation, teamId]);
+    Alert.alert("Habit Added! 🎯", `"${proposal.habitName}" has been added to your habits.`);
+  }, [proposal, addHabit, voteMutation, teamId]);
 
   const handleDecline = useCallback(() => {
     voteMutation.mutate({ proposalId: proposal.id, teamId, vote: "decline" });
@@ -796,53 +754,85 @@ function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId
   const myVote = proposal.myVote;
 
   return (
-    <View style={[styles.goalCard, { backgroundColor: colors.surface, borderColor: colors.primary + "40" }]}>
-      <View style={styles.goalCardHeader}>
-        <View style={[styles.goalCardBadge, { backgroundColor: colors.primary + "15" }]}>
-          <Text style={[styles.goalCardBadgeText, { color: colors.primary }]}>🎯 Team Goal</Text>
+    <>
+      <View style={[styles.goalCard, { backgroundColor: colors.surface, borderColor: colors.primary + "40" }]}>
+        <View style={styles.goalCardHeader}>
+          <View style={[styles.goalCardBadge, { backgroundColor: colors.primary + "15" }]}>
+            <Text style={[styles.goalCardBadgeText, { color: colors.primary }]}>🎯 Team Habit</Text>
+          </View>
+          <Text style={[styles.goalCardTime, { color: colors.muted }]}>{timeAgo(proposal.createdAt)}</Text>
         </View>
-        <Text style={[styles.goalCardTime, { color: colors.muted }]}>{timeAgo(proposal.createdAt)}</Text>
+        <View style={styles.goalCardBody}>
+          <Text style={styles.goalCardHabitEmoji}>{proposal.habitEmoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.goalCardHabitName, { color: colors.foreground }]}>{proposal.habitName}</Text>
+            {proposal.lifeArea ? (
+              <Text style={[styles.goalCardCatLabel, { color: colors.muted }]}>{proposal.lifeArea}</Text>
+            ) : null}
+            {proposal.habitDescription ? (
+              <Text style={[styles.goalCardDesc, { color: colors.muted }]}>{proposal.habitDescription}</Text>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.goalCardVotes}>
+          <Text style={[styles.goalCardVoteCount, { color: colors.muted }]}>{proposal.acceptCount} accepted · {proposal.declineCount} declined</Text>
+        </View>
+        {myVote ? (
+          <View style={[styles.goalCardVotedBanner, { backgroundColor: myVote === "accept" ? colors.success + "20" : colors.error + "15" }]}>
+            <Text style={[styles.goalCardVotedText, { color: myVote === "accept" ? colors.success : colors.error }]}>
+              {myVote === "accept" ? "✅ You accepted this habit" : "❌ You declined this habit"}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.goalCardActions}>
+            <TouchableOpacity
+              style={[styles.goalCardBtn, { backgroundColor: colors.success + "20", borderColor: colors.success + "40" }]}
+              onPress={() => setShowGoalPicker(true)}
+              disabled={voteMutation.isPending}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.goalCardBtnText, { color: colors.success }]}>✅ Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.goalCardBtn, { backgroundColor: colors.error + "15", borderColor: colors.error + "30" }]}
+              onPress={handleDecline}
+              disabled={voteMutation.isPending}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.goalCardBtnText, { color: colors.error }]}>❌ Decline</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
-      <View style={styles.goalCardBody}>
-        <Text style={styles.goalCardHabitEmoji}>{proposal.habitEmoji}</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.goalCardHabitName, { color: colors.foreground }]}>{proposal.habitName}</Text>
-          <Text style={[styles.goalCardCatLabel, { color: colors.muted }]}>{proposal.categoryEmoji} {proposal.categoryLabel}</Text>
-          {proposal.habitDescription ? (
-            <Text style={[styles.goalCardDesc, { color: colors.muted }]}>{proposal.habitDescription}</Text>
-          ) : null}
+
+      {/* Goal picker modal — shown when user taps Accept */}
+      <Modal visible={showGoalPicker} transparent animationType="slide" onRequestClose={() => setShowGoalPicker(false)}>
+        <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowGoalPicker(false)} activeOpacity={1} />
+        <View style={[{ borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, paddingBottom: 36, maxHeight: "70%" }, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[{ width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginTop: 12, marginBottom: 4 }, { backgroundColor: colors.border }]} />
+          <Text style={[{ fontSize: 17, fontWeight: "700", paddingHorizontal: 20, paddingTop: 8, marginBottom: 4 }, { color: colors.foreground }]}>Add to which goal?</Text>
+          <Text style={[{ fontSize: 13, paddingHorizontal: 20, marginBottom: 12 }, { color: colors.muted }]}>Choose the goal to track "{proposal.habitName}" under.</Text>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>
+            {categories.length === 0 ? (
+              <Text style={[{ fontSize: 14, textAlign: "center", padding: 20 }, { color: colors.muted }]}>No goals yet. Add a goal first in the Habits tab.</Text>
+            ) : (
+              categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  onPress={() => handleAcceptWithGoal(cat.id)}
+                  style={[{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, borderWidth: 1 }, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 24 }}>{cat.emoji}</Text>
+                  <Text style={[{ fontSize: 15, fontWeight: "600", flex: 1 }, { color: colors.foreground }]}>{cat.label}</Text>
+                  <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
         </View>
-      </View>
-      <View style={styles.goalCardVotes}>
-        <Text style={[styles.goalCardVoteCount, { color: colors.muted }]}>{proposal.acceptCount} accepted · {proposal.declineCount} declined</Text>
-      </View>
-      {myVote ? (
-        <View style={[styles.goalCardVotedBanner, { backgroundColor: myVote === "accept" ? colors.success + "20" : colors.error + "15" }]}>
-          <Text style={[styles.goalCardVotedText, { color: myVote === "accept" ? colors.success : colors.error }]}>
-            {myVote === "accept" ? "✅ You accepted this goal" : "❌ You declined this goal"}
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.goalCardActions}>
-          <TouchableOpacity
-            style={[styles.goalCardBtn, { backgroundColor: colors.success + "20", borderColor: colors.success + "40" }]}
-            onPress={handleAccept}
-            disabled={voteMutation.isPending}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.goalCardBtnText, { color: colors.success }]}>✅ Accept</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.goalCardBtn, { backgroundColor: colors.error + "15", borderColor: colors.error + "30" }]}
-            onPress={handleDecline}
-            disabled={voteMutation.isPending}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.goalCardBtnText, { color: colors.error }]}>❌ Decline</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+      </Modal>
+    </>
   );
 }
 

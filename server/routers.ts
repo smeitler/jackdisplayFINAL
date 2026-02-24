@@ -398,8 +398,6 @@ export const appRouter = router({
         habitName: z.string().min(1).max(100),
         habitEmoji: z.string().max(16),
         habitDescription: z.string().max(500).optional(),
-        categoryLabel: z.string().min(1).max(100),
-        categoryEmoji: z.string().max(16),
         lifeArea: z.string().max(32).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
