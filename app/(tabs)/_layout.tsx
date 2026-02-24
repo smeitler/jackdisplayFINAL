@@ -73,8 +73,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Settings",
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="bell.fill" color={color} />,
+          title: "More",
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="line.3.horizontal.decrease" color={color} />,
         }}
       />
     </Tabs>

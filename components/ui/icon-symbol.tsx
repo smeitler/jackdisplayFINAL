@@ -63,6 +63,7 @@ const MAPPING = {
   "gift.fill": "card-giftcard",
   "lock.fill": "lock",
   "lock.open.fill": "lock-open",
+  "line.3.horizontal.decrease": "menu",
 } as IconMapping;
 
 export function IconSymbol({

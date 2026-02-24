@@ -168,3 +168,4 @@
 - [x] Update app.config.ts appName to "Jack"
 - [x] Create eas.json with production API URL for EAS build
 - [ ] Rebuild iOS app with correct env vars and submit to TestFlight
+- [x] Change Settings tab label to "More" with hamburger (3-bar) icon
