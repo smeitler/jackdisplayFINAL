@@ -166,5 +166,5 @@
 
 - [x] Rebrand all "DayCheck" references to "Jack" throughout the app
 - [x] Update app.config.ts appName to "Jack"
-- [ ] Create eas.json with production API URL for EAS build
+- [x] Create eas.json with production API URL for EAS build
 - [ ] Rebuild iOS app with correct env vars and submit to TestFlight
