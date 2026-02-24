@@ -16,21 +16,21 @@ const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 const THEMES: { id: AppTheme; label: string; preview: string; description: string }[] = [
   {
-    id: "blue",
-    label: "Blue",
-    preview: "#6C63FF",
-    description: "Purple-blue accent",
+    id: "purple",
+    label: "Purple",
+    preview: "#7B74FF",
+    description: "Dark navy",
   },
   {
-    id: "light",
-    label: "Light",
-    preview: "#007AFF",
-    description: "Clean white",
+    id: "white",
+    label: "White",
+    preview: "#FFFFFF",
+    description: "Pure white",
   },
   {
-    id: "dark",
-    label: "Dark",
-    preview: "#111111",
+    id: "black",
+    label: "Black",
+    preview: "#000000",
     description: "True black",
   },
 ];

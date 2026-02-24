@@ -5,7 +5,7 @@ import themeConfig from "@/theme.config";
 export type ColorScheme = "light" | "dark";
 
 // Named app themes
-export type AppTheme = "blue" | "light" | "dark";
+export type AppTheme = "purple" | "white" | "black";
 
 export const ThemeColors = themeConfig.themeColors;
 
@@ -89,8 +89,8 @@ function makeThemePalette(
   };
 }
 
-/** Blue theme: original dark purple/blue brand palette */
-const bluePalette: ThemeColorPalette = makeThemePalette(
+/** Purple theme: original dark navy/purple brand palette */
+const purplePalette: ThemeColorPalette = makeThemePalette(
   '#7B74FF', // primary
   '#0F0E1A', // background (deep dark navy)
   '#1C1B2E', // surface
@@ -102,11 +102,11 @@ const bluePalette: ThemeColorPalette = makeThemePalette(
   '#F87171', // error
 );
 
-/** Light theme: clean iOS-style neutral white */
-const lightPalette: ThemeColorPalette = makeThemePalette(
+/** White theme: clean pure white, iOS-style */
+const whitePalette: ThemeColorPalette = makeThemePalette(
   '#007AFF', // primary
-  '#FFFFFF', // background
-  '#F2F2F7', // surface
+  '#FFFFFF', // background (pure white)
+  '#FFFFFF', // surface (pure white — no grey tint)
   '#000000', // foreground
   '#8E8E93', // muted
   '#E5E5EA', // border
@@ -115,8 +115,8 @@ const lightPalette: ThemeColorPalette = makeThemePalette(
   '#FF3B30', // error
 );
 
-/** Dark theme: true black OLED */
-const darkPalette: ThemeColorPalette = makeThemePalette(
+/** Black theme: true black OLED */
+const blackPalette: ThemeColorPalette = makeThemePalette(
   '#6C63FF', // primary
   '#000000', // background
   '#111111', // surface
@@ -129,15 +129,15 @@ const darkPalette: ThemeColorPalette = makeThemePalette(
 );
 
 export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
-  blue: bluePalette,
-  light: lightPalette,
-  dark: darkPalette,
+  purple: purplePalette,
+  white: whitePalette,
+  black: blackPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
-  blue: "dark",
-  light: "light",
-  dark: "dark",
+  purple: "dark",
+  white: "light",
+  black: "dark",
 };
 
 export const Fonts = Platform.select({

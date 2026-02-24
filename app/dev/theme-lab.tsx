@@ -76,7 +76,7 @@ export default function ThemeLabScreen() {
                   },
                 ]}
                 onPress={() => {
-                  setAppTheme(scheme === 'dark' ? 'dark' : 'light');
+                  setAppTheme(scheme === 'dark' ? 'black' : 'white');
                   setLastAction(`Applied ${scheme} globally`);
                 }}
               >
