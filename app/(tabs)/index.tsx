@@ -128,7 +128,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Range selector + goals progress */}
-        <View style={styles.sectionHeader}>
+        <View style={[styles.sectionHeader, { zIndex: 10 }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
             {range}-Day Goals
           </Text>
@@ -251,9 +251,6 @@ export default function HomeScreen() {
                       const barColor = met ? '#22C55E' : colors.primary;
                       return (
                         <View key={h.id} style={styles.weeklyGoalItem}>
-                          <Text style={[styles.weeklyGoalName, { color: colors.muted }]} numberOfLines={1}>
-                            {h.emoji} {h.name}
-                          </Text>
                           <View style={styles.weeklyGoalBarWrap}>
                             <View style={[styles.weeklyGoalBarBg, {
                               backgroundColor: met ? '#22C55E22' : colors.border,
@@ -318,27 +315,7 @@ export default function HomeScreen() {
           })}
         </View>
 
-        {/* History quick access */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Past Reviews</Text>
-        <View style={[styles.historyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {[-1, -2, -3, -4, -5].map((offset) => {
-            const dateStr = offsetDateString(offset);
-            const label = formatDisplayDate(dateStr);
-            return (
-              <Pressable
-                key={dateStr}
-                onPress={() => handleCheckIn(dateStr)}
-                style={({ pressed }) => [
-                  styles.historyRow,
-                  { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Text style={[styles.historyDate, { color: colors.foreground }]}>{label}</Text>
-                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-              </Pressable>
-            );
-          })}
-        </View>
+
 
         {/* Manage habits */}
         <Pressable
@@ -388,7 +365,7 @@ const styles = StyleSheet.create({
   alarmEditBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   alarmEditText: { fontSize: 14, fontWeight: '600' },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, zIndex: 10 },
   rangeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
