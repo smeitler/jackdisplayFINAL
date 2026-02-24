@@ -1,8 +1,9 @@
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent,
+  View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent, Platform,
 } from "react-native";
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { CategoryCalendar } from "@/components/category-calendar";
 import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet";
@@ -234,6 +235,10 @@ export default function ProgressScreen() {
                               [cat.id]: prev[cat.id] === h.id ? null : h.id,
                             }));
                           }}
+                          onLongPress={() => {
+                            if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            router.push(`/habit-detail?habitId=${h.id}` as never);
+                          }}
                           style={({ pressed }) => ([
                             styles.habitLegendChip,
                             {
@@ -251,6 +256,8 @@ export default function ProgressScreen() {
                           >
                             {h.name}
                           </Text>
+                          {/* Detail arrow */}
+                          <IconSymbol name="chevron.right" size={11} color={isSelected ? colors.primary : colors.muted} />
                         </Pressable>
                       );
                     })}
