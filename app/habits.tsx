@@ -214,7 +214,7 @@ interface HabitModalProps {
   editHabit?: Habit | null;
   defaultEmoji?: string;
   entryCount: number;
-  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number) => void;
+  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => void;
   onDelete: (habitId: string) => void;
   onDeactivate: (habitId: string) => void;
   onClose: () => void;
@@ -227,13 +227,15 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
   const [name, setName] = useState(editHabit?.name ?? '');
   const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [description, setDescription] = useState(editHabit?.description ?? '');
+  const [frequencyType, setFrequencyType] = useState<import('@/lib/storage').FrequencyType>(editHabit?.frequencyType ?? 'weekly');
   const [weeklyGoal, setWeeklyGoal] = useState<number | undefined>(editHabit?.weeklyGoal);
+  const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(editHabit?.monthlyGoal);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!name.trim()) return;
-    onSave(name.trim(), emoji, description.trim() || undefined, weeklyGoal);
+    onSave(name.trim(), emoji, description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
     onClose();
   }
 
@@ -264,11 +266,13 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
         transparent
         animationType="slide"
         onRequestClose={onClose}
-        onShow={() => {
+          onShow={() => {
           setName(editHabit?.name ?? '');
           setEmoji(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
           setDescription(editHabit?.description ?? '');
+          setFrequencyType(editHabit?.frequencyType ?? 'weekly');
           setWeeklyGoal(editHabit?.weeklyGoal);
+          setMonthlyGoal(editHabit?.monthlyGoal);
           setConfirmDelete(false);
         }}
       >
@@ -312,30 +316,82 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
               blurOnSubmit
             />
 
-            {/* Weekly goal selector */}
+            {/* Frequency type toggle */}
             <View style={styles.weeklyGoalRow}>
-              <Text style={[styles.weeklyGoalLabel, { color: colors.foreground }]}>Weekly goal</Text>
-              <View style={styles.weeklyGoalBtns}>
-                {[1,2,3,4,5,6,7].map((d) => (
+              <Text style={[styles.weeklyGoalLabel, { color: colors.foreground }]}>Goal frequency</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {(['weekly', 'monthly'] as const).map((ft) => (
                   <Pressable
-                    key={d}
-                    onPress={() => setWeeklyGoal(weeklyGoal === d ? undefined : d)}
+                    key={ft}
+                    onPress={() => setFrequencyType(ft)}
                     style={({ pressed }) => ([
                       styles.weeklyGoalDay,
+                      { flex: 1, height: 36, paddingHorizontal: 12 },
                       {
-                        backgroundColor: weeklyGoal === d ? colors.primary : colors.background,
-                        borderColor: weeklyGoal === d ? colors.primary : colors.border,
+                        backgroundColor: frequencyType === ft ? colors.primary : colors.background,
+                        borderColor: frequencyType === ft ? colors.primary : colors.border,
                         opacity: pressed ? 0.7 : 1,
                       },
                     ])}
                   >
-                    <Text style={[styles.weeklyGoalDayText, { color: weeklyGoal === d ? '#fff' : colors.muted }]}>{d}</Text>
+                    <Text style={[styles.weeklyGoalDayText, { color: frequencyType === ft ? '#fff' : colors.muted }]}>
+                      {ft === 'weekly' ? 'Weekly' : 'Monthly'}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
-              <Text style={[styles.weeklyGoalHint, { color: colors.muted }]}>
-                {weeklyGoal ? `${weeklyGoal}x per week` : 'No goal set'}
-              </Text>
+
+              {frequencyType === 'weekly' ? (
+                <>
+                  <Text style={[styles.weeklyGoalLabel, { color: colors.foreground }]}>Times per week</Text>
+                  <View style={styles.weeklyGoalBtns}>
+                    {[1,2,3,4,5,6,7].map((d) => (
+                      <Pressable
+                        key={d}
+                        onPress={() => setWeeklyGoal(weeklyGoal === d ? undefined : d)}
+                        style={({ pressed }) => ([
+                          styles.weeklyGoalDay,
+                          {
+                            backgroundColor: weeklyGoal === d ? colors.primary : colors.background,
+                            borderColor: weeklyGoal === d ? colors.primary : colors.border,
+                            opacity: pressed ? 0.7 : 1,
+                          },
+                        ])}
+                      >
+                        <Text style={[styles.weeklyGoalDayText, { color: weeklyGoal === d ? '#fff' : colors.muted }]}>{d}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={[styles.weeklyGoalHint, { color: colors.muted }]}>
+                    {weeklyGoal ? `${weeklyGoal}x per week` : 'No goal set'}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.weeklyGoalLabel, { color: colors.foreground }]}>Times per month</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                      <Pressable
+                        key={d}
+                        onPress={() => setMonthlyGoal(monthlyGoal === d ? undefined : d)}
+                        style={({ pressed }) => ([
+                          styles.weeklyGoalDay,
+                          {
+                            backgroundColor: monthlyGoal === d ? colors.primary : colors.background,
+                            borderColor: monthlyGoal === d ? colors.primary : colors.border,
+                            opacity: pressed ? 0.7 : 1,
+                          },
+                        ])}
+                      >
+                        <Text style={[styles.weeklyGoalDayText, { color: monthlyGoal === d ? '#fff' : colors.muted }]}>{d}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  <Text style={[styles.weeklyGoalHint, { color: colors.muted }]}>
+                    {monthlyGoal ? `${monthlyGoal}x per month` : 'No goal set'}
+                  </Text>
+                </>
+              )}
             </View>
 
             <View style={styles.modalActions}>
@@ -656,11 +712,11 @@ export default function HabitsScreen() {
     reorderHabits(catId, moved);
   }
 
-  function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number) {
+  function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) {
     if (habitModal.edit) {
-      updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal });
+      updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal });
     } else {
-      addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal);
+      addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal);
     }
   }
 

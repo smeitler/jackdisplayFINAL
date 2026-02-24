@@ -119,7 +119,7 @@ function serverAlarmToLocal(row: { hour: number; minute: number; days: string; e
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 type AppContextValue = AppState & {
-  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number) => Promise<void>;
+  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   addCategory: (label: string, emoji: string, lifeArea?: LifeArea) => Promise<void>;
@@ -136,6 +136,7 @@ type AppContextValue = AppState & {
   getCategoryRate: (category: Category, days?: number) => number;
   getCategoryBreakdown: (category: Category, days?: number) => { green: number; yellow: number; red: number; none: number };
   getHabitWeeklyDone: (habitId: string) => number; // count of days this week (Mon-Sun) with green or yellow rating
+  getHabitMonthlyDone: (habitId: string) => number; // count of days this calendar month with green or yellow rating
   streak: number;
 };
 
@@ -253,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number) => {
+  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => {
     const catHabits = state.habits.filter((h) => h.category === category);
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
@@ -264,6 +265,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isActive: true,
       order: catHabits.length,
       weeklyGoal,
+      frequencyType,
+      monthlyGoal,
       createdAt: new Date().toISOString(),
     };
     const updated = [...state.habits, newHabit];
@@ -533,6 +536,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return totalWeight === 0 ? 0 : totalScore / totalWeight;
   }, [activeHabits, state.checkIns]);
 
+  // Count how many days in the current calendar month a habit was completed (green or yellow)
+  const getHabitMonthlyDone = useCallback((habitId: string) => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let count = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, month, day);
+      const dateStr = toDateString(d);
+      const entry = state.checkIns.find((e) => e.habitId === habitId && e.date === dateStr);
+      if (entry && (entry.rating === 'green' || entry.rating === 'yellow')) count++;
+    }
+    return count;
+  }, [state.checkIns]);
+
   // Count how many days in the current Mon-Sun week a habit was completed (green or yellow)
   const getHabitWeeklyDone = useCallback((habitId: string) => {
     const today = new Date();
@@ -585,7 +604,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       submitCheckIn, updateAlarm,
       isPendingCheckIn, activeHabits,
       getEntriesForDate, getRatingsForDate,
-      getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone,
+      getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, getHabitMonthlyDone,
       streak,
     }}>
       {children}

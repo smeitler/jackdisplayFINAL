@@ -29,6 +29,8 @@ export type CategoryDef = {
 
 export type Rating = 'none' | 'red' | 'yellow' | 'green';
 
+export type FrequencyType = 'weekly' | 'monthly';
+
 export type Habit = {
   id: string;
   name: string;
@@ -38,7 +40,9 @@ export type Habit = {
   isActive: boolean;
   order: number;    // sort order within the category
   createdAt: string;
-  weeklyGoal?: number; // target days per week (1-7), optional
+  weeklyGoal?: number;     // target days per week (1-7), optional
+  frequencyType?: FrequencyType; // 'weekly' (default) | 'monthly'
+  monthlyGoal?: number;    // target days per month (1-31), used when frequencyType='monthly'
 };
 
 export type CheckInEntry = {

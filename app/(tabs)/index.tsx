@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, StyleSheet, Platform } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -20,8 +20,30 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
+// Returns a 0–1 progress and whether the goal is met, for any frequency type
+function getHabitProgress(
+  habit: { id: string; weeklyGoal?: number; monthlyGoal?: number; frequencyType?: string },
+  getWeeklyDone: (id: string) => number,
+  getMonthlyDone: (id: string) => number,
+): { done: number; goal: number; pct: number; met: boolean; label: string } | null {
+  const isMonthly = habit.frequencyType === 'monthly';
+  if (isMonthly && habit.monthlyGoal) {
+    const done = getMonthlyDone(habit.id);
+    const goal = habit.monthlyGoal;
+    const pct = Math.min(done / goal, 1);
+    return { done, goal, pct, met: done >= goal, label: `${done}/${goal}/mo` };
+  }
+  if (!isMonthly && habit.weeklyGoal) {
+    const done = getWeeklyDone(habit.id);
+    const goal = habit.weeklyGoal;
+    const pct = Math.min(done / goal, 1);
+    return { done, goal, pct, met: done >= goal, label: `${done}/${goal}/wk` };
+  }
+  return null;
+}
+
 export default function HomeScreen() {
-  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, streak, isLoaded, categories, activeHabits } = useApp();
+  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, getHabitMonthlyDone, streak, isLoaded, categories, activeHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
   const [range, setRange] = useState<Range>(7);
@@ -34,7 +56,6 @@ export default function HomeScreen() {
   }
 
   const yesterday = yesterdayString();
-  const today = toDateString();
 
   function handleCheckIn(date?: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -147,25 +168,54 @@ export default function HomeScreen() {
             )}
           </View>
         </View>
+
         <View style={styles.categoryGrid}>
           {categories.map((cat) => {
             const rate = getCategoryRate(cat.id, range);
             const breakdown = getCategoryBreakdown(cat.id, range);
             const total = breakdown.green + breakdown.yellow + breakdown.red;
             const lifeArea = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
-            // Habits with a weekly goal for this category
-            const habitsWithGoal = activeHabits.filter((h) => h.category === cat.id && h.weeklyGoal);
+            const habitsWithGoal = activeHabits.filter(
+              (h) => h.category === cat.id && (h.weeklyGoal || h.monthlyGoal)
+            );
+
+            // Is this category "on track"? Rate >= 80% and has data
+            const isOnTrack = total > 0 && rate >= 0.8;
 
             return (
               <Pressable
                 key={cat.id}
-                onPress={() => handleCheckIn(yesterday)}
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    if (isOnTrack) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } else {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                  }
+                  handleCheckIn(yesterday);
+                }}
                 style={({ pressed }) => [
                   styles.categoryCard,
-                  { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+                  {
+                    backgroundColor: isOnTrack ? '#22C55E14' : colors.surface,
+                    borderColor: isOnTrack ? '#22C55E55' : colors.border,
+                    borderWidth: isOnTrack ? 1.5 : 1,
+                    opacity: pressed ? 0.85 : 1,
+                  },
                 ]}
               >
-                <View style={[styles.catIconWrap, { backgroundColor: colors.primary + '22' }]}>
+                {/* On-track badge */}
+                {isOnTrack && (
+                  <View style={styles.onTrackBadge}>
+                    <Text style={styles.onTrackBadgeText}>✓ On Track</Text>
+                  </View>
+                )}
+
+                <View style={[
+                  styles.catIconWrap,
+                  { backgroundColor: isOnTrack ? '#22C55E22' : colors.primary + '22' },
+                ]}>
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </View>
                 <Text style={[styles.catLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
@@ -173,7 +223,12 @@ export default function HomeScreen() {
                   <Text style={[styles.catLifeArea, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
                 )}
                 <View style={styles.catScoreRow}>
-                  <Text style={[styles.catScore, { color: colors.primary }]}>{Math.round(rate * 100)}%</Text>
+                  <Text style={[
+                    styles.catScore,
+                    { color: isOnTrack ? '#22C55E' : colors.primary },
+                  ]}>
+                    {Math.round(rate * 100)}%
+                  </Text>
                   {cat.deadline && (() => {
                     const dl = new Date(cat.deadline + 'T12:00:00');
                     const now = new Date();
@@ -186,23 +241,47 @@ export default function HomeScreen() {
                   })()}
                 </View>
 
-                {/* Weekly habit goals */}
+                {/* Habit goal progress bars */}
                 {habitsWithGoal.length > 0 && (
                   <View style={styles.weeklyGoalList}>
                     {habitsWithGoal.map((h) => {
-                      const done = getHabitWeeklyDone(h.id);
-                      const goal = h.weeklyGoal!;
-                      const met = done >= goal;
-                      const pct = Math.min(done / goal, 1);
+                      const progress = getHabitProgress(h, getHabitWeeklyDone, getHabitMonthlyDone);
+                      if (!progress) return null;
+                      const { pct, met, label } = progress;
+                      const barColor = met ? '#22C55E' : colors.primary;
                       return (
                         <View key={h.id} style={styles.weeklyGoalItem}>
-                          <Text style={[styles.weeklyGoalName, { color: colors.muted }]} numberOfLines={1}>{h.emoji} {h.name}</Text>
+                          <Text style={[styles.weeklyGoalName, { color: colors.muted }]} numberOfLines={1}>
+                            {h.emoji} {h.name}
+                          </Text>
                           <View style={styles.weeklyGoalBarWrap}>
-                            <View style={[styles.weeklyGoalBarBg, { backgroundColor: colors.border }]}>
-                              <View style={[styles.weeklyGoalBarFill, { flex: pct, backgroundColor: met ? '#22C55E' : colors.primary }]} />
+                            <View style={[styles.weeklyGoalBarBg, {
+                              backgroundColor: met ? '#22C55E22' : colors.border,
+                              borderWidth: met ? 1 : 0,
+                              borderColor: met ? '#22C55E44' : 'transparent',
+                            }]}>
+                              <View style={[
+                                styles.weeklyGoalBarFill,
+                                {
+                                  flex: pct,
+                                  backgroundColor: barColor,
+                                  // Glow effect for met goals
+                                  ...(met ? {
+                                    shadowColor: '#22C55E',
+                                    shadowOpacity: 0.6,
+                                    shadowRadius: 4,
+                                    shadowOffset: { width: 0, height: 0 },
+                                  } : {}),
+                                },
+                              ]} />
                               {pct < 1 && <View style={{ flex: 1 - pct }} />}
                             </View>
-                            <Text style={[styles.weeklyGoalCount, { color: met ? '#22C55E' : colors.primary }]}>{done}/{goal}</Text>
+                            <View style={styles.weeklyGoalCountWrap}>
+                              {met && <Text style={styles.weeklyGoalCheckmark}>✓</Text>}
+                              <Text style={[styles.weeklyGoalCount, { color: barColor, fontWeight: met ? '800' : '700' }]}>
+                                {label}
+                              </Text>
+                            </View>
                           </View>
                         </View>
                       );
@@ -212,7 +291,15 @@ export default function HomeScreen() {
 
                 {/* Stacked bar */}
                 {total > 0 ? (
-                  <View style={[styles.catBar, { backgroundColor: colors.border }]}>
+                  <View style={[styles.catBar, {
+                    backgroundColor: colors.border,
+                    ...(isOnTrack ? {
+                      shadowColor: '#22C55E',
+                      shadowOpacity: 0.3,
+                      shadowRadius: 4,
+                      shadowOffset: { width: 0, height: 0 },
+                    } : {}),
+                  }]}>
                     {breakdown.green > 0 && (
                       <View style={[styles.catBarSeg, { flex: breakdown.green, backgroundColor: '#22C55E' }]} />
                     )}
@@ -322,7 +409,23 @@ const styles = StyleSheet.create({
   rangeDropdownText: { fontSize: 14 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
   categoryCard: {
-    width: '47.5%', borderRadius: 14, padding: 12, borderWidth: 1, gap: 4,
+    width: '47.5%', borderRadius: 14, padding: 12, gap: 4,
+  },
+  onTrackBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#22C55E22',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#22C55E55',
+  },
+  onTrackBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#22C55E',
+    letterSpacing: 0.3,
   },
   catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   catEmoji: { fontSize: 20 },
@@ -348,7 +451,9 @@ const styles = StyleSheet.create({
   weeklyGoalItem: { gap: 2 },
   weeklyGoalName: { fontSize: 11, fontWeight: '500' },
   weeklyGoalBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  weeklyGoalBarBg: { flex: 1, height: 5, borderRadius: 3, flexDirection: 'row', overflow: 'hidden' },
+  weeklyGoalBarBg: { flex: 1, height: 6, borderRadius: 3, flexDirection: 'row', overflow: 'hidden' },
   weeklyGoalBarFill: { borderRadius: 3 },
-  weeklyGoalCount: { fontSize: 11, fontWeight: '700', minWidth: 24, textAlign: 'right' },
+  weeklyGoalCountWrap: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  weeklyGoalCheckmark: { fontSize: 10, color: '#22C55E', fontWeight: '800' },
+  weeklyGoalCount: { fontSize: 11, minWidth: 28, textAlign: 'right' },
 });
