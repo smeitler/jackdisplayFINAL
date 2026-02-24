@@ -180,3 +180,4 @@
 - [x] Replace habit filter chips in analytics with direct single-tap navigation to habit detail screen
 - [x] Fix weekly goal count not updating on home screen
 - [x] Modernize habit number badge in analytics (remove big emoji style, use clean small number)
+- [x] Fix number emoji (1️⃣ etc) still showing on habit detail and analytics — migrate stored habits and replace with clean display

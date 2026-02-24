@@ -157,7 +157,14 @@ export async function saveCategories(cats: CategoryDef[]): Promise<void> {
 
 // ─── Habits ───────────────────────────────────────────────────────────────────
 
-const NUMBER_EMOJIS_STORAGE = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+// Number emoji characters that should be replaced on migration
+const NUMBER_EMOJI_SET = new Set(['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','⭐']);
+
+// Sensible default emoji per category for migration
+const CATEGORY_DEFAULT_EMOJI: Record<string, string> = {
+  body: '💪', mind: '🧠', relationships: '❤️', focus: '🎯',
+  career: '💼', money: '💰', contribution: '🤝', spirituality: '✨',
+};
 
 export async function loadHabits(): Promise<Habit[]> {
   try {
@@ -166,18 +173,19 @@ export async function loadHabits(): Promise<Habit[]> {
       await AsyncStorage.setItem(KEYS.habits, JSON.stringify(DEFAULT_HABITS));
       return DEFAULT_HABITS;
     }
-    // Migrate old habits: assign numbered emoji by position within category if missing or is the old ⭐ fallback
     const parsed = JSON.parse(raw) as any[];
-    const catCounts: Record<string, number> = {};
-    return parsed.map((h) => {
-      const needsMigration = !h.emoji || h.emoji === '⭐';
+    const migrated = parsed.map((h) => {
+      const needsMigration = !h.emoji || NUMBER_EMOJI_SET.has(h.emoji);
       if (needsMigration) {
-        const idx = catCounts[h.category] ?? 0;
-        catCounts[h.category] = idx + 1;
-        return { ...h, emoji: NUMBER_EMOJIS_STORAGE[idx] ?? '⭐' } as Habit;
+        const fallback = CATEGORY_DEFAULT_EMOJI[h.category] ?? '⭐';
+        return { ...h, emoji: fallback } as Habit;
       }
       return h as Habit;
     });
+    // Persist migration so it doesn't re-run every load
+    const anyMigrated = migrated.some((h, i) => h.emoji !== parsed[i]?.emoji);
+    if (anyMigrated) await AsyncStorage.setItem(KEYS.habits, JSON.stringify(migrated));
+    return migrated;
   } catch {
     return DEFAULT_HABITS;
   }
