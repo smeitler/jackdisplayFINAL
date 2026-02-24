@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "LHT46L3KFZ.com.jackalarm.app",
+        "paths": ["*"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["LHT46L3KFZ.com.jackalarm.app"]
+  },
+  "activitycontinuation": {
+    "apps": ["LHT46L3KFZ.com.jackalarm.app"]
+  }
+}

@@ -13,12 +13,12 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const CHANNEL_ID = 'daycheck-alarm';
+const CHANNEL_ID = 'jack-alarm';
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: 'DayCheck Daily Alarm',
+      name: 'Jack Daily Alarm',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#6C63FF',

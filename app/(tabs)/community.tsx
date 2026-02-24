@@ -53,7 +53,7 @@ function ReferralBanner() {
 
   const handleShare = useCallback(async () => {
     if (!stats?.referralCode) return;
-    const message = `Join me on DayCheck — the daily habit tracker that keeps you accountable! Use my referral code ${stats.referralCode} to get 6 months free. Download at https://daycheck.app`;
+    const message = `Join me on Jack — the daily alarm + habit check-in app! Use my referral code ${stats.referralCode} to get 6 months free. Download at https://jackalarm.com`;
     if (Platform.OS === "web") {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(stats.referralCode);

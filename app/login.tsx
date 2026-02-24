@@ -56,9 +56,9 @@ export default function LoginScreen() {
           <View style={[styles.logoWrap, { backgroundColor: colors.primary + "22" }]}>
             <Text style={styles.logoEmoji}>📈</Text>
           </View>
-          <Text style={[styles.appName, { color: colors.foreground }]}>DayCheck</Text>
+          <Text style={[styles.appName, { color: colors.foreground }]}>Jack</Text>
           <Text style={[styles.tagline, { color: colors.muted }]}>
-            Track your daily habits across every area of life
+            Your daily alarm + habit check-in.
           </Text>
         </View>
 

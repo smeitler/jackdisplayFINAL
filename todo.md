@@ -163,3 +163,8 @@
 - [x] Refer-a-friend: referral link/code at top of Community tab, 6-month credit tracking
 - [x] DB schema: teams, team_members, team_messages, shared_goals, referrals tables
 - [x] tRPC API: team CRUD, join/leave, member stats, messaging, referrals
+
+- [x] Rebrand all "DayCheck" references to "Jack" throughout the app
+- [x] Update app.config.ts appName to "Jack"
+- [ ] Create eas.json with production API URL for EAS build
+- [ ] Rebuild iOS app with correct env vars and submit to TestFlight
