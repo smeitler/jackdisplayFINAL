@@ -362,28 +362,65 @@ function PostCard({
         <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
       ) : null}
 
-      {/* Reactions row */}
-      <View style={styles.reactionsRow}>
-        {Object.entries(reactionGroups).map(([emoji, { count, myReaction }]) => (
-          <TouchableOpacity
-            key={emoji}
-            style={[
-              styles.reactionChip,
-              { backgroundColor: myReaction ? colors.primary + "20" : colors.background, borderColor: myReaction ? colors.primary : colors.border },
-            ]}
-            onPress={() => handleReact(emoji)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.reactionEmoji}>{emoji}</Text>
-            <Text style={[styles.reactionCount, { color: myReaction ? colors.primary : colors.muted }]}>{count}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Existing reaction chips (if any) */}
+      {Object.keys(reactionGroups).length > 0 && (
+        <View style={styles.reactionsRow}>
+          {Object.entries(reactionGroups).map(([emoji, { count, myReaction }]) => (
+            <TouchableOpacity
+              key={emoji}
+              style={[
+                styles.reactionChip,
+                { backgroundColor: myReaction ? colors.primary + "20" : colors.background, borderColor: myReaction ? colors.primary : colors.border },
+              ]}
+              onPress={() => handleReact(emoji)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reactionEmoji}>{emoji}</Text>
+              <Text style={[styles.reactionCount, { color: myReaction ? colors.primary : colors.muted }]}>{count}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Action row: Like + Comment + More reactions */}
+      <View style={styles.actionRow}>
+        {/* Like button (🔥) */}
         <TouchableOpacity
-          style={[styles.reactionAddBtn, { borderColor: colors.border }]}
+          style={[styles.actionBtn, reactionGroups["🔥"]?.myReaction && { backgroundColor: colors.primary + "15" }]}
+          onPress={() => handleReact("🔥")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.actionBtnEmoji}>🔥</Text>
+          {(reactionGroups["🔥"]?.count ?? 0) > 0 && (
+            <Text style={[styles.actionBtnLabel, { color: reactionGroups["🔥"]?.myReaction ? colors.primary : colors.muted }]}>
+              {reactionGroups["🔥"].count}
+            </Text>
+          )}
+          {!(reactionGroups["🔥"]?.count) && (
+            <Text style={[styles.actionBtnLabel, { color: colors.muted }]}>Like</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Comment button */}
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => setShowComments((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <IconSymbol name="text.bubble.fill" size={16} color={colors.muted} />
+          <Text style={[styles.actionBtnLabel, { color: colors.muted }]}>
+            {post.comments.length > 0 ? `${post.comments.length}` : "Comment"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* More reactions */}
+        <TouchableOpacity
+          style={styles.actionBtn}
           onPress={() => setShowReactionPicker((v) => !v)}
           activeOpacity={0.7}
         >
-          <Text style={styles.reactionAddText}>+</Text>
+          <Text style={styles.actionBtnEmoji}>😊</Text>
+          <Text style={[styles.actionBtnLabel, { color: colors.muted }]}>React</Text>
         </TouchableOpacity>
       </View>
 
@@ -397,18 +434,6 @@ function PostCard({
           ))}
         </View>
       )}
-
-      {/* Comments toggle */}
-      <TouchableOpacity
-        style={styles.commentsToggle}
-        onPress={() => setShowComments((v) => !v)}
-        activeOpacity={0.7}
-      >
-        <IconSymbol name="text.bubble.fill" size={14} color={colors.muted} />
-        <Text style={[styles.commentsToggleText, { color: colors.muted }]}>
-          {post.comments.length > 0 ? `${post.comments.length} comment${post.comments.length !== 1 ? "s" : ""}` : "Comment"}
-        </Text>
-      </TouchableOpacity>
 
       {/* Comments section */}
       {showComments && (
@@ -798,11 +823,15 @@ const styles = StyleSheet.create({
   reactionChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 20, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4 },
   reactionEmoji: { fontSize: 14 },
   reactionCount: { fontSize: 12, fontWeight: "600" },
-  reactionAddBtn: { borderRadius: 20, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, alignItems: "center", justifyContent: "center" },
-  reactionAddText: { fontSize: 16, fontWeight: "600", lineHeight: 20 },
   reactionPicker: { flexDirection: "row", borderRadius: 16, borderWidth: 1, padding: 8, gap: 4, alignSelf: "flex-start" },
   reactionPickerEmoji: { padding: 4 },
   reactionPickerEmojiText: { fontSize: 22 },
+
+  // Action row
+  actionRow: { flexDirection: "row", gap: 0, borderTopWidth: 0.5, borderTopColor: "transparent", marginTop: 4 },
+  actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 8, borderRadius: 10 },
+  actionBtnEmoji: { fontSize: 16 },
+  actionBtnLabel: { fontSize: 13, fontWeight: "600" },
 
   // Comments
   commentsToggle: { flexDirection: "row", alignItems: "center", gap: 6 },
