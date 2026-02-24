@@ -1,67 +1,97 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { Appearance, View, useColorScheme as useSystemColorScheme } from "react-native";
+import { Appearance, View } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { SchemeColors, type ColorScheme } from "@/constants/theme";
+import {
+  AppTheme,
+  AppThemeColorScheme,
+  AppThemePalettes,
+  type ColorScheme,
+  type ThemeColorPalette,
+} from "@/constants/theme";
+
+const THEME_STORAGE_KEY = "app_theme";
 
 type ThemeContextValue = {
   colorScheme: ColorScheme;
-  setColorScheme: (scheme: ColorScheme) => void;
+  appTheme: AppTheme;
+  setAppTheme: (theme: AppTheme) => void;
+  colors: ThemeColorPalette;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useSystemColorScheme() ?? "light";
-  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(systemScheme);
+  const [appTheme, setAppThemeState] = useState<AppTheme>("blue");
 
-  const applyScheme = useCallback((scheme: ColorScheme) => {
+  // Load persisted theme on mount
+  useEffect(() => {
+    AsyncStorage.getItem(THEME_STORAGE_KEY).then((saved) => {
+      if (saved === "blue" || saved === "light" || saved === "dark") {
+        applyTheme(saved);
+        setAppThemeState(saved);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const applyTheme = useCallback((theme: AppTheme) => {
+    const scheme: ColorScheme = AppThemeColorScheme[theme];
+    const palette = AppThemePalettes[theme];
+
     nativewindColorScheme.set(scheme);
     Appearance.setColorScheme?.(scheme);
+
     if (typeof document !== "undefined") {
       const root = document.documentElement;
       root.dataset.theme = scheme;
       root.classList.toggle("dark", scheme === "dark");
-      const palette = SchemeColors[scheme];
       Object.entries(palette).forEach(([token, value]) => {
-        root.style.setProperty(`--color-${token}`, value);
+        root.style.setProperty(`--color-${token}`, value as string);
       });
     }
   }, []);
 
-  const setColorScheme = useCallback((scheme: ColorScheme) => {
-    setColorSchemeState(scheme);
-    applyScheme(scheme);
-  }, [applyScheme]);
+  const setAppTheme = useCallback((theme: AppTheme) => {
+    setAppThemeState(theme);
+    applyTheme(theme);
+    AsyncStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [applyTheme]);
 
+  // Apply on mount after state is set
   useEffect(() => {
-    applyScheme(colorScheme);
-  }, [applyScheme, colorScheme]);
+    applyTheme(appTheme);
+  }, [applyTheme, appTheme]);
+
+  const colorScheme: ColorScheme = AppThemeColorScheme[appTheme];
+  const colors = AppThemePalettes[appTheme];
 
   const themeVariables = useMemo(
     () =>
       vars({
-        "color-primary": SchemeColors[colorScheme].primary,
-        "color-background": SchemeColors[colorScheme].background,
-        "color-surface": SchemeColors[colorScheme].surface,
-        "color-foreground": SchemeColors[colorScheme].foreground,
-        "color-muted": SchemeColors[colorScheme].muted,
-        "color-border": SchemeColors[colorScheme].border,
-        "color-success": SchemeColors[colorScheme].success,
-        "color-warning": SchemeColors[colorScheme].warning,
-        "color-error": SchemeColors[colorScheme].error,
+        "color-primary": colors.primary,
+        "color-background": colors.background,
+        "color-surface": colors.surface,
+        "color-foreground": colors.foreground,
+        "color-muted": colors.muted,
+        "color-border": colors.border,
+        "color-success": colors.success,
+        "color-warning": colors.warning,
+        "color-error": colors.error,
       }),
-    [colorScheme],
+    [colors],
   );
 
   const value = useMemo(
     () => ({
       colorScheme,
-      setColorScheme,
+      appTheme,
+      setAppTheme,
+      colors,
     }),
-    [colorScheme, setColorScheme],
+    [colorScheme, appTheme, setAppTheme, colors],
   );
-  console.log(value, themeVariables)
 
   return (
     <ThemeContext.Provider value={value}>

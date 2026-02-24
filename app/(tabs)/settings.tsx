@@ -8,15 +8,39 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { DAY_LABELS, formatAlarmTime } from "@/lib/notifications";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/hooks/use-auth";
+import { useThemeContext } from "@/lib/theme-provider";
+import { type AppTheme } from "@/constants/theme";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+const THEMES: { id: AppTheme; label: string; preview: string; description: string }[] = [
+  {
+    id: "blue",
+    label: "Blue",
+    preview: "#6C63FF",
+    description: "Purple-blue accent",
+  },
+  {
+    id: "light",
+    label: "Light",
+    preview: "#007AFF",
+    description: "Clean white",
+  },
+  {
+    id: "dark",
+    label: "Dark",
+    preview: "#111111",
+    description: "True black",
+  },
+];
 
 export default function SettingsScreen() {
   const { alarm, updateAlarm, activeHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
+  const { appTheme, setAppTheme } = useThemeContext();
 
   const [hour, setHour] = useState(alarm.hour);
   const [minute, setMinute] = useState(alarm.minute);
@@ -60,7 +84,61 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>More</Text>
+        </View>
+
+        {/* Appearance section */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
+              <IconSymbol name="sparkles" size={18} color={colors.primary} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
+          </View>
+          <View style={[styles.themeRow, { borderTopColor: colors.border }]}>
+            {THEMES.map((theme) => {
+              const isActive = appTheme === theme.id;
+              return (
+                <Pressable
+                  key={theme.id}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setAppTheme(theme.id);
+                  }}
+                  style={({ pressed }) => [
+                    styles.themeOption,
+                    {
+                      borderColor: isActive ? colors.primary : colors.border,
+                      backgroundColor: isActive ? colors.primary + '15' : colors.background,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  {/* Color swatch */}
+                  <View
+                    style={[
+                      styles.themeSwatch,
+                      {
+                        backgroundColor: theme.preview,
+                        borderColor: isActive ? colors.primary : colors.border,
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.themeLabel,
+                      { color: isActive ? colors.primary : colors.foreground },
+                    ]}
+                  >
+                    {theme.label}
+                  </Text>
+                  {isActive && (
+                    <IconSymbol name="checkmark" size={12} color={colors.primary} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         {/* Alarm section */}
@@ -280,6 +358,22 @@ const styles = StyleSheet.create({
   },
   sectionIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
+  // Theme selector
+  themeRow: {
+    flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1,
+  },
+  themeOption: {
+    flex: 1, alignItems: 'center', gap: 6,
+    paddingVertical: 12, paddingHorizontal: 8,
+    borderRadius: 12, borderWidth: 1.5,
+  },
+  themeSwatch: {
+    width: 32, height: 32, borderRadius: 16, borderWidth: 1,
+  },
+  themeLabel: {
+    fontSize: 13, fontWeight: '600',
+  },
+  // Alarm
   timeDisplay: { alignItems: 'center', paddingVertical: 16, borderTopWidth: 1 },
   timeDisplayText: { fontSize: 42, fontWeight: '700', letterSpacing: -1 },
   pickerSection: { paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: 1 },

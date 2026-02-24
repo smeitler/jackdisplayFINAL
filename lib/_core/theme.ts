@@ -4,6 +4,9 @@ import themeConfig from "@/theme.config";
 
 export type ColorScheme = "light" | "dark";
 
+// Named app themes
+export type AppTheme = "blue" | "light" | "dark";
+
 export const ThemeColors = themeConfig.themeColors;
 
 type ThemeColorTokens = typeof ThemeColors;
@@ -30,12 +33,10 @@ export const SchemeColors = buildSchemePalette(ThemeColors);
 
 type RuntimePalette = SchemePaletteItem & {
   text: string;
-  background: string;
   tint: string;
   icon: string;
   tabIconDefault: string;
   tabIconSelected: string;
-  border: string;
 };
 
 function buildRuntimePalette(scheme: ColorScheme): RuntimePalette {
@@ -43,12 +44,10 @@ function buildRuntimePalette(scheme: ColorScheme): RuntimePalette {
   return {
     ...base,
     text: base.foreground,
-    background: base.background,
     tint: base.primary,
     icon: base.muted,
     tabIconDefault: base.muted,
     tabIconSelected: base.primary,
-    border: base.border,
   };
 }
 
@@ -59,15 +58,93 @@ export const Colors = {
 
 export type ThemeColorPalette = (typeof Colors)[ColorScheme];
 
+// ─── Named theme palettes ────────────────────────────────────────────────────
+
+function makeThemePalette(
+  primary: string,
+  background: string,
+  surface: string,
+  foreground: string,
+  muted: string,
+  border: string,
+  success: string,
+  warning: string,
+  error: string,
+): ThemeColorPalette {
+  return {
+    primary,
+    background,
+    surface,
+    foreground,
+    muted,
+    border,
+    success,
+    warning,
+    error,
+    text: foreground,
+    tint: primary,
+    icon: muted,
+    tabIconDefault: muted,
+    tabIconSelected: primary,
+  };
+}
+
+/** Blue theme: current purple/blue brand palette */
+const bluePalette: ThemeColorPalette = makeThemePalette(
+  '#6C63FF', // primary
+  '#F8F7FF', // background
+  '#FFFFFF', // surface
+  '#1A1A2E', // foreground
+  '#7A7A9D', // muted
+  '#E2E0F5', // border
+  '#22C55E', // success
+  '#F59E0B', // warning
+  '#EF4444', // error
+);
+
+/** Light theme: clean iOS-style neutral white */
+const lightPalette: ThemeColorPalette = makeThemePalette(
+  '#007AFF', // primary
+  '#FFFFFF', // background
+  '#F2F2F7', // surface
+  '#000000', // foreground
+  '#8E8E93', // muted
+  '#E5E5EA', // border
+  '#34C759', // success
+  '#FF9500', // warning
+  '#FF3B30', // error
+);
+
+/** Dark theme: true black OLED */
+const darkPalette: ThemeColorPalette = makeThemePalette(
+  '#6C63FF', // primary
+  '#000000', // background
+  '#111111', // surface
+  '#FFFFFF', // foreground
+  '#8E8E93', // muted
+  '#222222', // border
+  '#4ADE80', // success
+  '#FBBF24', // warning
+  '#F87171', // error
+);
+
+export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
+  blue: bluePalette,
+  light: lightPalette,
+  dark: darkPalette,
+};
+
+export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
+  blue: "light",
+  light: "light",
+  dark: "dark",
+};
+
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: "system-ui",
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: "ui-serif",
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: "ui-rounded",
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: "ui-monospace",
   },
   default: {
