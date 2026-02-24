@@ -187,3 +187,4 @@
 - [x] Remove Past Reviews section from home screen
 - [x] Fix habit detail streak: count consecutive days with any check-in (not just crushed)
 - [x] Change Best Streak icon to green trophy on habit detail screen
+- [x] Remove 1/5wk weekly goal count label from home screen goal cards

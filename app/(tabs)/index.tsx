@@ -273,12 +273,7 @@ export default function HomeScreen() {
                               ]} />
                               {pct < 1 && <View style={{ flex: 1 - pct }} />}
                             </View>
-                            <View style={styles.weeklyGoalCountWrap}>
-                              {met && <Text style={styles.weeklyGoalCheckmark}>✓</Text>}
-                              <Text style={[styles.weeklyGoalCount, { color: barColor, fontWeight: met ? '800' : '700' }]}>
-                                {label}
-                              </Text>
-                            </View>
+
                           </View>
                         </View>
                       );
