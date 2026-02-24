@@ -382,24 +382,20 @@ function PostCard({
         </View>
       )}
 
-      {/* Action row: Like + Comment + More reactions */}
-      <View style={styles.actionRow}>
-        {/* Like button (🔥) */}
+      {/* Action row: React + Comment */}
+      <View style={[styles.actionRow, { borderTopColor: colors.border }]}>
+        {/* React button */}
         <TouchableOpacity
-          style={[styles.actionBtn, reactionGroups["🔥"]?.myReaction && { backgroundColor: colors.primary + "15" }]}
-          onPress={() => handleReact("🔥")}
+          style={styles.actionBtn}
+          onPress={() => setShowReactionPicker((v) => !v)}
           activeOpacity={0.7}
         >
-          <Text style={styles.actionBtnEmoji}>🔥</Text>
-          {(reactionGroups["🔥"]?.count ?? 0) > 0 && (
-            <Text style={[styles.actionBtnLabel, { color: reactionGroups["🔥"]?.myReaction ? colors.primary : colors.muted }]}>
-              {reactionGroups["🔥"].count}
-            </Text>
-          )}
-          {!(reactionGroups["🔥"]?.count) && (
-            <Text style={[styles.actionBtnLabel, { color: colors.muted }]}>Like</Text>
-          )}
+          <Text style={styles.actionBtnEmoji}>😊</Text>
+          <Text style={[styles.actionBtnLabel, { color: showReactionPicker ? colors.primary : colors.muted }]}>React</Text>
         </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
 
         {/* Comment button */}
         <TouchableOpacity
@@ -407,20 +403,10 @@ function PostCard({
           onPress={() => setShowComments((v) => !v)}
           activeOpacity={0.7}
         >
-          <IconSymbol name="text.bubble.fill" size={16} color={colors.muted} />
-          <Text style={[styles.actionBtnLabel, { color: colors.muted }]}>
-            {post.comments.length > 0 ? `${post.comments.length}` : "Comment"}
+          <IconSymbol name="text.bubble.fill" size={16} color={showComments ? colors.primary : colors.muted} />
+          <Text style={[styles.actionBtnLabel, { color: showComments ? colors.primary : colors.muted }]}>
+            {post.comments.length > 0 ? `${post.comments.length} Comment${post.comments.length !== 1 ? "s" : ""}` : "Comment"}
           </Text>
-        </TouchableOpacity>
-
-        {/* More reactions */}
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => setShowReactionPicker((v) => !v)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.actionBtnEmoji}>😊</Text>
-          <Text style={[styles.actionBtnLabel, { color: colors.muted }]}>React</Text>
         </TouchableOpacity>
       </View>
 
@@ -828,10 +814,11 @@ const styles = StyleSheet.create({
   reactionPickerEmojiText: { fontSize: 22 },
 
   // Action row
-  actionRow: { flexDirection: "row", gap: 0, borderTopWidth: 0.5, borderTopColor: "transparent", marginTop: 4 },
+  actionRow: { flexDirection: "row", gap: 0, borderTopWidth: 0.5, marginTop: 4 },
   actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 8, borderRadius: 10 },
   actionBtnEmoji: { fontSize: 16 },
   actionBtnLabel: { fontSize: 13, fontWeight: "600" },
+  actionDivider: { width: 0.5, marginVertical: 6 },
 
   // Comments
   commentsToggle: { flexDirection: "row", alignItems: "center", gap: 6 },
