@@ -555,7 +555,7 @@ export default function TeamDetailScreen() {
   const router = useRouter();
   const utils = trpc.useUtils();
   const [showShareGoals, setShowShareGoals] = useState(false);
-  const [activeTab, setActiveTab] = useState<"feed" | "members">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "stats" | "more">("feed");
 
   const { data: members, isLoading: membersLoading } = trpc.teams.members.useQuery({ teamId });
   const { data: myTeams } = trpc.teams.list.useQuery();
@@ -619,7 +619,7 @@ export default function TeamDetailScreen() {
 
       {/* Tabs */}
       <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
-        {(["feed", "members"] as const).map((tab) => (
+        {(["feed", "stats", "more"] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
@@ -627,7 +627,7 @@ export default function TeamDetailScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.tabText, { color: activeTab === tab ? colors.primary : colors.muted }]}>
-              {tab === "feed" ? "Feed" : "Members"}
+              {tab === "feed" ? "Feed" : tab === "stats" ? "Stats" : "More"}
             </Text>
           </TouchableOpacity>
         ))}
@@ -666,12 +666,20 @@ export default function TeamDetailScreen() {
             </>
           )}
 
-          {activeTab === "members" && (
+          {activeTab === "stats" && (
             <>
+              {/* Streak Banner in Stats */}
+              <TeamStreakBanner teamId={teamId} myUserId={myUserId} />
+
+              {/* Leaderboard in Stats */}
+              <WeeklyLeaderboard teamId={teamId} myUserId={myUserId} />
+
+              {/* Members list */}
               {membersLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
               ) : (
-                <View style={styles.memberList}>
+                <View style={[styles.leaderboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.leaderboardTitle, { color: colors.foreground }]}>Members</Text>
                   {(members ?? []).map((member) => {
                     const displayName = member.name ?? member.email ?? `User ${member.userId}`;
                     const initials = getInitials(member.name, member.email);
@@ -704,6 +712,30 @@ export default function TeamDetailScreen() {
                   })}
                 </View>
               )}
+            </>
+          )}
+
+          {activeTab === "more" && (
+            <>
+              {/* Invite code */}
+              {myTeam?.joinCode && (
+                <View style={[styles.moreSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.moreSectionTitle, { color: colors.foreground }]}>Invite Code</Text>
+                  <Text style={[styles.moreInviteCode, { color: colors.primary }]}>{myTeam.joinCode}</Text>
+                  <Text style={[styles.moreSectionSub, { color: colors.muted }]}>Share this code with friends to invite them to your team.</Text>
+                </View>
+              )}
+
+              {/* Share goals */}
+              <TouchableOpacity
+                style={[styles.moreRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setShowShareGoals(true)}
+                activeOpacity={0.75}
+              >
+                <IconSymbol name="lock.open.fill" size={20} color={colors.primary} />
+                <Text style={[styles.moreRowLabel, { color: colors.foreground }]}>Manage Shared Goals</Text>
+                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              </TouchableOpacity>
 
               {/* Leave / Delete */}
               <View style={styles.dangerZone}>
@@ -848,6 +880,12 @@ const styles = StyleSheet.create({
 
   // Danger
   dangerZone: { marginTop: 32, gap: 10 },
+  moreSection: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 6 },
+  moreSectionTitle: { fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  moreInviteCode: { fontSize: 28, fontWeight: "800", letterSpacing: 4 },
+  moreSectionSub: { fontSize: 13 },
+  moreRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 16 },
+  moreRowLabel: { flex: 1, fontSize: 15, fontWeight: "500" },
   dangerBtn: { borderRadius: 12, borderWidth: 1, paddingVertical: 14, alignItems: "center" },
   dangerBtnText: { fontWeight: "600", fontSize: 15 },
 
