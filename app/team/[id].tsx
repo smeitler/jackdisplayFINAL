@@ -465,6 +465,237 @@ function PostCard({
   );
 }
 
+// ─── Create Team Goal Modal ─────────────────────────────────────────────────────
+
+const LIFE_AREAS = [
+  { id: "body", label: "Body", emoji: "💪" },
+  { id: "mind", label: "Mind", emoji: "🧠" },
+  { id: "relationships", label: "Relationships", emoji: "❤️" },
+  { id: "focus", label: "Focus", emoji: "🎯" },
+  { id: "career", label: "Career", emoji: "💼" },
+  { id: "money", label: "Money", emoji: "💰" },
+  { id: "contribution", label: "Contribution", emoji: "🤝" },
+  { id: "spirituality", label: "Spirituality", emoji: "✨" },
+];
+
+function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; visible: boolean; onClose: () => void }) {
+  const colors = useColors();
+  const utils = trpc.useUtils();
+  const [habitName, setHabitName] = useState("");
+  const [habitEmoji, setHabitEmoji] = useState("⭐");
+  const [habitDesc, setHabitDesc] = useState("");
+  const [catLabel, setCatLabel] = useState("");
+  const [catEmoji, setCatEmoji] = useState("📋");
+  const [lifeArea, setLifeArea] = useState<string | undefined>(undefined);
+
+  const createMutation = trpc.goalProposals.create.useMutation({
+    onSuccess: () => {
+      utils.goalProposals.list.invalidate({ teamId });
+      setHabitName(""); setHabitEmoji("⭐"); setHabitDesc(""); setCatLabel(""); setCatEmoji("📋"); setLifeArea(undefined);
+      onClose();
+    },
+    onError: (err) => Alert.alert("Error", err.message),
+  });
+
+  const handleCreate = useCallback(() => {
+    if (!habitName.trim()) { Alert.alert("Required", "Please enter a habit name."); return; }
+    if (!catLabel.trim()) { Alert.alert("Required", "Please enter a category name."); return; }
+    createMutation.mutate({
+      teamId,
+      habitName: habitName.trim(),
+      habitEmoji,
+      habitDescription: habitDesc.trim() || undefined,
+      categoryLabel: catLabel.trim(),
+      categoryEmoji: catEmoji,
+      lifeArea,
+    });
+  }, [teamId, habitName, habitEmoji, habitDesc, catLabel, catEmoji, lifeArea, createMutation]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[styles.modalSafeArea, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
+        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.foreground }]}>Propose Team Goal</Text>
+          <TouchableOpacity onPress={onClose} style={[styles.modalCloseBtn, { backgroundColor: colors.surface }]} activeOpacity={0.7}>
+            <IconSymbol name="xmark" size={18} color={colors.muted} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} showsVerticalScrollIndicator={false}>
+          <Text style={[styles.moreSectionTitle, { color: colors.muted, marginBottom: 4 }]}>HABIT</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, width: 52, textAlign: "center", fontSize: 22 }]}
+              value={habitEmoji}
+              onChangeText={setHabitEmoji}
+              maxLength={4}
+            />
+            <TextInput
+              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, flex: 1 }]}
+              placeholder="Habit name (e.g. Morning run)"
+              placeholderTextColor={colors.muted}
+              value={habitName}
+              onChangeText={setHabitName}
+              maxLength={100}
+            />
+          </View>
+          <TextInput
+            style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, minHeight: 64 }]}
+            placeholder="Description (optional)"
+            placeholderTextColor={colors.muted}
+            value={habitDesc}
+            onChangeText={setHabitDesc}
+            multiline
+            maxLength={500}
+          />
+
+          <Text style={[styles.moreSectionTitle, { color: colors.muted, marginTop: 8, marginBottom: 4 }]}>CATEGORY</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, width: 52, textAlign: "center", fontSize: 22 }]}
+              value={catEmoji}
+              onChangeText={setCatEmoji}
+              maxLength={4}
+            />
+            <TextInput
+              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, flex: 1 }]}
+              placeholder="Category name (e.g. Health)"
+              placeholderTextColor={colors.muted}
+              value={catLabel}
+              onChangeText={setCatLabel}
+              maxLength={100}
+            />
+          </View>
+
+          <Text style={[styles.moreSectionTitle, { color: colors.muted, marginTop: 8, marginBottom: 4 }]}>LIFE AREA</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {LIFE_AREAS.map((area) => (
+              <TouchableOpacity
+                key={area.id}
+                style={[styles.lifeAreaChip, { backgroundColor: lifeArea === area.id ? colors.primary : colors.surface, borderColor: lifeArea === area.id ? colors.primary : colors.border }]}
+                onPress={() => setLifeArea(lifeArea === area.id ? undefined : area.id)}
+                activeOpacity={0.75}
+              >
+                <Text style={{ fontSize: 14 }}>{area.emoji}</Text>
+                <Text style={[styles.lifeAreaChipLabel, { color: lifeArea === area.id ? "#fff" : colors.foreground }]}>{area.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </ScrollView>
+        <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { backgroundColor: createMutation.isPending ? colors.muted : colors.primary }]}
+            onPress={handleCreate}
+            disabled={createMutation.isPending}
+            activeOpacity={0.8}
+          >
+            {createMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Propose Goal</Text>}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ─── Goal Proposal Card ───────────────────────────────────────────────────────
+
+type GoalProposal = {
+  id: number;
+  teamId: number;
+  creatorId: number;
+  habitName: string;
+  habitEmoji: string;
+  habitDescription: string | null;
+  categoryLabel: string;
+  categoryEmoji: string;
+  lifeArea: string | null;
+  createdAt: Date | string;
+  myVote: "accept" | "decline" | null;
+  acceptCount: number;
+  declineCount: number;
+};
+
+function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId: number }) {
+  const colors = useColors();
+  const utils = trpc.useUtils();
+  const { addHabit, addCategory, categories } = useApp();
+
+  const voteMutation = trpc.goalProposals.vote.useMutation({
+    onSuccess: () => utils.goalProposals.list.invalidate({ teamId }),
+    onError: (err) => Alert.alert("Error", err.message),
+  });
+
+  const handleAccept = useCallback(async () => {
+    // Find or create the category
+    let cat = categories.find((c) => c.label.toLowerCase() === proposal.categoryLabel.toLowerCase());
+    if (!cat) {
+      await addCategory(proposal.categoryLabel, proposal.categoryEmoji, proposal.lifeArea as any);
+      // After adding, find it by label
+      cat = categories.find((c) => c.label.toLowerCase() === proposal.categoryLabel.toLowerCase());
+    }
+    // Add the habit to that category
+    const catId = cat?.id ?? `custom_${Date.now()}`;
+    await addHabit(proposal.habitName, proposal.habitEmoji, catId, proposal.habitDescription ?? undefined);
+    voteMutation.mutate({ proposalId: proposal.id, teamId, vote: "accept" });
+    Alert.alert("Goal Added! 🎯", `"${proposal.habitName}" has been added to your habits.`);
+  }, [proposal, categories, addCategory, addHabit, voteMutation, teamId]);
+
+  const handleDecline = useCallback(() => {
+    voteMutation.mutate({ proposalId: proposal.id, teamId, vote: "decline" });
+  }, [proposal.id, teamId, voteMutation]);
+
+  const myVote = proposal.myVote;
+
+  return (
+    <View style={[styles.goalCard, { backgroundColor: colors.surface, borderColor: colors.primary + "40" }]}>
+      <View style={styles.goalCardHeader}>
+        <View style={[styles.goalCardBadge, { backgroundColor: colors.primary + "15" }]}>
+          <Text style={[styles.goalCardBadgeText, { color: colors.primary }]}>🎯 Team Goal</Text>
+        </View>
+        <Text style={[styles.goalCardTime, { color: colors.muted }]}>{timeAgo(proposal.createdAt)}</Text>
+      </View>
+      <View style={styles.goalCardBody}>
+        <Text style={styles.goalCardHabitEmoji}>{proposal.habitEmoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.goalCardHabitName, { color: colors.foreground }]}>{proposal.habitName}</Text>
+          <Text style={[styles.goalCardCatLabel, { color: colors.muted }]}>{proposal.categoryEmoji} {proposal.categoryLabel}</Text>
+          {proposal.habitDescription ? (
+            <Text style={[styles.goalCardDesc, { color: colors.muted }]}>{proposal.habitDescription}</Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={styles.goalCardVotes}>
+        <Text style={[styles.goalCardVoteCount, { color: colors.muted }]}>{proposal.acceptCount} accepted · {proposal.declineCount} declined</Text>
+      </View>
+      {myVote ? (
+        <View style={[styles.goalCardVotedBanner, { backgroundColor: myVote === "accept" ? colors.success + "20" : colors.error + "15" }]}>
+          <Text style={[styles.goalCardVotedText, { color: myVote === "accept" ? colors.success : colors.error }]}>
+            {myVote === "accept" ? "✅ You accepted this goal" : "❌ You declined this goal"}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.goalCardActions}>
+          <TouchableOpacity
+            style={[styles.goalCardBtn, { backgroundColor: colors.success + "20", borderColor: colors.success + "40" }]}
+            onPress={handleAccept}
+            disabled={voteMutation.isPending}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.goalCardBtnText, { color: colors.success }]}>✅ Accept</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.goalCardBtn, { backgroundColor: colors.error + "15", borderColor: colors.error + "30" }]}
+            onPress={handleDecline}
+            disabled={voteMutation.isPending}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.goalCardBtnText, { color: colors.error }]}>❌ Decline</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Share Goals Modal ────────────────────────────────────────────────────────
 
 function ShareGoalsModal({ teamId, visible, onClose }: { teamId: number; visible: boolean; onClose: () => void }) {
@@ -555,12 +786,14 @@ export default function TeamDetailScreen() {
   const router = useRouter();
   const utils = trpc.useUtils();
   const [showShareGoals, setShowShareGoals] = useState(false);
+  const [showCreateGoal, setShowCreateGoal] = useState(false);
   const [activeTab, setActiveTab] = useState<"feed" | "stats" | "more">("feed");
 
   const { data: members, isLoading: membersLoading } = trpc.teams.members.useQuery({ teamId });
   const { data: myTeams } = trpc.teams.list.useQuery();
   const { data: me } = trpc.auth.me.useQuery();
   const { data: feed, isLoading: feedLoading, refetch: refetchFeed } = trpc.teamFeed.list.useQuery({ teamId });
+  const { data: goalProposals } = trpc.goalProposals.list.useQuery({ teamId });
   const myUserId = me?.id;
 
   const leaveMutation = trpc.teams.leave.useMutation({
@@ -647,6 +880,15 @@ export default function TeamDetailScreen() {
               {/* Post Composer */}
               <PostComposer teamId={teamId} myUserId={myUserId} onPosted={() => refetchFeed()} />
 
+              {/* Goal Proposals */}
+              {goalProposals && goalProposals.length > 0 && (
+                <View style={{ gap: 10 }}>
+                  {(goalProposals as GoalProposal[]).map((proposal) => (
+                    <GoalProposalCard key={proposal.id} proposal={proposal} teamId={teamId} />
+                  ))}
+                </View>
+              )}
+
               {/* Feed */}
               {feedLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
@@ -726,6 +968,17 @@ export default function TeamDetailScreen() {
                 </View>
               )}
 
+              {/* Propose Team Goal */}
+              <TouchableOpacity
+                style={[styles.moreRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setShowCreateGoal(true)}
+                activeOpacity={0.75}
+              >
+                <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
+                <Text style={[styles.moreRowLabel, { color: colors.foreground }]}>Propose Team Goal</Text>
+                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              </TouchableOpacity>
+
               {/* Share goals */}
               <TouchableOpacity
                 style={[styles.moreRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -756,6 +1009,7 @@ export default function TeamDetailScreen() {
       </KeyboardAvoidingView>
 
       <ShareGoalsModal teamId={teamId} visible={showShareGoals} onClose={() => setShowShareGoals(false)} />
+      <CreateTeamGoalModal teamId={teamId} visible={showCreateGoal} onClose={() => setShowCreateGoal(false)} />
     </ScreenContainer>
   );
 }
@@ -902,4 +1156,27 @@ const styles = StyleSheet.create({
   modalFooter: { padding: 16, borderTopWidth: 0.5 },
   primaryBtn: { borderRadius: 14, paddingVertical: 14, alignItems: "center" },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
+  // Goal Proposal Card
+  goalCard: { borderRadius: 16, borderWidth: 1.5, padding: 14, gap: 10 },
+  goalCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  goalCardBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  goalCardBadgeText: { fontSize: 12, fontWeight: "700" },
+  goalCardTime: { fontSize: 12 },
+  goalCardBody: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  goalCardHabitEmoji: { fontSize: 32, lineHeight: 40 },
+  goalCardHabitName: { fontSize: 16, fontWeight: "700", lineHeight: 22 },
+  goalCardCatLabel: { fontSize: 13, marginTop: 2 },
+  goalCardDesc: { fontSize: 13, marginTop: 4, lineHeight: 18 },
+  goalCardVotes: { paddingTop: 4 },
+  goalCardVoteCount: { fontSize: 12 },
+  goalCardVotedBanner: { borderRadius: 10, padding: 10, alignItems: "center" },
+  goalCardVotedText: { fontSize: 14, fontWeight: "600" },
+  goalCardActions: { flexDirection: "row", gap: 10 },
+  goalCardBtn: { flex: 1, borderRadius: 12, borderWidth: 1, paddingVertical: 10, alignItems: "center" },
+  goalCardBtnText: { fontSize: 15, fontWeight: "700" },
+
+  // Life Area Chips
+  lifeAreaChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 20, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
+  lifeAreaChipLabel: { fontSize: 13, fontWeight: "600" },
 });

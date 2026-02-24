@@ -243,3 +243,40 @@ export const teamPostComments = mysqlTable("teamPostComments", {
 
 export type TeamPostComment = typeof teamPostComments.$inferSelect;
 export type InsertTeamPostComment = typeof teamPostComments.$inferInsert;
+
+/**
+ * Team goal proposals — a habit/goal proposed by a team owner to all members.
+ * Members can accept (adds to their habits) or decline.
+ */
+export const teamGoalProposals = mysqlTable("teamGoalProposals", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  creatorId: int("creatorId").notNull(),
+  habitName: varchar("habitName", { length: 100 }).notNull(),
+  habitEmoji: varchar("habitEmoji", { length: 16 }).notNull().default("⭐"),
+  habitDescription: text("habitDescription"),
+  categoryLabel: varchar("categoryLabel", { length: 100 }).notNull(),
+  categoryEmoji: varchar("categoryEmoji", { length: 16 }).notNull().default("📋"),
+  lifeArea: varchar("lifeArea", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TeamGoalProposal = typeof teamGoalProposals.$inferSelect;
+export type InsertTeamGoalProposal = typeof teamGoalProposals.$inferInsert;
+
+/**
+ * Team goal votes — one row per (proposalId, userId).
+ * vote: "accept" | "decline"
+ */
+export const teamGoalVotes = mysqlTable("teamGoalVotes", {
+  id: int("id").autoincrement().primaryKey(),
+  proposalId: int("proposalId").notNull(),
+  userId: int("userId").notNull(),
+  vote: mysqlEnum("vote", ["accept", "decline"]).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  proposalUserIdx: uniqueIndex("teamGoalVotes_proposalId_userId_idx").on(t.proposalId, t.userId),
+}));
+
+export type TeamGoalVote = typeof teamGoalVotes.$inferSelect;
+export type InsertTeamGoalVote = typeof teamGoalVotes.$inferInsert;

@@ -209,3 +209,7 @@
 - [ ] Team feed: photo upload in post composer
 - [ ] DB schema: team_posts, team_post_reactions, team_post_comments tables
 - [ ] tRPC API: posts CRUD, reactions toggle, comments CRUD
+- [ ] Create Team Goal button in More tab (owner only)
+- [ ] team_goal_proposals DB table with votes
+- [ ] Goal proposal card in Feed with Accept/Decline buttons
+- [ ] Accept adds goal to user's personal habits list

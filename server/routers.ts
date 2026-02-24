@@ -382,6 +382,45 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Community: Goal Proposals ────────────────────────────────────────────
+  goalProposals: router({
+    list: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamGoalProposals(input.teamId, ctx.user.id);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        teamId: z.number(),
+        habitName: z.string().min(1).max(100),
+        habitEmoji: z.string().max(16),
+        habitDescription: z.string().max(500).optional(),
+        categoryLabel: z.string().min(1).max(100),
+        categoryEmoji: z.string().max(16),
+        lifeArea: z.string().max(32).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.createTeamGoalProposal({ ...input, creatorId: ctx.user.id });
+      }),
+
+    vote: protectedProcedure
+      .input(z.object({
+        proposalId: z.number(),
+        teamId: z.number(),
+        vote: z.enum(["accept", "decline"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.voteOnTeamGoalProposal(input.proposalId, ctx.user.id, input.vote);
+      }),
+  }),
+
   // ─── Community: Referrals ──────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>

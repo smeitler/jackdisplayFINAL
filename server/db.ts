@@ -16,6 +16,8 @@ import {
   InsertHabit,
   InsertCheckIn,
   InsertAlarmConfig,
+  teamGoalProposals,
+  teamGoalVotes,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -678,4 +680,69 @@ export async function getTeamLeaderboard(teamId: number) {
     }, 0);
     return { ...m, weeklyScore: Math.round((score / total) * 100), checkInsCount: total };
   }).sort((a, b) => b.weeklyScore - a.weeklyScore);
+}
+
+// ─── Team Goal Proposals ──────────────────────────────────────────────────────
+
+export async function createTeamGoalProposal(data: {
+  teamId: number;
+  creatorId: number;
+  habitName: string;
+  habitEmoji: string;
+  habitDescription?: string;
+  categoryLabel: string;
+  categoryEmoji: string;
+  lifeArea?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(teamGoalProposals).values({
+    teamId: data.teamId,
+    creatorId: data.creatorId,
+    habitName: data.habitName,
+    habitEmoji: data.habitEmoji,
+    habitDescription: data.habitDescription ?? null,
+    categoryLabel: data.categoryLabel,
+    categoryEmoji: data.categoryEmoji,
+    lifeArea: data.lifeArea ?? null,
+  });
+  return result[0].insertId;
+}
+
+export async function getTeamGoalProposals(teamId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const proposals = await db
+    .select()
+    .from(teamGoalProposals)
+    .where(eq(teamGoalProposals.teamId, teamId))
+    .orderBy(desc(teamGoalProposals.createdAt));
+
+  if (proposals.length === 0) return [];
+
+  const votes = await db
+    .select()
+    .from(teamGoalVotes)
+    .where(inArray(teamGoalVotes.proposalId, proposals.map((p) => p.id)));
+
+  return proposals.map((p) => {
+    const myVote = votes.find((v) => v.proposalId === p.id && v.userId === userId);
+    const acceptCount = votes.filter((v) => v.proposalId === p.id && v.vote === "accept").length;
+    const declineCount = votes.filter((v) => v.proposalId === p.id && v.vote === "decline").length;
+    return { ...p, myVote: myVote?.vote ?? null, acceptCount, declineCount };
+  });
+}
+
+export async function voteOnTeamGoalProposal(
+  proposalId: number,
+  userId: number,
+  vote: "accept" | "decline"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .insert(teamGoalVotes)
+    .values({ proposalId, userId, vote })
+    .onDuplicateKeyUpdate({ set: { vote } });
+  return true;
 }
