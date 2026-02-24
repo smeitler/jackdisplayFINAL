@@ -22,6 +22,7 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useApp } from "@/lib/app-context";
 import * as ImagePicker from "expo-image-picker";
+import { EmojiPicker } from "@/components/emoji-picker";
 
 const REACTION_EMOJIS = ["🔥", "💪", "👏", "❤️", "😂"];
 
@@ -478,20 +479,37 @@ const LIFE_AREAS = [
   { id: "spirituality", label: "Spirituality", emoji: "✨" },
 ];
 
+const NAME_LIMIT = 60;
+
 function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; visible: boolean; onClose: () => void }) {
   const colors = useColors();
   const utils = trpc.useUtils();
+
+  // Habit fields
   const [habitName, setHabitName] = useState("");
   const [habitEmoji, setHabitEmoji] = useState("⭐");
   const [habitDesc, setHabitDesc] = useState("");
+  const [frequencyType, setFrequencyType] = useState<"weekly" | "monthly">("weekly");
+  const [weeklyGoal, setWeeklyGoal] = useState<number | undefined>(undefined);
+  const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(undefined);
+  const [showHabitEmojiPicker, setShowHabitEmojiPicker] = useState(false);
+
+  // Category fields
   const [catLabel, setCatLabel] = useState("");
-  const [catEmoji, setCatEmoji] = useState("📋");
+  const [catEmoji, setCatEmoji] = useState("🌟");
   const [lifeArea, setLifeArea] = useState<string | undefined>(undefined);
+  const [showCatEmojiPicker, setShowCatEmojiPicker] = useState(false);
+
+  function resetForm() {
+    setHabitName(""); setHabitEmoji("⭐"); setHabitDesc("");
+    setFrequencyType("weekly"); setWeeklyGoal(undefined); setMonthlyGoal(undefined);
+    setCatLabel(""); setCatEmoji("🌟"); setLifeArea(undefined);
+  }
 
   const createMutation = trpc.goalProposals.create.useMutation({
     onSuccess: () => {
       utils.goalProposals.list.invalidate({ teamId });
-      setHabitName(""); setHabitEmoji("⭐"); setHabitDesc(""); setCatLabel(""); setCatEmoji("📋"); setLifeArea(undefined);
+      resetForm();
       onClose();
     },
     onError: (err) => Alert.alert("Error", err.message),
@@ -499,7 +517,7 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
 
   const handleCreate = useCallback(() => {
     if (!habitName.trim()) { Alert.alert("Required", "Please enter a habit name."); return; }
-    if (!catLabel.trim()) { Alert.alert("Required", "Please enter a category name."); return; }
+    if (!catLabel.trim()) { Alert.alert("Required", "Please enter a goal/category name."); return; }
     createMutation.mutate({
       teamId,
       habitName: habitName.trim(),
@@ -512,87 +530,219 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
   }, [teamId, habitName, habitEmoji, habitDesc, catLabel, catEmoji, lifeArea, createMutation]);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[styles.modalSafeArea, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
-        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.modalTitle, { color: colors.foreground }]}>Propose Team Goal</Text>
-          <TouchableOpacity onPress={onClose} style={[styles.modalCloseBtn, { backgroundColor: colors.surface }]} activeOpacity={0.7}>
-            <IconSymbol name="xmark" size={18} color={colors.muted} />
-          </TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.moreSectionTitle, { color: colors.muted, marginBottom: 4 }]}>HABIT</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TextInput
-              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, width: 52, textAlign: "center", fontSize: 22 }]}
-              value={habitEmoji}
-              onChangeText={setHabitEmoji}
-              maxLength={4}
-            />
-            <TextInput
-              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, flex: 1 }]}
-              placeholder="Habit name (e.g. Morning run)"
-              placeholderTextColor={colors.muted}
-              value={habitName}
-              onChangeText={setHabitName}
-              maxLength={100}
-            />
-          </View>
-          <TextInput
-            style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, minHeight: 64 }]}
-            placeholder="Description (optional)"
-            placeholderTextColor={colors.muted}
-            value={habitDesc}
-            onChangeText={setHabitDesc}
-            multiline
-            maxLength={500}
-          />
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={onClose}
+        onShow={resetForm}
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={onClose} activeOpacity={1} />
+          <View style={[{
+            borderTopLeftRadius: 20, borderTopRightRadius: 20,
+            borderWidth: 1, paddingBottom: 36,
+            maxHeight: "90%",
+          }, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {/* Handle */}
+            <View style={[{ width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginTop: 12, marginBottom: 4 }, { backgroundColor: colors.border }]} />
+            <Text style={[{ fontSize: 18, fontWeight: "700", marginBottom: 4, paddingHorizontal: 20, paddingTop: 8 }, { color: colors.foreground }]}>Propose Team Goal</Text>
 
-          <Text style={[styles.moreSectionTitle, { color: colors.muted, marginTop: 8, marginBottom: 4 }]}>CATEGORY</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TextInput
-              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, width: 52, textAlign: "center", fontSize: 22 }]}
-              value={catEmoji}
-              onChangeText={setCatEmoji}
-              maxLength={4}
-            />
-            <TextInput
-              style={[styles.composerInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border, flex: 1 }]}
-              placeholder="Category name (e.g. Health)"
-              placeholderTextColor={colors.muted}
-              value={catLabel}
-              onChangeText={setCatLabel}
-              maxLength={100}
-            />
-          </View>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
 
-          <Text style={[styles.moreSectionTitle, { color: colors.muted, marginTop: 8, marginBottom: 4 }]}>LIFE AREA</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {LIFE_AREAS.map((area) => (
+              {/* ── Goal / Category ── */}
+              <Text style={[{ fontSize: 11, fontWeight: "700", marginTop: 16, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }, { color: colors.muted }]}>Goal</Text>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+                <TouchableOpacity
+                  onPress={() => setShowCatEmojiPicker(true)}
+                  style={[{ width: 48, height: 48, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" }, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 26 }}>{catEmoji}</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[{ flex: 1, height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 15 }, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                  placeholder="Goal name (e.g. Health)"
+                  placeholderTextColor={colors.muted}
+                  value={catLabel}
+                  onChangeText={setCatLabel}
+                  returnKeyType="next"
+                />
+              </View>
+
+              {/* Life area picker */}
+              <Text style={[{ fontSize: 11, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }, { color: colors.muted }]}>Life Area</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {LIFE_AREAS.map((area) => (
+                    <TouchableOpacity
+                      key={area.id}
+                      onPress={() => setLifeArea(lifeArea === area.id ? undefined : area.id)}
+                      style={[{
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                        paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1,
+                      }, {
+                        borderColor: lifeArea === area.id ? colors.primary : colors.border,
+                        backgroundColor: lifeArea === area.id ? colors.primary + "22" : colors.surface,
+                      }]}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 14 }}>{area.emoji}</Text>
+                      <Text style={[{ fontSize: 12, fontWeight: "600" }, { color: lifeArea === area.id ? colors.primary : colors.muted }]}>{area.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* ── Habit ── */}
+              <Text style={[{ fontSize: 11, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }, { color: colors.muted }]}>Habit</Text>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 0 }}>
+                <TouchableOpacity
+                  onPress={() => setShowHabitEmojiPicker(true)}
+                  style={[{ width: 48, height: 48, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" }, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 26 }}>{habitEmoji}</Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <TextInput
+                    style={[{ flex: 1, height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 15 }, { backgroundColor: colors.background, borderColor: habitName.length >= NAME_LIMIT ? "#F59E0B" : colors.border, color: colors.foreground }]}
+                    placeholder="Habit name…"
+                    placeholderTextColor={colors.muted}
+                    value={habitName}
+                    onChangeText={(t) => setHabitName(t.slice(0, NAME_LIMIT))}
+                    maxLength={NAME_LIMIT}
+                    returnKeyType="next"
+                  />
+                  <Text style={[{ fontSize: 11, textAlign: "right", marginTop: 2 }, { color: habitName.length >= NAME_LIMIT ? "#F59E0B" : colors.muted }]}>
+                    {habitName.length}/{NAME_LIMIT}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Description */}
+              <TextInput
+                style={[{ borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginBottom: 14, minHeight: 60, textAlignVertical: "top" }, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                placeholder="Description (optional)…"
+                placeholderTextColor={colors.muted}
+                value={habitDesc}
+                onChangeText={(t) => setHabitDesc(t.slice(0, 120))}
+                maxLength={120}
+                multiline
+                numberOfLines={2}
+                returnKeyType="done"
+                blurOnSubmit
+              />
+
+              {/* Frequency */}
+              <View style={{ marginTop: 4, marginBottom: 4 }}>
+                <Text style={[{ fontSize: 13, fontWeight: "600", marginBottom: 8 }, { color: colors.foreground }]}>Goal frequency</Text>
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                  {(["weekly", "monthly"] as const).map((ft) => (
+                    <TouchableOpacity
+                      key={ft}
+                      onPress={() => setFrequencyType(ft)}
+                      style={[{ flex: 1, height: 36, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" }, {
+                        backgroundColor: frequencyType === ft ? colors.primary : colors.background,
+                        borderColor: frequencyType === ft ? colors.primary : colors.border,
+                      }]}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[{ fontSize: 13, fontWeight: "600" }, { color: frequencyType === ft ? "#fff" : colors.muted }]}>
+                        {ft === "weekly" ? "Weekly" : "Monthly"}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {frequencyType === "weekly" ? (
+                  <>
+                    <Text style={[{ fontSize: 13, fontWeight: "600", marginBottom: 8 }, { color: colors.foreground }]}>Times per week</Text>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      {[1,2,3,4,5,6,7].map((d) => (
+                        <TouchableOpacity
+                          key={d}
+                          onPress={() => setWeeklyGoal(weeklyGoal === d ? undefined : d)}
+                          style={[{ width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" }, {
+                            backgroundColor: weeklyGoal === d ? colors.primary : colors.background,
+                            borderColor: weeklyGoal === d ? colors.primary : colors.border,
+                          }]}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[{ fontSize: 13, fontWeight: "600" }, { color: weeklyGoal === d ? "#fff" : colors.muted }]}>{d}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={[{ fontSize: 11, marginTop: 6 }, { color: colors.muted }]}>
+                      {weeklyGoal ? `${weeklyGoal}x per week` : "No goal set"}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[{ fontSize: 13, fontWeight: "600", marginBottom: 8 }, { color: colors.foreground }]}>Times per month</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <TouchableOpacity
+                          key={d}
+                          onPress={() => setMonthlyGoal(monthlyGoal === d ? undefined : d)}
+                          style={[{ width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" }, {
+                            backgroundColor: monthlyGoal === d ? colors.primary : colors.background,
+                            borderColor: monthlyGoal === d ? colors.primary : colors.border,
+                          }]}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[{ fontSize: 13, fontWeight: "600" }, { color: monthlyGoal === d ? "#fff" : colors.muted }]}>{d}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    <Text style={[{ fontSize: 11, marginTop: 6 }, { color: colors.muted }]}>
+                      {monthlyGoal ? `${monthlyGoal}x per month` : "No goal set"}
+                    </Text>
+                  </>
+                )}
+              </View>
+
+            </ScrollView>
+
+            {/* Actions */}
+            <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 20, paddingTop: 12 }}>
               <TouchableOpacity
-                key={area.id}
-                style={[styles.lifeAreaChip, { backgroundColor: lifeArea === area.id ? colors.primary : colors.surface, borderColor: lifeArea === area.id ? colors.primary : colors.border }]}
-                onPress={() => setLifeArea(lifeArea === area.id ? undefined : area.id)}
-                activeOpacity={0.75}
+                onPress={onClose}
+                style={[{ flex: 1, height: 44, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" }, { borderColor: colors.border }]}
+                activeOpacity={0.7}
               >
-                <Text style={{ fontSize: 14 }}>{area.emoji}</Text>
-                <Text style={[styles.lifeAreaChipLabel, { color: lifeArea === area.id ? "#fff" : colors.foreground }]}>{area.label}</Text>
+                <Text style={[{ fontSize: 15, fontWeight: "600" }, { color: colors.muted }]}>Cancel</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </ScrollView>
-        <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: createMutation.isPending ? colors.muted : colors.primary }]}
-            onPress={handleCreate}
-            disabled={createMutation.isPending}
-            activeOpacity={0.8}
-          >
-            {createMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Propose Goal</Text>}
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </Modal>
+              <TouchableOpacity
+                onPress={handleCreate}
+                disabled={createMutation.isPending}
+                style={[{ flex: 1, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" }, { backgroundColor: createMutation.isPending ? colors.muted : colors.primary }]}
+                activeOpacity={0.8}
+              >
+                {createMutation.isPending
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={{ fontSize: 15, fontWeight: "600", color: "#fff" }}>Propose Goal</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <EmojiPicker
+        visible={showHabitEmojiPicker}
+        currentEmoji={habitEmoji}
+        onSelect={(e) => setHabitEmoji(e)}
+        onClose={() => setShowHabitEmojiPicker(false)}
+      />
+      <EmojiPicker
+        visible={showCatEmojiPicker}
+        currentEmoji={catEmoji}
+        onSelect={(e) => setCatEmoji(e)}
+        onClose={() => setShowCatEmojiPicker(false)}
+      />
+    </>
   );
 }
 
