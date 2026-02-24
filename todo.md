@@ -197,3 +197,5 @@
 - [x] Wire analytics category header tap to category detail screen
 - [x] Remove purple stacked bar from home screen goal cards
 - [x] Restore color progress bar on home screen goal cards (removed accidentally with purple bar fix)
+- [x] Fix "Create or Join a Team" button to be full-width on Teams screen
+- [x] Add proper close/exit button (X) to the Create/Join Team modal

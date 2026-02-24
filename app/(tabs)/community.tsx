@@ -337,7 +337,7 @@ export default function CommunityScreen() {
               Create a team to hold each other accountable, or join one with a code from a friend.
             </Text>
             <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 16 }]}
+              style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 16, alignSelf: "stretch" }]}
               onPress={() => setShowModal(true)}
               activeOpacity={0.8}
             >
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 10, marginTop: 4 },
 
   // Empty
-  emptyState: { borderRadius: 16, borderWidth: 1, padding: 24, alignItems: "center", gap: 8 },
+  emptyState: { borderRadius: 16, borderWidth: 1, padding: 24, alignItems: "center", gap: 8, width: "100%" },
   emptyTitle: { fontSize: 18, fontWeight: "700", marginTop: 8 },
   emptySubtitle: { fontSize: 14, textAlign: "center", lineHeight: 20 },
 
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   modalContainer: { flex: 1 },
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 0.5 },
   modalTitle: { fontSize: 20, fontWeight: "700" },
-  modalCloseBtn: { padding: 4 },
+  modalCloseBtn: { padding: 8, borderRadius: 20, backgroundColor: "rgba(128,128,128,0.15)" },
   tabRow: { flexDirection: "row", margin: 16, borderRadius: 12, borderWidth: 1, padding: 4 },
   tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
   tabBtnText: { fontWeight: "600", fontSize: 14 },
