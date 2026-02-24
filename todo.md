@@ -185,3 +185,5 @@
 - [x] Fix 7-day range dropdown rendering behind cards (z-index issue)
 - [x] Remove habit name/progress bar from inside category goal card on home screen
 - [x] Remove Past Reviews section from home screen
+- [x] Fix habit detail streak: count consecutive days with any check-in (not just crushed)
+- [x] Change Best Streak icon to green trophy on habit detail screen

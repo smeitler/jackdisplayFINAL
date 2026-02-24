@@ -63,32 +63,41 @@ export default function HabitDetailScreen() {
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
-  // Current streak (consecutive days going back from yesterday)
+  // Current streak (consecutive days going back from today or yesterday)
   const { currentStreak, bestStreak } = useMemo(() => {
     const todayStr = toDateString(today);
-    const yesterdayD = new Date(today); yesterdayD.setDate(today.getDate() - 1);
+    const yesterdayD = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
     const yesterdayStr = toDateString(yesterdayD);
 
     // Build a sorted list of all rated dates
     const sorted = [...ratedDates].sort();
 
-    // Current streak: consecutive days ending at yesterday (or today)
+    // Current streak: start from today if checked in today, otherwise from yesterday
+    // Walk backwards counting consecutive days
     let cur = 0;
-    const startCheck = ratedDates.has(todayStr) ? todayStr : yesterdayStr;
-    const startD = new Date(startCheck + "T12:00:00");
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(startD); d.setDate(startD.getDate() - i);
-      if (ratedDates.has(toDateString(d))) cur++;
-      else break;
+    // Determine anchor: today if has data, yesterday if has data, else 0
+    let anchorStr: string | null = null;
+    if (ratedDates.has(todayStr)) anchorStr = todayStr;
+    else if (ratedDates.has(yesterdayStr)) anchorStr = yesterdayStr;
+
+    if (anchorStr) {
+      const anchorD = new Date(anchorStr + "T12:00:00");
+      for (let i = 0; i < 365; i++) {
+        const d = new Date(anchorD.getFullYear(), anchorD.getMonth(), anchorD.getDate() - i);
+        if (ratedDates.has(toDateString(d))) cur++;
+        else break;
+      }
     }
 
-    // Best streak: scan all dates
+    // Best streak: scan all dates for longest consecutive run
     let best = 0, run = 0;
     let prevD: Date | null = null;
     for (const ds of sorted) {
       const d = new Date(ds + "T12:00:00");
       if (prevD) {
-        const diff = Math.round((d.getTime() - prevD.getTime()) / 86400000);
+        const prevLocal = new Date(prevD.getFullYear(), prevD.getMonth(), prevD.getDate());
+        const curLocal = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const diff = Math.round((curLocal.getTime() - prevLocal.getTime()) / 86400000);
         if (diff === 1) { run++; }
         else run = 1;
       } else {
@@ -225,8 +234,8 @@ export default function HabitDetailScreen() {
             <Text style={[styles.statLabel, { color: colors.muted }]}>Streak</Text>
           </View>
           <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={styles.statIcon}>🏆</Text>
-            <Text style={[styles.statValue, { color: colors.foreground }]}>{bestStreak}</Text>
+            <Text style={[styles.statIcon, { color: '#22C55E' }]}>🏆</Text>
+            <Text style={[styles.statValue, { color: '#22C55E' }]}>{bestStreak}</Text>
             <Text style={[styles.statLabel, { color: colors.muted }]}>Best Streak</Text>
           </View>
           <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
