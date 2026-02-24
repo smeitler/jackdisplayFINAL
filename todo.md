@@ -170,3 +170,4 @@
 - [ ] Rebuild iOS app with correct env vars and submit to TestFlight
 - [x] Change Settings tab label to "More" with hamburger (3-bar) icon
 - [x] Add theme selector to More screen: Blue (default), Light, and Dark (black) options
+- [x] Fix Blue theme to restore original dark purple/blue default palette

@@ -89,17 +89,17 @@ function makeThemePalette(
   };
 }
 
-/** Blue theme: current purple/blue brand palette */
+/** Blue theme: original dark purple/blue brand palette */
 const bluePalette: ThemeColorPalette = makeThemePalette(
-  '#6C63FF', // primary
-  '#F8F7FF', // background
-  '#FFFFFF', // surface
-  '#1A1A2E', // foreground
-  '#7A7A9D', // muted
-  '#E2E0F5', // border
-  '#22C55E', // success
-  '#F59E0B', // warning
-  '#EF4444', // error
+  '#7B74FF', // primary
+  '#0F0E1A', // background (deep dark navy)
+  '#1C1B2E', // surface
+  '#EEEEFF', // foreground
+  '#9090B8', // muted
+  '#2E2D45', // border
+  '#4ADE80', // success
+  '#FBBF24', // warning
+  '#F87171', // error
 );
 
 /** Light theme: clean iOS-style neutral white */
@@ -135,7 +135,7 @@ export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
-  blue: "light",
+  blue: "dark",
   light: "light",
   dark: "dark",
 };
