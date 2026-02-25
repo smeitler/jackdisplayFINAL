@@ -100,7 +100,12 @@ export default function CheckInScreen() {
   const allRated = activeHabits.length > 0 &&
     activeHabits.every((h) => ratings[h.id] && ratings[h.id] !== 'none');
 
-  const ratedEntries = Object.values(ratings).filter((r) => r !== 'none' && r !== undefined);
+  // Only count ratings for currently active habits (avoids stale entries from past days inflating the score)
+  const activeHabitIds = new Set(activeHabits.map((h) => h.id));
+  const activeRatings = Object.entries(ratings)
+    .filter(([id, r]) => activeHabitIds.has(id) && r !== 'none' && r !== undefined)
+    .map(([, r]) => r);
+  const ratedEntries = activeRatings;
   const greenCount  = ratedEntries.filter((r) => r === 'green').length;
   const yellowCount = ratedEntries.filter((r) => r === 'yellow').length;
   const redCount    = ratedEntries.filter((r) => r === 'red').length;

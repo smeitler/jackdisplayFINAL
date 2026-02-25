@@ -269,3 +269,4 @@
 - [x] On Track card: replace garish solid green with subtle green tint + crisp border (polished look)
 - [x] On Track card: restore dark green background + bright green border, fix badge padding so nothing is squished
 - [x] Goal cards: add yellow "Doing Okay" state (50-79%) and red "Behind" state (<50%) with matching tint, border, badge
+- [x] Fix: daily check-in summary card shows incorrect percentage — now filters ratings to active habits only before calculating score
