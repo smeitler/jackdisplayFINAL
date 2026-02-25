@@ -270,3 +270,6 @@
 - [x] On Track card: restore dark green background + bright green border, fix badge padding so nothing is squished
 - [x] Goal cards: add yellow "Doing Okay" state (50-79%) and red "Behind" state (<50%) with matching tint, border, badge
 - [x] Fix: daily check-in summary card shows incorrect percentage — now filters ratings to active habits only before calculating score
+- [x] Habits: replace all emoji/icon circles with clean numbered rank badges (1, 2, 3...) based on importance order
+- [x] Habits: add reordering (up/down arrows) in habits management screen so users can set priority order
+- [x] Habits: add `globalOrder` field to Habit type for cross-category importance ranking, persisted in storage

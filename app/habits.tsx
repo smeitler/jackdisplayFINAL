@@ -695,7 +695,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function HabitsScreen() {
-  const { habits, categories, checkIns, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits } = useApp();
+  const { habits, categories, checkIns, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits, reorderAllHabits, activeHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
   const { data: myTeams } = trpc.teams.list.useQuery();
@@ -708,6 +708,7 @@ export default function HabitsScreen() {
 
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [reorderingCat, setReorderingCat] = useState<string | null>(null);
+  const [globalReordering, setGlobalReordering] = useState(false);
   const [habitModal, setHabitModal] = useState<{ open: boolean; categoryId: string; edit?: Habit | null }>({ open: false, categoryId: '' });
   const [categoryModal, setCategoryModal] = useState<{ open: boolean; edit?: CategoryDef | null }>({ open: false });
 
@@ -724,6 +725,14 @@ export default function HabitsScreen() {
     const [item] = moved.splice(fromIdx, 1);
     moved.splice(toIdx, 0, item);
     reorderHabits(catId, moved);
+  }
+
+  function moveGlobalHabit(fromIdx: number, toIdx: number) {
+    if (toIdx < 0 || toIdx >= activeHabits.length) return;
+    const moved = [...activeHabits];
+    const [item] = moved.splice(fromIdx, 1);
+    moved.splice(toIdx, 0, item);
+    reorderAllHabits(moved);
   }
 
   function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) {
@@ -895,6 +904,69 @@ export default function HabitsScreen() {
             </View>
           );
         })}
+
+        {/* ── Priority Order Section ── */}
+        {activeHabits.length > 1 && (
+          <View style={[styles.categoryBlock, { borderColor: colors.border, marginTop: 8 }]}>
+            <TouchableOpacity
+              onPress={() => setGlobalReordering((v) => !v)}
+              style={[styles.categoryRow, { backgroundColor: colors.surface }]}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.catEmojiBtn, { backgroundColor: colors.primary + '18' }]}>
+                <Text style={{ fontSize: 20 }}>🏆</Text>
+              </View>
+              <View style={styles.catInfo}>
+                <Text style={[styles.catLabel, { color: colors.foreground }]}>Priority Order</Text>
+                <Text style={[styles.catCount, { color: colors.muted }]}>
+                  {globalReordering ? 'Tap arrows to reorder · #1 = most important' : `${activeHabits.length} active habits ranked by importance`}
+                </Text>
+              </View>
+              <View style={styles.catActions}>
+                <View style={[styles.iconBtn, globalReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}>
+                  <IconSymbol name="arrow.up.arrow.down" size={14} color={globalReordering ? colors.primary : colors.muted} />
+                </View>
+                <View style={styles.iconBtn}>
+                  <IconSymbol name={globalReordering ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            {globalReordering && (
+              <View style={[styles.habitsList, { borderTopColor: colors.border }]}>
+                {activeHabits.map((habit, idx) => (
+                  <View
+                    key={habit.id}
+                    style={[styles.reorderRow, { borderBottomColor: colors.border, backgroundColor: colors.surface }, idx === activeHabits.length - 1 && { borderBottomWidth: 0 }]}
+                  >
+                    <View style={[styles.habitNumBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44', marginRight: 10 }]}>
+                      <Text style={[styles.habitNumText, { color: colors.primary }]}>{idx + 1}</Text>
+                    </View>
+                    <Text style={[styles.habitName, { color: colors.foreground, flex: 1 }]} numberOfLines={1}>{habit.name}</Text>
+                    <View style={{ flexDirection: 'row', gap: 4 }}>
+                      <TouchableOpacity
+                        onPress={() => moveGlobalHabit(idx, idx - 1)}
+                        style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}
+                        activeOpacity={0.5}
+                        disabled={idx === 0}
+                      >
+                        <IconSymbol name="chevron.up" size={16} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => moveGlobalHabit(idx, idx + 1)}
+                        style={[styles.iconBtn, { opacity: idx === activeHabits.length - 1 ? 0.3 : 1 }]}
+                        activeOpacity={0.5}
+                        disabled={idx === activeHabits.length - 1}
+                      >
+                        <IconSymbol name="chevron.down" size={16} color={colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Add Category */}
         <TouchableOpacity

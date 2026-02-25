@@ -142,6 +142,11 @@ export default function HabitDetailScreen() {
 
   const habit = useMemo(() => activeHabits.find((h) => h.id === habitId), [activeHabits, habitId]);
   const category = useMemo(() => habit ? categories.find((c) => c.id === habit.category) : null, [habit, categories]);
+  // Global rank badge: 1-based index in the sorted activeHabits list
+  const globalRank = useMemo(() => {
+    const idx = activeHabits.findIndex((h) => h.id === habitId);
+    return idx >= 0 ? idx + 1 : null;
+  }, [activeHabits, habitId]);
 
   const habitCheckIns = useMemo(
     () => checkIns.filter((e) => e.habitId === habitId && e.rating !== "none").sort((a, b) => a.date.localeCompare(b.date)),
@@ -278,7 +283,7 @@ export default function HabitDetailScreen() {
           <Text style={[styles.backText, { color: colors.primary }]}>Analytics</Text>
         </Pressable>
         <Text style={[styles.navTitle, { color: colors.foreground }]} numberOfLines={1}>
-          {habit.emoji} {habit.name}
+          {globalRank != null ? `#${globalRank} ` : ''}{habit.name}
         </Text>
         <View style={{ width: 80 }} />
       </View>
@@ -287,7 +292,11 @@ export default function HabitDetailScreen() {
 
         {/* ── Hero header ── */}
         <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={styles.heroEmoji}>{habit.emoji}</Text>
+          {globalRank != null && (
+            <View style={[styles.heroRankBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '55' }]}>
+              <Text style={[styles.heroRankText, { color: colors.primary }]}>#{globalRank}</Text>
+            </View>
+          )}
           <View style={styles.heroInfo}>
             <Text style={[styles.heroName, { color: colors.foreground }]}>{habit.name}</Text>
             {category && (
@@ -536,7 +545,8 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "flex-start", gap: 12,
     borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 14,
   },
-  heroEmoji: { fontSize: 36 },
+  heroRankBadge: { width: 48, height: 48, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  heroRankText: { fontSize: 18, fontWeight: '800' },
   heroInfo: { flex: 1, gap: 2 },
   heroName: { fontSize: 20, fontWeight: "700", letterSpacing: -0.3 },
   heroCat: { fontSize: 13 },

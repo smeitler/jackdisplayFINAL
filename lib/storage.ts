@@ -39,6 +39,7 @@ export type Habit = {
   category: Category;
   isActive: boolean;
   order: number;    // sort order within the category
+  globalOrder?: number; // global importance rank across all habits (1 = most important)
   createdAt: string;
   weeklyGoal?: number;     // target days per week (1-7), optional
   frequencyType?: FrequencyType; // 'weekly' (default) | 'monthly'

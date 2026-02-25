@@ -67,6 +67,13 @@ export default function CheckInScreen() {
     return map;
   }, [activeHabits, categories]);
 
+  // Global rank map: habitId -> 1-based rank across ALL active habits
+  const globalRankMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    activeHabits.forEach((h, i) => { m[h.id] = i + 1; });
+    return m;
+  }, [activeHabits]);
+
   function setRating(habitId: string, rating: ActiveRating) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRatings((prev) => ({ ...prev, [habitId]: prev[habitId] === rating ? 'none' : rating }));
@@ -302,6 +309,7 @@ export default function CheckInScreen() {
                 {habits.map((habit, idx) => {
                   const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
+                  const rank = globalRankMap[habit.id] ?? (idx + 1);
 
                   return (
                     <View
@@ -317,7 +325,7 @@ export default function CheckInScreen() {
                           backgroundColor: colors.primary + '22',
                           borderColor: colors.primary + '44',
                         }]}>
-                          <Text style={[styles.habitNumText, { color: colors.primary }]}>{idx + 1}</Text>
+                          <Text style={[styles.habitNumText, { color: colors.primary }]}>{rank}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>

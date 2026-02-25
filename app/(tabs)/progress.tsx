@@ -229,7 +229,7 @@ export default function ProgressScreen() {
                           <Text style={[styles.habitLegendBadgeText, { color: colors.primary }]}>{hIdx + 1}</Text>
                         </View>
                         <Text style={[styles.habitLegendName, { color: colors.foreground }]}>
-                          {h.emoji} {h.name}
+                          {h.name}
                         </Text>
                         <IconSymbol name="chevron.right" size={11} color={colors.muted} />
                       </Pressable>

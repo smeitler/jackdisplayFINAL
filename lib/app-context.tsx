@@ -132,6 +132,7 @@ type AppContextValue = AppState & {
   deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (cats: CategoryDef[]) => Promise<void>;
   reorderHabits: (catId: string, habits: Habit[]) => Promise<void>;
+  reorderAllHabits: (habits: Habit[]) => Promise<void>;
   submitCheckIn: (date: string, ratingsMap: Record<string, Rating>) => Promise<void>;
   updateAlarm: (config: AlarmConfig) => Promise<void>;
   isPendingCheckIn: boolean;
@@ -481,6 +482,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.habits, utils]);
 
+  /** Reorder ALL active habits globally — assigns globalOrder 0, 1, 2... */
+  const reorderAllHabits = useCallback(async (reorderedHabits: Habit[]) => {
+    const idToGlobal: Record<string, number> = {};
+    reorderedHabits.forEach((h, i) => { idToGlobal[h.id] = i; });
+    const updated = state.habits.map((h) =>
+      idToGlobal[h.id] !== undefined ? { ...h, globalOrder: idToGlobal[h.id] } : h
+    );
+    await saveHabits(updated);
+    dispatch({ type: 'SET_HABITS', habits: updated });
+  }, [state.habits]);
+
   const reorderCategories = useCallback(async (cats: CategoryDef[]) => {
     const reordered = cats.map((c, i) => ({ ...c, order: i }));
     await saveCategories(reordered);
@@ -553,7 +565,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  const activeHabits = state.habits.filter((h) => h.isActive).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Sort by globalOrder when set, otherwise fall back to per-category order
+  const activeHabits = state.habits
+    .filter((h) => h.isActive)
+    .sort((a, b) => {
+      const ag = a.globalOrder ?? 9999;
+      const bg = b.globalOrder ?? 9999;
+      if (ag !== bg) return ag - bg;
+      return (a.order ?? 0) - (b.order ?? 0);
+    });
   const isPendingCheckIn = state.lastCheckInDate !== yesterdayString();
 
   const getEntriesForDate = useCallback((date: string) =>
@@ -648,7 +668,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       ...state,
       addHabit, updateHabit, deleteHabit,
-      addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits,
+      addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits, reorderAllHabits,
       submitCheckIn, updateAlarm,
       isPendingCheckIn, activeHabits,
       getEntriesForDate, getRatingsForDate,
