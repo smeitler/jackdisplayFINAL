@@ -75,6 +75,7 @@ export default function SettingsScreen() {
   const [enabled, setEnabled] = useState(alarm.isEnabled);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [appearanceExpanded, setAppearanceExpanded] = useState(false);
 
   // Sync if alarm changes externally
   useEffect(() => {
@@ -113,60 +114,6 @@ export default function SettingsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.foreground }]}>More</Text>
-        </View>
-
-        {/* Appearance section */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
-              <IconSymbol name="sparkles" size={18} color={colors.primary} />
-            </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
-          </View>
-          <View style={[styles.themeRow, { borderTopColor: colors.border }]}>
-            {THEMES.map((theme) => {
-              const isActive = appTheme === theme.id;
-              return (
-                <Pressable
-                  key={theme.id}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setAppTheme(theme.id);
-                  }}
-                  style={({ pressed }) => [
-                    styles.themeOption,
-                    {
-                      borderColor: isActive ? colors.primary : colors.border,
-                      backgroundColor: isActive ? colors.primary + '15' : colors.background,
-                      opacity: pressed ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  {/* Color swatch */}
-                  <View
-                    style={[
-                      styles.themeSwatch,
-                      {
-                        backgroundColor: theme.preview,
-                        borderColor: isActive ? colors.primary : colors.border,
-                      },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.themeLabel,
-                      { color: isActive ? colors.primary : colors.foreground },
-                    ]}
-                  >
-                    {theme.label}
-                  </Text>
-                  {isActive && (
-                    <IconSymbol name="checkmark" size={12} color={colors.primary} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
         </View>
 
         {/* Alarm section */}
@@ -305,6 +252,73 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
 
+        {/* Appearance section — collapsible */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setAppearanceExpanded((v) => !v);
+            }}
+            style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
+              <IconSymbol name="sparkles" size={18} color={colors.primary} />
+            </View>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
+            {/* Active theme preview swatch */}
+            <View style={[styles.activeSwatchSmall, { backgroundColor: THEMES.find(t => t.id === appTheme)?.preview ?? colors.primary, borderColor: colors.border }]} />
+            <Text style={[{ fontSize: 13, color: colors.muted, marginRight: 4 }]}>
+              {THEMES.find(t => t.id === appTheme)?.label ?? ''}
+            </Text>
+            <IconSymbol name={appearanceExpanded ? 'chevron.up' : 'chevron.down'} size={16} color={colors.muted} />
+          </Pressable>
+          {appearanceExpanded && (
+            <View style={[styles.themeRow, { borderTopColor: colors.border }]}>
+              {THEMES.map((theme) => {
+                const isActive = appTheme === theme.id;
+                return (
+                  <Pressable
+                    key={theme.id}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setAppTheme(theme.id);
+                    }}
+                    style={({ pressed }) => [
+                      styles.themeOption,
+                      {
+                        borderColor: isActive ? colors.primary : colors.border,
+                        backgroundColor: isActive ? colors.primary + '15' : colors.background,
+                        opacity: pressed ? 0.7 : 1,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.themeSwatch,
+                        {
+                          backgroundColor: theme.preview,
+                          borderColor: isActive ? colors.primary : colors.border,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.themeLabel,
+                        { color: isActive ? colors.primary : colors.foreground },
+                      ]}
+                    >
+                      {theme.label}
+                    </Text>
+                    {isActive && (
+                      <IconSymbol name="checkmark" size={12} color={colors.primary} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
         {/* Habits section */}
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
           <View style={styles.sectionHeader}>
@@ -436,4 +450,5 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14, borderWidth: 1, marginTop: 8,
   },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  activeSwatchSmall: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, marginRight: 4 },
 });

@@ -263,3 +263,5 @@
 - [x] Fix: Remove all habit icons/emojis from entire interface (no star or any icon on habits)
 - [x] Fix: Propose habit error in TestFlight — removed emoji requirement, made habitEmoji optional with empty default
 - [x] Fix: Community feed chat blocked by accepted habits section — proposals now in collapsible "Team Habit Proposals" row (collapsed by default)
+- [x] More screen: move Daily Alarm section to the top (above Appearance)
+- [x] More screen: make Appearance section collapsible with a chevron toggle (collapsed by default)
