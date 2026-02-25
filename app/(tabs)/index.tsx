@@ -1,4 +1,5 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import { NovaCard, useIsNova } from "@/components/nova-effects";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -46,6 +47,7 @@ export default function HomeScreen() {
   const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, getHabitMonthlyDone, streak, isLoaded, categories, activeHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
+  const isNova = useIsNova();
   const [range, setRange] = useState<Range>(7);
   const [rangeOpen, setRangeOpen] = useState(false);
 
@@ -183,8 +185,8 @@ export default function HomeScreen() {
             const isOnTrack = total > 0 && rate >= 0.8;
 
             return (
+              <NovaCard key={cat.id} colors={colors} style={styles.categoryCard}>
               <Pressable
-                key={cat.id}
                 onPress={() => {
                   if (Platform.OS !== 'web') {
                     if (isOnTrack) {
@@ -196,13 +198,14 @@ export default function HomeScreen() {
                   router.push((`/category-detail?categoryId=${cat.id}`) as never);
                 }}
                 style={({ pressed }) => [
-                  styles.categoryCard,
-                  {
+                  { padding: 14, flex: 1 },
+                  !isNova && {
                     backgroundColor: isOnTrack ? '#22C55E14' : colors.surface,
                     borderColor: isOnTrack ? '#22C55E55' : colors.border,
                     borderWidth: isOnTrack ? 1.5 : 1,
-                    opacity: pressed ? 0.85 : 1,
+                    borderRadius: 16,
                   },
+                  { opacity: pressed ? 0.85 : 1 },
                 ]}
               >
                 {/* On-track badge */}
@@ -298,6 +301,7 @@ export default function HomeScreen() {
 
 
               </Pressable>
+              </NovaCard>
             );
           })}
         </View>

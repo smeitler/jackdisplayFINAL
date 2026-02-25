@@ -51,6 +51,12 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
     preview: "#C084A8",
     description: "Dreamy",
   },
+  {
+    id: "nova",
+    label: "Nova ✨",
+    preview: "#A855F7",
+    description: "Galaxy",
+  },
 ];
 
 export default function SettingsScreen() {

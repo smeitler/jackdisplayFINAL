@@ -5,7 +5,7 @@ import themeConfig from "@/theme.config";
 export type ColorScheme = "light" | "dark";
 
 // Named app themes
-export type AppTheme = "purple" | "white" | "black" | "punk" | "valley" | "airy";
+export type AppTheme = "purple" | "white" | "black" | "punk" | "valley" | "airy" | "nova";
 
 export const ThemeColors = themeConfig.themeColors;
 
@@ -171,6 +171,23 @@ const punkPalette: ThemeColorPalette = makeThemePalette(
   '#FF0055', // error — hot pink
 );
 
+/**
+ * Nova theme: deep space aurora — electric violet primary on true black,
+ * cosmic teal/cyan accents, animated shimmer and glow effects activated
+ * via the NovaEffects component when this theme is active.
+ */
+const novaPalette: ThemeColorPalette = makeThemePalette(
+  '#A855F7', // primary — electric violet
+  '#050510', // background — deep space black
+  '#0D0B1E', // surface — dark nebula
+  '#E8E0FF', // foreground — soft starlight white
+  '#7C6FA0', // muted — dim violet-grey
+  '#2D1B69', // border — deep violet
+  '#22D3EE', // success — cosmic cyan
+  '#F59E0B', // warning — solar amber
+  '#F43F5E', // error — supernova red-pink
+);
+
 export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   purple: purplePalette,
   white: whitePalette,
@@ -178,6 +195,7 @@ export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   punk: punkPalette,
   valley: valleyPalette,
   airy: airyPalette,
+  nova: novaPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
@@ -187,6 +205,7 @@ export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
   punk: "dark",
   valley: "dark",
   airy: "light",
+  nova: "dark",
 };
 
 export const Fonts = Platform.select({

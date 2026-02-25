@@ -245,3 +245,4 @@
 - [ ] Appearance settings: add "Airy" theme (light, soft sky blue/white, clean minimal feel) after Momentum Valley
 - [x] Fix day-note modal top cutoff: Cancel/Save bar hidden behind Dynamic Island/notch — add safe area top inset
 - [x] Redesign Airy theme palette inspired by Monument Valley game: soft pastels, dreamy pinks, muted teals, lavender, warm sandy tones
+- [x] Add "Nova" theme: aurora/galaxy aesthetic with animated gradient backgrounds, glowing buttons, shimmer cards, neon borders, and every visual effect possible

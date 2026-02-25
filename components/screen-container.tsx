@@ -2,6 +2,7 @@ import { View, type ViewProps } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { cn } from "@/lib/utils";
+import { NovaBackground, useIsNova } from "@/components/nova-effects";
 
 export interface ScreenContainerProps extends ViewProps {
   /**
@@ -26,17 +27,8 @@ export interface ScreenContainerProps extends ViewProps {
 /**
  * A container component that properly handles SafeArea and background colors.
  *
- * The outer View extends to full screen (including status bar area) with the background color,
- * while the inner SafeAreaView ensures content is within safe bounds.
- *
- * Usage:
- * ```tsx
- * <ScreenContainer className="p-4">
- *   <Text className="text-2xl font-bold text-foreground">
- *     Welcome
- *   </Text>
- * </ScreenContainer>
- * ```
+ * When the Nova theme is active, wraps the screen in the animated aurora
+ * background. Otherwise renders the standard background color.
  */
 export function ScreenContainer({
   children,
@@ -47,22 +39,34 @@ export function ScreenContainer({
   style,
   ...props
 }: ScreenContainerProps) {
+  const isNova = useIsNova();
+
+  const inner = (
+    <SafeAreaView
+      edges={edges}
+      className={cn("flex-1", safeAreaClassName)}
+      style={style}
+    >
+      <View className={cn("flex-1", className)}>{children}</View>
+    </SafeAreaView>
+  );
+
+  if (isNova) {
+    return (
+      <View className={cn("flex-1", containerClassName)} {...props}>
+        <NovaBackground style={{ flex: 1 }}>
+          {inner}
+        </NovaBackground>
+      </View>
+    );
+  }
+
   return (
     <View
-      className={cn(
-        "flex-1",
-        "bg-background",
-        containerClassName
-      )}
+      className={cn("flex-1", "bg-background", containerClassName)}
       {...props}
     >
-      <SafeAreaView
-        edges={edges}
-        className={cn("flex-1", safeAreaClassName)}
-        style={style}
-      >
-        <View className={cn("flex-1", className)}>{children}</View>
-      </SafeAreaView>
+      {inner}
     </View>
   );
 }
