@@ -59,7 +59,11 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // Serve static public files (privacy policy, terms, etc.)
-  const publicDir = path.resolve(__dirname, "../../public");
+  // In dev: __dirname = server/_core/, so ../../public = project root/public
+  // In prod (Railway): __dirname = dist/, so ../public = project root/public
+  const publicDir = process.env.NODE_ENV === "production"
+    ? path.resolve(__dirname, "../public")
+    : path.resolve(__dirname, "../../public");
   app.use(express.static(publicDir));
 
   // Canonical privacy policy URL
