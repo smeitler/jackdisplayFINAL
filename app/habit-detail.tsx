@@ -1,20 +1,21 @@
 /**
  * Habit Detail Screen
  * Accessed from the Analytics (Progress) tab by tapping a habit chip.
- * Shows: full calendar heatmap for the habit, streak, best streak,
- * monthly breakdown, rating distribution, and goal progress.
+ * Shows: full calendar heatmap, streak, best streak, monthly breakdown,
+ * rating distribution, goal progress, and per-day notes.
  */
 import {
   View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from "react-native";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { CategoryCalendar } from "@/components/category-calendar";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { toDateString } from "@/lib/storage";
+import { toDateString, loadDayNotes, saveDayNotes, type DayNotes } from "@/lib/storage";
 
 const MONTH_NAMES = [
   "January","February","March","April","May","June",
@@ -28,6 +29,77 @@ function ratingColor(r: string) {
   return "#9090B8";
 }
 
+// ─── Day Note Modal ───────────────────────────────────────────────────────────
+function DayNoteModal({
+  visible,
+  dateLabel,
+  initialNote,
+  onSave,
+  onClose,
+  colors,
+}: {
+  visible: boolean;
+  dateLabel: string;
+  initialNote: string;
+  onSave: (text: string) => void;
+  onClose: () => void;
+  colors: ReturnType<typeof import("@/hooks/use-colors").useColors>;
+}) {
+  const [text, setText] = useState(initialNote);
+
+  // Sync when modal opens with a new date
+  useEffect(() => { if (visible) setText(initialNote); }, [visible, initialNote]);
+
+  function handleSave() {
+    onSave(text.trim());
+    onClose();
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        {/* Header */}
+        <View style={[noteStyles.header, { borderBottomColor: colors.border }]}>
+          <Pressable onPress={onClose} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}>
+            <Text style={[noteStyles.cancelBtn, { color: colors.muted }]}>Cancel</Text>
+          </Pressable>
+          <Text style={[noteStyles.headerTitle, { color: colors.foreground }]}>{dateLabel}</Text>
+          <Pressable onPress={handleSave} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}>
+            <Text style={[noteStyles.saveBtn, { color: colors.primary }]}>Save</Text>
+          </Pressable>
+        </View>
+
+        <View style={noteStyles.body}>
+          <Text style={[noteStyles.prompt, { color: colors.muted }]}>What did you do today?</Text>
+          <TextInput
+            style={[noteStyles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+            value={text}
+            onChangeText={setText}
+            placeholder="e.g. 20 min box breathing before bed..."
+            placeholderTextColor={colors.muted}
+            multiline
+            autoFocus
+            returnKeyType="default"
+          />
+          {text.trim().length > 0 && (
+            <Pressable
+              onPress={() => setText("")}
+              style={({ pressed }) => [noteStyles.clearBtn, { opacity: pressed ? 0.5 : 1, borderColor: colors.border }]}
+            >
+              <IconSymbol name="trash" size={14} color="#EF4444" />
+              <Text style={noteStyles.clearBtnText}>Clear note</Text>
+            </Pressable>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HabitDetailScreen() {
   const { habitId } = useLocalSearchParams<{ habitId: string }>();
   const { checkIns, activeHabits, categories } = useApp();
@@ -39,6 +111,27 @@ export default function HabitDetailScreen() {
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [cardWidth, setCardWidth] = useState(0);
 
+  // Day notes state
+  const [dayNotes, setDayNotes] = useState<DayNotes>({});
+  const [noteModalDate, setNoteModalDate] = useState<string | null>(null);
+  const [noteModalLabel, setNoteModalLabel] = useState("");
+
+  useEffect(() => {
+    loadDayNotes().then(setDayNotes);
+  }, []);
+
+  const saveNote = useCallback(async (date: string, text: string) => {
+    const key = `${habitId}:${date}`;
+    const updated = { ...dayNotes };
+    if (text) {
+      updated[key] = text;
+    } else {
+      delete updated[key];
+    }
+    setDayNotes(updated);
+    await saveDayNotes(updated);
+  }, [dayNotes, habitId]);
+
   function onCardLayout(e: LayoutChangeEvent) {
     const w = e.nativeEvent.layout.width - 28;
     if (w > 0) setCardWidth(w);
@@ -47,13 +140,11 @@ export default function HabitDetailScreen() {
   const habit = useMemo(() => activeHabits.find((h) => h.id === habitId), [activeHabits, habitId]);
   const category = useMemo(() => habit ? categories.find((c) => c.id === habit.category) : null, [habit, categories]);
 
-  // All check-ins for this habit, sorted by date ascending
   const habitCheckIns = useMemo(
     () => checkIns.filter((e) => e.habitId === habitId && e.rating !== "none").sort((a, b) => a.date.localeCompare(b.date)),
     [checkIns, habitId],
   );
 
-  // Date set for quick lookup
   const ratedDates = useMemo(() => new Set(habitCheckIns.map((e) => e.date)), [habitCheckIns]);
   const ratingByDate = useMemo(() => {
     const m: Record<string, string> = {};
@@ -61,25 +152,15 @@ export default function HabitDetailScreen() {
     return m;
   }, [habitCheckIns]);
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-
-  // Current streak (consecutive days going back from today or yesterday)
   const { currentStreak, bestStreak } = useMemo(() => {
     const todayStr = toDateString(today);
     const yesterdayD = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
     const yesterdayStr = toDateString(yesterdayD);
-
-    // Build a sorted list of all rated dates
     const sorted = [...ratedDates].sort();
-
-    // Current streak: start from today if checked in today, otherwise from yesterday
-    // Walk backwards counting consecutive days
     let cur = 0;
-    // Determine anchor: today if has data, yesterday if has data, else 0
     let anchorStr: string | null = null;
     if (ratedDates.has(todayStr)) anchorStr = todayStr;
     else if (ratedDates.has(yesterdayStr)) anchorStr = yesterdayStr;
-
     if (anchorStr) {
       const anchorD = new Date(anchorStr + "T12:00:00");
       for (let i = 0; i < 365; i++) {
@@ -88,8 +169,6 @@ export default function HabitDetailScreen() {
         else break;
       }
     }
-
-    // Best streak: scan all dates for longest consecutive run
     let best = 0, run = 0;
     let prevD: Date | null = null;
     for (const ds of sorted) {
@@ -98,19 +177,14 @@ export default function HabitDetailScreen() {
         const prevLocal = new Date(prevD.getFullYear(), prevD.getMonth(), prevD.getDate());
         const curLocal = new Date(d.getFullYear(), d.getMonth(), d.getDate());
         const diff = Math.round((curLocal.getTime() - prevLocal.getTime()) / 86400000);
-        if (diff === 1) { run++; }
-        else run = 1;
-      } else {
-        run = 1;
-      }
+        if (diff === 1) { run++; } else run = 1;
+      } else { run = 1; }
       if (run > best) best = run;
       prevD = d;
     }
-
     return { currentStreak: cur, bestStreak: best };
   }, [ratedDates, today]);
 
-  // Rating distribution totals
   const { green, yellow, red, total } = useMemo(() => {
     let g = 0, y = 0, r = 0;
     for (const e of habitCheckIns) {
@@ -121,10 +195,8 @@ export default function HabitDetailScreen() {
     return { green: g, yellow: y, red: r, total: g + y + r };
   }, [habitCheckIns]);
 
-  // Score (weighted average)
   const score = total > 0 ? (green * 1 + yellow * 0.5) / total : null;
 
-  // Monthly breakdown for the last 6 months
   const monthlyBreakdown = useMemo(() => {
     const months: { year: number; month: number; green: number; yellow: number; red: number; total: number }[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -140,7 +212,6 @@ export default function HabitDetailScreen() {
     return months;
   }, [habitCheckIns, today]);
 
-  // Goal progress this period
   const goalInfo = useMemo(() => {
     if (!habit) return null;
     const isMonthly = habit.frequencyType === "monthly";
@@ -183,6 +254,8 @@ export default function HabitDetailScreen() {
       </ScreenContainer>
     );
   }
+
+  const recentEntries = [...habitCheckIns].reverse().slice(0, 14);
 
   return (
     <ScreenContainer>
@@ -328,7 +401,6 @@ export default function HabitDetailScreen() {
           style={[styles.calCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onLayout={onCardLayout}
         >
-          {/* Month nav */}
           <View style={[styles.monthNav, { borderBottomColor: colors.border }]}>
             <Pressable
               onPress={prevMonth}
@@ -358,7 +430,6 @@ export default function HabitDetailScreen() {
             />
           </View>
 
-          {/* Legend */}
           <View style={styles.legend}>
             {[
               { color: "#22C55E", label: "Crushed" },
@@ -373,23 +444,49 @@ export default function HabitDetailScreen() {
           </View>
         </View>
 
-        {/* ── Recent history list ── */}
+        {/* ── Recent history list with notes ── */}
         <View style={[styles.historyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent History</Text>
+          <View style={styles.historyHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent History</Text>
+            <Text style={[styles.historyHint, { color: colors.muted }]}>Tap a day to add a note</Text>
+          </View>
           {habitCheckIns.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.muted }]}>No check-ins yet.</Text>
           ) : (
-            [...habitCheckIns].reverse().slice(0, 14).map((entry) => {
+            recentEntries.map((entry) => {
               const d = new Date(entry.date + "T12:00:00");
               const label = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
               const rc = ratingColor(entry.rating);
               const ratingLabel = entry.rating === "green" ? "Crushed it" : entry.rating === "yellow" ? "Okay" : "Missed";
+              const noteKey = `${habitId}:${entry.date}`;
+              const note = dayNotes[noteKey];
+
               return (
-                <View key={entry.date} style={[styles.historyRow, { borderBottomColor: colors.border }]}>
+                <Pressable
+                  key={entry.date}
+                  onPress={() => {
+                    setNoteModalDate(entry.date);
+                    setNoteModalLabel(label);
+                  }}
+                  style={({ pressed }) => [
+                    styles.historyRow,
+                    { borderBottomColor: colors.border, backgroundColor: pressed ? colors.border + "40" : "transparent" },
+                  ]}
+                >
                   <View style={[styles.historyDot, { backgroundColor: rc }]} />
-                  <Text style={[styles.historyDate, { color: colors.foreground }]}>{label}</Text>
-                  <Text style={[styles.historyRating, { color: rc }]}>{ratingLabel}</Text>
-                </View>
+                  <View style={styles.historyContent}>
+                    <View style={styles.historyTopRow}>
+                      <Text style={[styles.historyDate, { color: colors.foreground }]}>{label}</Text>
+                      <Text style={[styles.historyRating, { color: rc }]}>{ratingLabel}</Text>
+                    </View>
+                    {note ? (
+                      <Text style={[styles.historyNote, { color: colors.muted }]} numberOfLines={2}>{note}</Text>
+                    ) : (
+                      <Text style={[styles.historyNoteEmpty, { color: colors.border }]}>+ Add note</Text>
+                    )}
+                  </View>
+                  <IconSymbol name="chevron.right" size={14} color={colors.border} />
+                </Pressable>
               );
             })
           )}
@@ -397,10 +494,23 @@ export default function HabitDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Day Note Modal */}
+      {noteModalDate && (
+        <DayNoteModal
+          visible={noteModalDate !== null}
+          dateLabel={noteModalLabel}
+          initialNote={dayNotes[`${habitId}:${noteModalDate}`] ?? ""}
+          onSave={(text) => saveNote(noteModalDate, text)}
+          onClose={() => setNoteModalDate(null)}
+          colors={colors}
+        />
+      )}
     </ScreenContainer>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: { padding: 20, paddingBottom: 40 },
@@ -450,22 +560,21 @@ const styles = StyleSheet.create({
   distCard: {
     borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 14,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 12 },
-  distRow: { flexDirection: "row", gap: 10 },
-  distItem: { flex: 1, alignItems: "center", gap: 3 },
-  distEmoji: { fontSize: 18 },
+  distRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 12 },
+  distItem: { alignItems: "center", gap: 4, flex: 1 },
+  distEmoji: { fontSize: 20 },
   distCount: { fontSize: 20, fontWeight: "800" },
   distLabel: { fontSize: 11, fontWeight: "500" },
-  distBarBg: { width: "100%", height: 60, borderRadius: 6, overflow: "hidden", justifyContent: "flex-end" },
-  distBarFill: { width: "100%", borderRadius: 6 },
+  distBarBg: { width: 8, height: 60, borderRadius: 4, overflow: "hidden", justifyContent: "flex-end" },
+  distBarFill: { width: 8, borderRadius: 4 },
 
   trendCard: {
     borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 14,
   },
-  trendRow: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
-  trendCol: { flex: 1, alignItems: "center", gap: 4 },
-  trendBarWrap: { height: 64, justifyContent: "flex-end", width: "100%" },
-  trendBar: { width: "100%", borderRadius: 4, minHeight: 4 },
+  trendRow: { flexDirection: "row", justifyContent: "space-around", alignItems: "flex-end", marginTop: 12, height: 80 },
+  trendCol: { alignItems: "center", gap: 4, flex: 1 },
+  trendBarWrap: { height: 60, justifyContent: "flex-end" },
+  trendBar: { width: 24, borderRadius: 4 },
   trendMonthLabel: { fontSize: 10, fontWeight: "600" },
   trendPct: { fontSize: 9, fontWeight: "700" },
 
@@ -474,25 +583,65 @@ const styles = StyleSheet.create({
   },
   monthNav: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 0.5,
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5,
   },
-  monthNavBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  monthTitle: { fontSize: 15, fontWeight: "700" },
+  monthNavBtn: { padding: 4 },
+  monthTitle: { fontSize: 16, fontWeight: "700" },
   calendarWrap: { padding: 14 },
-  legend: { flexDirection: "row", gap: 12, paddingHorizontal: 14, paddingBottom: 12 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  legend: {
+    flexDirection: "row", gap: 16, paddingHorizontal: 16, paddingBottom: 14,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 11 },
+  legendText: { fontSize: 12 },
 
   historyCard: {
-    borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 14,
+    borderRadius: 16, borderWidth: 1, marginBottom: 14, overflow: "hidden",
   },
-  emptyText: { fontSize: 14, textAlign: "center", marginTop: 8 },
+  historyHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4,
+  },
+  historyHint: { fontSize: 11 },
   historyRow: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingVertical: 10, borderBottomWidth: 0.5,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 0.5,
   },
-  historyDot: { width: 10, height: 10, borderRadius: 5 },
-  historyDate: { flex: 1, fontSize: 14 },
-  historyRating: { fontSize: 13, fontWeight: "700" },
+  historyDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  historyContent: { flex: 1, gap: 2 },
+  historyTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  historyDate: { fontSize: 15, fontWeight: "500" },
+  historyRating: { fontSize: 14, fontWeight: "700" },
+  historyNote: { fontSize: 13, lineHeight: 18 },
+  historyNoteEmpty: { fontSize: 12, fontStyle: "italic" },
+
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
+  emptyText: { fontSize: 14, padding: 16 },
+});
+
+const noteStyles = StyleSheet.create({
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 16, fontWeight: "700" },
+  cancelBtn: { fontSize: 16 },
+  saveBtn: { fontSize: 16, fontWeight: "700" },
+  body: { padding: 20, gap: 12 },
+  prompt: { fontSize: 13, fontWeight: "600", letterSpacing: 0.5, textTransform: "uppercase" },
+  input: {
+    fontSize: 16, lineHeight: 24,
+    borderWidth: 1, borderRadius: 12,
+    padding: 14, minHeight: 140,
+    textAlignVertical: "top",
+  },
+  clearBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 10, borderWidth: 1,
+  },
+  clearBtnText: { fontSize: 13, color: "#EF4444", fontWeight: "600" },
 });

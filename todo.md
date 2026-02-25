@@ -239,3 +239,5 @@
 - [x] Redesign Vision Board: swipeable photo carousel per goal (swipe left/right through photos)
 - [x] Vision Board: tap goal section header to open full-screen goal detail view (motivations at top, all photos below with swipe)
 - [x] Vision Board goal detail: motivations are fully editable (tap bullet to edit inline, swipe/tap X to delete)
+- [x] Habit detail screen: tap any day in Recent History to add/edit a personal note for that day
+- [x] Appearance settings: add "Punk" cyberpunk theme (neon magenta/cyan on deep black)

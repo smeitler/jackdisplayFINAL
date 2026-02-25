@@ -5,7 +5,7 @@ import themeConfig from "@/theme.config";
 export type ColorScheme = "light" | "dark";
 
 // Named app themes
-export type AppTheme = "purple" | "white" | "black";
+export type AppTheme = "purple" | "white" | "black" | "punk";
 
 export const ThemeColors = themeConfig.themeColors;
 
@@ -128,16 +128,31 @@ const blackPalette: ThemeColorPalette = makeThemePalette(
   '#F87171', // error
 );
 
+/** Punk theme: cyberpunk neon magenta + cyan on true black */
+const punkPalette: ThemeColorPalette = makeThemePalette(
+  '#FF00FF', // primary — neon magenta
+  '#000000', // background — true black
+  '#0D0D0D', // surface — near-black
+  '#00FFFF', // foreground — neon cyan
+  '#CC00CC', // muted — dim magenta
+  '#330033', // border — dark magenta
+  '#00FF99', // success — neon green
+  '#FF6600', // warning — neon orange
+  '#FF0055', // error — hot pink
+);
+
 export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   purple: purplePalette,
   white: whitePalette,
   black: blackPalette,
+  punk: punkPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
   purple: "dark",
   white: "light",
   black: "dark",
+  punk: "dark",
 };
 
 export const Fonts = Platform.select({

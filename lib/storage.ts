@@ -316,6 +316,26 @@ export async function saveVisionMotivations(motivations: VisionMotivations): Pro
   await AsyncStorage.setItem(VISION_MOTIVATIONS_KEY, JSON.stringify(motivations));
 }
 
+// ─── Day Notes ───────────────────────────────────────────────────────────────
+
+/** Map of "habitId:YYYY-MM-DD" -> note string */
+export type DayNotes = Record<string, string>;
+
+const DAY_NOTES_KEY = 'daycheck:daynotes';
+
+export async function loadDayNotes(): Promise<DayNotes> {
+  try {
+    const raw = await AsyncStorage.getItem(DAY_NOTES_KEY);
+    return raw ? (JSON.parse(raw) as DayNotes) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveDayNotes(notes: DayNotes): Promise<void> {
+  await AsyncStorage.setItem(DAY_NOTES_KEY, JSON.stringify(notes));
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Returns "YYYY-MM-DD" for a given Date (or today) using LOCAL timezone. */

@@ -33,6 +33,12 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
     preview: "#000000",
     description: "True black",
   },
+  {
+    id: "punk",
+    label: "Punk",
+    preview: "#FF00FF",
+    description: "Cyberpunk",
+  },
 ];
 
 export default function SettingsScreen() {
