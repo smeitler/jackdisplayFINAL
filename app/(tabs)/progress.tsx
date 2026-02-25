@@ -1,6 +1,7 @@
 import {
   View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent, Platform,
 } from "react-native";
+import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -33,6 +34,7 @@ export default function ProgressScreen() {
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
   const colors = useColors();
   const router = useRouter();
+  const maxWidth = useContentMaxWidth();
 
   const today = new Date();
   const [calYear,  setCalYear]  = useState(today.getFullYear());
@@ -93,6 +95,7 @@ export default function ProgressScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
         {/* ── Page title ── */}
         <Text style={[styles.pageTitle, { color: colors.foreground }]}>Analytics</Text>
@@ -254,6 +257,7 @@ export default function ProgressScreen() {
         })}
 
         <View style={{ height: 40 }} />
+        </View>
       </ScrollView>
 
       <DayDetailSheet

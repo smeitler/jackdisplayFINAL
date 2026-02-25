@@ -8,6 +8,7 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { yesterdayString, formatDisplayDate, toDateString, offsetDateString, LIFE_AREAS } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
+import { useIsIPad, useContentMaxWidth } from "@/hooks/use-is-ipad";
 
 const RANGES = [7, 14, 30, 60, 90] as const;
 type Range = typeof RANGES[number];
@@ -48,6 +49,8 @@ export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const isNova = useIsNova();
+  const isIPad = useIsIPad();
+  const maxWidth = useContentMaxWidth();
   const [range, setRange] = useState<Range>(7);
   const [rangeOpen, setRangeOpen] = useState(false);
 
@@ -75,6 +78,7 @@ export default function HomeScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         {/* Header */}
         <View style={styles.header}>
           <View>
@@ -173,6 +177,7 @@ export default function HomeScreen() {
 
         <View style={styles.categoryGrid}>
           {categories.map((cat) => {
+            const cardWidth = isIPad ? '31.5%' : '47.5%';
             const rate = getCategoryRate(cat.id, range);
             const breakdown = getCategoryBreakdown(cat.id, range);
             const total = breakdown.green + breakdown.yellow + breakdown.red;
@@ -185,7 +190,7 @@ export default function HomeScreen() {
             const isOnTrack = total > 0 && rate >= 0.8;
 
             return (
-              <NovaCard key={cat.id} colors={colors} style={styles.categoryCard}>
+              <NovaCard key={cat.id} colors={colors} style={{ ...styles.categoryCard, width: cardWidth }}>
               <Pressable
                 onPress={() => {
                   if (Platform.OS !== 'web') {
@@ -322,6 +327,7 @@ export default function HomeScreen() {
         </Pressable>
 
         <View style={{ height: 30 }} />
+        </View>
       </ScrollView>
     </ScreenContainer>
   );

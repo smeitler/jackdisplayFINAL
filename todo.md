@@ -257,3 +257,4 @@
 - [ ] Profile picture: tRPC route to update and fetch avatar URL
 - [ ] Voice messages in team chat: hold-to-record audio message, upload to S3, play inline in chat
 - [ ] Audio data privacy disclosure: add Audio Data to App Store privacy labels once voice messages are live
+- [x] iPad Pro 13" layout: responsive layouts across all main screens for App Store screenshots

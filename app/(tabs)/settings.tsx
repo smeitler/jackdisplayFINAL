@@ -1,4 +1,5 @@
 import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform } from "react-native";
+import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -66,6 +67,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
   const { appTheme, setAppTheme } = useThemeContext();
+  const maxWidth = useContentMaxWidth();
 
   const [hour, setHour] = useState(alarm.hour);
   const [minute, setMinute] = useState(alarm.minute);
@@ -107,6 +109,7 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.foreground }]}>More</Text>
@@ -369,6 +372,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={{ height: 30 }} />
+        </View>
       </ScrollView>
     </ScreenContainer>
   );

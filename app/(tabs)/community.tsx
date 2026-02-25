@@ -12,6 +12,7 @@ import {
   Share,
   Platform,
 } from "react-native";
+import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { ScreenContainer } from "@/components/screen-container";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -322,6 +323,7 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
 export default function CommunityScreen() {
   const colors = useColors();
   const router = useRouter();
+  const maxWidth = useContentMaxWidth();
   const [showModal, setShowModal] = useState(false);
 
   const { data: teams, isLoading, refetch } = trpc.teams.list.useQuery();
@@ -333,6 +335,7 @@ export default function CommunityScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         {/* Header */}
         <View style={styles.pageHeader}>
           <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
@@ -380,6 +383,7 @@ export default function CommunityScreen() {
             ))}
           </View>
         )}
+        </View>
       </ScrollView>
 
       <CreateJoinModal visible={showModal} onClose={() => setShowModal(false)} />

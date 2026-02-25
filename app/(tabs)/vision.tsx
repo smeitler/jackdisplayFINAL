@@ -3,6 +3,7 @@ import {
   Alert, Dimensions, Modal, Platform, FlatList, TextInput,
   KeyboardAvoidingView,
 } from "react-native";
+import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useCallback, useRef } from "react";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -318,6 +319,7 @@ function GoalDetailModal({
 export default function VisionBoardScreen() {
   const { categories } = useApp();
   const colors = useColors();
+  const maxWidth = useContentMaxWidth();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
   const [board, setBoard] = useState<VisionBoard>({});
@@ -379,6 +381,7 @@ export default function VisionBoardScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         <Text style={[styles.pageTitle, { color: colors.foreground }]}>Vision Board</Text>
         <Text style={[styles.pageSubtitle, { color: colors.muted }]}>
           Tap a goal to add photos and reasons. Swipe photos to browse.
@@ -479,6 +482,7 @@ export default function VisionBoardScreen() {
         })}
 
         <View style={{ height: 40 }} />
+        </View>
       </ScrollView>
 
       {/* Goal Detail Modal */}
