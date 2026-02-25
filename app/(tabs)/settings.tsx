@@ -10,6 +10,7 @@ import * as Haptics from "expo-haptics";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeContext } from "@/lib/theme-provider";
 import { type AppTheme } from "@/constants/theme";
+import { clearLocalData } from "@/lib/storage";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
@@ -343,6 +344,8 @@ export default function SettingsScreen() {
             <Pressable
               onPress={async () => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                // Clear all local user data so the next account starts fresh
+                await clearLocalData();
                 await logout();
                 router.replace('/login');
               }}

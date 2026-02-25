@@ -249,3 +249,5 @@
 - [x] Vision Board main screen: show motivations/reasons under each goal section (not just in detail view)
 - [x] Nova theme: replace jarring white shimmer bar with smooth atmospheric aurora glow effect
 - [x] Fix "No procedure found on path goalProposals.create" error when proposing a team habit (teamGoalVotes table was missing from DB, created it; route itself was correct)
+- [ ] Add Demo Mode login button on login screen: bypasses OAuth, creates a session for a pre-seeded test account so Apple reviewer can access the full app
+- [x] CRITICAL: Signing in with a different account loads the previous account's local data — fix data isolation on account switch

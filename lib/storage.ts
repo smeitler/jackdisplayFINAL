@@ -87,6 +87,7 @@ const KEYS = {
   checkIns:   'daycheck:checkins',
   alarm:      'daycheck:alarm',
   lastCheckIn:'daycheck:lastcheckin',
+  lastUserId: 'daycheck:lastUserId',
 } as const;
 
 // ─── Default data ─────────────────────────────────────────────────────────────
@@ -334,6 +335,36 @@ export async function loadDayNotes(): Promise<DayNotes> {
 
 export async function saveDayNotes(notes: DayNotes): Promise<void> {
   await AsyncStorage.setItem(DAY_NOTES_KEY, JSON.stringify(notes));
+}
+
+// ─── User Identity (for data isolation on account switch) ───────────────────
+
+/** Returns the user ID that was last logged in, or null if never set. */
+export async function getLastUserId(): Promise<string | null> {
+  return AsyncStorage.getItem(KEYS.lastUserId);
+}
+
+/** Persists the current user ID so we can detect account switches on next launch. */
+export async function setLastUserId(userId: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.lastUserId, userId);
+}
+
+/**
+ * Clears ALL local user data from AsyncStorage.
+ * Call this on logout or when a different user logs in to prevent data leakage.
+ */
+export async function clearLocalData(): Promise<void> {
+  await AsyncStorage.multiRemove([
+    KEYS.habits,
+    KEYS.categories,
+    KEYS.checkIns,
+    KEYS.alarm,
+    KEYS.lastCheckIn,
+    KEYS.lastUserId,
+    VISION_BOARD_KEY,
+    VISION_MOTIVATIONS_KEY,
+    DAY_NOTES_KEY,
+  ]);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

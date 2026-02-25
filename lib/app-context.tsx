@@ -14,6 +14,9 @@ import {
   DEFAULT_CATEGORIES,
   DEFAULT_HABITS,
   DEFAULT_ALARM,
+  clearLocalData,
+  getLastUserId,
+  setLastUserId,
 } from './storage';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
@@ -170,7 +173,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         // Fetch all user data from server in parallel.
         // If the user is not authenticated, this will throw a 401/403 error.
-        const [serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
+        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
+          utils.auth.me.fetch(),
           utils.categories.list.fetch(),
           utils.habits.list.fetch(),
           utils.checkIns.list.fetch(),
@@ -180,12 +184,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // If we reach here, the user is authenticated
         isAuthenticated.current = true;
 
+        // ── Account-switch guard ────────────────────────────────────────────
+        // If a different user logged in, wipe the previous user's local cache
+        // so their data is never shown to the new account.
+        let accountSwitched = false;
+        if (serverUser) {
+          const currentUserId = String(serverUser.id);
+          const lastUserId = await getLastUserId();
+          if (lastUserId !== null && lastUserId !== currentUserId) {
+            console.log('[AppContext] Account switch detected — clearing local data for previous user');
+            await clearLocalData();
+            accountSwitched = true;
+            // Reset in-memory state to empty defaults so the UI shows clean data
+            // while we load the new user's server data below.
+            dispatch({ type: 'LOADED', habits: [], categories: DEFAULT_CATEGORIES, checkIns: [], alarm: DEFAULT_ALARM, lastCheckInDate: null });
+          }
+          await setLastUserId(currentUserId);
+        }
+
+        // When an account switch occurred, localHabits/localCategories/localCheckIns
+        // still hold the previous user's data in memory (loaded before the clear).
+        // Use empty arrays so we never push stale data to the new account.
+        const safeLocalCategories = accountSwitched ? DEFAULT_CATEGORIES : localCategories;
+        const safeLocalHabits = accountSwitched ? [] : localHabits;
+        const safeLocalCheckIns = accountSwitched ? [] : localCheckIns;
+        const safeLocalAlarm = accountSwitched ? DEFAULT_ALARM : localAlarm;
+
         const isFirstLogin = serverCats.length === 0 && serverHabits.length === 0;
 
         if (isFirstLogin) {
           // First time this user logs in — push local data to server
           await Promise.all([
-            utils.client.categories.bulkSync.mutate(localCategories.map((c) => ({
+            utils.client.categories.bulkSync.mutate(safeLocalCategories.map((c) => ({
               clientId: c.id,
               label: c.label,
               emoji: c.emoji,
@@ -193,7 +223,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               lifeArea: c.lifeArea ?? null,
               deadline: c.deadline ?? null,
             }))),
-            utils.client.habits.bulkSync.mutate(localHabits.map((h) => ({
+            utils.client.habits.bulkSync.mutate(safeLocalHabits.map((h) => ({
               clientId: h.id,
               categoryClientId: h.category,
               name: h.name,
@@ -203,7 +233,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               order: h.order,
               weeklyGoal: h.weeklyGoal ?? null,
             }))),
-            utils.client.checkIns.bulkSync.mutate(localCheckIns.map((e) => ({
+            utils.client.checkIns.bulkSync.mutate(safeLocalCheckIns.map((e) => ({
               habitClientId: e.habitId,
               date: e.date,
               rating: e.rating,
@@ -212,10 +242,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ]);
           // Alarm
           await utils.client.alarm.upsert.mutate({
-            hour: localAlarm.hour,
-            minute: localAlarm.minute,
-            days: localAlarm.days.join(','),
-            enabled: localAlarm.isEnabled,
+            hour: safeLocalAlarm.hour,
+            minute: safeLocalAlarm.minute,
+            days: safeLocalAlarm.days.join(','),
+            enabled: safeLocalAlarm.isEnabled,
           });
         } else {
           // Existing user — use server data as source of truth
