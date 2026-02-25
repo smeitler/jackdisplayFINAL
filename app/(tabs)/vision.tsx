@@ -8,7 +8,8 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { loadVisionBoard, saveVisionBoard, VisionBoard } from "@/lib/storage";
+import { loadVisionBoard, saveVisionBoard, VisionBoard, loadVisionMotivations, saveVisionMotivations, VisionMotivations } from "@/lib/storage";
+import { TextInput } from "react-native";
 
 const SCREEN_W = Dimensions.get("window").width;
 const GAP = 4;
@@ -19,16 +20,20 @@ const THUMB_SIZE = Math.floor((SCREEN_W - PADDING * 2 - GAP) / COLS);
 const HERO_HEIGHT = Math.floor(SCREEN_W * 0.55);
 
 export default function VisionBoardScreen() {
-  const { categories, activeHabits, getHabitWeeklyDone } = useApp();
+  const { categories } = useApp();
   const colors = useColors();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
   const [board, setBoard] = useState<VisionBoard>({});
+  const [motivations, setMotivations] = useState<VisionMotivations>({});
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewCatId, setPreviewCatId] = useState<string | null>(null);
+  // Per-category new motivation input text
+  const [newMotivation, setNewMotivation] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadVisionBoard().then(setBoard);
+    loadVisionMotivations().then(setMotivations);
   }, []);
 
   async function updateBoard(newBoard: VisionBoard) {
@@ -83,7 +88,7 @@ export default function VisionBoardScreen() {
 
         {sortedCategories.map((cat) => {
           const images = board[cat.id] ?? [];
-          const habitsWithGoal = activeHabits.filter((h) => h.category === cat.id && h.weeklyGoal);
+          const catMotivations = motivations[cat.id] ?? [];
           // Deadline calculation
           let deadlineLabel: string | null = null;
           let deadlineColor = colors.muted;
@@ -154,29 +159,53 @@ export default function VisionBoardScreen() {
                 </View>
               )}
 
-              {/* Weekly habit goals */}
-              {habitsWithGoal.length > 0 && (
-                <View style={[styles.visionWeeklyList, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 }]}>
-                  {habitsWithGoal.map((h) => {
-                    const done = getHabitWeeklyDone(h.id);
-                    const goal = h.weeklyGoal!;
-                    const met = done >= goal;
-                    const pct = Math.min(done / goal, 1);
-                    return (
-                      <View key={h.id} style={styles.visionWeeklyItem}>
-                        <Text style={[styles.visionWeeklyName, { color: colors.muted }]} numberOfLines={1}>{h.emoji} {h.name}</Text>
-                        <View style={styles.visionWeeklyBarWrap}>
-                          <View style={[styles.visionWeeklyBarBg, { backgroundColor: colors.border }]}>
-                            <View style={[styles.visionWeeklyBarFill, { flex: pct, backgroundColor: met ? '#22C55E' : colors.primary }]} />
-                            {pct < 1 && <View style={{ flex: 1 - pct }} />}
-                          </View>
-                          <Text style={[styles.visionWeeklyCount, { color: met ? '#22C55E' : colors.primary }]}>{done}/{goal}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
+              {/* Motivations — why this goal matters */}
+              <View style={[styles.motivationsSection, { borderTopWidth: images.length > 0 ? 1 : 0, borderTopColor: colors.border }]}>
+                {catMotivations.length > 0 && (
+                  <View style={styles.motivationsList}>
+                    {catMotivations.map((m, idx) => (
+                      <Pressable
+                        key={idx}
+                        onLongPress={() => {
+                          Alert.alert("Remove", `Remove "${m}"?`, [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Remove", style: "destructive",
+                              onPress: async () => {
+                                const updated = { ...motivations, [cat.id]: catMotivations.filter((_, i) => i !== idx) };
+                                setMotivations(updated);
+                                await saveVisionMotivations(updated);
+                              },
+                            },
+                          ]);
+                        }}
+                        style={{ flexDirection: "row", alignItems: "flex-start", gap: 6, paddingVertical: 2 }}
+                      >
+                        <Text style={[styles.motivationBullet, { color: colors.primary }]}>•</Text>
+                        <Text style={[styles.motivationText, { color: colors.foreground }]}>{m}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                <View style={[styles.motivationInputRow, { borderColor: colors.border }]}>
+                  <TextInput
+                    style={[styles.motivationInput, { color: colors.foreground }]}
+                    placeholder={catMotivations.length === 0 ? "Why does this goal matter to you?" : "Add another reason..."}
+                    placeholderTextColor={colors.muted}
+                    value={newMotivation[cat.id] ?? ""}
+                    onChangeText={(t) => setNewMotivation((prev) => ({ ...prev, [cat.id]: t }))}
+                    returnKeyType="done"
+                    onSubmitEditing={async () => {
+                      const text = (newMotivation[cat.id] ?? "").trim();
+                      if (!text) return;
+                      const updated = { ...motivations, [cat.id]: [...catMotivations, text] };
+                      setMotivations(updated);
+                      setNewMotivation((prev) => ({ ...prev, [cat.id]: "" }));
+                      await saveVisionMotivations(updated);
+                    }}
+                  />
                 </View>
-              )}
+              </View>
             </View>
           );
         })}
@@ -328,11 +357,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   visionDeadline: { fontSize: 11, fontWeight: '600', marginTop: 1 },
-  visionWeeklyList: { marginTop: 10, gap: 6 },
-  visionWeeklyItem: { gap: 2 },
-  visionWeeklyName: { fontSize: 11, fontWeight: '500' },
-  visionWeeklyBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  visionWeeklyBarBg: { flex: 1, height: 5, borderRadius: 3, flexDirection: 'row', overflow: 'hidden' },
-  visionWeeklyBarFill: { borderRadius: 3 },
-  visionWeeklyCount: { fontSize: 11, fontWeight: '700', minWidth: 24, textAlign: 'right' },
+
+  // Motivations section
+  motivationsSection: { marginTop: 10, paddingTop: 10, gap: 8 },
+  motivationsList: { gap: 4 },
+  motivationBullet: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  motivationText: { fontSize: 14, lineHeight: 22, flex: 1 },
+  motivationInputRow: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  motivationInput: { fontSize: 14, lineHeight: 20 },
 });

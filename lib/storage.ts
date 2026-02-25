@@ -284,7 +284,11 @@ export async function saveAlarm(config: AlarmConfig): Promise<void> {
 /** Map of categoryId -> array of local image URIs */
 export type VisionBoard = Record<string, string[]>;
 
+/** Map of categoryId -> array of motivation strings (why this goal matters) */
+export type VisionMotivations = Record<string, string[]>;
+
 const VISION_BOARD_KEY = 'daycheck:visionboard';
+const VISION_MOTIVATIONS_KEY = 'daycheck:visionmotivations';
 
 export async function loadVisionBoard(): Promise<VisionBoard> {
   try {
@@ -297,6 +301,19 @@ export async function loadVisionBoard(): Promise<VisionBoard> {
 
 export async function saveVisionBoard(board: VisionBoard): Promise<void> {
   await AsyncStorage.setItem(VISION_BOARD_KEY, JSON.stringify(board));
+}
+
+export async function loadVisionMotivations(): Promise<VisionMotivations> {
+  try {
+    const raw = await AsyncStorage.getItem(VISION_MOTIVATIONS_KEY);
+    return raw ? (JSON.parse(raw) as VisionMotivations) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveVisionMotivations(motivations: VisionMotivations): Promise<void> {
+  await AsyncStorage.setItem(VISION_MOTIVATIONS_KEY, JSON.stringify(motivations));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

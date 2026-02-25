@@ -221,3 +221,4 @@
 - [ ] Add tRPC route to reset a vote for a proposal
 - [ ] Wire habit deletion in app-context to call vote reset if habit has a proposalId
 - [x] Fix Vision Board photo display: remove dashed placeholder box, show photos large/full-width
+- [x] Replace habit progress bars on Vision Board with editable motivations/why section per goal
