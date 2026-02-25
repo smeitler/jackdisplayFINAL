@@ -43,6 +43,8 @@ export type Habit = {
   weeklyGoal?: number;     // target days per week (1-7), optional
   frequencyType?: FrequencyType; // 'weekly' (default) | 'monthly'
   monthlyGoal?: number;    // target days per month (1-31), used when frequencyType='monthly'
+  teamProposalId?: number; // if this habit was added from a team proposal, store the proposal ID
+  teamId?: number;         // the team the proposal belongs to
 };
 
 export type CheckInEntry = {

@@ -216,3 +216,7 @@
 - [x] Rename "Propose Team Goal" to "Propose Team Habit"
 - [x] Remove category fields from proposal form — habit-only (name, emoji, description, frequency)
 - [x] When accepting a proposal, show goal picker so member chooses which personal goal to file it under
+- [ ] When a habit from a team proposal is deleted, reset the user's vote so the proposal card shows Accept/Decline again
+- [ ] Store proposalId on habits so deletion can be linked back to the proposal
+- [ ] Add tRPC route to reset a vote for a proposal
+- [ ] Wire habit deletion in app-context to call vote reset if habit has a proposalId

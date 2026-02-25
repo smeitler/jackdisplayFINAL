@@ -417,6 +417,17 @@ export const appRouter = router({
         if (!isMember) throw new Error("Not a member of this team");
         return db.voteOnTeamGoalProposal(input.proposalId, ctx.user.id, input.vote);
       }),
+
+    resetVote: protectedProcedure
+      .input(z.object({
+        proposalId: z.number(),
+        teamId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.resetTeamGoalVote(input.proposalId, ctx.user.id);
+      }),
   }),
 
   // ─── Community: Referrals ──────────────────────────────────────────────────

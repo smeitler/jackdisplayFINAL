@@ -742,7 +742,8 @@ function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId
 
   const handleAcceptWithGoal = useCallback(async (categoryId: string) => {
     setShowGoalPicker(false);
-    await addHabit(proposal.habitName, proposal.habitEmoji, categoryId, proposal.habitDescription ?? undefined);
+    // Pass teamProposalId and teamId so deleting this habit later resets the vote
+    await addHabit(proposal.habitName, proposal.habitEmoji, categoryId, proposal.habitDescription ?? undefined, undefined, undefined, undefined, proposal.id, teamId);
     voteMutation.mutate({ proposalId: proposal.id, teamId, vote: "accept" });
     Alert.alert("Habit Added! 🎯", `"${proposal.habitName}" has been added to your habits.`);
   }, [proposal, addHabit, voteMutation, teamId]);

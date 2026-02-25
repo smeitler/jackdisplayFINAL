@@ -119,7 +119,7 @@ function serverAlarmToLocal(row: { hour: number; minute: number; days: string; e
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 type AppContextValue = AppState & {
-  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => Promise<void>;
+  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   addCategory: (label: string, emoji: string, lifeArea?: LifeArea) => Promise<void>;
@@ -254,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => {
+  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number) => {
     const catHabits = state.habits.filter((h) => h.category === category);
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
@@ -268,6 +268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       frequencyType,
       monthlyGoal,
       createdAt: new Date().toISOString(),
+      ...(teamProposalId !== undefined ? { teamProposalId, teamId } : {}),
     };
     const updated = [...state.habits, newHabit];
     await saveHabits(updated);
@@ -318,6 +319,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.habits, utils]);
 
   const deleteHabit = useCallback(async (id: string) => {
+    const habit = state.habits.find((h) => h.id === id);
     const updated = state.habits.filter((h) => h.id !== id);
     await Promise.all([saveHabits(updated), localDeleteCheckInsForHabit(id)]);
     const updatedCheckIns = state.checkIns.filter((e) => e.habitId !== id);
@@ -327,10 +329,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (isAuthenticated.current) {
       try {
-        await Promise.all([
+        const deletions: Promise<any>[] = [
           utils.client.habits.delete.mutate({ clientId: id }),
           utils.client.checkIns.deleteForHabit.mutate({ habitClientId: id }),
-        ]);
+        ];
+        // If this habit came from a team proposal, reset the vote so the card shows Accept again
+        if (habit?.teamProposalId && habit?.teamId) {
+          deletions.push(
+            utils.client.goalProposals.resetVote.mutate({
+              proposalId: habit.teamProposalId,
+              teamId: habit.teamId,
+            })
+          );
+        }
+        await Promise.all(deletions);
       } catch (err) {
         console.warn('[AppContext] Failed to sync habit deletion:', err);
       }

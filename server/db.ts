@@ -742,3 +742,12 @@ export async function voteOnTeamGoalProposal(
     .onDuplicateKeyUpdate({ set: { vote } });
   return true;
 }
+
+export async function resetTeamGoalVote(proposalId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(teamGoalVotes)
+    .where(and(eq(teamGoalVotes.proposalId, proposalId), eq(teamGoalVotes.userId, userId)));
+  return true;
+}
