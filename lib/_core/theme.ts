@@ -5,7 +5,7 @@ import themeConfig from "@/theme.config";
 export type ColorScheme = "light" | "dark";
 
 // Named app themes
-export type AppTheme = "purple" | "white" | "black" | "punk";
+export type AppTheme = "purple" | "white" | "black" | "punk" | "valley" | "airy";
 
 export const ThemeColors = themeConfig.themeColors;
 
@@ -128,6 +128,36 @@ const blackPalette: ThemeColorPalette = makeThemePalette(
   '#F87171', // error
 );
 
+/** Momentum Valley theme: deep forest green + warm amber on rich dark earth */
+const valleyPalette: ThemeColorPalette = makeThemePalette(
+  '#4ADE80', // primary — vivid green
+  '#0D1A0F', // background — deep forest black-green
+  '#162318', // surface — dark moss
+  '#E8F5E9', // foreground — soft leaf white
+  '#6B9E72', // muted — muted sage
+  '#1E3A22', // border — dark forest
+  '#86EFAC', // success — bright mint
+  '#FCD34D', // warning — warm amber
+  '#F87171', // error — soft red
+);
+
+/**
+ * Airy theme: inspired by Monument Valley's dreamy pastel aesthetic.
+ * Soft dusty rose primary, misty lavender-white background, warm sandy surface,
+ * deep muted slate text — the same ethereal, calming palette as the game.
+ */
+const airyPalette: ThemeColorPalette = makeThemePalette(
+  '#C084A8', // primary — dusty rose / soft magenta (MV accent)
+  '#F5F0F7', // background — misty lavender-white
+  '#EDE8F2', // surface — pale lilac card
+  '#2D2438', // foreground — deep muted plum text
+  '#8E7FA0', // muted — soft lavender-grey
+  '#D8CEEA', // border — pale violet
+  '#7ECBA1', // success — muted sage green (MV greenery)
+  '#E8B86D', // warning — warm sandy amber (MV warm tones)
+  '#D97B8A', // error — soft dusty pink
+);
+
 /** Punk theme: cyberpunk neon magenta + cyan on true black */
 const punkPalette: ThemeColorPalette = makeThemePalette(
   '#FF00FF', // primary — neon magenta
@@ -146,6 +176,8 @@ export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   white: whitePalette,
   black: blackPalette,
   punk: punkPalette,
+  valley: valleyPalette,
+  airy: airyPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
@@ -153,6 +185,8 @@ export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
   white: "light",
   black: "dark",
   punk: "dark",
+  valley: "dark",
+  airy: "light",
 };
 
 export const Fonts = Platform.select({

@@ -39,6 +39,18 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
     preview: "#FF00FF",
     description: "Cyberpunk",
   },
+  {
+    id: "valley",
+    label: "Valley",
+    preview: "#4ADE80",
+    description: "Momentum",
+  },
+  {
+    id: "airy",
+    label: "Airy",
+    preview: "#C084A8",
+    description: "Dreamy",
+  },
 ];
 
 export default function SettingsScreen() {

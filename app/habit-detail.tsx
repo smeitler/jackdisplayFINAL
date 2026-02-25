@@ -8,6 +8,7 @@ import {
   View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent,
   Modal, TextInput, KeyboardAvoidingView, Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -55,14 +56,16 @@ function DayNoteModal({
     onClose();
   }
 
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: colors.background }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Header */}
-        <View style={[noteStyles.header, { borderBottomColor: colors.border }]}>
+        {/* Header — padded for Dynamic Island / notch */}
+        <View style={[noteStyles.header, { borderBottomColor: colors.border, paddingTop: Math.max(insets.top, 16) }]}>
           <Pressable onPress={onClose} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}>
             <Text style={[noteStyles.cancelBtn, { color: colors.muted }]}>Cancel</Text>
           </Pressable>

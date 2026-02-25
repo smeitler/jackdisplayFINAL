@@ -242,3 +242,6 @@
 - [x] Habit detail screen: tap any day in Recent History to add/edit a personal note for that day
 - [x] Appearance settings: add "Punk" cyberpunk theme (neon magenta/cyan on deep black)
 - [x] Fix Best Streak: count only consecutive green-rated days in a row (not all rated days)
+- [ ] Appearance settings: add "Airy" theme (light, soft sky blue/white, clean minimal feel) after Momentum Valley
+- [x] Fix day-note modal top cutoff: Cancel/Save bar hidden behind Dynamic Island/notch — add safe area top inset
+- [x] Redesign Airy theme palette inspired by Monument Valley game: soft pastels, dreamy pinks, muted teals, lavender, warm sandy tones
