@@ -156,7 +156,7 @@ export default function HabitDetailScreen() {
     const todayStr = toDateString(today);
     const yesterdayD = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
     const yesterdayStr = toDateString(yesterdayD);
-    const sorted = [...ratedDates].sort();
+    // Current streak: consecutive rated days going back from today/yesterday
     let cur = 0;
     let anchorStr: string | null = null;
     if (ratedDates.has(todayStr)) anchorStr = todayStr;
@@ -169,21 +169,27 @@ export default function HabitDetailScreen() {
         else break;
       }
     }
+
+    // Best streak: longest consecutive run of GREEN days only
+    const greenDates = new Set(
+      habitCheckIns.filter((e) => e.rating === "green").map((e) => e.date)
+    );
+    const sortedGreen = [...greenDates].sort();
     let best = 0, run = 0;
     let prevD: Date | null = null;
-    for (const ds of sorted) {
+    for (const ds of sortedGreen) {
       const d = new Date(ds + "T12:00:00");
       if (prevD) {
         const prevLocal = new Date(prevD.getFullYear(), prevD.getMonth(), prevD.getDate());
         const curLocal = new Date(d.getFullYear(), d.getMonth(), d.getDate());
         const diff = Math.round((curLocal.getTime() - prevLocal.getTime()) / 86400000);
-        if (diff === 1) { run++; } else run = 1;
+        if (diff === 1) { run++; } else { run = 1; }
       } else { run = 1; }
       if (run > best) best = run;
       prevD = d;
     }
     return { currentStreak: cur, bestStreak: best };
-  }, [ratedDates, today]);
+  }, [ratedDates, habitCheckIns, today]);
 
   const { green, yellow, red, total } = useMemo(() => {
     let g = 0, y = 0, r = 0;

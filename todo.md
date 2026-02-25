@@ -241,3 +241,4 @@
 - [x] Vision Board goal detail: motivations are fully editable (tap bullet to edit inline, swipe/tap X to delete)
 - [x] Habit detail screen: tap any day in Recent History to add/edit a personal note for that day
 - [x] Appearance settings: add "Punk" cyberpunk theme (neon magenta/cyan on deep black)
+- [x] Fix Best Streak: count only consecutive green-rated days in a row (not all rated days)
