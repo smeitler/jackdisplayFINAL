@@ -110,16 +110,15 @@ function AuroraOverlay() {
 
   const style = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ translateX: translateX.value }],
   }));
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, style, { pointerEvents: "none" }]}>
       <LinearGradient
-        colors={["transparent", "#7c3aed60", "#06b6d460", "#a855f740", "transparent"]}
-        locations={[0, 0.25, 0.5, 0.75, 1]}
-        start={{ x: 0, y: 0.3 }}
-        end={{ x: 1, y: 0.7 }}
+        colors={["transparent", "#7c3aed30", "#0d1a4a50", "#7c3aed20", "transparent"]}
+        locations={[0, 0.3, 0.5, 0.7, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
         style={{ flex: 1 }}
       />
     </Animated.View>
@@ -270,13 +269,13 @@ export function NovaCard({
       />
       {/* Card surface */}
       <View style={[novaCardStyles.innerCard, { backgroundColor: "#0D0B1E" }]}>
-        {/* Shimmer sweep */}
+        {/* Shimmer sweep — very subtle violet sheen */}
         <Animated.View style={[novaCardStyles.shimmerContainer, shimmerStyle]} pointerEvents="none">
           <LinearGradient
-            colors={["transparent", "rgba(168,85,247,0.18)", "rgba(6,182,212,0.22)", "transparent"]}
+            colors={["transparent", "rgba(168,85,247,0.07)", "rgba(168,85,247,0.10)", "rgba(168,85,247,0.07)", "transparent"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={{ width: 120, height: "100%" }}
+            style={{ width: 180, height: "100%" }}
           />
         </Animated.View>
         {children}

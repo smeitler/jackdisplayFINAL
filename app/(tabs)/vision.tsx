@@ -414,11 +414,7 @@ export default function VisionBoardScreen() {
                   {deadlineLabel && (
                     <Text style={[styles.visionDeadline, { color: deadlineColor }]}>{deadlineLabel}</Text>
                   )}
-                  {catMotivations.length > 0 && (
-                    <Text style={[styles.motivePreview, { color: colors.muted }]} numberOfLines={1}>
-                      {catMotivations[0]}
-                    </Text>
-                  )}
+
                 </View>
                 <View style={styles.headerRight}>
                   <Pressable
@@ -435,6 +431,27 @@ export default function VisionBoardScreen() {
                 </View>
               </Pressable>
 
+              {/* Motivations — shown prominently below header, above photos */}
+              {catMotivations.length > 0 && (
+                <Pressable
+                  onPress={() => setDetailCatId(cat.id)}
+                  style={[styles.motivationsPreview, { borderTopColor: colors.border }]}
+                >
+                  <Text style={[styles.motiveSectionLabel, { color: colors.muted }]}>WHY THIS MATTERS</Text>
+                  {catMotivations.slice(0, 3).map((m, i) => (
+                    <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 4 }}>
+                      <Text style={[styles.motiveBullet, { color: colors.primary }]}>•</Text>
+                      <Text style={[styles.motiveText, { color: colors.foreground }]} numberOfLines={2}>{m}</Text>
+                    </View>
+                  ))}
+                  {catMotivations.length > 3 && (
+                    <Text style={[styles.moreText, { color: colors.primary }]}>
+                      +{catMotivations.length - 3} more reasons →
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+
               {/* Swipeable photo carousel */}
               {images.length > 0 && (
                 <View style={{ marginTop: 8 }}>
@@ -444,26 +461,6 @@ export default function VisionBoardScreen() {
                     onPhotoPress={() => setDetailCatId(cat.id)}
                   />
                 </View>
-              )}
-
-              {/* Motivations preview (first 2) */}
-              {catMotivations.length > 0 && (
-                <Pressable
-                  onPress={() => setDetailCatId(cat.id)}
-                  style={[styles.motivationsPreview, { borderTopColor: colors.border }]}
-                >
-                  {catMotivations.slice(0, 2).map((m, i) => (
-                    <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
-                      <Text style={[styles.motiveBullet, { color: colors.primary }]}>•</Text>
-                      <Text style={[styles.motiveText, { color: colors.foreground }]} numberOfLines={2}>{m}</Text>
-                    </View>
-                  ))}
-                  {catMotivations.length > 2 && (
-                    <Text style={[styles.moreText, { color: colors.primary }]}>
-                      +{catMotivations.length - 2} more reasons
-                    </Text>
-                  )}
-                </Pressable>
               )}
 
               {/* Empty state */}
@@ -546,6 +543,7 @@ const styles = StyleSheet.create({
   motivationsPreview: {
     marginTop: 10, paddingTop: 10, borderTopWidth: 1, gap: 4,
   },
+  motiveSectionLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 },
   motiveBullet: { fontSize: 14, lineHeight: 20 },
   motiveText: { fontSize: 14, lineHeight: 20, flex: 1 },
   moreText: { fontSize: 12, fontWeight: "600", marginTop: 4 },
