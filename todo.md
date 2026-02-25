@@ -273,3 +273,6 @@
 - [x] Habits: replace all emoji/icon circles with clean numbered rank badges (1, 2, 3...) based on importance order
 - [x] Habits: add reordering (up/down arrows) in habits management screen so users can set priority order
 - [x] Habits: add `globalOrder` field to Habit type for cross-category importance ranking, persisted in storage
+- [x] Fix: old habits still show emoji icons — stripped habit.emoji from all display surfaces (category-detail, habits modal), always show number badge only
+- [x] Fix: Priority Order section redesigned — clean standalone collapsible section, clearly separate from goal rows, no trophy icon
+- [x] Fix: Priority Order reorder changes reflected everywhere via globalOrder field (check-in, analytics, home screen all use activeHabits sorted by globalOrder)

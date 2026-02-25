@@ -48,6 +48,13 @@ export default function CategoryDetailScreen() {
     [activeHabits, categoryId],
   );
 
+  // Global rank: position of each habit in the full activeHabits list (sorted by globalOrder)
+  const globalRankMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    activeHabits.forEach((h, i) => { m[h.id] = i + 1; });
+    return m;
+  }, [activeHabits]);
+
   const today = new Date();
   const todayStr = toDateString(today);
 
@@ -243,8 +250,10 @@ export default function CategoryDetailScreen() {
             >
               {/* Habit header */}
               <View style={styles.habitHeader}>
-                <View style={[styles.habitIconWrap, { backgroundColor: colors.primary + "22" }]}>
-                  <Text style={styles.habitEmoji}>{habit.emoji}</Text>
+                <View style={[styles.habitIconWrap, { backgroundColor: colors.primary + "22", borderWidth: 1, borderColor: colors.primary + "44" }]}>
+                  <Text style={[styles.habitEmoji, { color: colors.primary, fontWeight: '700', fontSize: 15 }]}>
+                    #{globalRankMap[habit.id] ?? ''}
+                  </Text>
                 </View>
                 <View style={styles.habitInfo}>
                   <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>{habit.name}</Text>

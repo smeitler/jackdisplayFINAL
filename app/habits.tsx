@@ -16,8 +16,6 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 
-// Numbered emojis 1–10 then fallback to ⭐
-const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
 
 // ─── Inline Date Picker ─────────────────────────────────────────────────────
 
@@ -219,7 +217,6 @@ function SwipeableHabitRow({ habit, habitIndex, isLast, teamName, onEdit, onTogg
 interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
-  defaultEmoji?: string;
   entryCount: number;
   onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => void;
   onDelete: (habitId: string) => void;
@@ -229,20 +226,18 @@ interface HabitModalProps {
 
 const NAME_LIMIT = 20;
 
-function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDelete, onDeactivate, onClose }: HabitModalProps) {
+function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeactivate, onClose }: HabitModalProps) {
   const colors = useColors();
   const [name, setName] = useState(editHabit?.name ?? '');
-  const [emoji, setEmoji] = useState(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
   const [description, setDescription] = useState(editHabit?.description ?? '');
   const [frequencyType, setFrequencyType] = useState<import('@/lib/storage').FrequencyType>(editHabit?.frequencyType ?? 'weekly');
   const [weeklyGoal, setWeeklyGoal] = useState<number | undefined>(editHabit?.weeklyGoal);
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(editHabit?.monthlyGoal);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     if (!name.trim()) return;
-    onSave(name.trim(), emoji, description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
+    onSave(name.trim(), '', description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
     onClose();
   }
 
@@ -275,7 +270,6 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
         onRequestClose={onClose}
           onShow={() => {
           setName(editHabit?.name ?? '');
-          setEmoji(editHabit?.emoji ?? defaultEmoji ?? '1️⃣');
           setDescription(editHabit?.description ?? '');
           setFrequencyType(editHabit?.frequencyType ?? 'weekly');
           setWeeklyGoal(editHabit?.weeklyGoal);
@@ -470,12 +464,6 @@ function HabitModal({ visible, editHabit, defaultEmoji, entryCount, onSave, onDe
         </KeyboardAvoidingView>
       </Modal>
 
-      <EmojiPicker
-        visible={showEmojiPicker}
-        currentEmoji={emoji}
-        onSelect={(e) => setEmoji(e)}
-        onClose={() => setShowEmojiPicker(false)}
-      />
     </>
   );
 }
@@ -682,12 +670,6 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
         </KeyboardAvoidingView>
       </Modal>
 
-      <EmojiPicker
-        visible={showEmojiPicker}
-        currentEmoji={emoji}
-        onSelect={(e) => setEmoji(e)}
-        onClose={() => setShowEmojiPicker(false)}
-      />
     </>
   );
 }
@@ -907,28 +889,21 @@ export default function HabitsScreen() {
 
         {/* ── Priority Order Section ── */}
         {activeHabits.length > 1 && (
-          <View style={[styles.categoryBlock, { borderColor: colors.border, marginTop: 8 }]}>
+          <View style={{ marginTop: 24, marginBottom: 4 }}>
+            {/* Section header row */}
             <TouchableOpacity
               onPress={() => setGlobalReordering((v) => !v)}
-              style={[styles.categoryRow, { backgroundColor: colors.surface }]}
+              style={[styles.priorityHeader, { borderColor: colors.border, backgroundColor: colors.surface }]}
               activeOpacity={0.7}
             >
-              <View style={[styles.catEmojiBtn, { backgroundColor: colors.primary + '18' }]}>
-                <Text style={{ fontSize: 20 }}>🏆</Text>
-              </View>
-              <View style={styles.catInfo}>
-                <Text style={[styles.catLabel, { color: colors.foreground }]}>Priority Order</Text>
-                <Text style={[styles.catCount, { color: colors.muted }]}>
-                  {globalReordering ? 'Tap arrows to reorder · #1 = most important' : `${activeHabits.length} active habits ranked by importance`}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.priorityTitle, { color: colors.foreground }]}>Habit Priority Order</Text>
+                <Text style={[styles.prioritySub, { color: colors.muted }]}>
+                  {globalReordering ? '#1 = most important · tap arrows to reorder' : `${activeHabits.length} habits · tap to reorder by importance`}
                 </Text>
               </View>
-              <View style={styles.catActions}>
-                <View style={[styles.iconBtn, globalReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}>
-                  <IconSymbol name="arrow.up.arrow.down" size={14} color={globalReordering ? colors.primary : colors.muted} />
-                </View>
-                <View style={styles.iconBtn}>
-                  <IconSymbol name={globalReordering ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-                </View>
+              <View style={[styles.iconBtn, globalReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}>
+                <IconSymbol name={globalReordering ? 'chevron.up' : 'chevron.down'} size={14} color={globalReordering ? colors.primary : colors.muted} />
               </View>
             </TouchableOpacity>
 
@@ -985,10 +960,6 @@ export default function HabitsScreen() {
       <HabitModal
         visible={habitModal.open}
         editHabit={habitModal.edit}
-        defaultEmoji={(() => {
-          const catHabits = habits.filter((h) => h.category === habitModal.categoryId);
-          return NUMBER_EMOJIS[catHabits.length] ?? '⭐';
-        })()}
         entryCount={habitModal.edit ? (checkIns as CheckInEntry[]).filter((e) => e.habitId === habitModal.edit!.id).length : 0}
         onSave={handleSaveHabit}
         onDelete={(id) => deleteHabit(id)}
@@ -1151,4 +1122,15 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   teamBadgeText: { fontSize: 11, fontWeight: '600' },
+  priorityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 2,
+  },
+  priorityTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  prioritySub: { fontSize: 12 },
 });
