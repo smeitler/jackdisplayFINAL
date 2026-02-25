@@ -276,3 +276,4 @@
 - [x] Fix: old habits still show emoji icons — stripped habit.emoji from all display surfaces (category-detail, habits modal), always show number badge only
 - [x] Fix: Priority Order section redesigned — clean standalone collapsible section, clearly separate from goal rows, no trophy icon
 - [x] Fix: Priority Order reorder changes reflected everywhere via globalOrder field (check-in, analytics, home screen all use activeHabits sorted by globalOrder)
+- [x] Fix: category-detail habit numbering now starts at #1 within the category (not global rank)
