@@ -404,7 +404,7 @@ export const appRouter = router({
       .input(z.object({
         teamId: z.number(),
         habitName: z.string().min(1).max(100),
-        habitEmoji: z.string().max(16),
+        habitEmoji: z.string().max(16).optional().default(""),
         habitDescription: z.string().max(500).optional(),
         lifeArea: z.string().max(32).optional(),
       }))

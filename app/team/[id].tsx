@@ -22,7 +22,6 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useApp } from "@/lib/app-context";
 import * as ImagePicker from "expo-image-picker";
-import { EmojiPicker } from "@/components/emoji-picker";
 
 const REACTION_EMOJIS = ["🔥", "💪", "👏", "❤️", "😂"];
 
@@ -487,17 +486,15 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
 
   // Habit fields
   const [habitName, setHabitName] = useState("");
-  const [habitEmoji, setHabitEmoji] = useState("⭐");
   const [habitDesc, setHabitDesc] = useState("");
   const [frequencyType, setFrequencyType] = useState<"weekly" | "monthly">("weekly");
   const [weeklyGoal, setWeeklyGoal] = useState<number | undefined>(undefined);
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(undefined);
-  const [showHabitEmojiPicker, setShowHabitEmojiPicker] = useState(false);
 
   const [lifeArea, setLifeArea] = useState<string | undefined>(undefined);
 
   function resetForm() {
-    setHabitName(""); setHabitEmoji("⭐"); setHabitDesc("");
+    setHabitName(""); setHabitDesc("");
     setFrequencyType("weekly"); setWeeklyGoal(undefined); setMonthlyGoal(undefined);
     setLifeArea(undefined);
   }
@@ -516,11 +513,10 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
     createMutation.mutate({
       teamId,
       habitName: habitName.trim(),
-      habitEmoji,
       habitDescription: habitDesc.trim() || undefined,
       lifeArea,
     });
-  }, [teamId, habitName, habitEmoji, habitDesc, lifeArea, createMutation]);
+  }, [teamId, habitName, habitDesc, lifeArea, createMutation]);
 
   return (
     <>
@@ -570,28 +566,19 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
 
               {/* ── Habit ── */}
               <Text style={[{ fontSize: 11, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }, { color: colors.muted }]}>Habit</Text>
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 0 }}>
-                <TouchableOpacity
-                  onPress={() => setShowHabitEmojiPicker(true)}
-                  style={[{ width: 48, height: 48, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" }, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontSize: 26 }}>{habitEmoji}</Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                    style={[{ flex: 1, height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 15 }, { backgroundColor: colors.background, borderColor: habitName.length >= NAME_LIMIT ? "#F59E0B" : colors.border, color: colors.foreground }]}
-                    placeholder="Habit name…"
-                    placeholderTextColor={colors.muted}
-                    value={habitName}
-                    onChangeText={(t) => setHabitName(t.slice(0, NAME_LIMIT))}
-                    maxLength={NAME_LIMIT}
-                    returnKeyType="next"
-                  />
-                  <Text style={[{ fontSize: 11, textAlign: "right", marginTop: 2 }, { color: habitName.length >= NAME_LIMIT ? "#F59E0B" : colors.muted }]}>
-                    {habitName.length}/{NAME_LIMIT}
-                  </Text>
-                </View>
+              <View style={{ marginBottom: 0 }}>
+                <TextInput
+                  style={[{ height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 15 }, { backgroundColor: colors.background, borderColor: habitName.length >= NAME_LIMIT ? "#F59E0B" : colors.border, color: colors.foreground }]}
+                  placeholder="Habit name…"
+                  placeholderTextColor={colors.muted}
+                  value={habitName}
+                  onChangeText={(t) => setHabitName(t.slice(0, NAME_LIMIT))}
+                  maxLength={NAME_LIMIT}
+                  returnKeyType="next"
+                />
+                <Text style={[{ fontSize: 11, textAlign: "right", marginTop: 2 }, { color: habitName.length >= NAME_LIMIT ? "#F59E0B" : colors.muted }]}>
+                  {habitName.length}/{NAME_LIMIT}
+                </Text>
               </View>
 
               {/* Description */}
@@ -703,17 +690,10 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
         </KeyboardAvoidingView>
       </Modal>
 
-      <EmojiPicker
-        visible={showHabitEmojiPicker}
-        currentEmoji={habitEmoji}
-        onSelect={(e) => setHabitEmoji(e)}
-        onClose={() => setShowHabitEmojiPicker(false)}
-      />
     </>
   );
 }
-
-// ─── Goal Proposal Card ───────────────────────────────────────────────────────
+// ─── Goal Proposal Card ────────────────────────────────────────────────────────
 
 type GoalProposal = {
   id: number;
@@ -743,7 +723,7 @@ function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId
   const handleAcceptWithGoal = useCallback(async (categoryId: string) => {
     setShowGoalPicker(false);
     // Pass teamProposalId and teamId so deleting this habit later resets the vote
-    await addHabit(proposal.habitName, proposal.habitEmoji, categoryId, proposal.habitDescription ?? undefined, undefined, undefined, undefined, proposal.id, teamId);
+    await addHabit(proposal.habitName, "", categoryId, proposal.habitDescription ?? undefined, undefined, undefined, undefined, proposal.id, teamId);
     voteMutation.mutate({ proposalId: proposal.id, teamId, vote: "accept" });
     Alert.alert("Habit Added! 🎯", `"${proposal.habitName}" has been added to your habits.`);
   }, [proposal, addHabit, voteMutation, teamId]);
@@ -764,7 +744,6 @@ function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId
           <Text style={[styles.goalCardTime, { color: colors.muted }]}>{timeAgo(proposal.createdAt)}</Text>
         </View>
         <View style={styles.goalCardBody}>
-          <Text style={styles.goalCardHabitEmoji}>{proposal.habitEmoji}</Text>
           <View style={{ flex: 1 }}>
             <Text style={[styles.goalCardHabitName, { color: colors.foreground }]}>{proposal.habitName}</Text>
             {proposal.lifeArea ? (
@@ -929,6 +908,7 @@ export default function TeamDetailScreen() {
   const [showShareGoals, setShowShareGoals] = useState(false);
   const [showCreateGoal, setShowCreateGoal] = useState(false);
   const [activeTab, setActiveTab] = useState<"feed" | "stats" | "more">("feed");
+  const [proposalsExpanded, setProposalsExpanded] = useState(false);
 
   const { data: members, isLoading: membersLoading } = trpc.teams.members.useQuery({ teamId });
   const { data: myTeams } = trpc.teams.list.useQuery();
@@ -1021,12 +1001,32 @@ export default function TeamDetailScreen() {
               {/* Post Composer */}
               <PostComposer teamId={teamId} myUserId={myUserId} onPosted={() => refetchFeed()} />
 
-              {/* Goal Proposals */}
+              {/* Goal Proposals — collapsible so chat stays visible */}
               {goalProposals && goalProposals.length > 0 && (
-                <View style={{ gap: 10 }}>
-                  {(goalProposals as GoalProposal[]).map((proposal) => (
-                    <GoalProposalCard key={proposal.id} proposal={proposal} teamId={teamId} />
-                  ))}
+                <View style={{ marginBottom: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => setProposalsExpanded((v) => !v)}
+                    style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, marginBottom: proposalsExpanded ? 10 : 0 }, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    activeOpacity={0.75}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <IconSymbol name="person.3.fill" size={16} color={colors.primary} />
+                      <Text style={[{ fontSize: 14, fontWeight: "700" }, { color: colors.foreground }]}>
+                        Team Habit Proposals
+                      </Text>
+                      <View style={[{ borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 }, { backgroundColor: colors.primary + "20" }]}>
+                        <Text style={[{ fontSize: 11, fontWeight: "700" }, { color: colors.primary }]}>{goalProposals.length}</Text>
+                      </View>
+                    </View>
+                    <IconSymbol name={proposalsExpanded ? "chevron.up" : "chevron.down"} size={16} color={colors.muted} />
+                  </TouchableOpacity>
+                  {proposalsExpanded && (
+                    <View style={{ gap: 10 }}>
+                      {(goalProposals as GoalProposal[]).map((proposal) => (
+                        <GoalProposalCard key={proposal.id} proposal={proposal} teamId={teamId} />
+                      ))}
+                    </View>
+                  )}
                 </View>
               )}
 

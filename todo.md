@@ -258,3 +258,8 @@
 - [ ] Voice messages in team chat: hold-to-record audio message, upload to S3, play inline in chat
 - [ ] Audio data privacy disclosure: add Audio Data to App Store privacy labels once voice messages are live
 - [x] iPad Pro 13" layout: responsive layouts across all main screens for App Store screenshots
+- [x] Fix: "On Track" green badge overflowing/too tight inside goal card
+- [x] Fix: Appearance selector (purple/white/black themes) too crowded — needs more spacing (2-column grid layout)
+- [x] Fix: Remove all habit icons/emojis from entire interface (no star or any icon on habits)
+- [x] Fix: Propose habit error in TestFlight — removed emoji requirement, made habitEmoji optional with empty default
+- [x] Fix: Community feed chat blocked by accepted habits section — proposals now in collapsible "Team Habit Proposals" row (collapsed by default)

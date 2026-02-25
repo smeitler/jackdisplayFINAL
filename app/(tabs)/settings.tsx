@@ -391,15 +391,15 @@ const styles = StyleSheet.create({
   sectionTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
   // Theme selector
   themeRow: {
-    flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1,
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 16, borderTopWidth: 1,
   },
   themeOption: {
-    flex: 1, alignItems: 'center', gap: 6,
-    paddingVertical: 12, paddingHorizontal: 8,
-    borderRadius: 12, borderWidth: 1.5,
+    width: '47%', alignItems: 'center', gap: 8,
+    paddingVertical: 14, paddingHorizontal: 10,
+    borderRadius: 14, borderWidth: 1.5,
   },
   themeSwatch: {
-    width: 32, height: 32, borderRadius: 16, borderWidth: 1,
+    width: 36, height: 36, borderRadius: 18, borderWidth: 1,
   },
   themeLabel: {
     fontSize: 13, fontWeight: '600',
