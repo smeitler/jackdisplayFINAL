@@ -248,3 +248,4 @@
 - [x] Add "Nova" theme: aurora/galaxy aesthetic with animated gradient backgrounds, glowing buttons, shimmer cards, neon borders, and every visual effect possible
 - [x] Vision Board main screen: show motivations/reasons under each goal section (not just in detail view)
 - [x] Nova theme: replace jarring white shimmer bar with smooth atmospheric aurora glow effect
+- [x] Fix "No procedure found on path goalProposals.create" error when proposing a team habit (teamGoalVotes table was missing from DB, created it; route itself was correct)
