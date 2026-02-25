@@ -91,6 +91,8 @@ export const appRouter = router({
         isActive: z.boolean().default(true),
         order: z.number().int().min(0).default(0),
         weeklyGoal: z.number().int().min(1).max(7).optional().nullable(),
+        frequencyType: z.string().max(16).optional().nullable(),
+        monthlyGoal: z.number().int().min(1).max(31).optional().nullable(),
       }))
       .mutation(({ ctx, input }) =>
         db.upsertHabit({
@@ -103,6 +105,8 @@ export const appRouter = router({
           isActive: input.isActive,
           order: input.order,
           weeklyGoal: input.weeklyGoal ?? null,
+          frequencyType: input.frequencyType ?? null,
+          monthlyGoal: input.monthlyGoal ?? null,
         })
       ),
 
@@ -122,6 +126,8 @@ export const appRouter = router({
         isActive: z.boolean().default(true),
         order: z.number().int().min(0).default(0),
         weeklyGoal: z.number().int().min(1).max(7).optional().nullable(),
+        frequencyType: z.string().max(16).optional().nullable(),
+        monthlyGoal: z.number().int().min(1).max(31).optional().nullable(),
       })))
       .mutation(({ ctx, input }) =>
         db.bulkUpsertHabits(ctx.user.id, input.map((h) => ({
@@ -134,6 +140,8 @@ export const appRouter = router({
           isActive: h.isActive,
           order: h.order,
           weeklyGoal: h.weeklyGoal ?? null,
+          frequencyType: h.frequencyType ?? null,
+          monthlyGoal: h.monthlyGoal ?? null,
         })))
       ),
 

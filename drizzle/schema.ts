@@ -65,6 +65,8 @@ export const habits = mysqlTable("habits", {
   isActive: boolean("isActive").notNull().default(true),
   order: int("order").notNull().default(0),
   weeklyGoal: int("weeklyGoal"), // target days per week (1-7), nullable = no goal set
+  frequencyType: varchar("frequencyType", { length: 16 }), // 'weekly' | 'monthly'
+  monthlyGoal: int("monthlyGoal"), // target days per month (1-31)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({

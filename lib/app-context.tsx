@@ -83,7 +83,7 @@ function serverCatToLocal(row: { clientId: string; label: string; emoji: string;
   };
 }
 
-function serverHabitToLocal(row: { clientId: string; categoryClientId: string; name: string; emoji: string; description?: string | null; isActive: boolean; order?: number | null; weeklyGoal?: number | null; createdAt: Date }): Habit {
+function serverHabitToLocal(row: { clientId: string; categoryClientId: string; name: string; emoji: string; description?: string | null; isActive: boolean; order?: number | null; weeklyGoal?: number | null; frequencyType?: string | null; monthlyGoal?: number | null; createdAt: Date }): Habit {
   return {
     id: row.clientId,
     name: row.name,
@@ -93,6 +93,8 @@ function serverHabitToLocal(row: { clientId: string; categoryClientId: string; n
     isActive: row.isActive,
     order: row.order ?? 0,
     weeklyGoal: row.weeklyGoal ?? undefined,
+    frequencyType: (row.frequencyType as import('@/lib/storage').FrequencyType | null) ?? undefined,
+    monthlyGoal: row.monthlyGoal ?? undefined,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
 }
@@ -285,6 +287,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           isActive: newHabit.isActive,
           order: newHabit.order,
           weeklyGoal: newHabit.weeklyGoal ?? null,
+          frequencyType: newHabit.frequencyType ?? null,
+          monthlyGoal: newHabit.monthlyGoal ?? null,
         });
       } catch (err) {
         console.warn('[AppContext] Failed to sync new habit:', err);
@@ -310,6 +314,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             isActive: habit.isActive,
             order: habit.order,
             weeklyGoal: habit.weeklyGoal ?? null,
+            frequencyType: habit.frequencyType ?? null,
+            monthlyGoal: habit.monthlyGoal ?? null,
           });
         } catch (err) {
           console.warn('[AppContext] Failed to sync updated habit:', err);

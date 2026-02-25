@@ -139,6 +139,8 @@ export async function upsertHabit(data: InsertHabit) {
       isActive: data.isActive,
       order: data.order ?? 0,
       weeklyGoal: data.weeklyGoal ?? null,
+      frequencyType: data.frequencyType ?? null,
+      monthlyGoal: data.monthlyGoal ?? null,
     },
   });
 }

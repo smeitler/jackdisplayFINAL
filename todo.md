@@ -232,3 +232,10 @@
 - [ ] App UI: "Connect a Clock" setup wizard in More/Settings tab
 - [ ] App UI: connected devices list with online/offline status in More tab
 - [ ] Push notification trigger when alarm_dismissed event received from device
+- [x] Fix home screen: Mindset category goal cards not showing target details like Financial goals do
+- [x] Fix Vision Board: photos not persisting after app restart (save/load from AsyncStorage)
+- [x] Fix DB schema: add frequencyType and monthlyGoal columns to habits table so server sync preserves them
+- [x] Fix Vision Board: copy picked photos to documentDirectory for permanent persistence on iOS
+- [x] Redesign Vision Board: swipeable photo carousel per goal (swipe left/right through photos)
+- [x] Vision Board: tap goal section header to open full-screen goal detail view (motivations at top, all photos below with swipe)
+- [x] Vision Board goal detail: motivations are fully editable (tap bullet to edit inline, swipe/tap X to delete)
