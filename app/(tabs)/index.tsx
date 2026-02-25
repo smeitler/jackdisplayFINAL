@@ -193,8 +193,8 @@ export default function HomeScreen() {
               <NovaCard
                 key={cat.id}
                 colors={colors}
-                cardBg={isOnTrack ? '#16A34A' : undefined}
-                cardBorder={isOnTrack ? '#15803D' : undefined}
+                cardBg={isOnTrack ? (colors.background === '#151718' ? '#0d2b18' : '#f0fdf4') : undefined}
+                cardBorder={isOnTrack ? '#22C55E' : undefined}
                 style={{ ...styles.categoryCard, width: cardWidth }}
               >
               <Pressable
@@ -213,25 +213,27 @@ export default function HomeScreen() {
                   { opacity: pressed ? 0.85 : 1 },
                 ]}
               >
-                {/* On-track label */}
+                {/* On-track badge */}
                 {isOnTrack && (
-                  <Text style={styles.onTrackLabel}>✓ On Track</Text>
+                  <View style={styles.onTrackBadge}>
+                    <Text style={styles.onTrackBadgeText}>✓ On Track</Text>
+                  </View>
                 )}
 
                 <View style={[
                   styles.catIconWrap,
-                  { backgroundColor: isOnTrack ? 'rgba(255,255,255,0.18)' : colors.primary + '22' },
+                  { backgroundColor: isOnTrack ? '#22C55E22' : colors.primary + '22' },
                 ]}>
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </View>
-                <Text style={[styles.catLabel, { color: isOnTrack ? '#fff' : colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+                <Text style={[styles.catLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
                 {lifeArea && (
-                  <Text style={[styles.catLifeArea, { color: isOnTrack ? 'rgba(255,255,255,0.75)' : colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
+                  <Text style={[styles.catLifeArea, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
                 )}
                 <View style={styles.catScoreRow}>
                   <Text style={[
                     styles.catScore,
-                    { color: isOnTrack ? '#fff' : colors.primary },
+                    { color: '#22C55E' },
                   ]}>
                     {Math.round(rate * 100)}%
                   </Text>
@@ -251,13 +253,13 @@ export default function HomeScreen() {
                 {total > 0 && (
                   <View style={[styles.catBar, { marginTop: 6, marginBottom: 2 }]}>
                     {breakdown.green > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.green / total, backgroundColor: isOnTrack ? 'rgba(255,255,255,0.55)' : '#22C55E' }]} />
+                      <View style={[styles.catBarSeg, { flex: breakdown.green / total, backgroundColor: '#22C55E' }]} />
                     )}
                     {breakdown.yellow > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.yellow / total, backgroundColor: isOnTrack ? 'rgba(255,255,255,0.3)' : '#F59E0B' }]} />
+                      <View style={[styles.catBarSeg, { flex: breakdown.yellow / total, backgroundColor: '#F59E0B' }]} />
                     )}
                     {breakdown.red > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.red / total, backgroundColor: isOnTrack ? 'rgba(255,255,255,0.15)' : '#EF4444' }]} />
+                      <View style={[styles.catBarSeg, { flex: breakdown.red / total, backgroundColor: '#EF4444' }]} />
                     )}
                   </View>
                 )}
@@ -269,13 +271,14 @@ export default function HomeScreen() {
                       const progress = getHabitProgress(h, getHabitWeeklyDone, getHabitMonthlyDone);
                       if (!progress) return null;
                       const { pct, met, label } = progress;
-                      const barColor = isOnTrack ? 'rgba(255,255,255,0.7)' : (met ? '#22C55E' : colors.primary);
+                      const barColor = met ? '#22C55E' : colors.primary;
                       return (
                         <View key={h.id} style={styles.weeklyGoalItem}>
                           <View style={styles.weeklyGoalBarWrap}>
                             <View style={[styles.weeklyGoalBarBg, {
-                              backgroundColor: isOnTrack ? 'rgba(255,255,255,0.2)' : (met ? '#22C55E22' : colors.border),
-                              borderWidth: 0,
+                              backgroundColor: met ? '#22C55E22' : colors.border,
+                              borderWidth: met ? 1 : 0,
+                              borderColor: met ? '#22C55E44' : 'transparent',
                             }]}>
                               <View style={[
                                 styles.weeklyGoalBarFill,
@@ -382,12 +385,21 @@ const styles = StyleSheet.create({
   categoryCard: {
     width: '47.5%', borderRadius: 14, padding: 12, gap: 4,
   },
-  onTrackLabel: {
+  onTrackBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#22C55E20',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#22C55E60',
+  },
+  onTrackBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.9)',
-    letterSpacing: 0.4,
-    marginBottom: 6,
+    color: '#22C55E',
+    letterSpacing: 0.3,
   },
   catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   catEmoji: { fontSize: 20 },
