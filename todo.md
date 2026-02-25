@@ -267,3 +267,4 @@
 - [x] More screen: make Appearance section collapsible with a chevron toggle (collapsed by default)
 - [x] Home screen goal cards: when On Track, make the entire card background green (remove grey gap/inner badge look)
 - [x] On Track card: replace garish solid green with subtle green tint + crisp border (polished look)
+- [x] On Track card: restore dark green background + bright green border, fix badge padding so nothing is squished

@@ -193,7 +193,7 @@ export default function HomeScreen() {
               <NovaCard
                 key={cat.id}
                 colors={colors}
-                cardBg={isOnTrack ? (colors.background === '#151718' ? '#0d2b18' : '#f0fdf4') : undefined}
+                cardBg={isOnTrack ? '#0d2b18' : undefined}
                 cardBorder={isOnTrack ? '#22C55E' : undefined}
                 style={{ ...styles.categoryCard, width: cardWidth }}
               >
@@ -226,14 +226,14 @@ export default function HomeScreen() {
                 ]}>
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </View>
-                <Text style={[styles.catLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+                <Text style={[styles.catLabel, { color: isOnTrack ? '#e2fce8' : colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
                 {lifeArea && (
-                  <Text style={[styles.catLifeArea, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
+                  <Text style={[styles.catLifeArea, { color: isOnTrack ? '#86efac' : colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
                 )}
                 <View style={styles.catScoreRow}>
                   <Text style={[
                     styles.catScore,
-                    { color: '#22C55E' },
+                    { color: isOnTrack ? '#4ade80' : colors.primary },
                   ]}>
                     {Math.round(rate * 100)}%
                   </Text>
@@ -387,19 +387,19 @@ const styles = StyleSheet.create({
   },
   onTrackBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#22C55E20',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#22C55E60',
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#22C55E',
   },
   onTrackBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#22C55E',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   catEmoji: { fontSize: 20 },
