@@ -1,5 +1,6 @@
 import { and, eq, desc, gte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import crypto from "crypto";
 import {
   InsertUser,
   users,
@@ -18,6 +19,12 @@ import {
   InsertAlarmConfig,
   teamGoalProposals,
   teamGoalVotes,
+  devices,
+  deviceEvents,
+  teamPosts,
+  teamPostReactions,
+  teamPostComments,
+  InsertTeamPost,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -467,12 +474,7 @@ export async function getReferralStats(userId: number) {
 
 // ─── Team Feed: Posts ─────────────────────────────────────────────────────────
 
-import {
-  teamPosts,
-  teamPostReactions,
-  teamPostComments,
-  InsertTeamPost,
-} from "../drizzle/schema";
+
 
 export async function createTeamPost(data: InsertTeamPost) {
   const db = await getDb();
@@ -749,5 +751,133 @@ export async function resetTeamGoalVote(proposalId: number, userId: number) {
   await db
     .delete(teamGoalVotes)
     .where(and(eq(teamGoalVotes.proposalId, proposalId), eq(teamGoalVotes.userId, userId)));
+  return true;
+}
+
+// ─── Physical Alarm Clock Devices ────────────────────────────────────────────
+
+/** Generate a cryptographically secure API key for a device */
+function generateApiKey(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+/** Generate a short-lived one-time pairing token */
+export function generatePairingToken(): string {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+/** Create a pairing token for a user — returned to the app during setup wizard */
+export async function createDevicePairingToken(userId: number): Promise<{ token: string; expiresAt: Date }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const token = generatePairingToken();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  // Store token temporarily in a placeholder device row (macAddress unknown until device registers)
+  await db.insert(devices).values({
+    userId,
+    macAddress: `PENDING-${token.slice(0, 8)}`,
+    apiKey: `PENDING-${token}`,
+    pairingToken: token,
+    pairingTokenExpiresAt: expiresAt,
+  });
+  return { token, expiresAt };
+}
+
+/** Register a device using a pairing token — called by the ESP32 firmware */
+export async function registerDevice(data: {
+  pairingToken: string;
+  macAddress: string;
+  firmwareVersion?: string;
+}): Promise<{ deviceId: number; apiKey: string } | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Find the pending device row by pairing token
+  const rows = await db.select().from(devices)
+    .where(eq(devices.pairingToken, data.pairingToken))
+    .limit(1);
+
+  if (rows.length === 0) return null;
+  const pending = rows[0];
+
+  // Check token hasn't expired
+  if (pending.pairingTokenExpiresAt && pending.pairingTokenExpiresAt < new Date()) return null;
+
+  const apiKey = generateApiKey();
+  await db.update(devices).set({
+    macAddress: data.macAddress,
+    apiKey,
+    firmwareVersion: data.firmwareVersion ?? null,
+    pairingToken: null,
+    pairingTokenExpiresAt: null,
+    lastSeenAt: new Date(),
+  }).where(eq(devices.id, pending.id));
+
+  return { deviceId: pending.id, apiKey };
+}
+
+/** Authenticate a device request by API key */
+export async function getDeviceByApiKey(apiKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(devices).where(eq(devices.apiKey, apiKey)).limit(1);
+  if (rows.length === 0) return null;
+  // Update lastSeenAt
+  await db.update(devices).set({ lastSeenAt: new Date() }).where(eq(devices.id, rows[0].id));
+  return rows[0];
+}
+
+/** Get all devices for a user */
+export async function getUserDevices(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: devices.id,
+    macAddress: devices.macAddress,
+    firmwareVersion: devices.firmwareVersion,
+    lastSeenAt: devices.lastSeenAt,
+    createdAt: devices.createdAt,
+  }).from(devices).where(eq(devices.userId, userId));
+}
+
+/** Get alarm schedule for a device (from the user's alarmConfigs) */
+export async function getDeviceSchedule(deviceId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1);
+  if (rows.length === 0) return null;
+  const device = rows[0];
+  const alarms = await db.select().from(alarmConfigs).where(eq(alarmConfigs.userId, device.userId));
+  return { alarms, userId: device.userId };
+}
+
+/** Record a device event (alarm fired, dismissed, snooze, heartbeat) */
+export async function recordDeviceEvent(data: {
+  deviceId: number;
+  type: "alarm_fired" | "alarm_dismissed" | "snooze" | "heartbeat";
+  alarmId?: string;
+  firedAt?: Date;
+  dismissedAt?: Date;
+  snoozedCount?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(deviceEvents).values({
+    deviceId: data.deviceId,
+    type: data.type,
+    alarmId: data.alarmId ?? null,
+    firedAt: data.firedAt ?? null,
+    dismissedAt: data.dismissedAt ?? null,
+    snoozedCount: data.snoozedCount ?? 0,
+  });
+  return result[0].insertId as number;
+}
+
+/** Delete a device (unlink from account) */
+export async function deleteDevice(deviceId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)));
   return true;
 }

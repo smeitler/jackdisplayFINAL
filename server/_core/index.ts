@@ -56,6 +56,10 @@ async function startServer() {
 
   registerOAuthRoutes(app);
 
+  // Physical alarm clock device API
+  const { default: deviceRouter } = await import("../deviceRoutes.js");
+  app.use("/api/device", deviceRouter);
+
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
   });

@@ -430,7 +430,27 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── Community: Referrals ──────────────────────────────────────────────────
+  // ─── Physical Alarm Clock Devices ─────────────────────────────────────────────────────────
+  devices: router({
+    /** Generate a one-time pairing token — app calls this before showing the setup wizard */
+    createPairingToken: protectedProcedure.mutation(({ ctx }) =>
+      db.createDevicePairingToken(ctx.user.id)
+    ),
+
+    /** List all physical devices linked to the current user's account */
+    list: protectedProcedure.query(({ ctx }) =>
+      db.getUserDevices(ctx.user.id)
+    ),
+
+    /** Unlink / remove a device from the account */
+    remove: protectedProcedure
+      .input(z.object({ deviceId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        db.deleteDevice(input.deviceId, ctx.user.id)
+      ),
+  }),
+
+  // ─── Community: Referrals ─────────────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>
       db.getReferralStats(ctx.user.id)

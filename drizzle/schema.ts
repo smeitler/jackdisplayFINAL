@@ -278,3 +278,42 @@ export const teamGoalVotes = mysqlTable("teamGoalVotes", {
 
 export type TeamGoalVote = typeof teamGoalVotes.$inferSelect;
 export type InsertTeamGoalVote = typeof teamGoalVotes.$inferInsert;
+
+/**
+ * Physical alarm clock devices — one row per registered hardware device.
+ * apiKey: long-lived secret stored on the device, used to authenticate device requests.
+ * pairingToken: short-lived one-time token generated during the app pairing flow.
+ */
+export const devices = mysqlTable("devices", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  macAddress: varchar("macAddress", { length: 17 }).notNull().unique(),
+  apiKey: varchar("apiKey", { length: 64 }).notNull().unique(),
+  pairingToken: varchar("pairingToken", { length: 64 }),
+  pairingTokenExpiresAt: timestamp("pairingTokenExpiresAt"),
+  firmwareVersion: varchar("firmwareVersion", { length: 16 }),
+  lastSeenAt: timestamp("lastSeenAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Device = typeof devices.$inferSelect;
+export type InsertDevice = typeof devices.$inferInsert;
+
+/**
+ * Device events — events reported by the physical alarm clock.
+ * type: 'alarm_fired' | 'alarm_dismissed' | 'snooze' | 'heartbeat'
+ */
+export const deviceEvents = mysqlTable("deviceEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  deviceId: int("deviceId").notNull(),
+  type: mysqlEnum("type", ["alarm_fired", "alarm_dismissed", "snooze", "heartbeat"]).notNull(),
+  alarmId: varchar("alarmId", { length: 64 }),
+  firedAt: timestamp("firedAt"),
+  dismissedAt: timestamp("dismissedAt"),
+  snoozedCount: int("snoozedCount").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DeviceEvent = typeof deviceEvents.$inferSelect;
+export type InsertDeviceEvent = typeof deviceEvents.$inferInsert;
