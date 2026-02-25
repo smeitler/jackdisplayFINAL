@@ -222,3 +222,4 @@
 - [ ] Wire habit deletion in app-context to call vote reset if habit has a proposalId
 - [x] Fix Vision Board photo display: remove dashed placeholder box, show photos large/full-width
 - [x] Replace habit progress bars on Vision Board with editable motivations/why section per goal
+- [x] Show team-shared badge on personal habit rows for habits accepted from a team proposal (display team name/icon on manage goals and check-in screens)

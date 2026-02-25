@@ -2,7 +2,7 @@ import {
   View, Text, TouchableOpacity, TextInput, Pressable,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -14,6 +14,7 @@ import { useApp } from '@/lib/app-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/storage';
+import { trpc } from '@/lib/trpc';
 
 // Numbered emojis 1–10 then fallback to ⭐
 const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
@@ -99,13 +100,14 @@ interface SwipeableHabitRowProps {
   habit: Habit;
   habitIndex: number;
   isLast: boolean;
+  teamName?: string | null;
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
 }
 
-function SwipeableHabitRow({ habit, habitIndex, isLast, onEdit, onToggle, onDelete, colors }: SwipeableHabitRowProps) {
+function SwipeableHabitRow({ habit, habitIndex, isLast, teamName, onEdit, onToggle, onDelete, colors }: SwipeableHabitRowProps) {
   const translateX = useSharedValue(0);
   const isRevealed = useSharedValue(false);
 
@@ -181,6 +183,11 @@ function SwipeableHabitRow({ habit, habitIndex, isLast, onEdit, onToggle, onDele
             <Text style={[styles.habitName, { color: habit.isActive ? colors.foreground : colors.muted }]}>
               {habit.name}
             </Text>
+            {teamName && (
+              <View style={[styles.teamBadge, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
+                <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamName}</Text>
+              </View>
+            )}
             {!habit.isActive && (
               <Text style={[styles.habitInactive, { color: colors.muted }]}>Inactive</Text>
             )}
@@ -691,6 +698,13 @@ export default function HabitsScreen() {
   const { habits, categories, checkIns, addHabit, updateHabit, deleteHabit, addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits } = useApp();
   const colors = useColors();
   const router = useRouter();
+  const { data: myTeams } = trpc.teams.list.useQuery();
+  // Build a map from teamId -> team name for quick lookup
+  const teamNameMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const t of myTeams ?? []) map[t.id] = t.name;
+    return map;
+  }, [myTeams]);
 
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [reorderingCat, setReorderingCat] = useState<string | null>(null);
@@ -858,6 +872,7 @@ export default function HabitsScreen() {
                         habit={habit}
                         habitIndex={idx}
                         isLast={idx === catHabits.length - 1}
+                        teamName={habit.teamId ? (teamNameMap[habit.teamId] ?? null) : null}
                         colors={colors}
                         onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
                         onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
@@ -1053,4 +1068,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  teamBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 3,
+  },
+  teamBadgeText: { fontSize: 11, fontWeight: '600' },
 });

@@ -15,6 +15,7 @@ import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, LIFE_AREAS } from "@/lib/storage";
+import { trpc } from "@/lib/trpc";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
@@ -32,6 +33,12 @@ export default function CategoryDetailScreen() {
   const { categories, activeHabits, checkIns, getHabitWeeklyDone, getHabitMonthlyDone } = useApp();
   const colors = useColors();
   const router = useRouter();
+  const { data: myTeams } = trpc.teams.list.useQuery();
+  const teamNameMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const t of myTeams ?? []) map[t.id] = t.name;
+    return map;
+  }, [myTeams]);
 
   const category = useMemo(() => categories.find((c) => c.id === categoryId), [categories, categoryId]);
   const lifeArea = category?.lifeArea ? LIFE_AREA_MAP[category.lifeArea] : null;
@@ -241,6 +248,11 @@ export default function CategoryDetailScreen() {
                 </View>
                 <View style={styles.habitInfo}>
                   <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>{habit.name}</Text>
+                  {habit.teamId && teamNameMap[habit.teamId] && (
+                    <View style={[styles.teamBadge, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
+                      <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
+                    </View>
+                  )}
                   {streak > 0 && (
                     <Text style={[styles.habitStreak, { color: colors.muted }]}>🔥 {streak} day streak</Text>
                   )}
@@ -367,4 +379,16 @@ const styles = StyleSheet.create({
   miniDot: { width: 8, height: 8, borderRadius: 4 },
   miniNum: { fontSize: 13, fontWeight: "700" },
   miniTotal: { fontSize: 12, marginLeft: "auto" },
+  teamBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  teamBadgeText: { fontSize: 11, fontWeight: '600' },
 });

@@ -37,6 +37,11 @@ export default function CheckInScreen() {
 
   const { data: myTeams } = trpc.teams.list.useQuery();
   const createPost = trpc.teamFeed.createPost.useMutation();
+  const teamNameMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const t of myTeams ?? []) map[t.id] = t.name;
+    return map;
+  }, [myTeams]);
 
   const today = toDateString();
   const canGoForward = currentDate < yesterdayString();
@@ -309,9 +314,16 @@ export default function CheckInScreen() {
                         }]}>
                           <Text style={[styles.habitNumText, { color: colors.primary }]}>{idx + 1}</Text>
                         </View>
-                        <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
-                          {habit.name}
-                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
+                            {habit.name}
+                          </Text>
+                          {habit.teamId && teamNameMap[habit.teamId] && (
+                            <View style={[styles.teamBadge, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
+                              <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
 
                       {/* 3-color segmented button */}
@@ -425,7 +437,18 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   habitNumText: { fontSize: 12, fontWeight: '700' },
-  habitName: { flex: 1, fontSize: 15, lineHeight: 20 },
+  habitName: { fontSize: 15, lineHeight: 20 },
+  teamBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 3,
+  },
+  teamBadgeText: { fontSize: 11, fontWeight: '600' },
 
   segmentedBtn: {
     flexDirection: 'row',
