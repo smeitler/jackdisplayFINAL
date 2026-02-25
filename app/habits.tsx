@@ -889,11 +889,17 @@ export default function HabitsScreen() {
 
         {/* ── Priority Order Section ── */}
         {activeHabits.length > 1 && (
-          <View style={{ marginTop: 24, marginBottom: 4 }}>
+          <View style={{ marginTop: 28, marginBottom: 4 }}>
+            {/* Divider label */}
+            <View style={styles.priorityDivider}>
+              <View style={[styles.priorityDividerLine, { backgroundColor: colors.border }]} />
+              <Text style={[styles.priorityDividerLabel, { color: colors.muted }]}>TOOLS</Text>
+              <View style={[styles.priorityDividerLine, { backgroundColor: colors.border }]} />
+            </View>
             {/* Section header row */}
             <TouchableOpacity
               onPress={() => setGlobalReordering((v) => !v)}
-              style={[styles.priorityHeader, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              style={[styles.priorityHeader, { borderColor: colors.primary + '30', backgroundColor: colors.primary + '0a' }]}
               activeOpacity={0.7}
             >
               <View style={{ flex: 1 }}>
@@ -1133,4 +1139,7 @@ const styles = StyleSheet.create({
   },
   priorityTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   prioritySub: { fontSize: 12 },
+  priorityDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
+  priorityDividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  priorityDividerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1 },
 });
