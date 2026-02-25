@@ -186,15 +186,28 @@ export default function HomeScreen() {
               (h) => h.category === cat.id && (h.weeklyGoal || h.monthlyGoal)
             );
 
-            // Is this category "on track"? Rate >= 80% and has data
+            // Three-tier card state based on rate
             const isOnTrack = total > 0 && rate >= 0.8;
+            const isOkay = total > 0 && rate >= 0.5 && rate < 0.8;
+            const isBehind = total > 0 && rate < 0.5;
+
+            // Card theme values
+            const cardBg = isOnTrack ? '#0d2b18' : isOkay ? '#2b1f06' : isBehind ? '#2b0a0a' : undefined;
+            const cardBorderColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : undefined;
+            const badgeLabel = isOnTrack ? '✓ On Track' : isOkay ? '~ Doing Okay' : isBehind ? '✗ Behind' : null;
+            const badgeBorderColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : '#EF4444';
+            const badgeTextColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : '#EF4444';
+            const iconBg = isOnTrack ? '#22C55E22' : isOkay ? '#F59E0B22' : isBehind ? '#EF444422' : colors.primary + '22';
+            const labelColor = isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground;
+            const mutedColor = isOnTrack ? '#86efac' : isOkay ? '#fcd34d' : isBehind ? '#fca5a5' : colors.muted;
+            const scoreColor = isOnTrack ? '#4ade80' : isOkay ? '#fbbf24' : isBehind ? '#f87171' : colors.primary;
 
             return (
               <NovaCard
                 key={cat.id}
                 colors={colors}
-                cardBg={isOnTrack ? '#0d2b18' : undefined}
-                cardBorder={isOnTrack ? '#22C55E' : undefined}
+                cardBg={cardBg}
+                cardBorder={cardBorderColor}
                 style={{ ...styles.categoryCard, width: cardWidth }}
               >
               <Pressable
@@ -202,6 +215,8 @@ export default function HomeScreen() {
                   if (Platform.OS !== 'web') {
                     if (isOnTrack) {
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } else if (isBehind) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                     } else {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }
@@ -213,27 +228,27 @@ export default function HomeScreen() {
                   { opacity: pressed ? 0.85 : 1 },
                 ]}
               >
-                {/* On-track badge */}
-                {isOnTrack && (
-                  <View style={styles.onTrackBadge}>
-                    <Text style={styles.onTrackBadgeText}>✓ On Track</Text>
+                {/* Status badge */}
+                {badgeLabel && (
+                  <View style={[styles.onTrackBadge, { borderColor: badgeBorderColor }]}>
+                    <Text style={[styles.onTrackBadgeText, { color: badgeTextColor }]}>{badgeLabel}</Text>
                   </View>
                 )}
 
                 <View style={[
                   styles.catIconWrap,
-                  { backgroundColor: isOnTrack ? '#22C55E22' : colors.primary + '22' },
+                  { backgroundColor: iconBg },
                 ]}>
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </View>
-                <Text style={[styles.catLabel, { color: isOnTrack ? '#e2fce8' : colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+                <Text style={[styles.catLabel, { color: labelColor }]} numberOfLines={1}>{cat.label}</Text>
                 {lifeArea && (
-                  <Text style={[styles.catLifeArea, { color: isOnTrack ? '#86efac' : colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
+                  <Text style={[styles.catLifeArea, { color: mutedColor }]}>{lifeArea.emoji} {lifeArea.label}</Text>
                 )}
                 <View style={styles.catScoreRow}>
                   <Text style={[
                     styles.catScore,
-                    { color: isOnTrack ? '#4ade80' : colors.primary },
+                    { color: scoreColor },
                   ]}>
                     {Math.round(rate * 100)}%
                   </Text>
