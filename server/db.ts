@@ -79,6 +79,12 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function updateUserAvatar(userId: number, avatarUrl: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ avatarUrl }).where(eq(users.id, userId));
+}
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export async function getUserCategories(userId: number) {

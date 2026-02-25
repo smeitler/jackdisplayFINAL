@@ -251,3 +251,9 @@
 - [x] Fix "No procedure found on path goalProposals.create" error when proposing a team habit (teamGoalVotes table was missing from DB, created it; route itself was correct)
 - [ ] Add Demo Mode login button on login screen: bypasses OAuth, creates a session for a pre-seeded test account so Apple reviewer can access the full app
 - [x] CRITICAL: Signing in with a different account loads the previous account's local data — fix data isolation on account switch
+- [ ] Profile picture: tap avatar in More/Settings to pick from photo library and upload
+- [ ] Profile picture: display avatar in More/Settings account section
+- [ ] Profile picture: server endpoint to upload and store avatar URL on user record
+- [ ] Profile picture: tRPC route to update and fetch avatar URL
+- [ ] Voice messages in team chat: hold-to-record audio message, upload to S3, play inline in chat
+- [ ] Audio data privacy disclosure: add Audio Data to App Store privacy labels once voice messages are live
