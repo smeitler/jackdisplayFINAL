@@ -214,10 +214,14 @@ export function NovaCard({
   children,
   style,
   colors: themeColors,
+  cardBg,
+  cardBorder,
 }: {
   children: ReactNode;
   style?: ViewStyle;
   colors: { surface: string; border: string };
+  cardBg?: string;
+  cardBorder?: string;
 }) {
   const isNova = useIsNova();
   const shimmerX = useSharedValue(-1);
@@ -249,7 +253,7 @@ export function NovaCard({
       <View
         style={[
           novaCardStyles.card,
-          { backgroundColor: themeColors.surface, borderColor: themeColors.border },
+          { backgroundColor: cardBg ?? themeColors.surface, borderColor: cardBorder ?? themeColors.border },
           style,
         ]}
       >

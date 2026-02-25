@@ -190,7 +190,13 @@ export default function HomeScreen() {
             const isOnTrack = total > 0 && rate >= 0.8;
 
             return (
-              <NovaCard key={cat.id} colors={colors} style={{ ...styles.categoryCard, width: cardWidth }}>
+              <NovaCard
+                key={cat.id}
+                colors={colors}
+                cardBg={isOnTrack ? '#16A34A' : undefined}
+                cardBorder={isOnTrack ? '#15803D' : undefined}
+                style={{ ...styles.categoryCard, width: cardWidth }}
+              >
               <Pressable
                 onPress={() => {
                   if (Platform.OS !== 'web') {
@@ -204,36 +210,28 @@ export default function HomeScreen() {
                 }}
                 style={({ pressed }) => [
                   { padding: 14, flex: 1 },
-                  !isNova && {
-                    backgroundColor: isOnTrack ? '#22C55E14' : colors.surface,
-                    borderColor: isOnTrack ? '#22C55E55' : colors.border,
-                    borderWidth: isOnTrack ? 1.5 : 1,
-                    borderRadius: 16,
-                  },
                   { opacity: pressed ? 0.85 : 1 },
                 ]}
               >
-                {/* On-track badge */}
+                {/* On-track label */}
                 {isOnTrack && (
-                  <View style={styles.onTrackBadge}>
-                    <Text style={styles.onTrackBadgeText}>✓ On Track</Text>
-                  </View>
+                  <Text style={styles.onTrackLabel}>✓ On Track</Text>
                 )}
 
                 <View style={[
                   styles.catIconWrap,
-                  { backgroundColor: isOnTrack ? '#22C55E22' : colors.primary + '22' },
+                  { backgroundColor: isOnTrack ? 'rgba(255,255,255,0.18)' : colors.primary + '22' },
                 ]}>
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </View>
-                <Text style={[styles.catLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+                <Text style={[styles.catLabel, { color: isOnTrack ? '#fff' : colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
                 {lifeArea && (
-                  <Text style={[styles.catLifeArea, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
+                  <Text style={[styles.catLifeArea, { color: isOnTrack ? 'rgba(255,255,255,0.75)' : colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
                 )}
                 <View style={styles.catScoreRow}>
                   <Text style={[
                     styles.catScore,
-                    { color: isOnTrack ? '#22C55E' : colors.primary },
+                    { color: isOnTrack ? '#fff' : colors.primary },
                   ]}>
                     {Math.round(rate * 100)}%
                   </Text>
@@ -253,13 +251,13 @@ export default function HomeScreen() {
                 {total > 0 && (
                   <View style={[styles.catBar, { marginTop: 6, marginBottom: 2 }]}>
                     {breakdown.green > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.green / total, backgroundColor: '#22C55E' }]} />
+                      <View style={[styles.catBarSeg, { flex: breakdown.green / total, backgroundColor: isOnTrack ? 'rgba(255,255,255,0.55)' : '#22C55E' }]} />
                     )}
                     {breakdown.yellow > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.yellow / total, backgroundColor: '#F59E0B' }]} />
+                      <View style={[styles.catBarSeg, { flex: breakdown.yellow / total, backgroundColor: isOnTrack ? 'rgba(255,255,255,0.3)' : '#F59E0B' }]} />
                     )}
                     {breakdown.red > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.red / total, backgroundColor: '#EF4444' }]} />
+                      <View style={[styles.catBarSeg, { flex: breakdown.red / total, backgroundColor: isOnTrack ? 'rgba(255,255,255,0.15)' : '#EF4444' }]} />
                     )}
                   </View>
                 )}
@@ -271,14 +269,13 @@ export default function HomeScreen() {
                       const progress = getHabitProgress(h, getHabitWeeklyDone, getHabitMonthlyDone);
                       if (!progress) return null;
                       const { pct, met, label } = progress;
-                      const barColor = met ? '#22C55E' : colors.primary;
+                      const barColor = isOnTrack ? 'rgba(255,255,255,0.7)' : (met ? '#22C55E' : colors.primary);
                       return (
                         <View key={h.id} style={styles.weeklyGoalItem}>
                           <View style={styles.weeklyGoalBarWrap}>
                             <View style={[styles.weeklyGoalBarBg, {
-                              backgroundColor: met ? '#22C55E22' : colors.border,
-                              borderWidth: met ? 1 : 0,
-                              borderColor: met ? '#22C55E44' : 'transparent',
+                              backgroundColor: isOnTrack ? 'rgba(255,255,255,0.2)' : (met ? '#22C55E22' : colors.border),
+                              borderWidth: 0,
                             }]}>
                               <View style={[
                                 styles.weeklyGoalBarFill,
@@ -385,21 +382,12 @@ const styles = StyleSheet.create({
   categoryCard: {
     width: '47.5%', borderRadius: 14, padding: 12, gap: 4,
   },
-  onTrackBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#22C55E22',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#22C55E55',
-  },
-  onTrackBadgeText: {
+  onTrackLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#22C55E',
-    letterSpacing: 0.3,
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 0.4,
+    marginBottom: 6,
   },
   catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   catEmoji: { fontSize: 20 },

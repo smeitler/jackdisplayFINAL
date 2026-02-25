@@ -265,3 +265,4 @@
 - [x] Fix: Community feed chat blocked by accepted habits section — proposals now in collapsible "Team Habit Proposals" row (collapsed by default)
 - [x] More screen: move Daily Alarm section to the top (above Appearance)
 - [x] More screen: make Appearance section collapsible with a chevron toggle (collapsed by default)
+- [x] Home screen goal cards: when On Track, make the entire card background green (remove grey gap/inner badge look)
