@@ -11,11 +11,12 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { loadVisionBoard, saveVisionBoard, VisionBoard } from "@/lib/storage";
 
 const SCREEN_W = Dimensions.get("window").width;
-// 3-column grid with gaps
 const GAP = 4;
 const PADDING = 20;
-const COLS = 3;
-const IMG_SIZE = Math.floor((SCREEN_W - PADDING * 2 - GAP * (COLS - 1)) / COLS);
+// 2-column grid for secondary photos
+const COLS = 2;
+const THUMB_SIZE = Math.floor((SCREEN_W - PADDING * 2 - GAP) / COLS);
+const HERO_HEIGHT = Math.floor(SCREEN_W * 0.55);
 
 export default function VisionBoardScreen() {
   const { categories, activeHabits, getHabitWeeklyDone } = useApp();
@@ -123,37 +124,33 @@ export default function VisionBoardScreen() {
               {images.length === 0 ? (
                 <Pressable
                   onPress={() => pickImage(cat.id)}
-                  style={({ pressed }) => [
-                    styles.emptyGrid,
-                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                  ]}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, alignSelf: "flex-start", paddingVertical: 4 })}
                 >
-                  <IconSymbol name="plus.circle.fill" size={32} color={colors.muted} />
-                  <Text style={[styles.emptyText, { color: colors.muted }]}>
-                    Tap to add your first photo
-                  </Text>
+                  <Text style={[styles.emptyText, { color: colors.primary }]}>+ Add your first photo</Text>
                 </Pressable>
               ) : (
-                <View style={styles.grid}>
-                  {images.map((uri, idx) => (
-                    <Pressable
-                      key={`${uri}-${idx}`}
-                      onPress={() => { setPreviewUri(uri); setPreviewCatId(cat.id); }}
-                      style={({ pressed }) => [styles.imgWrap, { opacity: pressed ? 0.85 : 1 }]}
-                    >
-                      <Image source={{ uri }} style={styles.img} resizeMode="cover" />
-                    </Pressable>
-                  ))}
-                  {/* Add more tile */}
+                <View style={styles.photoContainer}>
+                  {/* Hero — first photo full width */}
                   <Pressable
-                    onPress={() => pickImage(cat.id)}
-                    style={({ pressed }) => [
-                      styles.addTile,
-                      { backgroundColor: colors.background, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                    ]}
+                    onPress={() => { setPreviewUri(images[0]); setPreviewCatId(cat.id); }}
+                    style={({ pressed }) => [styles.heroWrap, { opacity: pressed ? 0.88 : 1 }]}
                   >
-                    <IconSymbol name="plus" size={22} color={colors.muted} />
+                    <Image source={{ uri: images[0] }} style={styles.heroImg} resizeMode="cover" />
                   </Pressable>
+                  {/* Secondary photos — 2-column grid */}
+                  {images.length > 1 && (
+                    <View style={styles.thumbGrid}>
+                      {images.slice(1).map((uri, idx) => (
+                        <Pressable
+                          key={`${uri}-${idx}`}
+                          onPress={() => { setPreviewUri(uri); setPreviewCatId(cat.id); }}
+                          style={({ pressed }) => [styles.thumbWrap, { opacity: pressed ? 0.85 : 1 }]}
+                        >
+                          <Image source={{ uri }} style={styles.thumbImg} resizeMode="cover" />
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -266,40 +263,35 @@ const styles = StyleSheet.create({
   },
   addBtnText: { fontSize: 12, fontWeight: "600" },
 
-  emptyGrid: {
-    height: 100,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  emptyText: { fontSize: 13 },
+  emptyText: { fontSize: 14, fontWeight: "500" },
 
-  grid: {
+  photoContainer: {
+    gap: GAP,
+  },
+  heroWrap: {
+    width: "100%",
+    height: HERO_HEIGHT,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  heroImg: {
+    width: "100%",
+    height: HERO_HEIGHT,
+  },
+  thumbGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: GAP,
   },
-  imgWrap: {
-    width: IMG_SIZE,
-    height: IMG_SIZE,
+  thumbWrap: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
     borderRadius: 10,
     overflow: "hidden",
   },
-  img: {
-    width: IMG_SIZE,
-    height: IMG_SIZE,
-  },
-  addTile: {
-    width: IMG_SIZE,
-    height: IMG_SIZE,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
+  thumbImg: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
   },
 
   // Preview modal
