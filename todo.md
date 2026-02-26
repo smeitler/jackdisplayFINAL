@@ -282,3 +282,4 @@
 - [x] Remove: Habit Priority Order section and TOOLS divider from Manage Goals screen entirely
 - [x] Fix: goal emoji auto-sets from selected Life Area (no custom emoji picker on goals); Life Area is required to save a goal
 - [x] Manage Goals: add up/down reorder arrows to goal rows so users can set goal priority order
+- [x] Increase habit name character limit from 20 to 40 characters

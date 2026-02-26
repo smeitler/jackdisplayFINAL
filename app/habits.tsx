@@ -224,7 +224,7 @@ interface HabitModalProps {
   onClose: () => void;
 }
 
-const NAME_LIMIT = 20;
+const NAME_LIMIT = 40;
 
 function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeactivate, onClose }: HabitModalProps) {
   const colors = useColors();
