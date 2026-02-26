@@ -396,6 +396,7 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
             </View>
 
             <View style={styles.modalActions}>
+
               <TouchableOpacity
                 onPress={onClose}
                 style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.border }]}
@@ -491,7 +492,10 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
 
   function handleSave() {
     if (!label.trim()) return;
-    onSave(label.trim(), emoji, lifeArea, deadline);
+    if (!lifeArea) return; // Life Area is required
+    const selectedArea = LIFE_AREAS.find(a => a.id === lifeArea);
+    const finalEmoji = selectedArea?.emoji ?? emoji;
+    onSave(label.trim(), finalEmoji, lifeArea, deadline);
     onClose();
   }
 
@@ -519,6 +523,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
           setShowDatePicker(false);
         }}
       >
+
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -528,13 +533,12 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
             </Text>
 
             <View style={styles.inputRow}>
-              <TouchableOpacity
-                onPress={() => setShowEmojiPicker(true)}
-                style={[styles.emojiBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.emojiBtnText}>{emoji}</Text>
-              </TouchableOpacity>
+              {/* Show Life Area emoji if selected, else placeholder */}
+              <View style={[styles.emojiBtn, { backgroundColor: colors.background, borderColor: lifeArea ? colors.primary + '60' : colors.border }]}>
+                <Text style={styles.emojiBtnText}>
+                  {lifeArea ? (LIFE_AREAS.find(a => a.id === lifeArea)?.emoji ?? '🌟') : '?'}
+                </Text>
+              </View>
               <TextInput
                 style={[styles.nameInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
                 placeholder="Goal name…"
@@ -557,15 +561,18 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSave}
-                style={[styles.modalBtn, styles.modalBtnSave, { backgroundColor: colors.primary }]}
+                style={[styles.modalBtn, styles.modalBtnSave, { backgroundColor: !lifeArea ? colors.muted : colors.primary, opacity: !lifeArea ? 0.5 : 1 }]}
                 activeOpacity={0.8}
+                disabled={!lifeArea}
               >
                 <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Life area picker */}
-            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Life Area</Text>
+            {/* Life area picker — required */}
+            <Text style={[styles.fieldLabel, { color: !lifeArea ? colors.error : colors.muted }]}>
+              Life Area {!lifeArea ? '(required)' : ''}
+            </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {LIFE_AREAS.map((area) => (
@@ -886,68 +893,6 @@ export default function HabitsScreen() {
             </View>
           );
         })}
-
-        {/* ── Priority Order Section ── */}
-        {activeHabits.length > 1 && (
-          <View style={{ marginTop: 28, marginBottom: 4 }}>
-            {/* Divider label */}
-            <View style={styles.priorityDivider}>
-              <View style={[styles.priorityDividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.priorityDividerLabel, { color: colors.muted }]}>TOOLS</Text>
-              <View style={[styles.priorityDividerLine, { backgroundColor: colors.border }]} />
-            </View>
-            {/* Section header row */}
-            <TouchableOpacity
-              onPress={() => setGlobalReordering((v) => !v)}
-              style={[styles.priorityHeader, { borderColor: colors.primary + '30', backgroundColor: colors.primary + '0a' }]}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.priorityTitle, { color: colors.foreground }]}>Habit Priority Order</Text>
-                <Text style={[styles.prioritySub, { color: colors.muted }]}>
-                  {globalReordering ? '#1 = most important · tap arrows to reorder' : `${activeHabits.length} habits · tap to reorder by importance`}
-                </Text>
-              </View>
-              <View style={[styles.iconBtn, globalReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}>
-                <IconSymbol name={globalReordering ? 'chevron.up' : 'chevron.down'} size={14} color={globalReordering ? colors.primary : colors.muted} />
-              </View>
-            </TouchableOpacity>
-
-            {globalReordering && (
-              <View style={[styles.habitsList, { borderTopColor: colors.border }]}>
-                {activeHabits.map((habit, idx) => (
-                  <View
-                    key={habit.id}
-                    style={[styles.reorderRow, { borderBottomColor: colors.border, backgroundColor: colors.surface }, idx === activeHabits.length - 1 && { borderBottomWidth: 0 }]}
-                  >
-                    <View style={[styles.habitNumBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44', marginRight: 10 }]}>
-                      <Text style={[styles.habitNumText, { color: colors.primary }]}>{idx + 1}</Text>
-                    </View>
-                    <Text style={[styles.habitName, { color: colors.foreground, flex: 1 }]} numberOfLines={1}>{habit.name}</Text>
-                    <View style={{ flexDirection: 'row', gap: 4 }}>
-                      <TouchableOpacity
-                        onPress={() => moveGlobalHabit(idx, idx - 1)}
-                        style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}
-                        activeOpacity={0.5}
-                        disabled={idx === 0}
-                      >
-                        <IconSymbol name="chevron.up" size={16} color={colors.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => moveGlobalHabit(idx, idx + 1)}
-                        style={[styles.iconBtn, { opacity: idx === activeHabits.length - 1 ? 0.3 : 1 }]}
-                        activeOpacity={0.5}
-                        disabled={idx === activeHabits.length - 1}
-                      >
-                        <IconSymbol name="chevron.down" size={16} color={colors.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
 
         {/* Add Category */}
         <TouchableOpacity

@@ -278,3 +278,6 @@
 - [x] Fix: Priority Order reorder changes reflected everywhere via globalOrder field (check-in, analytics, home screen all use activeHabits sorted by globalOrder)
 - [x] Fix: category-detail habit numbering now starts at #1 within the category (not global rank)
 - [x] Fix: Habit Priority Order section now has a TOOLS divider + blue-tinted border to clearly distinguish it from deleteable goal rows
+- [ ] Fix: goal emoji should auto-set from selected Life Area (not a custom picker); Life Area is required when creating/editing a goal
+- [x] Remove: Habit Priority Order section and TOOLS divider from Manage Goals screen entirely
+- [x] Fix: goal emoji auto-sets from selected Life Area (no custom emoji picker on goals); Life Area is required to save a goal
