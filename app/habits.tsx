@@ -277,8 +277,8 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
           setConfirmDelete(false);
         }}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} pointerEvents="box-none">
+          <Pressable style={styles.backdrop} onPress={onClose} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
@@ -294,8 +294,9 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                   value={name}
                   onChangeText={(t) => setName(t.slice(0, NAME_LIMIT))}
                   maxLength={NAME_LIMIT}
-                  autoFocus
-                  returnKeyType="next"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSave}
+                  blurOnSubmit={false}
                 />
                 <Text style={[styles.charCounter, { color: name.length >= NAME_LIMIT ? '#F59E0B' : colors.muted }]}>
                   {name.length}/{NAME_LIMIT}
@@ -524,8 +525,8 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
         }}
       >
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} pointerEvents="box-none">
+          <Pressable style={styles.backdrop} onPress={onClose} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
@@ -545,9 +546,9 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
                 placeholderTextColor={colors.muted}
                 value={label}
                 onChangeText={setLabel}
-                autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleSave}
+                blurOnSubmit={false}
               />
             </View>
 

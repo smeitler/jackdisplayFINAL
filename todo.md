@@ -288,3 +288,4 @@
 - [x] Demo Mode: show persistent "Demo Mode" banner so users know it's not real data
 - [x] Demo Mode: "Exit Demo" button that clears demo data and returns to login screen
 - [x] Demo Mode: skip server sync entirely (all data stays local)
+- [x] Bug: habit name TextInput not accepting typed characters on iOS TestFlight (Add Habit / Edit Habit modal)
