@@ -698,6 +698,7 @@ export default function HabitsScreen() {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [reorderingCat, setReorderingCat] = useState<string | null>(null);
   const [globalReordering, setGlobalReordering] = useState(false);
+  const [reorderingGoals, setReorderingGoals] = useState(false);
   const [habitModal, setHabitModal] = useState<{ open: boolean; categoryId: string; edit?: Habit | null }>({ open: false, categoryId: '' });
   const [categoryModal, setCategoryModal] = useState<{ open: boolean; edit?: CategoryDef | null }>({ open: false });
 
@@ -714,6 +715,14 @@ export default function HabitsScreen() {
     const [item] = moved.splice(fromIdx, 1);
     moved.splice(toIdx, 0, item);
     reorderHabits(catId, moved);
+  }
+
+  function moveCategory(fromIdx: number, toIdx: number) {
+    if (toIdx < 0 || toIdx >= sortedCategories.length) return;
+    const moved = [...sortedCategories];
+    const [item] = moved.splice(fromIdx, 1);
+    moved.splice(toIdx, 0, item);
+    reorderCategories(moved);
   }
 
   function moveGlobalHabit(fromIdx: number, toIdx: number) {
@@ -753,82 +762,116 @@ export default function HabitsScreen() {
           <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Manage Goals</Text>
-        <TouchableOpacity
-          onPress={() => setCategoryModal({ open: true })}
-          style={styles.addCatBtn}
-          activeOpacity={0.6}
-        >
-          <IconSymbol name="plus.circle.fill" size={22} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 60, justifyContent: 'flex-end' }}>
+          {/* Reorder goals toggle */}
+          <TouchableOpacity
+            onPress={() => setReorderingGoals((v) => !v)}
+            style={[styles.headerIconBtn, reorderingGoals && { backgroundColor: colors.primary + '22', borderRadius: 8 }]}
+            activeOpacity={0.6}
+          >
+            <IconSymbol name="arrow.up.arrow.down" size={18} color={reorderingGoals ? colors.primary : colors.muted} />
+          </TouchableOpacity>
+          {!reorderingGoals && (
+            <TouchableOpacity
+              onPress={() => setCategoryModal({ open: true })}
+              style={styles.headerIconBtn}
+              activeOpacity={0.6}
+            >
+              <IconSymbol name="plus.circle.fill" size={22} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[styles.hint, { color: colors.muted }]}>
-          Tap a goal to expand. Swipe a habit left to delete, or tap the pencil to edit.
+          {reorderingGoals ? 'Use arrows to reorder goals by priority. Tap the sort icon again to finish.' : 'Tap a goal to expand. Swipe a habit left to delete, or tap the pencil to edit.'}
         </Text>
 
-        {sortedCategories.map((cat) => {
+        {sortedCategories.map((cat, catIdx) => {
           const catHabits = [...habits.filter((h) => h.category === cat.id)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          const isExpanded = expandedCat === cat.id;
+          const isExpanded = expandedCat === cat.id && !reorderingGoals;
           const isReordering = reorderingCat === cat.id;
 
           return (
-            <View key={cat.id} style={[styles.categoryBlock, { borderColor: colors.border }]}>
+            <View key={cat.id} style={[styles.categoryBlock, { borderColor: reorderingGoals ? colors.primary + '55' : colors.border }]}>
               {/* Category row */}
               <View style={[styles.categoryRow, { backgroundColor: colors.surface }]}>
-                {/* Tap emoji to edit category */}
+                {/* Emoji */}
                 <TouchableOpacity
-                  onPress={() => setCategoryModal({ open: true, edit: cat })}
+                  onPress={() => !reorderingGoals && setCategoryModal({ open: true, edit: cat })}
                   style={styles.catEmojiBtn}
-                  activeOpacity={0.6}
+                  activeOpacity={reorderingGoals ? 1 : 0.6}
                 >
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 </TouchableOpacity>
 
-                {/* Tap label area to expand/collapse */}
+                {/* Label area */}
                 <TouchableOpacity
-                  onPress={() => toggleCategory(cat.id)}
+                  onPress={() => !reorderingGoals && toggleCategory(cat.id)}
                   style={styles.catInfo}
-                  activeOpacity={0.7}
+                  activeOpacity={reorderingGoals ? 1 : 0.7}
                 >
                   <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
                   <Text style={[styles.catCount, { color: colors.muted }]}>
-                    {catHabits.length} habit{catHabits.length !== 1 ? 's' : ''} · {catHabits.filter((h) => h.isActive).length} active
+                    {reorderingGoals ? `Priority #${catIdx + 1}` : `${catHabits.length} habit${catHabits.length !== 1 ? 's' : ''} · ${catHabits.filter((h) => h.isActive).length} active`}
                   </Text>
                 </TouchableOpacity>
 
-                <View style={styles.catActions}>
-                  {/* Edit (pencil) — delete is inside this modal */}
-                  <TouchableOpacity
-                    onPress={() => setCategoryModal({ open: true, edit: cat })}
-                    style={styles.iconBtn}
-                    activeOpacity={0.5}
-                  >
-                    <IconSymbol name="pencil" size={16} color={colors.muted} />
-                  </TouchableOpacity>
-                  {/* Reorder toggle (only when expanded and has >1 habit) */}
-                  {isExpanded && catHabits.length > 1 && (
+                {reorderingGoals ? (
+                  /* Goal reorder arrows */
+                  <View style={styles.catActions}>
                     <TouchableOpacity
-                      onPress={() => setReorderingCat(isReordering ? null : cat.id)}
-                      style={[styles.iconBtn, isReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}
+                      onPress={() => moveCategory(catIdx, catIdx - 1)}
+                      style={[styles.iconBtn, { opacity: catIdx === 0 ? 0.3 : 1 }]}
+                      activeOpacity={0.5}
+                      disabled={catIdx === 0}
+                    >
+                      <IconSymbol name="chevron.up" size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => moveCategory(catIdx, catIdx + 1)}
+                      style={[styles.iconBtn, { opacity: catIdx === sortedCategories.length - 1 ? 0.3 : 1 }]}
+                      activeOpacity={0.5}
+                      disabled={catIdx === sortedCategories.length - 1}
+                    >
+                      <IconSymbol name="chevron.down" size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.catActions}>
+                    {/* Edit (pencil) — delete is inside this modal */}
+                    <TouchableOpacity
+                      onPress={() => setCategoryModal({ open: true, edit: cat })}
+                      style={styles.iconBtn}
                       activeOpacity={0.5}
                     >
-                      <IconSymbol name="arrow.up.arrow.down" size={14} color={isReordering ? colors.primary : colors.muted} />
+                      <IconSymbol name="pencil" size={16} color={colors.muted} />
                     </TouchableOpacity>
-                  )}
-                  {/* Expand/collapse chevron */}
-                  <TouchableOpacity
-                    onPress={() => { toggleCategory(cat.id); if (isReordering) setReorderingCat(null); }}
-                    style={styles.iconBtn}
-                    activeOpacity={0.5}
-                  >
-                    <IconSymbol
-                      name={isExpanded ? 'chevron.up' : 'chevron.down'}
-                      size={14}
-                      color={colors.muted}
-                    />
-                  </TouchableOpacity>
-                </View>
+                    {/* Reorder toggle (only when expanded and has >1 habit) */}
+                    {isExpanded && catHabits.length > 1 && (
+                      <TouchableOpacity
+                        onPress={() => setReorderingCat(isReordering ? null : cat.id)}
+                        style={[styles.iconBtn, isReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}
+                        activeOpacity={0.5}
+                      >
+                        <IconSymbol name="arrow.up.arrow.down" size={14} color={isReordering ? colors.primary : colors.muted} />
+                      </TouchableOpacity>
+                    )}
+                    {/* Expand/collapse chevron */}
+                    <TouchableOpacity
+                      onPress={() => { toggleCategory(cat.id); if (isReordering) setReorderingCat(null); }}
+                      style={styles.iconBtn}
+                      activeOpacity={0.5}
+                    >
+                      <IconSymbol
+                        name={isExpanded ? 'chevron.up' : 'chevron.down'}
+                        size={14}
+                        color={colors.muted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Habits list */}
@@ -938,6 +981,7 @@ const styles = StyleSheet.create({
   backText: { fontSize: 16 },
   headerTitle: { fontSize: 17, fontWeight: '700' },
   addCatBtn: { padding: 4, minWidth: 60, alignItems: 'flex-end' },
+  headerIconBtn: { padding: 6 },
 
   scroll: { padding: 16 },
   hint: { fontSize: 13, marginBottom: 14, lineHeight: 18 },

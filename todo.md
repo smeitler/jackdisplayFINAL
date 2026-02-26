@@ -281,3 +281,4 @@
 - [ ] Fix: goal emoji should auto-set from selected Life Area (not a custom picker); Life Area is required when creating/editing a goal
 - [x] Remove: Habit Priority Order section and TOOLS divider from Manage Goals screen entirely
 - [x] Fix: goal emoji auto-sets from selected Life Area (no custom emoji picker on goals); Life Area is required to save a goal
+- [x] Manage Goals: add up/down reorder arrows to goal rows so users can set goal priority order
