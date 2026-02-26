@@ -1,10 +1,11 @@
 import { Tabs, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Platform } from "react-native";
+import { Platform, View, Text } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useAuth } from "@/hooks/use-auth";
+import { useApp } from "@/lib/app-context";
 import { useEffect } from "react";
 
 export default function TabLayout() {
@@ -13,13 +14,15 @@ export default function TabLayout() {
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + bottomPadding;
   const { isAuthenticated, loading } = useAuth();
+  const { isDemoMode } = useApp();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    // Allow demo mode users through without authentication
+    if (!loading && !isAuthenticated && !isDemoMode) {
       router.replace("/login");
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, isDemoMode, loading, router]);
 
   return (
     <Tabs
@@ -74,7 +77,20 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: "More",
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="line.3.horizontal.decrease" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <View>
+              <IconSymbol size={26} name="line.3.horizontal.decrease" color={color} />
+              {isDemoMode && (
+                <View style={{
+                  position: 'absolute', top: -4, right: -8,
+                  backgroundColor: '#F59E0B', borderRadius: 6,
+                  paddingHorizontal: 4, paddingVertical: 1,
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800' }}>DEMO</Text>
+                </View>
+              )}
+            </View>
+          ),
         }}
       />
     </Tabs>

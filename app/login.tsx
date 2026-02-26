@@ -6,13 +6,16 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { startOAuthLogin } from "@/constants/oauth";
 import { useAuth } from "@/hooks/use-auth";
+import { useApp } from "@/lib/app-context";
 import * as Haptics from "expo-haptics";
 
 export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
   const { isAuthenticated, loading } = useAuth();
+  const { startDemo } = useApp();
   const [signingIn, setSigningIn] = useState(false);
+  const [startingDemo, setStartingDemo] = useState(false);
 
   // If already authenticated, redirect to tabs
   useEffect(() => {
@@ -35,6 +38,18 @@ export default function LoginScreen() {
     // Keep signingIn=true on native until the deep link callback fires
     if (Platform.OS === "web") {
       setSigningIn(false);
+    }
+  }
+
+  async function handleTryDemo() {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setStartingDemo(true);
+    try {
+      await startDemo();
+      router.replace("/(tabs)");
+    } catch (err) {
+      console.error("[Login] Demo start failed:", err);
+      setStartingDemo(false);
     }
   }
 
@@ -78,14 +93,15 @@ export default function LoginScreen() {
           ))}
         </View>
 
-        {/* Sign-in button */}
+        {/* Buttons */}
         <View style={styles.footer}>
+          {/* Primary: Sign in */}
           <Pressable
             onPress={handleLogin}
-            disabled={signingIn}
+            disabled={signingIn || startingDemo}
             style={({ pressed }) => [
               styles.signInBtn,
-              { backgroundColor: colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }], opacity: signingIn ? 0.7 : 1 },
+              { backgroundColor: colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }], opacity: (signingIn || startingDemo) ? 0.7 : 1 },
             ]}
           >
             {signingIn ? (
@@ -95,6 +111,32 @@ export default function LoginScreen() {
             )}
             <Text style={styles.signInBtnText}>
               {signingIn ? "Opening login…" : "Sign in to get started"}
+            </Text>
+          </Pressable>
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>or</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          </View>
+
+          {/* Secondary: Try Demo */}
+          <Pressable
+            onPress={handleTryDemo}
+            disabled={signingIn || startingDemo}
+            style={({ pressed }) => [
+              styles.demoBtn,
+              { borderColor: colors.border, backgroundColor: colors.surface, transform: [{ scale: pressed ? 0.97 : 1 }], opacity: (signingIn || startingDemo) ? 0.7 : 1 },
+            ]}
+          >
+            {startingDemo ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <IconSymbol name="play.fill" size={16} color={colors.primary} />
+            )}
+            <Text style={[styles.demoBtnText, { color: colors.foreground }]}>
+              {startingDemo ? "Loading demo…" : "Try Demo"}
             </Text>
           </Pressable>
 
@@ -119,11 +161,19 @@ const styles = StyleSheet.create({
   featureRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   featureIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   featureText: { fontSize: 16, fontWeight: "500" },
-  footer: { gap: 16 },
+  footer: { gap: 12 },
   signInBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     borderRadius: 16, paddingVertical: 18,
   },
   signInBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 2 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerText: { fontSize: 13 },
+  demoBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    borderRadius: 16, paddingVertical: 16, borderWidth: 1,
+  },
+  demoBtnText: { fontSize: 16, fontWeight: "600" },
   disclaimer: { fontSize: 12, textAlign: "center", lineHeight: 18 },
 });

@@ -17,7 +17,10 @@ import {
   clearLocalData,
   getLastUserId,
   setLastUserId,
+  getIsDemoMode,
+  setDemoMode,
 } from './storage';
+import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns } from './demo-data';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
 
@@ -31,10 +34,12 @@ type AppState = {
   lastCheckInDate: string | null;
   isLoaded: boolean;
   isSyncing: boolean;
+  isDemoMode: boolean;
 };
 
 type Action =
   | { type: 'LOADED'; habits: Habit[]; categories: CategoryDef[]; checkIns: CheckInEntry[]; alarm: AlarmConfig; lastCheckInDate: string | null }
+  | { type: 'SET_DEMO_MODE'; isDemoMode: boolean }
   | { type: 'SET_HABITS'; habits: Habit[] }
   | { type: 'SET_CATEGORIES'; categories: CategoryDef[] }
   | { type: 'SET_CHECKINS'; checkIns: CheckInEntry[] }
@@ -58,6 +63,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, lastCheckInDate: action.date };
     case 'SET_SYNCING':
       return { ...state, isSyncing: action.syncing };
+    case 'SET_DEMO_MODE':
+      return { ...state, isDemoMode: action.isDemoMode };
     default:
       return state;
   }
@@ -71,6 +78,7 @@ const initialState: AppState = {
   lastCheckInDate: null,
   isLoaded: false,
   isSyncing: false,
+  isDemoMode: false,
 };
 
 // ─── Helpers: convert server rows → app types ─────────────────────────────────
@@ -144,6 +152,8 @@ type AppContextValue = AppState & {
   getHabitWeeklyDone: (habitId: string) => number; // count of days this week (Mon-Sun) with green or yellow rating
   getHabitMonthlyDone: (habitId: string) => number; // count of days this calendar month with green or yellow rating
   streak: number;
+  startDemo: () => Promise<void>;
+  exitDemo: () => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -158,6 +168,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Load data on mount ─────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
+      // 0. Check if demo mode is active — if so, skip server sync entirely
+      const demoActive = await getIsDemoMode();
+      if (demoActive) {
+        const demoCheckIns = buildDemoCheckIns();
+        const lastDate = demoCheckIns.map((e) => e.date).sort().pop() ?? null;
+        dispatch({ type: 'LOADED', habits: DEMO_HABITS, categories: DEMO_CATEGORIES, checkIns: demoCheckIns, alarm: DEMO_ALARM, lastCheckInDate: lastDate });
+        dispatch({ type: 'SET_DEMO_MODE', isDemoMode: true });
+        return;
+      }
+
       // 1. Load from local cache immediately for fast startup
       const [localHabits, localCategories, localCheckIns, localAlarm, lastCheckInDate] = await Promise.all([
         loadHabits(),
@@ -664,6 +684,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return count;
   }, [state.checkIns]);
 
+  const startDemo = useCallback(async () => {
+    await setDemoMode(true);
+    const demoCheckIns = buildDemoCheckIns();
+    const lastDate = demoCheckIns.map((e) => e.date).sort().pop() ?? null;
+    dispatch({ type: 'LOADED', habits: DEMO_HABITS, categories: DEMO_CATEGORIES, checkIns: demoCheckIns, alarm: DEMO_ALARM, lastCheckInDate: lastDate });
+    dispatch({ type: 'SET_DEMO_MODE', isDemoMode: true });
+  }, []);
+
+  const exitDemo = useCallback(async () => {
+    await setDemoMode(false);
+    // Reload real local data
+    const [localHabits, localCategories, localCheckIns, localAlarm, lastCheckInDate] = await Promise.all([
+      loadHabits(),
+      loadCategories(),
+      loadCheckIns(),
+      loadAlarm(),
+      getLastCheckInDate(),
+    ]);
+    dispatch({ type: 'LOADED', habits: localHabits, categories: localCategories, checkIns: localCheckIns, alarm: localAlarm, lastCheckInDate });
+    dispatch({ type: 'SET_DEMO_MODE', isDemoMode: false });
+  }, []);
+
   return (
     <AppContext.Provider value={{
       ...state,
@@ -674,6 +716,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       getEntriesForDate, getRatingsForDate,
       getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, getHabitMonthlyDone,
       streak,
+      startDemo, exitDemo,
     }}>
       {children}
     </AppContext.Provider>

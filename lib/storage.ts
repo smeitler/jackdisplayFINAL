@@ -89,7 +89,23 @@ const KEYS = {
   alarm:      'daycheck:alarm',
   lastCheckIn:'daycheck:lastcheckin',
   lastUserId: 'daycheck:lastUserId',
+  demoMode:   'daycheck:demoMode',
 } as const;
+
+/** Returns true if the app is currently running in Demo Mode. */
+export async function getIsDemoMode(): Promise<boolean> {
+  const val = await AsyncStorage.getItem(KEYS.demoMode);
+  return val === '1';
+}
+
+/** Set or clear Demo Mode flag. */
+export async function setDemoMode(enabled: boolean): Promise<void> {
+  if (enabled) {
+    await AsyncStorage.setItem(KEYS.demoMode, '1');
+  } else {
+    await AsyncStorage.removeItem(KEYS.demoMode);
+  }
+}
 
 // ─── Default data ─────────────────────────────────────────────────────────────
 

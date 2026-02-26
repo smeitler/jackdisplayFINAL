@@ -62,7 +62,7 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
 ];
 
 export default function SettingsScreen() {
-  const { alarm, updateAlarm, activeHabits } = useApp();
+  const { alarm, updateAlarm, activeHabits, isDemoMode, exitDemo } = useApp();
   const colors = useColors();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
@@ -344,6 +344,35 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
+        {/* Demo Mode banner + Exit button */}
+        {isDemoMode && (
+          <View style={[styles.demoCard, { backgroundColor: '#F59E0B18', borderColor: '#F59E0B' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <Text style={{ fontSize: 18 }}>🎭</Text>
+              <Text style={[styles.sectionTitle, { color: '#F59E0B', flex: 1 }]}>Demo Mode</Text>
+            </View>
+            <Text style={[{ fontSize: 13, color: colors.muted, lineHeight: 18, marginBottom: 14 }]}>
+              You're exploring a demo with sample data. Sign in to save your own goals and habits.
+            </Text>
+            <Pressable
+              onPress={async () => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                await exitDemo();
+                router.replace('/login');
+              }}
+              style={({ pressed }) => [{
+                backgroundColor: '#F59E0B',
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: 'center' as const,
+                opacity: pressed ? 0.8 : 1,
+              }]}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Exit Demo & Sign In</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Account section */}
         {isAuthenticated && (
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
@@ -394,6 +423,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 40 },
+  demoCard: { borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 20 },
   header: { marginBottom: 20 },
   title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
   section: { borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12 },

@@ -283,3 +283,8 @@
 - [x] Fix: goal emoji auto-sets from selected Life Area (no custom emoji picker on goals); Life Area is required to save a goal
 - [x] Manage Goals: add up/down reorder arrows to goal rows so users can set goal priority order
 - [x] Increase habit name character limit from 20 to 40 characters
+- [x] Demo Mode: add "Try Demo" button on login screen
+- [x] Demo Mode: seed rich sample data (goals, habits, check-ins, streaks) when demo is started
+- [x] Demo Mode: show persistent "Demo Mode" banner so users know it's not real data
+- [x] Demo Mode: "Exit Demo" button that clears demo data and returns to login screen
+- [x] Demo Mode: skip server sync entirely (all data stays local)
