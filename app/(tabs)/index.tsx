@@ -139,7 +139,7 @@ function GoalCard({
         {/* Life area tag */}
         {lifeAreaDef && (
           <Text style={[styles.cardLifeArea, { color: accentColor + 'cc', textAlign: 'center' }]}>
-            {lifeAreaDef.emoji} {lifeAreaDef.label}
+            {lifeAreaDef.label}
           </Text>
         )}
 
