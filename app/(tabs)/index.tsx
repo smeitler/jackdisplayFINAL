@@ -103,15 +103,17 @@ function GoalRing({ rate, emoji, label, deadline, onPress, colors }: {
           />
         )}
       </Svg>
-      {/* Center content */}
+      {/* Center content — percentage only */}
       <View style={styles.ringCenter} pointerEvents="none">
-        <Text style={styles.ringEmoji}>{emoji}</Text>
         <Text style={[styles.ringPct, { color: pct > 0 ? ringColor : colors.muted }]}>
           {pct > 0 ? `${pctText}%` : '—'}
         </Text>
       </View>
-      {/* Label below ring */}
-      <Text style={[styles.ringLabel, { color: colors.foreground }]} numberOfLines={2}>{label}</Text>
+      {/* Emoji + label below ring */}
+      <View style={styles.ringLabelRow}>
+        <Text style={styles.ringEmoji}>{emoji}</Text>
+        <Text style={[styles.ringLabel, { color: colors.foreground }]} numberOfLines={2}>{label}</Text>
+      </View>
       {deadlineLabel ? <Text style={[styles.ringDeadline, { color: deadlineColor }]}>{deadlineLabel}</Text> : null}
     </Pressable>
   );
@@ -357,9 +359,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
-  ringEmoji: { fontSize: 22 },
-  ringPct: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  ringLabel: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8, lineHeight: 18 },
+  ringEmoji: { fontSize: 18 },
+  ringPct: { fontSize: 26, fontWeight: '800', letterSpacing: -1 },
+  ringLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, paddingHorizontal: 4 },
+  ringLabel: { fontSize: 13, fontWeight: '600', flex: 1, lineHeight: 18 },
   ringDeadline: { fontSize: 11, fontWeight: '600', marginTop: 2, textAlign: 'center' },
   historyCard: { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 16 },
   historyRow: {
