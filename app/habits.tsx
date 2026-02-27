@@ -15,6 +15,7 @@ import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
+import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 
 
 // ─── Inline Date Picker ─────────────────────────────────────────────────────
@@ -699,9 +700,6 @@ export default function HabitsScreen() {
   }, [myTeams]);
 
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
-  const [reorderingCat, setReorderingCat] = useState<string | null>(null);
-  const [globalReordering, setGlobalReordering] = useState(false);
-  const [reorderingGoals, setReorderingGoals] = useState(false);
   const [habitModal, setHabitModal] = useState<{ open: boolean; categoryId: string; edit?: Habit | null }>({ open: false, categoryId: '' });
   const [categoryModal, setCategoryModal] = useState<{ open: boolean; edit?: CategoryDef | null }>({ open: false });
 
@@ -709,31 +707,6 @@ export default function HabitsScreen() {
 
   function toggleCategory(id: string) {
     setExpandedCat((prev) => (prev === id ? null : id));
-  }
-
-  function moveHabit(catId: string, fromIdx: number, toIdx: number) {
-    const catHabits = [...habits.filter((h) => h.category === catId)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (toIdx < 0 || toIdx >= catHabits.length) return;
-    const moved = [...catHabits];
-    const [item] = moved.splice(fromIdx, 1);
-    moved.splice(toIdx, 0, item);
-    reorderHabits(catId, moved);
-  }
-
-  function moveCategory(fromIdx: number, toIdx: number) {
-    if (toIdx < 0 || toIdx >= sortedCategories.length) return;
-    const moved = [...sortedCategories];
-    const [item] = moved.splice(fromIdx, 1);
-    moved.splice(toIdx, 0, item);
-    reorderCategories(moved);
-  }
-
-  function moveGlobalHabit(fromIdx: number, toIdx: number) {
-    if (toIdx < 0 || toIdx >= activeHabits.length) return;
-    const moved = [...activeHabits];
-    const [item] = moved.splice(fromIdx, 1);
-    moved.splice(toIdx, 0, item);
-    reorderAllHabits(moved);
   }
 
   function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) {
@@ -766,84 +739,84 @@ export default function HabitsScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Manage Goals</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 60, justifyContent: 'flex-end' }}>
-          {/* Reorder goals toggle */}
           <TouchableOpacity
-            onPress={() => setReorderingGoals((v) => !v)}
-            style={[styles.headerIconBtn, reorderingGoals && { backgroundColor: colors.primary + '22', borderRadius: 8 }]}
+            onPress={() => setCategoryModal({ open: true })}
+            style={styles.headerIconBtn}
             activeOpacity={0.6}
           >
-            <IconSymbol name="arrow.up.arrow.down" size={18} color={reorderingGoals ? colors.primary : colors.muted} />
+            <IconSymbol name="plus.circle.fill" size={22} color={colors.primary} />
           </TouchableOpacity>
-          {!reorderingGoals && (
-            <TouchableOpacity
-              onPress={() => setCategoryModal({ open: true })}
-              style={styles.headerIconBtn}
-              activeOpacity={0.6}
-            >
-              <IconSymbol name="plus.circle.fill" size={22} color={colors.primary} />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.hint, { color: colors.muted }]}>
-          {reorderingGoals ? 'Use arrows to reorder goals by priority. Tap the sort icon again to finish.' : 'Tap a goal to expand. Swipe a habit left to delete, or tap the pencil to edit.'}
-        </Text>
-
-        {sortedCategories.map((cat, catIdx) => {
+      <DraggableFlatList<CategoryDef>
+        data={sortedCategories}
+        keyExtractor={(cat) => cat.id}
+        onDragEnd={({ data }) => reorderCategories(data)}
+        activationDistance={10}
+        containerStyle={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <Text style={[styles.hint, { color: colors.muted }]}>
+            Long-press the ☰ handle to drag goals. Tap to expand habits.
+          </Text>
+        }
+        ListFooterComponent={
+          <>
+            <TouchableOpacity
+              onPress={() => setCategoryModal({ open: true })}
+              style={[styles.addCategoryBlock, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
+              <Text style={[styles.addCategoryText, { color: colors.primary }]}>Add New Goal</Text>
+            </TouchableOpacity>
+            <View style={{ height: 40 }} />
+          </>
+        }
+        renderItem={({ item: cat, drag, isActive }: RenderItemParams<CategoryDef>) => {
           const catHabits = [...habits.filter((h) => h.category === cat.id)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          const isExpanded = expandedCat === cat.id && !reorderingGoals;
-          const isReordering = reorderingCat === cat.id;
+          const isExpanded = expandedCat === cat.id;
 
           return (
-            <View key={cat.id} style={[styles.categoryBlock, { borderColor: reorderingGoals ? colors.primary + '55' : colors.border }]}>
-              {/* Category row */}
-              <View style={[styles.categoryRow, { backgroundColor: colors.surface }]}>
-                {/* Emoji */}
-                <TouchableOpacity
-                  onPress={() => !reorderingGoals && setCategoryModal({ open: true, edit: cat })}
-                  style={styles.catEmojiBtn}
-                  activeOpacity={reorderingGoals ? 1 : 0.6}
-                >
-                  <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                </TouchableOpacity>
+            <ScaleDecorator activeScale={1.02}>
+              <View style={[styles.categoryBlock, { borderColor: isActive ? colors.primary : colors.border }]}>
+                {/* Category row */}
+                <View style={[styles.categoryRow, { backgroundColor: colors.surface }]}>
+                  {/* Drag handle */}
+                  <TouchableOpacity
+                    onLongPress={drag}
+                    delayLongPress={150}
+                    style={styles.dragHandle}
+                    activeOpacity={0.5}
+                  >
+                    <IconSymbol name="line.3.horizontal" size={18} color={colors.muted} />
+                  </TouchableOpacity>
 
-                {/* Label area */}
-                <TouchableOpacity
-                  onPress={() => !reorderingGoals && toggleCategory(cat.id)}
-                  style={styles.catInfo}
-                  activeOpacity={reorderingGoals ? 1 : 0.7}
-                >
-                  <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
-                  <Text style={[styles.catCount, { color: colors.muted }]}>
-                    {reorderingGoals ? `Priority #${catIdx + 1}` : `${catHabits.length} habit${catHabits.length !== 1 ? 's' : ''} · ${catHabits.filter((h) => h.isActive).length} active`}
-                  </Text>
-                </TouchableOpacity>
+                  {/* Emoji */}
+                  <TouchableOpacity
+                    onPress={() => setCategoryModal({ open: true, edit: cat })}
+                    style={styles.catEmojiBtn}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.catEmoji}>{cat.emoji}</Text>
+                  </TouchableOpacity>
 
-                {reorderingGoals ? (
-                  /* Goal reorder arrows */
+                  {/* Label area */}
+                  <TouchableOpacity
+                    onPress={() => toggleCategory(cat.id)}
+                    style={styles.catInfo}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
+                    <Text style={[styles.catCount, { color: colors.muted }]}>
+                      {`${catHabits.length} habit${catHabits.length !== 1 ? 's' : ''} · ${catHabits.filter((h) => h.isActive).length} active`}
+                    </Text>
+                  </TouchableOpacity>
+
                   <View style={styles.catActions}>
-                    <TouchableOpacity
-                      onPress={() => moveCategory(catIdx, catIdx - 1)}
-                      style={[styles.iconBtn, { opacity: catIdx === 0 ? 0.3 : 1 }]}
-                      activeOpacity={0.5}
-                      disabled={catIdx === 0}
-                    >
-                      <IconSymbol name="chevron.up" size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => moveCategory(catIdx, catIdx + 1)}
-                      style={[styles.iconBtn, { opacity: catIdx === sortedCategories.length - 1 ? 0.3 : 1 }]}
-                      activeOpacity={0.5}
-                      disabled={catIdx === sortedCategories.length - 1}
-                    >
-                      <IconSymbol name="chevron.down" size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.catActions}>
-                    {/* Edit (pencil) — delete is inside this modal */}
+                    {/* Edit (pencil) */}
                     <TouchableOpacity
                       onPress={() => setCategoryModal({ open: true, edit: cat })}
                       style={styles.iconBtn}
@@ -851,19 +824,9 @@ export default function HabitsScreen() {
                     >
                       <IconSymbol name="pencil" size={16} color={colors.muted} />
                     </TouchableOpacity>
-                    {/* Reorder toggle (only when expanded and has >1 habit) */}
-                    {isExpanded && catHabits.length > 1 && (
-                      <TouchableOpacity
-                        onPress={() => setReorderingCat(isReordering ? null : cat.id)}
-                        style={[styles.iconBtn, isReordering && { backgroundColor: colors.primary + '22', borderRadius: 6 }]}
-                        activeOpacity={0.5}
-                      >
-                        <IconSymbol name="arrow.up.arrow.down" size={14} color={isReordering ? colors.primary : colors.muted} />
-                      </TouchableOpacity>
-                    )}
                     {/* Expand/collapse chevron */}
                     <TouchableOpacity
-                      onPress={() => { toggleCategory(cat.id); if (isReordering) setReorderingCat(null); }}
+                      onPress={() => toggleCategory(cat.id)}
                       style={styles.iconBtn}
                       activeOpacity={0.5}
                     >
@@ -874,84 +837,66 @@ export default function HabitsScreen() {
                       />
                     </TouchableOpacity>
                   </View>
+                </View>
+
+                {/* Habits list — drag-and-drop within each goal */}
+                {isExpanded && (
+                  <View style={[styles.habitsList, { borderTopColor: colors.border }]}>
+                    {catHabits.length === 0 && (
+                      <Text style={[styles.emptyHint, { color: colors.muted }]}>No habits yet. Add one below.</Text>
+                    )}
+                    <DraggableFlatList<Habit>
+                      data={catHabits}
+                      keyExtractor={(h) => h.id}
+                      onDragEnd={({ data }) => reorderHabits(cat.id, data)}
+                      activationDistance={10}
+                      scrollEnabled={false}
+                      renderItem={({ item: habit, drag: dragHabit, isActive: isHabitActive }: RenderItemParams<Habit>) => (
+                        <ScaleDecorator activeScale={1.02}>
+                          <View style={[styles.habitDragRow, { borderBottomColor: colors.border, backgroundColor: isHabitActive ? colors.surface : 'transparent' }]}>
+                            {/* Drag handle */}
+                            <TouchableOpacity
+                              onLongPress={dragHabit}
+                              delayLongPress={150}
+                              style={styles.dragHandle}
+                              activeOpacity={0.5}
+                            >
+                              <IconSymbol name="line.3.horizontal" size={16} color={colors.muted} />
+                            </TouchableOpacity>
+                            {/* Habit content (swipeable row) */}
+                            <View style={{ flex: 1 }}>
+                              <SwipeableHabitRow
+                                habit={habit}
+                                habitIndex={catHabits.indexOf(habit)}
+                                isLast={catHabits.indexOf(habit) === catHabits.length - 1}
+                                teamName={habit.teamId ? (teamNameMap[habit.teamId] ?? null) : null}
+                                colors={colors}
+                                onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
+                                onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
+                                onDelete={() => deleteHabit(habit.id)}
+                              />
+                            </View>
+                          </View>
+                        </ScaleDecorator>
+                      )}
+                    />
+
+                    {/* Add habit */}
+                    <TouchableOpacity
+                      onPress={() => setHabitModal({ open: true, categoryId: cat.id })}
+                      style={styles.addHabitBtn}
+                      activeOpacity={0.7}
+                    >
+                      <IconSymbol name="plus.circle" size={16} color={colors.primary} />
+                      <Text style={[styles.addHabitText, { color: colors.primary }]}>Add Habit</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
-
-              {/* Habits list */}
-              {isExpanded && (
-                <View style={[styles.habitsList, { borderTopColor: colors.border }]}>
-                  {catHabits.length === 0 && (
-                    <Text style={[styles.emptyHint, { color: colors.muted }]}>No habits yet. Add one below.</Text>
-                  )}
-                  {catHabits.map((habit, idx) => (
-                    isReordering ? (
-                      <View
-                        key={habit.id}
-                        style={[styles.reorderRow, { borderBottomColor: colors.border, backgroundColor: colors.surface }, idx === catHabits.length - 1 && { borderBottomWidth: 0 }]}
-                      >
-                        <IconSymbol name="line.3.horizontal" size={18} color={colors.muted} style={{ marginRight: 10 }} />
-                        <Text style={[styles.habitName, { color: habit.isActive ? colors.foreground : colors.muted, flex: 1 }]}>{habit.name}</Text>
-                        <View style={{ flexDirection: 'row', gap: 4 }}>
-                          <TouchableOpacity
-                            onPress={() => moveHabit(cat.id, idx, idx - 1)}
-                            style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}
-                            activeOpacity={0.5}
-                            disabled={idx === 0}
-                          >
-                            <IconSymbol name="chevron.up" size={16} color={colors.primary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => moveHabit(cat.id, idx, idx + 1)}
-                            style={[styles.iconBtn, { opacity: idx === catHabits.length - 1 ? 0.3 : 1 }]}
-                            activeOpacity={0.5}
-                            disabled={idx === catHabits.length - 1}
-                          >
-                            <IconSymbol name="chevron.down" size={16} color={colors.primary} />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ) : (
-                      <SwipeableHabitRow
-                        key={habit.id}
-                        habit={habit}
-                        habitIndex={idx}
-                        isLast={idx === catHabits.length - 1}
-                        teamName={habit.teamId ? (teamNameMap[habit.teamId] ?? null) : null}
-                        colors={colors}
-                        onEdit={() => setHabitModal({ open: true, categoryId: cat.id, edit: habit })}
-                        onToggle={() => updateHabit(habit.id, { isActive: !habit.isActive })}
-                        onDelete={() => deleteHabit(habit.id)}
-                      />
-                    )
-                  ))}
-
-                  {/* Add habit */}
-                  <TouchableOpacity
-                    onPress={() => setHabitModal({ open: true, categoryId: cat.id })}
-                    style={styles.addHabitBtn}
-                    activeOpacity={0.7}
-                  >
-                    <IconSymbol name="plus.circle" size={16} color={colors.primary} />
-                    <Text style={[styles.addHabitText, { color: colors.primary }]}>Add Habit</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+            </ScaleDecorator>
           );
-        })}
-
-        {/* Add Category */}
-        <TouchableOpacity
-          onPress={() => setCategoryModal({ open: true })}
-          style={[styles.addCategoryBlock, { borderColor: colors.border, backgroundColor: colors.surface }]}
-          activeOpacity={0.7}
-        >
-          <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
-          <Text style={[styles.addCategoryText, { color: colors.primary }]}>Add New Goal</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+        }}
+      />
 
       {/* Modals */}
       <HabitModal
@@ -1103,6 +1048,13 @@ const styles = StyleSheet.create({
   weeklyGoalDay: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weeklyGoalDayText: { fontSize: 13, fontWeight: '600' },
   weeklyGoalHint: { fontSize: 11, marginTop: 6 },
+  dragHandle: {
+    width: 32, height: 44, alignItems: 'center', justifyContent: 'center',
+  },
+  habitDragRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   reorderRow: {
     flexDirection: 'row',
     alignItems: 'center',
