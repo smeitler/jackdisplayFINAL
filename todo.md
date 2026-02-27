@@ -307,3 +307,4 @@
 - [x] Bug: app crashes when tapping a meditation/breathwork option in the After Alarm dropdown — fixed: replaced useAudioPlayer (static source hook) with createAudioPlayer imperative approach; each preview creates a fresh player and releases it when done; null sources (Priming, Journaling) skip playback gracefully
 - [x] Goal cards: change from 2-column grid to single full-width column so long titles never get cut off
 - [x] Alarm check-in popup: add fixed header at top saying it dismisses the alarm
+- [x] Home screen: only show Yesterday's Review prompt if yesterday's check-in has not been completed

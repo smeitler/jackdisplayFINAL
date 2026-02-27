@@ -594,7 +594,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ag !== bg) return ag - bg;
       return (a.order ?? 0) - (b.order ?? 0);
     });
-  const isPendingCheckIn = state.lastCheckInDate !== yesterdayString();
+  const isPendingCheckIn = !state.checkIns.some((e) => e.date === yesterdayString());
 
   const getEntriesForDate = useCallback((date: string) =>
     state.checkIns.filter((e) => e.date === date),
