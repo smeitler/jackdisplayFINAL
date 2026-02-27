@@ -10,7 +10,7 @@ import { yesterdayString, formatDisplayDate, toDateString, offsetDateString, LIF
 import * as Haptics from "expo-haptics";
 import { useIsIPad, useContentMaxWidth } from "@/hooks/use-is-ipad";
 
-const RANGES = [7, 14, 30, 60, 90] as const;
+const RANGES = [1, 7, 14, 30, 60, 90] as const;
 type Range = typeof RANGES[number];
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
@@ -51,7 +51,7 @@ export default function HomeScreen() {
   const isNova = useIsNova();
   const isIPad = useIsIPad();
   const maxWidth = useContentMaxWidth();
-  const [range, setRange] = useState<Range>(7);
+  const [range, setRange] = useState<Range>(1);
   const [rangeOpen, setRangeOpen] = useState(false);
 
   function handleRangeSelect(r: Range) {
@@ -136,7 +136,7 @@ export default function HomeScreen() {
         {/* Range selector + goals progress */}
         <View style={[styles.sectionHeader, { zIndex: 10 }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            {range}-Day Goals
+            {range === 1 ? "Yesterday's Goals" : `${range}-Day Goals`}
           </Text>
           <View>
             <Pressable
@@ -228,30 +228,10 @@ export default function HomeScreen() {
                   { opacity: pressed ? 0.85 : 1 },
                 ]}
               >
-                {/* Status badge */}
-                {badgeLabel && (
-                  <View style={[styles.onTrackBadge, { borderColor: badgeBorderColor }]}>
-                    <Text style={[styles.onTrackBadgeText, { color: badgeTextColor }]}>{badgeLabel}</Text>
-                  </View>
-                )}
-
-                <View style={[
-                  styles.catIconWrap,
-                  { backgroundColor: iconBg },
-                ]}>
+                {/* Compact row: emoji + name + spacer + days left + percentage */}
+                <View style={styles.catCompactRow}>
                   <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                </View>
-                <Text style={[styles.catLabel, { color: labelColor }]} numberOfLines={1}>{cat.label}</Text>
-                {lifeArea && (
-                  <Text style={[styles.catLifeArea, { color: mutedColor }]}>{lifeArea.emoji} {lifeArea.label}</Text>
-                )}
-                <View style={styles.catScoreRow}>
-                  <Text style={[
-                    styles.catScore,
-                    { color: scoreColor },
-                  ]}>
-                    {Math.round(rate * 100)}%
-                  </Text>
+                  <Text style={[styles.catLabel, { color: labelColor, flex: 1 }]} numberOfLines={1}>{cat.label}</Text>
                   {cat.deadline && (() => {
                     const dl = new Date(cat.deadline + 'T12:00:00');
                     const now = new Date();
@@ -262,62 +242,8 @@ export default function HomeScreen() {
                     const color = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : colors.muted;
                     return <Text style={[styles.deadlineTag, { color, borderColor: color + '44', backgroundColor: color + '18' }]}>{label}</Text>;
                   })()}
+                  <Text style={[styles.catScore, { color: scoreColor }]}>{Math.round(rate * 100)}%</Text>
                 </View>
-
-                {/* Stacked green/yellow/red breakdown bar */}
-                {total > 0 && (
-                  <View style={[styles.catBar, { marginTop: 6, marginBottom: 2 }]}>
-                    {breakdown.green > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.green / total, backgroundColor: '#22C55E' }]} />
-                    )}
-                    {breakdown.yellow > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.yellow / total, backgroundColor: '#F59E0B' }]} />
-                    )}
-                    {breakdown.red > 0 && (
-                      <View style={[styles.catBarSeg, { flex: breakdown.red / total, backgroundColor: '#EF4444' }]} />
-                    )}
-                  </View>
-                )}
-
-                {/* Habit goal progress bars */}
-                {habitsWithGoal.length > 0 && (
-                  <View style={styles.weeklyGoalList}>
-                    {habitsWithGoal.map((h) => {
-                      const progress = getHabitProgress(h, getHabitWeeklyDone, getHabitMonthlyDone);
-                      if (!progress) return null;
-                      const { pct, met, label } = progress;
-                      const barColor = met ? '#22C55E' : colors.primary;
-                      return (
-                        <View key={h.id} style={styles.weeklyGoalItem}>
-                          <View style={styles.weeklyGoalBarWrap}>
-                            <View style={[styles.weeklyGoalBarBg, {
-                              backgroundColor: met ? '#22C55E22' : colors.border,
-                              borderWidth: met ? 1 : 0,
-                              borderColor: met ? '#22C55E44' : 'transparent',
-                            }]}>
-                              <View style={[
-                                styles.weeklyGoalBarFill,
-                                {
-                                  flex: pct,
-                                  backgroundColor: barColor,
-                                  // Glow effect for met goals
-                                  ...(met ? {
-                                    shadowColor: '#22C55E',
-                                    shadowOpacity: 0.6,
-                                    shadowRadius: 4,
-                                    shadowOffset: { width: 0, height: 0 },
-                                  } : {}),
-                                },
-                              ]} />
-                              {pct < 1 && <View style={{ flex: 1 - pct }} />}
-                            </View>
-
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
 
 
               </Pressable>
@@ -418,9 +344,10 @@ const styles = StyleSheet.create({
   },
   catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   catEmoji: { fontSize: 20 },
-  catLabel: { fontSize: 13, fontWeight: '600' },
+  catLabel: { fontSize: 14, fontWeight: '600' },
+  catCompactRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   catLifeArea: { fontSize: 11, marginTop: -2 },
-  catScore: { fontSize: 20, fontWeight: '800' },
+  catScore: { fontSize: 16, fontWeight: '800' },
   catBar: { height: 5, borderRadius: 3, overflow: 'hidden', flexDirection: 'row', marginTop: 4 },
   catBarSeg: { height: 5 },
   historyCard: { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 16 },

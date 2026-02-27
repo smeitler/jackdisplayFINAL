@@ -308,3 +308,5 @@
 - [x] Goal cards: change from 2-column grid to single full-width column so long titles never get cut off
 - [x] Alarm check-in popup: add fixed header at top saying it dismisses the alarm
 - [x] Home screen: only show Yesterday's Review prompt if yesterday's check-in has not been completed
+- [x] Goal cards: slim down to emoji + name + days left + percentage only (remove progress bars, badges, habit counts)
+- [x] Home screen stats: default range to 1d (yesterday) instead of 7d
