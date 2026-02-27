@@ -312,3 +312,4 @@
 - [x] Home screen stats: default range to 1d (yesterday) instead of 7d
 - [ ] Goal cards: add color-coded status label (Needs Work / Getting There / On Track / Crushing It) based on percentage
 - [x] Goal cards: replace with WHOOP-style circular progress rings, 2 per row, percentage inside ring, emoji + name below
+- [x] Home screen: full visual polish pass — improved ring layout, header, streak display, section spacing, typography
