@@ -1,6 +1,7 @@
 import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
@@ -15,6 +16,20 @@ import { clearLocalData } from "@/lib/storage";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
+  { id: 'classic',  label: 'Classic',  emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
+  { id: 'buzzer',   label: 'Buzzer',   emoji: '📢', source: require('@/assets/audio/alarm_buzzer.wav') },
+  { id: 'digital',  label: 'Digital',  emoji: '📱', source: require('@/assets/audio/alarm_digital.wav') },
+  { id: 'gentle',   label: 'Gentle',   emoji: '🔔', source: require('@/assets/audio/alarm_gentle.wav') },
+  { id: 'urgent',   label: 'Urgent',   emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav') },
+];
+
+const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> }[] = [
+  { id: 'bowl',      label: 'Singing Bowl',   emoji: '🎵', description: '432 Hz tone, 30 sec',           source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_bowl_c8bd7151.wav' },
+  { id: 'breathing', label: 'Box Breathing',  emoji: '🌬️', description: 'Inhale · Hold · Exhale, 30 sec', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_breathing_fd1069a2.wav' },
+  { id: 'focus',     label: 'Focus Tones',    emoji: '🧠', description: 'Binaural beats, 30 sec',          source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_focus_782acd2b.wav' },
+];
 
 const THEMES: { id: AppTheme; label: string; preview: string; description: string }[] = [
   {
@@ -76,6 +91,46 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [appearanceExpanded, setAppearanceExpanded] = useState(false);
+  const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
+  const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+
+  // Determine which source to preview
+  const previewSource = previewingId
+    ? (ALARM_SOUNDS.find(s => s.id === previewingId)?.source ??
+       MEDITATION_OPTIONS.find(m => m.id === previewingId)?.source ?? null)
+    : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const previewPlayer = useAudioPlayer((previewSource ?? ALARM_SOUNDS[0].source) as any);
+
+  // Stop preview after 3 seconds
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function playPreview(id: string, source: ReturnType<typeof require>) {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    if (previewingId === id) {
+      // Toggle off
+      previewPlayer.pause();
+      setPreviewingId(null);
+      return;
+    }
+    setPreviewingId(id);
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    previewPlayer.seekTo(0);
+    previewPlayer.play();
+    previewTimerRef.current = setTimeout(() => {
+      previewPlayer.pause();
+      setPreviewingId(null);
+    }, 4000);
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      previewPlayer.pause();
+    };
+  }, []);
 
   // Sync if alarm changes externally
   useEffect(() => {
@@ -83,6 +138,8 @@ export default function SettingsScreen() {
     setMinute(alarm.minute);
     setDays(alarm.days);
     setEnabled(alarm.isEnabled);
+    setSoundId(alarm.soundId ?? 'classic');
+    setMeditationId(alarm.meditationId);
   }, [alarm]);
 
   function toggleDay(day: number) {
@@ -95,7 +152,7 @@ export default function SettingsScreen() {
   async function handleSave() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled });
+    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -228,6 +285,104 @@ export default function SettingsScreen() {
                     );
                   })}
                 </View>
+              </View>
+
+              {/* Alarm Sound Picker */}
+              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
+                <View style={styles.soundPickerHeader}>
+                  <IconSymbol name="music.note" size={14} color={colors.muted} />
+                  <Text style={[styles.pickerLabel, { color: colors.muted, marginBottom: 0 }]}>Alarm Sound</Text>
+                </View>
+                <View style={[styles.soundGrid, { marginTop: 10 }]}>
+                  {ALARM_SOUNDS.map((sound) => {
+                    const isSelected = soundId === sound.id;
+                    const isPreviewing = previewingId === sound.id;
+                    return (
+                      <Pressable
+                        key={sound.id}
+                        onPress={() => {
+                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSoundId(sound.id);
+                          playPreview(sound.id, sound.source);
+                        }}
+                        style={({ pressed }) => [
+                          styles.soundOption,
+                          isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
+                          !isSelected && { borderColor: colors.border, backgroundColor: colors.surface },
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
+                        <Text style={[styles.soundLabel, { color: isSelected ? colors.primary : colors.foreground }]}>
+                          {sound.label}
+                        </Text>
+                        {isSelected && <IconSymbol name="checkmark" size={12} color={colors.primary} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Guided Meditation Picker */}
+              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
+                <View style={styles.soundPickerHeader}>
+                  <IconSymbol name="moon.stars.fill" size={14} color={colors.muted} />
+                  <Text style={[styles.pickerLabel, { color: colors.muted, marginBottom: 0 }]}>After Alarm Meditation</Text>
+                </View>
+                <Text style={[styles.meditationSubtitle, { color: colors.muted }]}>
+                  Plays after you open the app and submit your check-in
+                </Text>
+                {/* None option */}
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMeditationId(undefined);
+                  }}
+                  style={({ pressed }) => [
+                    styles.meditationOption,
+                    { borderColor: !meditationId ? colors.primary : colors.border,
+                      backgroundColor: !meditationId ? colors.primary + '18' : colors.surface,
+                      opacity: pressed ? 0.7 : 1,
+                      marginTop: 10,
+                    },
+                  ]}
+                >
+                  <Text style={styles.soundEmoji}>🚫</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.meditationLabel, { color: !meditationId ? colors.primary : colors.foreground }]}>None</Text>
+                    <Text style={[styles.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
+                  </View>
+                  {!meditationId && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
+                </Pressable>
+                {MEDITATION_OPTIONS.map((med) => {
+                  const isSelected = meditationId === med.id;
+                  const isPreviewing = previewingId === med.id;
+                  return (
+                    <Pressable
+                      key={med.id}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setMeditationId(med.id);
+                        playPreview(med.id, med.source);
+                      }}
+                      style={({ pressed }) => [
+                        styles.meditationOption,
+                        isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
+                        !isSelected && { borderColor: colors.border, backgroundColor: colors.surface },
+                        { opacity: pressed ? 0.7 : 1, marginTop: 8 },
+                      ]}
+                    >
+                      <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.meditationLabel, { color: isSelected ? colors.primary : colors.foreground }]}>
+                          {med.label}
+                        </Text>
+                        <Text style={[styles.meditationDesc, { color: colors.muted }]}>{med.description}</Text>
+                      </View>
+                      {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
+                    </Pressable>
+                  );
+                })}
               </View>
             </>
           )}
@@ -481,4 +636,23 @@ const styles = StyleSheet.create({
   },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
   activeSwatchSmall: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, marginRight: 4 },
+  // Sound picker
+  soundPickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  soundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  soundOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 9,
+    borderRadius: 12, borderWidth: 1.5,
+    minWidth: '30%',
+  },
+  soundEmoji: { fontSize: 16 },
+  soundLabel: { fontSize: 13, fontWeight: '600', flex: 1 },
+  // Meditation picker
+  meditationSubtitle: { fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 2 },
+  meditationOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 12, borderRadius: 12, borderWidth: 1.5,
+  },
+  meditationLabel: { fontSize: 14, fontWeight: '600' },
+  meditationDesc: { fontSize: 12, marginTop: 1 },
 });

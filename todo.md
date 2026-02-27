@@ -290,3 +290,9 @@
 - [x] Demo Mode: skip server sync entirely (all data stays local)
 - [x] Bug: habit name TextInput not accepting typed characters on iOS TestFlight (Add Habit / Edit Habit modal)
 - [x] Bug: photos added in Vision Board disappear on TestFlight — fixed: resolve ph:// URIs via MediaLibrary.getAssetInfoAsync() before copying to documentDirectory
+
+- [x] More tab alarm section: add alarm sound picker (list of built-in sounds with preview tap)
+- [x] More tab alarm section: add optional guided meditation picker (plays after alarm is dismissed)
+- [x] Persist selected alarm sound and meditation choice in AsyncStorage / alarm config
+- [ ] Play selected alarm sound when alarm fires (replace default notification sound)
+- [ ] Play selected meditation audio after check-in is submitted (if meditation is enabled)

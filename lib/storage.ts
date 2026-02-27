@@ -61,6 +61,8 @@ export type AlarmConfig = {
   days: number[];     // 0=Sun … 6=Sat
   isEnabled: boolean;
   notificationIds: string[];
+  soundId?: string;       // ID of the alarm sound to play (default: 'classic')
+  meditationId?: string;  // ID of the post-alarm meditation (default: none)
 };
 
 // ─── Rating helpers ───────────────────────────────────────────────────────────
@@ -154,6 +156,8 @@ export const DEFAULT_ALARM: AlarmConfig = {
   days: [1, 2, 3, 4, 5, 6, 0],
   isEnabled: false,
   notificationIds: [],
+  soundId: 'classic',
+  meditationId: undefined,
 };
 
 // ─── Categories ───────────────────────────────────────────────────────────────

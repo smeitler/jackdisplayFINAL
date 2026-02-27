@@ -72,6 +72,13 @@ const MAPPING = {
   "crown.fill": "workspace-premium",
   "medal.fill": "military-tech",
   "arrow.up.right": "north-east",
+  "music.note": "music-note",
+  "headphones": "headphones",
+  "speaker.wave.2.fill": "volume-up",
+  "play.fill": "play-arrow",
+  "stop.fill": "stop",
+  "moon.stars.fill": "bedtime",
+  "waveform": "graphic-eq",
 } as IconMapping;
 
 export function IconSymbol({
