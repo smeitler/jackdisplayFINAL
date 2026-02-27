@@ -63,6 +63,7 @@ export type AlarmConfig = {
   notificationIds: string[];
   soundId?: string;       // ID of the alarm sound to play (default: 'classic')
   meditationId?: string;  // ID of the post-alarm meditation (default: none)
+  requireCheckin?: boolean; // If true, block app access until yesterday's check-in is done
 };
 
 // ─── Rating helpers ───────────────────────────────────────────────────────────

@@ -62,6 +62,7 @@ const MAPPING = {
   "link": "link",
   "square.and.arrow.up": "share",
   "gift.fill": "card-giftcard",
+  "eye.fill": "visibility",
   "lock.fill": "lock",
   "lock.open.fill": "lock-open",
   "line.3.horizontal.decrease": "menu",

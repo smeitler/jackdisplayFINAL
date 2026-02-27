@@ -295,7 +295,7 @@
 - [x] More tab alarm section: add optional guided meditation picker (plays after alarm is dismissed)
 - [x] Persist selected alarm sound and meditation choice in AsyncStorage / alarm config
 - [ ] Play selected alarm sound when alarm fires (replace default notification sound)
-- [ ] Play selected meditation audio after check-in is submitted (if meditation is enabled)
+- [x] Play selected meditation audio after check-in is submitted (if meditation is enabled)
 - [x] Bug: Add Habit modal — habit name TextInput is invisible/untappable on iOS TestFlight — fixed: removed pointerEvents box-none from KeyboardAvoidingView, added explicit nameInputWrapper with minHeight, changed nameInput to width:100%
 - [x] More tab: rework alarm sound and meditation pickers as collapsible dropdown rows (tap row to expand/collapse options)
 - [x] Replace tap-to-sort button with drag-and-drop reordering for goals in Manage Goals screen
@@ -314,3 +314,6 @@
 - [x] Goal cards: replace with WHOOP-style circular progress rings, 2 per row, percentage inside ring, emoji + name below
 - [x] Home screen: full visual polish pass — improved ring layout, header, streak display, section spacing, typography
 - [x] Home screen: restore 2-column card layout with WHOOP-style SVG arc border indicating percentage
+- [x] Alarm settings: add "Preview Check-in" button that opens the check-in popup so user can see/test it
+- [x] Alarm settings: add toggle "Require check-in to unlock app" — blocks app access until yesterday's check-in is done
+- [x] Implement app lockout gate on app open when requireCheckin is enabled and yesterday's check-in is incomplete

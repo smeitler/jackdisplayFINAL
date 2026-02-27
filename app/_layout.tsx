@@ -1,7 +1,7 @@
 import "@/global.css";
 import { useRef } from "react";
 import * as Notifications from "expo-notifications";
-import { AppProvider } from "@/lib/app-context";
+import { AppProvider, useApp } from "@/lib/app-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -21,7 +21,7 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -29,6 +29,23 @@ const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 export const unstable_settings = {
   anchor: "(tabs)",
 };
+
+function CheckinGate() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { alarm, isPendingCheckIn, isLoaded } = useApp();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!alarm.requireCheckin) return;
+    if (!isPendingCheckIn) return;
+    // Don't redirect if already on check-in or login screens
+    if (pathname === '/checkin' || pathname === '/login' || pathname.startsWith('/oauth')) return;
+    router.push('/checkin?fromAlarm=1' as never);
+  }, [isLoaded, alarm.requireCheckin, isPendingCheckIn, pathname, router]);
+
+  return null;
+}
 
 function NotificationHandler() {
   const router = useRouter();
@@ -108,6 +125,7 @@ export default function RootLayout() {
             {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
             {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
             <NotificationHandler />
+            <CheckinGate />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="login" options={{ presentation: 'fullScreenModal' }} />

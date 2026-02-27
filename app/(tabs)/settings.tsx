@@ -97,6 +97,7 @@ export default function SettingsScreen() {
   const [meditationOpen, setMeditationOpen] = useState(false);
   const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
   const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
+  const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   // Imperative player ref — created fresh each time, released when done
@@ -152,6 +153,7 @@ export default function SettingsScreen() {
     setEnabled(alarm.isEnabled);
     setSoundId(alarm.soundId ?? 'classic');
     setMeditationId(alarm.meditationId);
+    setRequireCheckin(alarm.requireCheckin ?? false);
   }, [alarm]);
 
   function toggleDay(day: number) {
@@ -164,7 +166,7 @@ export default function SettingsScreen() {
   async function handleSave() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId });
+    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -417,6 +419,49 @@ export default function SettingsScreen() {
                   })}
                 </View>
               )}
+              {/* Require check-in toggle */}
+              <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
+                <IconSymbol name="lock.fill" size={16} color={colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Require Check-in to Unlock App</Text>
+                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
+                    Block app access until yesterday's check-in is complete
+                  </Text>
+                </View>
+                <Switch
+                  value={requireCheckin}
+                  onValueChange={(v) => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setRequireCheckin(v);
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              {/* Preview check-in button */}
+              <Pressable
+                onPress={() => router.push('/checkin?fromAlarm=1&preview=1')}
+                style={({ pressed }) => [{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderTopColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                <IconSymbol name="eye.fill" size={16} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownRowLabel, { color: colors.primary }]}>Preview Check-in Popup</Text>
+                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
+                    See exactly what appears when your alarm fires
+                  </Text>
+                </View>
+                <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+              </Pressable>
             </>
           )}
         </View>

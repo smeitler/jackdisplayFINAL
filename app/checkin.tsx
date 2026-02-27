@@ -2,7 +2,7 @@ import {
   ScrollView, Text, View, Pressable, StyleSheet, Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
@@ -22,19 +23,41 @@ const RATING_COLORS: Record<ActiveRating, string> = {
   green:  '#22C55E',
 };
 
+// Must match MEDITATION_OPTIONS in settings.tsx
+const AFTER_ALARM_SOURCES: Record<string, string | ReturnType<typeof require> | null> = {
+  priming:       null,
+  meditation:    'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_bowl_c8bd7151.wav',
+  breathwork:    'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_breathing_fd1069a2.wav',
+  visualization: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_focus_782acd2b.wav',
+  journaling:    null,
+};
+
+const AFTER_ALARM_META: Record<string, { label: string; emoji: string; description: string }> = {
+  priming:       { label: 'Priming',           emoji: '🔥', description: 'Gratitude · Goals · Visualize' },
+  meditation:    { label: 'Guided Meditation', emoji: '🧘', description: 'Mindful awareness, 5 min' },
+  breathwork:    { label: 'Breathwork',        emoji: '🌬️', description: 'Box breathing, 4-4-4-4' },
+  visualization: { label: 'Visualizations',   emoji: '🎯', description: 'See your goals achieved' },
+  journaling:    { label: 'Journaling',        emoji: '📓', description: 'Morning pages, free write' },
+};
+
 export default function CheckInScreen() {
-  const { activeHabits, categories, submitCheckIn, getRatingsForDate } = useApp();
+  const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string; fromAlarm?: string }>();
+  const params = useLocalSearchParams<{ date?: string; fromAlarm?: string; preview?: string }>();
   const fromAlarm = params.fromAlarm === '1';
+  const isPreview = params.preview === '1';
 
   const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
   const [submitted, setSubmitted] = useState(false);
   const [shareToTeam, setShareToTeam] = useState(true);
   const [shared, setShared] = useState(false);
+
+  // After-alarm audio state
+  const [afterAlarmPlaying, setAfterAlarmPlaying] = useState(false);
+  const afterAlarmPlayerRef = useRef<AudioPlayer | null>(null);
 
   const { data: myTeams } = trpc.teams.list.useQuery();
   const createPost = trpc.teamFeed.createPost.useMutation();
@@ -46,6 +69,54 @@ export default function CheckInScreen() {
 
   const today = toDateString();
   const canGoForward = currentDate < yesterdayString();
+
+  // Start after-alarm audio when submitted from alarm context
+  useEffect(() => {
+    if (!submitted || !fromAlarm || isPreview) return;
+    const meditationId = alarm.meditationId;
+    if (!meditationId) return;
+    const source = AFTER_ALARM_SOURCES[meditationId];
+    if (!source) return;
+
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const player = createAudioPlayer(source as any);
+      afterAlarmPlayerRef.current = player;
+      player.play();
+      setAfterAlarmPlaying(true);
+    } catch (e) {
+      console.warn('[AfterAlarm] Failed to start audio:', e);
+    }
+
+    return () => {
+      if (afterAlarmPlayerRef.current) {
+        try { afterAlarmPlayerRef.current.pause(); } catch { /* ignore */ }
+        try { afterAlarmPlayerRef.current.remove(); } catch { /* ignore */ }
+        afterAlarmPlayerRef.current = null;
+      }
+    };
+  }, [submitted, fromAlarm, isPreview, alarm.meditationId]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (afterAlarmPlayerRef.current) {
+        try { afterAlarmPlayerRef.current.pause(); } catch { /* ignore */ }
+        try { afterAlarmPlayerRef.current.remove(); } catch { /* ignore */ }
+        afterAlarmPlayerRef.current = null;
+      }
+    };
+  }, []);
+
+  function stopAfterAlarm() {
+    if (afterAlarmPlayerRef.current) {
+      try { afterAlarmPlayerRef.current.pause(); } catch { /* ignore */ }
+      try { afterAlarmPlayerRef.current.remove(); } catch { /* ignore */ }
+      afterAlarmPlayerRef.current = null;
+    }
+    setAfterAlarmPlaying(false);
+  }
 
   function navigateDate(direction: -1 | 1) {
     const d = new Date(currentDate + 'T12:00:00');
@@ -127,6 +198,11 @@ export default function CheckInScreen() {
     const scoreColor = score >= 70 ? '#22C55E' : score >= 40 ? '#F59E0B' : '#EF4444';
     const hasTeams = myTeams && myTeams.length > 0;
 
+    // After-alarm meditation info
+    const meditationId = alarm.meditationId;
+    const meditationMeta = meditationId ? AFTER_ALARM_META[meditationId] : null;
+    const showAfterAlarm = fromAlarm && !isPreview && meditationMeta;
+
     const handleShareToTeams = async () => {
       if (!myTeams) return;
       for (const team of myTeams) {
@@ -139,6 +215,7 @@ export default function CheckInScreen() {
         });
       }
       setShared(true);
+      stopAfterAlarm();
       setTimeout(() => router.back(), 1200);
     };
 
@@ -161,6 +238,26 @@ export default function CheckInScreen() {
             {redCount    > 0 && <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}><Text style={styles.successPillText}>{redCount} missed</Text></View>}
           </View>
 
+          {/* After-alarm meditation card */}
+          {showAfterAlarm && meditationMeta && (
+            <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>
+                {meditationMeta.emoji} {meditationMeta.label}
+              </Text>
+              <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>
+                {meditationMeta.description}
+              </Text>
+              {afterAlarmPlaying && (
+                <Pressable
+                  style={({ pressed }) => [styles.afterAlarmStopBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                  onPress={stopAfterAlarm}
+                >
+                  <Text style={[styles.afterAlarmStopText, { color: colors.muted }]}>⏹ Stop</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
           {hasTeams && !shared && (
             <View style={[styles.shareTeamBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.shareTeamTitle, { color: colors.foreground }]}>Share with your team?</Text>
@@ -168,7 +265,7 @@ export default function CheckInScreen() {
               <View style={styles.shareTeamBtns}>
                 <Pressable
                   style={({ pressed }) => [styles.shareTeamSkip, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
-                  onPress={() => { setTimeout(() => router.back(), 300); }}
+                  onPress={() => { stopAfterAlarm(); setTimeout(() => router.back(), 300); }}
                 >
                   <Text style={[styles.shareTeamSkipText, { color: colors.muted }]}>Skip</Text>
                 </Pressable>
@@ -186,7 +283,7 @@ export default function CheckInScreen() {
           {(!hasTeams || shared) && (
             <Pressable
               style={({ pressed }) => [styles.successDoneBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
-              onPress={() => router.back()}
+              onPress={() => { stopAfterAlarm(); router.back(); }}
             >
               <Text style={styles.successDoneBtnText}>{shared ? '✅ Shared!' : 'Done'}</Text>
             </Pressable>
@@ -200,9 +297,16 @@ export default function CheckInScreen() {
     <ScreenContainer edges={["top", "left", "right"]}>
 
       {/* ── Alarm banner (fixed at top when opened from alarm) ── */}
-      {fromAlarm && (
+      {fromAlarm && !isPreview && (
         <View style={[styles.alarmBanner, { backgroundColor: colors.primary }]}>
           <Text style={styles.alarmBannerText}>⏰ Complete your check-in to dismiss the alarm</Text>
+        </View>
+      )}
+
+      {/* ── Preview banner ── */}
+      {isPreview && (
+        <View style={[styles.alarmBanner, { backgroundColor: '#6B7280' }]}>
+          <Text style={styles.alarmBannerText}>👁 Preview Mode — this is what your alarm check-in looks like</Text>
         </View>
       )}
 
@@ -524,6 +628,19 @@ const styles = StyleSheet.create({
   successPills: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 },
   successPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
   successPillText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  afterAlarmBox: {
+    borderRadius: 16, borderWidth: 1, padding: 16, width: '100%',
+    alignItems: 'center', gap: 6, marginTop: 12,
+  },
+  afterAlarmTitle: { fontSize: 17, fontWeight: '700' },
+  afterAlarmDesc: { fontSize: 13, textAlign: 'center' },
+  afterAlarmStopBtn: {
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 20, paddingVertical: 8, marginTop: 4,
+  },
+  afterAlarmStopText: { fontSize: 14, fontWeight: '600' },
+
   shareTeamBox: { borderRadius: 16, borderWidth: 1, padding: 16, width: '100%', gap: 8, marginTop: 12 },
   shareTeamTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
   shareTeamSub: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
