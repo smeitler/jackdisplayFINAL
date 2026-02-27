@@ -27,7 +27,8 @@ export default function CheckInScreen() {
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string }>();
+  const params = useLocalSearchParams<{ date?: string; fromAlarm?: string }>();
+  const fromAlarm = params.fromAlarm === '1';
 
   const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
@@ -197,6 +198,13 @@ export default function CheckInScreen() {
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
+
+      {/* ── Alarm banner (fixed at top when opened from alarm) ── */}
+      {fromAlarm && (
+        <View style={[styles.alarmBanner, { backgroundColor: colors.primary }]}>
+          <Text style={styles.alarmBannerText}>⏰ Complete your check-in to dismiss the alarm</Text>
+        </View>
+      )}
 
       {/* ── Header ── */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -526,4 +534,11 @@ const styles = StyleSheet.create({
   shareTeamBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   successDoneBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40, alignItems: 'center', marginTop: 16 },
   successDoneBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  alarmBanner: {
+    paddingVertical: 10, paddingHorizontal: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  alarmBannerText: {
+    color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center',
+  },
 });

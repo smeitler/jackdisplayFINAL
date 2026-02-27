@@ -38,7 +38,7 @@ function NotificationHandler() {
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as { action?: string };
       if (data?.action === 'open_checkin') {
-        router.push('/checkin' as never);
+        router.push('/checkin?fromAlarm=1' as never);
       }
     });
     return () => { responseListener.current?.remove(); };

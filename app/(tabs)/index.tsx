@@ -177,7 +177,7 @@ export default function HomeScreen() {
 
         <View style={styles.categoryGrid}>
           {categories.map((cat) => {
-            const cardWidth = isIPad ? '31.5%' : '47.5%';
+            const cardWidth = isIPad ? '31.5%' : '100%';
             const rate = getCategoryRate(cat.id, range);
             const breakdown = getCategoryBreakdown(cat.id, range);
             const total = breakdown.green + breakdown.yellow + breakdown.red;
@@ -396,9 +396,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 11,
   },
   rangeDropdownText: { fontSize: 14 },
-  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  categoryGrid: { flexDirection: 'column', gap: 10, marginBottom: 20 },
   categoryCard: {
-    width: '47.5%', borderRadius: 14, padding: 12, gap: 4,
+    width: '100%', borderRadius: 14, padding: 12, gap: 4,
   },
   onTrackBadge: {
     alignSelf: 'flex-start',
