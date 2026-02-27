@@ -358,6 +358,34 @@ export async function saveDayNotes(notes: DayNotes): Promise<void> {
   await AsyncStorage.setItem(DAY_NOTES_KEY, JSON.stringify(notes));
 }
 
+// ─── Mind Dump ──────────────────────────────────────────────────────────────
+
+export type MindDumpCategory = 'task' | 'idea' | 'reminder' | 'worry' | 'gratitude';
+
+export type MindDumpItem = {
+  id: string;
+  text: string;
+  category: MindDumpCategory;
+  createdAt: string;       // ISO timestamp
+  promotedToDate?: string; // YYYY-MM-DD if promoted to a day's check-in
+  done: boolean;
+};
+
+const MIND_DUMP_KEY = 'daycheck:minddump';
+
+export async function loadMindDump(): Promise<MindDumpItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(MIND_DUMP_KEY);
+    return raw ? (JSON.parse(raw) as MindDumpItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveMindDump(items: MindDumpItem[]): Promise<void> {
+  await AsyncStorage.setItem(MIND_DUMP_KEY, JSON.stringify(items));
+}
+
 // ─── User Identity (for data isolation on account switch) ───────────────────
 
 /** Returns the user ID that was last logged in, or null if never set. */

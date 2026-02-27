@@ -25,10 +25,12 @@ const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnTy
   { id: 'urgent',   label: 'Urgent',   emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav') },
 ];
 
-const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> }[] = [
-  { id: 'bowl',      label: 'Singing Bowl',   emoji: '🎵', description: '432 Hz tone, 30 sec',           source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_bowl_c8bd7151.wav' },
-  { id: 'breathing', label: 'Box Breathing',  emoji: '🌬️', description: 'Inhale · Hold · Exhale, 30 sec', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_breathing_fd1069a2.wav' },
-  { id: 'focus',     label: 'Focus Tones',    emoji: '🧠', description: 'Binaural beats, 30 sec',          source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_focus_782acd2b.wav' },
+const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> | null }[] = [
+  { id: 'priming',      label: 'Priming',           emoji: '🔥', description: 'Gratitude · Goals · Visualize', source: null },
+  { id: 'meditation',   label: 'Guided Meditation', emoji: '🧘', description: 'Mindful awareness, 5 min',       source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_bowl_c8bd7151.wav' },
+  { id: 'breathwork',   label: 'Breathwork',        emoji: '🌬️', description: 'Box breathing, 4-4-4-4',         source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_breathing_fd1069a2.wav' },
+  { id: 'visualization',label: 'Visualizations',    emoji: '🎯', description: 'See your goals achieved',        source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_focus_782acd2b.wav' },
+  { id: 'journaling',   label: 'Journaling',        emoji: '📓', description: 'Morning pages, free write',      source: null },
 ];
 
 const THEMES: { id: AppTheme; label: string; preview: string; description: string }[] = [
@@ -517,6 +519,29 @@ export default function SettingsScreen() {
           >
             <Text style={[styles.manageHabitsBtnText, { color: colors.primary }]}>
               Manage Habits
+            </Text>
+            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+          </Pressable>
+        </View>
+
+        {/* Mind Dump */}
+        <View style={[styles.section, { borderColor: colors.border }]}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: '#7B74FF18' }]}>
+              <IconSymbol name="brain" size={18} color="#7B74FF" />
+            </View>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Mind Dump</Text>
+            <Text style={[styles.habitCountBadge, { color: colors.muted }]}>Capture thoughts</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push('/mind-dump' as never)}
+            style={({ pressed }) => [
+              styles.manageHabitsBtn,
+              { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Text style={[styles.manageHabitsBtnText, { color: '#7B74FF' }]}>
+              Open Mind Dump
             </Text>
             <IconSymbol name="chevron.right" size={16} color={colors.muted} />
           </Pressable>

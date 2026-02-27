@@ -44,6 +44,7 @@ const MAPPING = {
   "person.2.fill": "group",
   "dollarsign.circle.fill": "attach-money",
   "brain.head.profile": "psychology",
+  "brain": "psychology",
   "figure.walk": "directions-walk",
   "arrow.right": "arrow-forward",
   "info.circle": "info",

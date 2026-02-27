@@ -301,3 +301,6 @@
 - [x] Replace tap-to-sort button with drag-and-drop reordering for goals in Manage Goals screen
 - [x] Replace tap-to-sort button with drag-and-drop reordering for habits within each goal
 - [x] Bug: Vision Board photos still disappearing on TestFlight after restart — fixed: persistUri now returns null on failure (never saves ph:// URIs), pickImage filters nulls, startup cleanup strips stale ph:// URIs from AsyncStorage
+- [x] Update After Alarm options: Priming (first), Guided Meditation, Breathwork, Visualizations, Journaling, None
+- [x] Build Mind Dump screen under More tab: capture one-off tasks/thoughts with timestamp and category
+- [x] Mind Dump: ability to promote a task to today's check-in (adds as a one-off habit for today)
