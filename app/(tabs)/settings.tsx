@@ -91,6 +91,8 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [appearanceExpanded, setAppearanceExpanded] = useState(false);
+  const [soundOpen, setSoundOpen] = useState(false);
+  const [meditationOpen, setMeditationOpen] = useState(false);
   const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
   const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
@@ -287,13 +289,26 @@ export default function SettingsScreen() {
                 </View>
               </View>
 
-              {/* Alarm Sound Picker */}
-              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
-                <View style={styles.soundPickerHeader}>
-                  <IconSymbol name="music.note" size={14} color={colors.muted} />
-                  <Text style={[styles.pickerLabel, { color: colors.muted, marginBottom: 0 }]}>Alarm Sound</Text>
+              {/* Alarm Sound Picker — collapsible dropdown */}
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSoundOpen(v => !v);
+                }}
+                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <IconSymbol name="music.note" size={16} color={colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Alarm Sound</Text>
+                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
+                    {ALARM_SOUNDS.find(s => s.id === soundId)?.emoji ?? '⏰'}{' '}
+                    {ALARM_SOUNDS.find(s => s.id === soundId)?.label ?? 'Classic'}
+                  </Text>
                 </View>
-                <View style={[styles.soundGrid, { marginTop: 10 }]}>
+                <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+              </Pressable>
+              {soundOpen && (
+                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
                   {ALARM_SOUNDS.map((sound) => {
                     const isSelected = soundId === sound.id;
                     const isPreviewing = previewingId === sound.id;
@@ -306,84 +321,92 @@ export default function SettingsScreen() {
                           playPreview(sound.id, sound.source);
                         }}
                         style={({ pressed }) => [
-                          styles.soundOption,
-                          isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
-                          !isSelected && { borderColor: colors.border, backgroundColor: colors.surface },
+                          styles.dropdownItem,
+                          isSelected && { backgroundColor: colors.primary + '18' },
                           { opacity: pressed ? 0.7 : 1 },
                         ]}
                       >
                         <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
-                        <Text style={[styles.soundLabel, { color: isSelected ? colors.primary : colors.foreground }]}>
+                        <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground, flex: 1 }]}>
                           {sound.label}
                         </Text>
-                        {isSelected && <IconSymbol name="checkmark" size={12} color={colors.primary} />}
+                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
                       </Pressable>
                     );
                   })}
                 </View>
-              </View>
+              )}
 
-              {/* Guided Meditation Picker */}
-              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
-                <View style={styles.soundPickerHeader}>
-                  <IconSymbol name="moon.stars.fill" size={14} color={colors.muted} />
-                  <Text style={[styles.pickerLabel, { color: colors.muted, marginBottom: 0 }]}>After Alarm Meditation</Text>
+              {/* Guided Meditation Picker — collapsible dropdown */}
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setMeditationOpen(v => !v);
+                }}
+                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <IconSymbol name="moon.stars.fill" size={16} color={colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>After Alarm</Text>
+                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
+                    {meditationId
+                      ? `${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.emoji ?? ''} ${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.label ?? ''}`
+                      : '🚫 None'}
+                  </Text>
                 </View>
-                <Text style={[styles.meditationSubtitle, { color: colors.muted }]}>
-                  Plays after you open the app and submit your check-in
-                </Text>
-                {/* None option */}
-                <Pressable
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMeditationId(undefined);
-                  }}
-                  style={({ pressed }) => [
-                    styles.meditationOption,
-                    { borderColor: !meditationId ? colors.primary : colors.border,
-                      backgroundColor: !meditationId ? colors.primary + '18' : colors.surface,
-                      opacity: pressed ? 0.7 : 1,
-                      marginTop: 10,
-                    },
-                  ]}
-                >
-                  <Text style={styles.soundEmoji}>🚫</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.meditationLabel, { color: !meditationId ? colors.primary : colors.foreground }]}>None</Text>
-                    <Text style={[styles.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
-                  </View>
-                  {!meditationId && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                </Pressable>
-                {MEDITATION_OPTIONS.map((med) => {
-                  const isSelected = meditationId === med.id;
-                  const isPreviewing = previewingId === med.id;
-                  return (
-                    <Pressable
-                      key={med.id}
-                      onPress={() => {
-                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setMeditationId(med.id);
-                        playPreview(med.id, med.source);
-                      }}
-                      style={({ pressed }) => [
-                        styles.meditationOption,
-                        isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
-                        !isSelected && { borderColor: colors.border, backgroundColor: colors.surface },
-                        { opacity: pressed ? 0.7 : 1, marginTop: 8 },
-                      ]}
-                    >
-                      <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.meditationLabel, { color: isSelected ? colors.primary : colors.foreground }]}>
-                          {med.label}
-                        </Text>
-                        <Text style={[styles.meditationDesc, { color: colors.muted }]}>{med.description}</Text>
-                      </View>
-                      {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                    </Pressable>
-                  );
-                })}
-              </View>
+                <IconSymbol name={meditationOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+              </Pressable>
+              {meditationOpen && (
+                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
+                  {/* None option */}
+                  <Pressable
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setMeditationId(undefined);
+                    }}
+                    style={({ pressed }) => [
+                      styles.dropdownItem,
+                      !meditationId && { backgroundColor: colors.primary + '18' },
+                      { opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Text style={styles.soundEmoji}>🚫</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.dropdownItemText, { color: !meditationId ? colors.primary : colors.foreground }]}>None</Text>
+                      <Text style={[styles.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
+                    </View>
+                    {!meditationId && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
+                  </Pressable>
+                  {MEDITATION_OPTIONS.map((med) => {
+                    const isSelected = meditationId === med.id;
+                    const isPreviewing = previewingId === med.id;
+                    return (
+                      <Pressable
+                        key={med.id}
+                        onPress={() => {
+                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setMeditationId(med.id);
+                          playPreview(med.id, med.source);
+                        }}
+                        style={({ pressed }) => [
+                          styles.dropdownItem,
+                          isSelected && { backgroundColor: colors.primary + '18' },
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
+                            {med.label}
+                          </Text>
+                          <Text style={[styles.meditationDesc, { color: colors.muted }]}>{med.description}</Text>
+                        </View>
+                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </>
           )}
         </View>
@@ -636,7 +659,7 @@ const styles = StyleSheet.create({
   },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
   activeSwatchSmall: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, marginRight: 4 },
-  // Sound picker
+  // Sound picker (legacy, kept for soundEmoji)
   soundPickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   soundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   soundOption: {
@@ -645,7 +668,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1.5,
     minWidth: '30%',
   },
-  soundEmoji: { fontSize: 16 },
+  soundEmoji: { fontSize: 18 },
   soundLabel: { fontSize: 13, fontWeight: '600', flex: 1 },
   // Meditation picker
   meditationSubtitle: { fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 2 },
@@ -655,4 +678,17 @@ const styles = StyleSheet.create({
   },
   meditationLabel: { fontSize: 14, fontWeight: '600' },
   meditationDesc: { fontSize: 12, marginTop: 1 },
+  // Dropdown rows
+  dropdownRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1,
+  },
+  dropdownRowLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  dropdownRowValue: { fontSize: 15, fontWeight: '600', marginTop: 2 },
+  dropdownContent: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 4 },
+  dropdownItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12, borderRadius: 0,
+  },
+  dropdownItemText: { fontSize: 15, fontWeight: '500' },
 });
