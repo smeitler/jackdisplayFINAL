@@ -310,3 +310,5 @@
 - [x] Home screen: only show Yesterday's Review prompt if yesterday's check-in has not been completed
 - [x] Goal cards: slim down to emoji + name + days left + percentage only (remove progress bars, badges, habit counts)
 - [x] Home screen stats: default range to 1d (yesterday) instead of 7d
+- [ ] Goal cards: add color-coded status label (Needs Work / Getting There / On Track / Crushing It) based on percentage
+- [x] Goal cards: replace with WHOOP-style circular progress rings, 2 per row, percentage inside ring, emoji + name below

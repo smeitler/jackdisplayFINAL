@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, useWindowDimensions } from "react-native";
 import { NovaCard, useIsNova } from "@/components/nova-effects";
 import { useState } from "react";
 import { useRouter } from "expo-router";
@@ -9,6 +9,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { yesterdayString, formatDisplayDate, toDateString, offsetDateString, LIFE_AREAS } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useIsIPad, useContentMaxWidth } from "@/hooks/use-is-ipad";
+import Svg, { Circle } from "react-native-svg";
 
 const RANGES = [1, 7, 14, 30, 60, 90] as const;
 type Range = typeof RANGES[number];
@@ -42,6 +43,78 @@ function getHabitProgress(
     return { done, goal, pct, met: done >= goal, label: `${done}/${goal}/wk` };
   }
   return null;
+}
+
+function GoalRing({ rate, emoji, label, deadline, onPress, colors }: {
+  rate: number; emoji: string; label: string; deadline?: string;
+  onPress: () => void; colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+}) {
+  const { width } = useWindowDimensions();
+  // 2 per row with 20px padding each side and 12px gap
+  const ringSize = Math.floor((width - 40 - 12) / 2);
+  const strokeWidth = 10;
+  const radius = (ringSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = Math.min(Math.max(rate, 0), 1);
+  const strokeDashoffset = circumference * (1 - pct);
+
+  // Color based on rate
+  const ringColor = pct >= 0.8 ? '#4ade80' : pct >= 0.5 ? '#fbbf24' : pct > 0 ? '#f87171' : colors.border;
+  const pctText = Math.round(pct * 100);
+
+  // Deadline
+  let deadlineLabel = '';
+  let deadlineColor = colors.muted;
+  if (deadline) {
+    const dl = new Date(deadline + 'T12:00:00');
+    const now = new Date(); now.setHours(0,0,0,0);
+    const days = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
+    deadlineLabel = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d left`;
+    deadlineColor = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : colors.muted;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.ringCell, { width: ringSize, opacity: pressed ? 0.8 : 1 }]}
+    >
+      <Svg width={ringSize} height={ringSize} style={{ transform: [{ rotate: '-90deg' }] }}>
+        {/* Track */}
+        <Circle
+          cx={ringSize / 2}
+          cy={ringSize / 2}
+          r={radius}
+          stroke={colors.border}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        {/* Progress */}
+        {pct > 0 && (
+          <Circle
+            cx={ringSize / 2}
+            cy={ringSize / 2}
+            r={radius}
+            stroke={ringColor}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+          />
+        )}
+      </Svg>
+      {/* Center content */}
+      <View style={styles.ringCenter} pointerEvents="none">
+        <Text style={styles.ringEmoji}>{emoji}</Text>
+        <Text style={[styles.ringPct, { color: pct > 0 ? ringColor : colors.muted }]}>
+          {pct > 0 ? `${pctText}%` : '—'}
+        </Text>
+      </View>
+      {/* Label below ring */}
+      <Text style={[styles.ringLabel, { color: colors.foreground }]} numberOfLines={2}>{label}</Text>
+      {deadlineLabel ? <Text style={[styles.ringDeadline, { color: deadlineColor }]}>{deadlineLabel}</Text> : null}
+    </Pressable>
+  );
 }
 
 export default function HomeScreen() {
@@ -175,79 +248,23 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.categoryGrid}>
+        {/* Goal rings grid — 2 per row */}
+        <View style={styles.ringGrid}>
           {categories.map((cat) => {
-            const cardWidth = isIPad ? '31.5%' : '100%';
             const rate = getCategoryRate(cat.id, range);
-            const breakdown = getCategoryBreakdown(cat.id, range);
-            const total = breakdown.green + breakdown.yellow + breakdown.red;
-            const lifeArea = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
-            const habitsWithGoal = activeHabits.filter(
-              (h) => h.category === cat.id && (h.weeklyGoal || h.monthlyGoal)
-            );
-
-            // Three-tier card state based on rate
-            const isOnTrack = total > 0 && rate >= 0.8;
-            const isOkay = total > 0 && rate >= 0.5 && rate < 0.8;
-            const isBehind = total > 0 && rate < 0.5;
-
-            // Card theme values
-            const cardBg = isOnTrack ? '#0d2b18' : isOkay ? '#2b1f06' : isBehind ? '#2b0a0a' : undefined;
-            const cardBorderColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : undefined;
-            const badgeLabel = isOnTrack ? '✓ On Track' : isOkay ? '~ Doing Okay' : isBehind ? '✗ Behind' : null;
-            const badgeBorderColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : '#EF4444';
-            const badgeTextColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : '#EF4444';
-            const iconBg = isOnTrack ? '#22C55E22' : isOkay ? '#F59E0B22' : isBehind ? '#EF444422' : colors.primary + '22';
-            const labelColor = isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground;
-            const mutedColor = isOnTrack ? '#86efac' : isOkay ? '#fcd34d' : isBehind ? '#fca5a5' : colors.muted;
-            const scoreColor = isOnTrack ? '#4ade80' : isOkay ? '#fbbf24' : isBehind ? '#f87171' : colors.primary;
-
             return (
-              <NovaCard
+              <GoalRing
                 key={cat.id}
+                rate={rate}
+                emoji={cat.emoji}
+                label={cat.label}
+                deadline={cat.deadline}
                 colors={colors}
-                cardBg={cardBg}
-                cardBorder={cardBorderColor}
-                style={{ ...styles.categoryCard, width: cardWidth }}
-              >
-              <Pressable
                 onPress={() => {
-                  if (Platform.OS !== 'web') {
-                    if (isOnTrack) {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    } else if (isBehind) {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    } else {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }
-                  }
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   router.push((`/category-detail?categoryId=${cat.id}`) as never);
                 }}
-                style={({ pressed }) => [
-                  { padding: 14, flex: 1 },
-                  { opacity: pressed ? 0.85 : 1 },
-                ]}
-              >
-                {/* Compact row: emoji + name + spacer + days left + percentage */}
-                <View style={styles.catCompactRow}>
-                  <Text style={styles.catEmoji}>{cat.emoji}</Text>
-                  <Text style={[styles.catLabel, { color: labelColor, flex: 1 }]} numberOfLines={1}>{cat.label}</Text>
-                  {cat.deadline && (() => {
-                    const dl = new Date(cat.deadline + 'T12:00:00');
-                    const now = new Date();
-                    now.setHours(0, 0, 0, 0);
-                    const diffMs = dl.getTime() - now.getTime();
-                    const days = Math.ceil(diffMs / 86400000);
-                    const label = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d left`;
-                    const color = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : colors.muted;
-                    return <Text style={[styles.deadlineTag, { color, borderColor: color + '44', backgroundColor: color + '18' }]}>{label}</Text>;
-                  })()}
-                  <Text style={[styles.catScore, { color: scoreColor }]}>{Math.round(rate * 100)}%</Text>
-                </View>
-
-
-              </Pressable>
-              </NovaCard>
+              />
             );
           })}
         </View>
@@ -322,34 +339,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 11,
   },
   rangeDropdownText: { fontSize: 14 },
-  categoryGrid: { flexDirection: 'column', gap: 10, marginBottom: 20 },
-  categoryCard: {
-    width: '100%', borderRadius: 14, padding: 12, gap: 4,
+  ringGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+    justifyContent: 'space-between',
   },
-  onTrackBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 10,
-    borderWidth: 1.5,
-    borderColor: '#22C55E',
+  ringCell: {
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  onTrackBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#22C55E',
-    letterSpacing: 0.2,
+  ringCenter: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
-  catIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  catEmoji: { fontSize: 20 },
-  catLabel: { fontSize: 14, fontWeight: '600' },
-  catCompactRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  catLifeArea: { fontSize: 11, marginTop: -2 },
-  catScore: { fontSize: 16, fontWeight: '800' },
-  catBar: { height: 5, borderRadius: 3, overflow: 'hidden', flexDirection: 'row', marginTop: 4 },
-  catBarSeg: { height: 5 },
+  ringEmoji: { fontSize: 22 },
+  ringPct: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  ringLabel: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8, lineHeight: 18 },
+  ringDeadline: { fontSize: 11, fontWeight: '600', marginTop: 2, textAlign: 'center' },
   historyCard: { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 16 },
   historyRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
