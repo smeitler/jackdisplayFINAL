@@ -1,7 +1,7 @@
 import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useRef } from "react";
-import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
@@ -99,41 +99,49 @@ export default function SettingsScreen() {
   const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
-  // Determine which source to preview
-  const previewSource = previewingId
-    ? (ALARM_SOUNDS.find(s => s.id === previewingId)?.source ??
-       MEDITATION_OPTIONS.find(m => m.id === previewingId)?.source ?? null)
-    : null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const previewPlayer = useAudioPlayer((previewSource ?? ALARM_SOUNDS[0].source) as any);
-
-  // Stop preview after 3 seconds
+  // Imperative player ref — created fresh each time, released when done
+  const previewPlayerRef = useRef<AudioPlayer | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function playPreview(id: string, source: ReturnType<typeof require>) {
+  function stopPreview() {
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    if (previewingId === id) {
-      // Toggle off
-      previewPlayer.pause();
-      setPreviewingId(null);
+    if (previewPlayerRef.current) {
+      try { previewPlayerRef.current.pause(); } catch { /* ignore */ }
+      try { previewPlayerRef.current.remove(); } catch { /* ignore */ }
+      previewPlayerRef.current = null;
+    }
+    setPreviewingId(null);
+  }
+
+  function playPreview(id: string, source: string | ReturnType<typeof require> | null) {
+    // Stop any existing preview first
+    stopPreview();
+    // If same id tapped again, just stop (toggle off)
+    if (previewingId === id) return;
+    // No audio source for this option (e.g. Priming, Journaling)
+    if (!source) {
+      setPreviewingId(id);
       return;
     }
     setPreviewingId(id);
     setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-    previewPlayer.seekTo(0);
-    previewPlayer.play();
-    previewTimerRef.current = setTimeout(() => {
-      previewPlayer.pause();
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const player = createAudioPlayer(source as any);
+      previewPlayerRef.current = player;
+      player.play();
+      previewTimerRef.current = setTimeout(() => {
+        stopPreview();
+      }, 4000);
+    } catch (e) {
+      console.warn('[Preview] Failed to create player:', e);
       setPreviewingId(null);
-    }, 4000);
+    }
   }
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-      previewPlayer.pause();
-    };
+    return () => { stopPreview(); };
   }, []);
 
   // Sync if alarm changes externally
@@ -388,7 +396,7 @@ export default function SettingsScreen() {
                         onPress={() => {
                           if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                           setMeditationId(med.id);
-                          playPreview(med.id, med.source);
+                          playPreview(med.id, med.source ?? null);
                         }}
                         style={({ pressed }) => [
                           styles.dropdownItem,

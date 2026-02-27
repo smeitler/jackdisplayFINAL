@@ -304,3 +304,4 @@
 - [x] Update After Alarm options: Priming (first), Guided Meditation, Breathwork, Visualizations, Journaling, None
 - [x] Build Mind Dump screen under More tab: capture one-off tasks/thoughts with timestamp and category
 - [x] Mind Dump: ability to promote a task to today's check-in (adds as a one-off habit for today)
+- [x] Bug: app crashes when tapping a meditation/breathwork option in the After Alarm dropdown — fixed: replaced useAudioPlayer (static source hook) with createAudioPlayer imperative approach; each preview creates a fresh player and releases it when done; null sources (Priming, Journaling) skip playback gracefully
