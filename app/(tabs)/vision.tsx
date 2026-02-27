@@ -23,32 +23,50 @@ const CARD_W = SCREEN_W - PADDING * 2;
 const CAROUSEL_H = Math.floor(CARD_W * 0.62);
 
 // ─── Copy a URI to permanent app storage ─────────────────────────────────────
-async function persistUri(uri: string): Promise<string> {
+// Returns the permanent file:// path on success, or null if the copy failed.
+// NEVER returns the original ph:// URI — those are ephemeral and will break on restart.
+async function persistUri(uri: string): Promise<string | null> {
   if (Platform.OS === "web") return uri;
-  // Already in documentDirectory — nothing to do
+
   const docDir = FileSystem.documentDirectory ?? "";
-  if (uri.startsWith(docDir)) return uri;
+
+  // Already in documentDirectory — verify it still exists
+  if (uri.startsWith(docDir)) {
+    try {
+      const info = await FileSystem.getInfoAsync(uri);
+      if (info.exists) return uri;
+    } catch { /* fall through to re-copy */ }
+    return null; // file was deleted, don't keep a dead reference
+  }
 
   // On iOS, ImagePicker returns ph:// asset URIs which FileSystem.copyAsync cannot read.
-  // We must resolve them to a real file:// localUri via MediaLibrary first.
-  let resolvedUri = uri;
+  // We MUST resolve them to a real file:// localUri via MediaLibrary first.
+  let resolvedUri: string | null = null;
+
   if (Platform.OS === "ios" && uri.startsWith("ph://")) {
     try {
-      // Extract the asset ID from ph://<id>/... format
+      // Extract the asset ID — ph://<assetId>/L0/001 or ph://<assetId>
       const assetId = uri.replace("ph://", "").split("/")[0];
       const assetInfo = await MediaLibrary.getAssetInfoAsync(assetId);
-      if (assetInfo.localUri) {
+      if (assetInfo?.localUri) {
         resolvedUri = assetInfo.localUri;
       }
     } catch {
-      // If resolution fails, try copyAsync directly (may work on some iOS versions)
+      // getAssetInfoAsync failed — cannot proceed
     }
+    if (!resolvedUri) {
+      // Could not resolve ph:// to a real path — do not save this URI
+      return null;
+    }
+  } else {
+    resolvedUri = uri;
   }
 
   // Generate a unique filename in permanent document storage
   const ext = resolvedUri.split(".").pop()?.split("?")[0]?.toLowerCase() ?? "jpg";
   const safeExt = ["jpg", "jpeg", "png", "heic", "heif", "webp", "gif"].includes(ext) ? ext : "jpg";
   const dest = `${docDir}visionboard_${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
+
   try {
     await FileSystem.copyAsync({ from: resolvedUri, to: dest });
     // Verify the copy actually worked and has content
@@ -56,12 +74,13 @@ async function persistUri(uri: string): Promise<string> {
     if (info.exists && (info as { size?: number }).size && (info as { size?: number }).size! > 0) {
       return dest;
     }
-    // Copy produced an empty file — fall back
+    // Copy produced an empty file — clean up and report failure
     await FileSystem.deleteAsync(dest, { idempotent: true });
-    return uri;
+    return null;
   } catch {
-    // Fall back to original URI if copy fails
-    return uri;
+    // Copy failed entirely — clean up any partial file
+    try { await FileSystem.deleteAsync(dest, { idempotent: true }); } catch { /* ignore */ }
+    return null;
   }
 }
 
@@ -353,7 +372,38 @@ export default function VisionBoardScreen() {
   const [detailCatId, setDetailCatId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadVisionBoard().then(setBoard);
+    // Load board and strip any stale ph:// or non-file:// URIs saved by older app versions.
+    // Those URIs are ephemeral iOS asset references that expire after app restart.
+    loadVisionBoard().then(async (loaded) => {
+      if (Platform.OS !== "web") {
+        const docDir = FileSystem.documentDirectory ?? "";
+        let needsSave = false;
+        const cleaned: VisionBoard = {};
+        for (const [catId, uris] of Object.entries(loaded)) {
+          const valid: string[] = [];
+          for (const uri of uris) {
+            // Keep only URIs already in permanent documentDirectory
+            if (uri.startsWith(docDir)) {
+              try {
+                const info = await FileSystem.getInfoAsync(uri);
+                if (info.exists) valid.push(uri);
+                else needsSave = true; // file was deleted from disk
+              } catch {
+                needsSave = true;
+              }
+            } else {
+              // ph://, cache://, or other ephemeral URI — discard it
+              needsSave = true;
+            }
+          }
+          cleaned[catId] = valid;
+        }
+        setBoard(cleaned);
+        if (needsSave) await saveVisionBoard(cleaned);
+      } else {
+        setBoard(loaded);
+      }
+    });
     loadVisionMotivations().then(setMotivations);
   }, []);
 
@@ -384,11 +434,19 @@ export default function VisionBoardScreen() {
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      // Copy each photo to permanent storage
-      const persistedUris = await Promise.all(result.assets.map((a) => persistUri(a.uri)));
+      // Copy each photo to permanent storage; filter out any that failed (null)
+      const results = await Promise.all(result.assets.map((a) => persistUri(a.uri)));
+      const persistedUris = results.filter((u): u is string => u !== null);
+      if (persistedUris.length === 0) {
+        Alert.alert("Could not save photos", "Unable to copy photos to app storage. Please try again.");
+        return;
+      }
       const existing = board[catId] ?? [];
       const updated = { ...board, [catId]: [...existing, ...persistedUris] };
       await updateBoard(updated);
+      if (persistedUris.length < result.assets.length) {
+        Alert.alert("Some photos skipped", `${result.assets.length - persistedUris.length} photo(s) could not be saved and were skipped.`);
+      }
     }
   }, [board]);
 

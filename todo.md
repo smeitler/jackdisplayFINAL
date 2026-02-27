@@ -300,3 +300,4 @@
 - [x] More tab: rework alarm sound and meditation pickers as collapsible dropdown rows (tap row to expand/collapse options)
 - [x] Replace tap-to-sort button with drag-and-drop reordering for goals in Manage Goals screen
 - [x] Replace tap-to-sort button with drag-and-drop reordering for habits within each goal
+- [x] Bug: Vision Board photos still disappearing on TestFlight after restart — fixed: persistUri now returns null on failure (never saves ph:// URIs), pickImage filters nulls, startup cleanup strips stale ph:// URIs from AsyncStorage
