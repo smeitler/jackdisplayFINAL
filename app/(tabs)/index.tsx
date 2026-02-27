@@ -122,7 +122,7 @@ function GoalCard({
       </Svg>
 
       {/* Card content */}
-      <View style={[styles.cardContent, { padding: 12 }]}>
+      <View style={[styles.cardContent, { padding: 12, alignItems: 'center' }]}>
         {/* Status badge */}
         {badgeLabel && (
           <View style={[styles.badge, { borderColor: accentColor, backgroundColor: accentColor + '18' }]}>
@@ -130,23 +130,21 @@ function GoalCard({
           </View>
         )}
 
-        {/* Emoji icon */}
-        <View style={[styles.emojiBox, { backgroundColor: accentColor + '22' }]}>
-          <Text style={styles.emojiText}>{emoji}</Text>
-        </View>
+        {/* Emoji — no box, just centered */}
+        <Text style={styles.emojiText}>{emoji}</Text>
 
         {/* Goal name */}
-        <Text style={[styles.cardLabel, { color: labelColor }]} numberOfLines={2}>{label}</Text>
+        <Text style={[styles.cardLabel, { color: labelColor, textAlign: 'center' }]} numberOfLines={2}>{label}</Text>
 
         {/* Life area tag */}
         {lifeAreaDef && (
-          <Text style={[styles.cardLifeArea, { color: accentColor + 'cc' }]}>
+          <Text style={[styles.cardLifeArea, { color: accentColor + 'cc', textAlign: 'center' }]}>
             {lifeAreaDef.emoji} {lifeAreaDef.label}
           </Text>
         )}
 
         {/* Percentage + deadline */}
-        <View style={styles.cardScoreRow}>
+        <View style={[styles.cardScoreRow, { justifyContent: 'center' }]}>
           <Text style={[styles.cardPct, { color: pctColor }]}>
             {hasData ? `${Math.round(pct * 100)}%` : '—'}
           </Text>
@@ -157,9 +155,9 @@ function GoalCard({
           ) : null}
         </View>
 
-        {/* Progress bars */}
+        {/* Progress bar */}
         {total > 0 && (
-          <View style={styles.barsWrap}>
+          <View style={[styles.barsWrap, { width: '100%' }]}>
             <View style={styles.bar}>
               <View style={[styles.barSeg, { flex: greenW, backgroundColor: '#22C55E' }]} />
               <View style={[styles.barSeg, { flex: yellowW, backgroundColor: '#F59E0B' }]} />
