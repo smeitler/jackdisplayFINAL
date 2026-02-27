@@ -5,13 +5,15 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Rect } from "react-native-svg";
 
 const RANGES = [1, 7, 14, 30, 60, 90] as const;
 type Range = typeof RANGES[number];
+
+const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -20,22 +22,42 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function GoalRing({ rate, emoji, label, deadline, onPress, colors }: {
-  rate: number; emoji: string; label: string; deadline?: string;
-  onPress: () => void; colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+/** Card with a rounded-rect SVG border that fills clockwise based on pct */
+function GoalCard({
+  rate, emoji, label, lifeArea, deadline, breakdown, onPress, colors,
+}: {
+  rate: number;
+  emoji: string;
+  label: string;
+  lifeArea?: string;
+  deadline?: string;
+  breakdown: { green: number; yellow: number; red: number; none: number };
+  onPress: () => void;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
 }) {
   const { width } = useWindowDimensions();
-  // 2 per row: 20px padding each side, 16px gap between
-  const ringSize = Math.floor((width - 40 - 16) / 2);
-  const strokeWidth = 12;
-  const radius = (ringSize - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const pct = Math.min(Math.max(rate, 0), 1);
-  const strokeDashoffset = circumference * (1 - pct);
+  // 2 per row: 20px padding each side, 12px gap
+  const cardW = Math.floor((width - 40 - 12) / 2);
+  const cardH = cardW + 20; // slightly taller than wide
 
-  // Color based on rate
-  const ringColor = pct >= 0.8 ? '#4ade80' : pct >= 0.5 ? '#fbbf24' : pct > 0 ? '#f87171' : '#334155';
-  const glowColor = pct >= 0.8 ? '#4ade8055' : pct >= 0.5 ? '#fbbf2455' : pct > 0 ? '#f8717155' : 'transparent';
+  const pct = Math.min(Math.max(rate, 0), 1);
+  const strokeW = 3;
+  const r = 16; // border-radius of card
+  // Perimeter of rounded rect
+  const perimeter = 2 * (cardW - 2 * r) + 2 * (cardH - 2 * r) + 2 * Math.PI * r;
+  const dashOffset = perimeter * (1 - pct);
+
+  // Colors
+  const isOnTrack = pct >= 0.8;
+  const isOkay = pct >= 0.5 && pct < 0.8;
+  const isBehind = pct > 0 && pct < 0.5;
+  const hasData = pct > 0;
+
+  const accentColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.border;
+  const cardBg = isOnTrack ? '#0a1f10' : isOkay ? '#1f1500' : isBehind ? '#1f0808' : colors.surface;
+  const badgeLabel = isOnTrack ? '✓ On Track' : isOkay ? '~ Doing Okay' : isBehind ? '✗ Behind' : null;
+  const pctColor = isOnTrack ? '#4ade80' : isOkay ? '#fbbf24' : isBehind ? '#f87171' : colors.muted;
+  const labelColor = isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground;
 
   // Deadline
   let deadlineLabel = '';
@@ -44,74 +66,115 @@ function GoalRing({ rate, emoji, label, deadline, onPress, colors }: {
     const dl = new Date(deadline + 'T12:00:00');
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const days = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
-    deadlineLabel = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d`;
-    deadlineColor = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : colors.muted;
+    deadlineLabel = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d left`;
+    deadlineColor = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : '#6b7280';
   }
+
+  // Progress bar totals
+  const total = breakdown.green + breakdown.yellow + breakdown.red + breakdown.none;
+  const greenW = total > 0 ? (breakdown.green / total) : 0;
+  const yellowW = total > 0 ? (breakdown.yellow / total) : 0;
+  const redW = total > 0 ? (breakdown.red / total) : 0;
+
+  const lifeAreaDef = lifeArea ? LIFE_AREA_MAP[lifeArea] : null;
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.ringCell, { width: ringSize, opacity: pressed ? 0.75 : 1 }]}
+      style={({ pressed }) => [styles.cardOuter, { width: cardW, height: cardH, opacity: pressed ? 0.82 : 1 }]}
     >
-      {/* Glow behind ring */}
-      <View style={[styles.ringGlow, { width: ringSize, height: ringSize, shadowColor: glowColor, shadowOpacity: pct > 0 ? 1 : 0, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } }]} />
-
-      <View style={{ width: ringSize, height: ringSize }}>
-        <Svg width={ringSize} height={ringSize} style={{ transform: [{ rotate: '-90deg' }] }}>
-          {/* Dark fill inside ring */}
-          <Circle
-            cx={ringSize / 2}
-            cy={ringSize / 2}
-            r={radius}
-            fill="#0d1117"
-          />
-          {/* Track */}
-          <Circle
-            cx={ringSize / 2}
-            cy={ringSize / 2}
-            r={radius}
-            stroke="#1e2a3a"
-            strokeWidth={strokeWidth}
+      {/* SVG arc border — drawn on top of card */}
+      <Svg
+        width={cardW}
+        height={cardH}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      >
+        {/* Track (full border, dim) */}
+        <Rect
+          x={strokeW / 2}
+          y={strokeW / 2}
+          width={cardW - strokeW}
+          height={cardH - strokeW}
+          rx={r}
+          ry={r}
+          fill={cardBg}
+          stroke={accentColor + '30'}
+          strokeWidth={strokeW}
+        />
+        {/* Progress arc */}
+        {hasData && (
+          <Rect
+            x={strokeW / 2}
+            y={strokeW / 2}
+            width={cardW - strokeW}
+            height={cardH - strokeW}
+            rx={r}
+            ry={r}
             fill="none"
+            stroke={accentColor}
+            strokeWidth={strokeW}
+            strokeDasharray={`${perimeter} ${perimeter}`}
+            strokeDashoffset={dashOffset}
+            strokeLinecap="round"
           />
-          {/* Progress arc */}
-          {pct > 0 && (
-            <Circle
-              cx={ringSize / 2}
-              cy={ringSize / 2}
-              r={radius}
-              stroke={ringColor}
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeDasharray={`${circumference} ${circumference}`}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-            />
-          )}
-        </Svg>
+        )}
+      </Svg>
 
-        {/* Centered percentage */}
-        <View style={[styles.ringCenter, { width: ringSize, height: ringSize }]} pointerEvents="none">
-          <Text style={styles.ringPct}>
-            {pct > 0 ? `${Math.round(pct * 100)}%` : '—'}
-          </Text>
+      {/* Card content */}
+      <View style={[styles.cardContent, { padding: 12 }]}>
+        {/* Status badge */}
+        {badgeLabel && (
+          <View style={[styles.badge, { borderColor: accentColor, backgroundColor: accentColor + '18' }]}>
+            <Text style={[styles.badgeText, { color: accentColor }]}>{badgeLabel}</Text>
+          </View>
+        )}
+
+        {/* Emoji icon */}
+        <View style={[styles.emojiBox, { backgroundColor: accentColor + '22' }]}>
+          <Text style={styles.emojiText}>{emoji}</Text>
         </View>
-      </View>
 
-      {/* Emoji + label below */}
-      <View style={styles.ringLabelRow}>
-        <Text style={styles.ringEmoji}>{emoji}</Text>
-        <Text style={[styles.ringLabel, { color: colors.foreground }]} numberOfLines={2}>{label}</Text>
+        {/* Goal name */}
+        <Text style={[styles.cardLabel, { color: labelColor }]} numberOfLines={2}>{label}</Text>
+
+        {/* Life area tag */}
+        {lifeAreaDef && (
+          <Text style={[styles.cardLifeArea, { color: accentColor + 'cc' }]}>
+            {lifeAreaDef.emoji} {lifeAreaDef.label}
+          </Text>
+        )}
+
+        {/* Percentage + deadline */}
+        <View style={styles.cardScoreRow}>
+          <Text style={[styles.cardPct, { color: pctColor }]}>
+            {hasData ? `${Math.round(pct * 100)}%` : '—'}
+          </Text>
+          {deadlineLabel ? (
+            <View style={[styles.deadlineTag, { borderColor: deadlineColor + '55', backgroundColor: deadlineColor + '18' }]}>
+              <Text style={[styles.deadlineText, { color: deadlineColor }]}>{deadlineLabel}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Progress bars */}
+        {total > 0 && (
+          <View style={styles.barsWrap}>
+            <View style={styles.bar}>
+              <View style={[styles.barSeg, { flex: greenW, backgroundColor: '#22C55E' }]} />
+              <View style={[styles.barSeg, { flex: yellowW, backgroundColor: '#F59E0B' }]} />
+              <View style={[styles.barSeg, { flex: redW, backgroundColor: '#EF4444' }]} />
+              <View style={[styles.barSeg, { flex: Math.max(1 - greenW - yellowW - redW, 0), backgroundColor: '#1e2a3a' }]} />
+            </View>
+          </View>
+        )}
       </View>
-      {deadlineLabel ? (
-        <Text style={[styles.ringDeadline, { color: deadlineColor }]}>{deadlineLabel}</Text>
-      ) : null}
     </Pressable>
   );
 }
 
 export default function HomeScreen() {
-  const { alarm, isPendingCheckIn, getCategoryRate, streak, isLoaded, categories } = useApp();
+  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, streak, isLoaded, categories } = useApp();
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
@@ -137,13 +200,7 @@ export default function HomeScreen() {
     return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
   }
 
-  // Overall score across all categories
-  const allRates = categories.map((c) => getCategoryRate(c.id, range));
-  const overallPct = allRates.length > 0
-    ? Math.round(allRates.reduce((a, b) => a + b, 0) / allRates.length * 100)
-    : null;
-
-  const rangeLabel = range === 1 ? 'Yesterday' : `${range}-Day`;
+  const rangeLabel = range === 1 ? "Yesterday's Goals" : `${range}-Day Goals`;
 
   return (
     <ScreenContainer>
@@ -162,7 +219,6 @@ export default function HomeScreen() {
               <View style={styles.streakPill}>
                 <Text style={styles.streakFire}>🔥</Text>
                 <Text style={styles.streakNum}>{streak}</Text>
-                <Text style={styles.streakDay}>day{streak !== 1 ? 's' : ''}</Text>
               </View>
             )}
           </View>
@@ -177,8 +233,8 @@ export default function HomeScreen() {
               ]}
             >
               <View style={styles.checkInLeft}>
-                <Text style={styles.checkInTitle}>Rate Yesterday</Text>
-                <Text style={styles.checkInSub}>{formatDisplayDate(yesterday)} · Tap to review 🔴🟡🟢</Text>
+                <Text style={styles.checkInTitle}>Yesterday's Review</Text>
+                <Text style={styles.checkInSub}>{formatDisplayDate(yesterday)} · Tap to rate 🔴🟡🟢</Text>
               </View>
               <IconSymbol name="chevron.right" size={18} color="rgba(255,255,255,0.8)" />
             </Pressable>
@@ -193,25 +249,18 @@ export default function HomeScreen() {
             ]}
           >
             <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
-            <Text style={[styles.alarmStripLabel, { color: colors.muted }]}>Alarm</Text>
-            <Text style={[styles.alarmStripTime, { color: colors.foreground }]}>
+            <Text style={[styles.alarmLabel, { color: colors.muted }]}>Alarm</Text>
+            <Text style={[styles.alarmTime, { color: colors.foreground }]}>
               {alarm.isEnabled ? formatAlarmTime(alarm.hour, alarm.minute) : 'Off'}
             </Text>
             <View style={{ flex: 1 }} />
-            <Text style={[styles.alarmStripEdit, { color: colors.primary }]}>Edit</Text>
+            <Text style={[styles.alarmEdit, { color: colors.primary }]}>Edit</Text>
             <IconSymbol name="chevron.right" size={14} color={colors.muted} />
           </Pressable>
 
           {/* ── Goals section header ── */}
           <View style={[styles.sectionRow, { zIndex: 10 }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{rangeLabel} Goals</Text>
-              {overallPct !== null && (
-                <Text style={[styles.sectionSub, { color: colors.muted }]}>
-                  Overall {overallPct}% across {categories.length} goal{categories.length !== 1 ? 's' : ''}
-                </Text>
-              )}
-            </View>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{rangeLabel}</Text>
             <View>
               <Pressable
                 onPress={() => setRangeOpen((o) => !o)}
@@ -249,20 +298,22 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── Goal rings 2-per-row ── */}
+          {/* ── 2-column goal cards ── */}
           {categories.length === 0 ? (
             <View style={[styles.emptyState, { borderColor: colors.border }]}>
-              <Text style={[styles.emptyStateText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
             </View>
           ) : (
-            <View style={styles.ringGrid}>
+            <View style={styles.cardGrid}>
               {categories.map((cat) => (
-                <GoalRing
+                <GoalCard
                   key={cat.id}
                   rate={getCategoryRate(cat.id, range)}
                   emoji={cat.emoji}
                   label={cat.label}
+                  lifeArea={cat.lifeArea}
                   deadline={cat.deadline}
+                  breakdown={getCategoryBreakdown(cat.id, range)}
                   colors={colors}
                   onPress={() => {
                     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -298,17 +349,15 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, gap: 12 },
-  greeting: { fontSize: 28, fontWeight: '800', letterSpacing: -0.8 },
-  dateText: { fontSize: 13, marginTop: 3, letterSpacing: 0.1 },
+  greeting: { fontSize: 26, fontWeight: '800', letterSpacing: -0.6 },
+  dateText: { fontSize: 13, marginTop: 3 },
   streakPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FF6B3520', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 7,
-    marginTop: 2,
+    paddingHorizontal: 12, paddingVertical: 7, marginTop: 2,
   },
   streakFire: { fontSize: 16 },
   streakNum: { fontSize: 17, fontWeight: '800', color: '#FF6B35' },
-  streakDay: { fontSize: 11, fontWeight: '600', color: '#FF6B3599', marginTop: 1 },
 
   // Check-in banner
   checkInBanner: {
@@ -326,17 +375,16 @@ const styles = StyleSheet.create({
     borderWidth: 1, marginBottom: 24,
   },
   alarmDot: { width: 8, height: 8, borderRadius: 4 },
-  alarmStripLabel: { fontSize: 12, fontWeight: '500' },
-  alarmStripTime: { fontSize: 15, fontWeight: '700' },
-  alarmStripEdit: { fontSize: 13, fontWeight: '600' },
+  alarmLabel: { fontSize: 12, fontWeight: '500' },
+  alarmTime: { fontSize: 15, fontWeight: '700' },
+  alarmEdit: { fontSize: 13, fontWeight: '600' },
 
   // Section header
   sectionRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 14,
   },
-  sectionTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
-  sectionSub: { fontSize: 12, marginTop: 3 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
   rangeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 6,
@@ -345,8 +393,7 @@ const styles = StyleSheet.create({
   rangeChipText: { fontSize: 13, fontWeight: '700' },
   rangeDropdown: {
     position: 'absolute', right: 0, top: 36, zIndex: 100,
-    borderRadius: 12, borderWidth: 1,
-    minWidth: 130, overflow: 'hidden',
+    borderRadius: 12, borderWidth: 1, minWidth: 130, overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
@@ -356,33 +403,63 @@ const styles = StyleSheet.create({
   },
   rangeDropdownText: { fontSize: 14 },
 
-  // Rings
-  ringGrid: {
+  // Card grid
+  cardGrid: {
     flexDirection: 'row', flexWrap: 'wrap',
-    gap: 16, marginBottom: 24,
+    gap: 12, marginBottom: 24,
     justifyContent: 'space-between',
   },
-  ringCell: { alignItems: 'center' },
-  ringGlow: { position: 'absolute', top: 0, left: 0, borderRadius: 999 },
-  ringCenter: {
-    position: 'absolute', top: 0, left: 0,
+  cardOuter: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  cardContent: {
+    flex: 1, gap: 6,
+  },
+
+  // Badge
+  badge: {
+    alignSelf: 'flex-start',
+    borderRadius: 20, borderWidth: 1.5,
+    paddingHorizontal: 10, paddingVertical: 4,
+    marginBottom: 2,
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+
+  // Emoji icon box
+  emojiBox: {
+    width: 44, height: 44, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
-  ringPct: { fontSize: 26, fontWeight: '900', letterSpacing: -1, color: '#ffffff' },
-  ringLabelRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    marginTop: 10, paddingHorizontal: 2,
+  emojiText: { fontSize: 22 },
+
+  // Card text
+  cardLabel: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
+  cardLifeArea: { fontSize: 11, fontWeight: '500', marginTop: -2 },
+  cardScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  cardPct: { fontSize: 26, fontWeight: '900', letterSpacing: -1 },
+
+  // Deadline tag
+  deadlineTag: {
+    borderRadius: 6, borderWidth: 1,
+    paddingHorizontal: 7, paddingVertical: 2,
   },
-  ringEmoji: { fontSize: 16 },
-  ringLabel: { fontSize: 13, fontWeight: '600', flex: 1, lineHeight: 17 },
-  ringDeadline: { fontSize: 11, fontWeight: '600', marginTop: 3, textAlign: 'center' },
+  deadlineText: { fontSize: 11, fontWeight: '700' },
+
+  // Progress bars
+  barsWrap: { gap: 4, marginTop: 2 },
+  bar: {
+    height: 5, borderRadius: 3, overflow: 'hidden',
+    flexDirection: 'row', backgroundColor: '#1e2a3a',
+  },
+  barSeg: { height: 5 },
 
   // Empty state
   emptyState: {
     borderRadius: 14, borderWidth: 1, borderStyle: 'dashed',
     padding: 24, alignItems: 'center', marginBottom: 24,
   },
-  emptyStateText: { fontSize: 14, textAlign: 'center' },
+  emptyText: { fontSize: 14, textAlign: 'center' },
 
   // Manage button
   manageBtn: {

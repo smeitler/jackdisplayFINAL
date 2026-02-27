@@ -313,3 +313,4 @@
 - [ ] Goal cards: add color-coded status label (Needs Work / Getting There / On Track / Crushing It) based on percentage
 - [x] Goal cards: replace with WHOOP-style circular progress rings, 2 per row, percentage inside ring, emoji + name below
 - [x] Home screen: full visual polish pass — improved ring layout, header, streak display, section spacing, typography
+- [x] Home screen: restore 2-column card layout with WHOOP-style SVG arc border indicating percentage
