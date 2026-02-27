@@ -277,7 +277,7 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
           setConfirmDelete(false);
         }}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} pointerEvents="box-none">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.backdrop} onPress={onClose} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -286,7 +286,7 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
             </Text>
 
             <View style={styles.inputRow}>
-              <View style={{ flex: 1 }}>
+              <View style={styles.nameInputWrapper}>
                 <TextInput
                   style={[styles.nameInput, { backgroundColor: colors.background, borderColor: name.length >= NAME_LIMIT ? '#F59E0B' : colors.border, color: colors.foreground }]}
                   placeholder="Habit name…"
@@ -297,6 +297,8 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                   returnKeyType="done"
                   onSubmitEditing={handleSave}
                   blurOnSubmit={false}
+                  autoCorrect={false}
+                  autoCapitalize="sentences"
                 />
                 <Text style={[styles.charCounter, { color: name.length >= NAME_LIMIT ? '#F59E0B' : colors.muted }]}>
                   {name.length}/{NAME_LIMIT}
@@ -525,7 +527,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
         }}
       >
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} pointerEvents="box-none">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.backdrop} onPress={onClose} />
           <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -1044,13 +1046,14 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
   inputRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  nameInputWrapper: { flex: 1, minHeight: 48 },
   emojiBtn: {
     width: 48, height: 48, borderRadius: 10, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
   },
   emojiBtnText: { fontSize: 26 },
   nameInput: {
-    flex: 1, height: 48, borderRadius: 10, borderWidth: 1,
+    width: '100%', height: 48, borderRadius: 10, borderWidth: 1,
     paddingHorizontal: 12, fontSize: 15,
   },
   modalActions: { flexDirection: 'row', gap: 10 },

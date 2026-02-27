@@ -296,3 +296,4 @@
 - [x] Persist selected alarm sound and meditation choice in AsyncStorage / alarm config
 - [ ] Play selected alarm sound when alarm fires (replace default notification sound)
 - [ ] Play selected meditation audio after check-in is submitted (if meditation is enabled)
+- [x] Bug: Add Habit modal — habit name TextInput is invisible/untappable on iOS TestFlight — fixed: removed pointerEvents box-none from KeyboardAvoidingView, added explicit nameInputWrapper with minHeight, changed nameInput to width:100%
