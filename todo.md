@@ -289,3 +289,4 @@
 - [x] Demo Mode: "Exit Demo" button that clears demo data and returns to login screen
 - [x] Demo Mode: skip server sync entirely (all data stays local)
 - [x] Bug: habit name TextInput not accepting typed characters on iOS TestFlight (Add Habit / Edit Habit modal)
+- [x] Bug: photos added in Vision Board disappear on TestFlight — fixed: resolve ph:// URIs via MediaLibrary.getAssetInfoAsync() before copying to documentDirectory

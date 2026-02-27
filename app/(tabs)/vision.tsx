@@ -7,6 +7,7 @@ import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useCallback, useRef } from "react";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import * as MediaLibrary from "expo-media-library";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -27,12 +28,37 @@ async function persistUri(uri: string): Promise<string> {
   // Already in documentDirectory — nothing to do
   const docDir = FileSystem.documentDirectory ?? "";
   if (uri.startsWith(docDir)) return uri;
-  // Generate a unique filename
-  const ext = uri.split(".").pop()?.split("?")[0] ?? "jpg";
-  const dest = `${docDir}visionboard_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+  // On iOS, ImagePicker returns ph:// asset URIs which FileSystem.copyAsync cannot read.
+  // We must resolve them to a real file:// localUri via MediaLibrary first.
+  let resolvedUri = uri;
+  if (Platform.OS === "ios" && uri.startsWith("ph://")) {
+    try {
+      // Extract the asset ID from ph://<id>/... format
+      const assetId = uri.replace("ph://", "").split("/")[0];
+      const assetInfo = await MediaLibrary.getAssetInfoAsync(assetId);
+      if (assetInfo.localUri) {
+        resolvedUri = assetInfo.localUri;
+      }
+    } catch {
+      // If resolution fails, try copyAsync directly (may work on some iOS versions)
+    }
+  }
+
+  // Generate a unique filename in permanent document storage
+  const ext = resolvedUri.split(".").pop()?.split("?")[0]?.toLowerCase() ?? "jpg";
+  const safeExt = ["jpg", "jpeg", "png", "heic", "heif", "webp", "gif"].includes(ext) ? ext : "jpg";
+  const dest = `${docDir}visionboard_${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
   try {
-    await FileSystem.copyAsync({ from: uri, to: dest });
-    return dest;
+    await FileSystem.copyAsync({ from: resolvedUri, to: dest });
+    // Verify the copy actually worked and has content
+    const info = await FileSystem.getInfoAsync(dest);
+    if (info.exists && (info as { size?: number }).size && (info as { size?: number }).size! > 0) {
+      return dest;
+    }
+    // Copy produced an empty file — fall back
+    await FileSystem.deleteAsync(dest, { idempotent: true });
+    return uri;
   } catch {
     // Fall back to original URI if copy fails
     return uri;
