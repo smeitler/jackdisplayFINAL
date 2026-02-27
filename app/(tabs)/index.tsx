@@ -41,7 +41,7 @@ function GoalCard({
   const cardH = cardW + 20; // slightly taller than wide
 
   const pct = Math.min(Math.max(rate, 0), 1);
-  const strokeW = 3;
+  const strokeW = 1.5;
   const r = 16; // border-radius of card
   // Perimeter of rounded rect
   const perimeter = 2 * (cardW - 2 * r) + 2 * (cardH - 2 * r) + 2 * Math.PI * r;
