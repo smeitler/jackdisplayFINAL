@@ -78,36 +78,38 @@ function GoalRing({ rate, emoji, label, deadline, onPress, colors }: {
       onPress={onPress}
       style={({ pressed }) => [styles.ringCell, { width: ringSize, opacity: pressed ? 0.8 : 1 }]}
     >
-      <Svg width={ringSize} height={ringSize} style={{ transform: [{ rotate: '-90deg' }] }}>
-        {/* Track */}
-        <Circle
-          cx={ringSize / 2}
-          cy={ringSize / 2}
-          r={radius}
-          stroke={colors.border}
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        {/* Progress */}
-        {pct > 0 && (
+      <View style={{ width: ringSize, height: ringSize }}>
+        <Svg width={ringSize} height={ringSize} style={{ transform: [{ rotate: '-90deg' }] }}>
+          {/* Track */}
           <Circle
             cx={ringSize / 2}
             cy={ringSize / 2}
             r={radius}
-            stroke={ringColor}
+            stroke={colors.border}
             strokeWidth={strokeWidth}
             fill="none"
-            strokeDasharray={`${circumference} ${circumference}`}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
           />
-        )}
-      </Svg>
-      {/* Center content — percentage only */}
-      <View style={styles.ringCenter} pointerEvents="none">
-        <Text style={[styles.ringPct, { color: pct > 0 ? ringColor : colors.muted }]}>
-          {pct > 0 ? `${pctText}%` : '—'}
-        </Text>
+          {/* Progress */}
+          {pct > 0 && (
+            <Circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={radius}
+              stroke={ringColor}
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={`${circumference} ${circumference}`}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+            />
+          )}
+        </Svg>
+        {/* Center content — percentage only, absolutely centered over SVG */}
+        <View style={[styles.ringCenter, { width: ringSize, height: ringSize }]} pointerEvents="none">
+          <Text style={styles.ringPct}>
+            {pct > 0 ? `${pctText}%` : '—'}
+          </Text>
+        </View>
       </View>
       {/* Emoji + label below ring */}
       <View style={styles.ringLabelRow}>
@@ -354,13 +356,12 @@ const styles = StyleSheet.create({
   },
   ringCenter: {
     position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
+    top: 0, left: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
   },
   ringEmoji: { fontSize: 18 },
-  ringPct: { fontSize: 26, fontWeight: '800', letterSpacing: -1 },
+  ringPct: { fontSize: 26, fontWeight: '800', letterSpacing: -1, color: '#ffffff' },
   ringLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, paddingHorizontal: 4 },
   ringLabel: { fontSize: 13, fontWeight: '600', flex: 1, lineHeight: 18 },
   ringDeadline: { fontSize: 11, fontWeight: '600', marginTop: 2, textAlign: 'center' },
