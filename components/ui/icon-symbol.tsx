@@ -39,6 +39,7 @@ const MAPPING = {
   "flame.fill": "local-fire-department",
   "calendar": "calendar-today",
   "clock.fill": "access-time",
+  "clock.arrow.circlepath": "snooze",
   "list.bullet": "list",
   "person.fill": "person",
   "person.2.fill": "group",

@@ -11,6 +11,7 @@ import {
   yesterdayString, formatDisplayDate, toDateString, Rating,
 } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
 import { trpc } from "@/lib/trpc";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 
@@ -174,6 +175,32 @@ export default function CheckInScreen() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
+  }
+
+  async function handleSnooze() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const snoozeMinutes = alarm.snoozeMinutes ?? 10;
+    // Schedule a one-time notification snoozeMinutes from now
+    if (Platform.OS !== 'web') {
+      try {
+        const triggerDate = new Date(Date.now() + snoozeMinutes * 60 * 1000);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Snooze over — time to check in! ⏰",
+            body: "Your daily habit check-in is waiting.",
+            data: { action: 'open_checkin' },
+            sound: 'default',
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: triggerDate,
+          } as Notifications.DateTriggerInput,
+        });
+      } catch (e) {
+        console.warn('[Snooze] Failed to schedule:', e);
+      }
+    }
+    router.back();
   }
 
   const allRated = activeHabits.length > 0 &&
@@ -506,6 +533,22 @@ export default function CheckInScreen() {
           </View>
         )}
 
+        {/* Snooze button — only when opened from alarm and lockout is off */}
+        {fromAlarm && !isPreview && !alarm.requireCheckin && (
+          <Pressable
+            onPress={handleSnooze}
+            style={({ pressed }) => [
+              styles.snoozeBtn,
+              { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
+            <Text style={[styles.snoozeBtnText, { color: colors.muted }]}>
+              Snooze {alarm.snoozeMinutes ?? 10} min
+            </Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={allRated ? handleSubmit : undefined}
           style={({ pressed }) => [
@@ -666,4 +709,10 @@ const styles = StyleSheet.create({
   alarmBannerText: {
     color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center',
   },
+  snoozeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 14, paddingVertical: 13,
+    borderWidth: 1.5,
+  },
+  snoozeBtnText: { fontSize: 15, fontWeight: '700' },
 });

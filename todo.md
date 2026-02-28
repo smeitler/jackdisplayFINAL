@@ -320,3 +320,8 @@
 - [x] Fix: Nova theme home screen has large blank white/lavender area below goal cards — fill space or fix background color
 - [x] Alarm check-in banner: when requireCheckin lockout is active, say "Complete your habits to turn off the alarm" instead of generic dismiss text
 - [x] Fix: Nova theme white space below goal cards — set deep space background on ScreenContainer and tab bar
+- [x] Fix Preview Check-in: show the real alarm banner experience (correct banner text, requireCheckin state) when tapped from settings
+- [x] Add snooze button to check-in screen when opened from alarm (not lockout mode)
+- [x] Add snooze interval picker in alarm settings (5, 10, 15, 20, 30 min options)
+- [x] Persist snooze interval in AlarmConfig
+- [x] Snooze: schedule a new notification for snoozeInterval minutes in the future and dismiss current screen

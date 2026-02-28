@@ -64,6 +64,7 @@ export type AlarmConfig = {
   soundId?: string;       // ID of the alarm sound to play (default: 'classic')
   meditationId?: string;  // ID of the post-alarm meditation (default: none)
   requireCheckin?: boolean; // If true, block app access until yesterday's check-in is done
+  snoozeMinutes?: number;   // Snooze duration in minutes (default: 10)
 };
 
 // ─── Rating helpers ───────────────────────────────────────────────────────────
@@ -159,6 +160,7 @@ export const DEFAULT_ALARM: AlarmConfig = {
   notificationIds: [],
   soundId: 'classic',
   meditationId: undefined,
+  snoozeMinutes: 10,
 };
 
 // ─── Categories ───────────────────────────────────────────────────────────────

@@ -98,6 +98,7 @@ export default function SettingsScreen() {
   const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
   const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
   const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
+  const [snoozeMinutes, setSnoozeMinutes] = useState(alarm.snoozeMinutes ?? 10);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   // Imperative player ref — created fresh each time, released when done
@@ -154,6 +155,7 @@ export default function SettingsScreen() {
     setSoundId(alarm.soundId ?? 'classic');
     setMeditationId(alarm.meditationId);
     setRequireCheckin(alarm.requireCheckin ?? false);
+    setSnoozeMinutes(alarm.snoozeMinutes ?? 10);
   }, [alarm]);
 
   function toggleDay(day: number) {
@@ -166,7 +168,7 @@ export default function SettingsScreen() {
   async function handleSave() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin });
+    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin, snoozeMinutes });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -419,6 +421,43 @@ export default function SettingsScreen() {
                   })}
                 </View>
               )}
+              {/* Snooze interval picker */}
+              <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
+                <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Snooze Duration</Text>
+                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
+                    How long to snooze when alarm is dismissed
+                  </Text>
+                </View>
+              </View>
+              <View style={[{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: 16, paddingVertical: 12 }]}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  {[5, 10, 15, 20, 30].map((mins) => (
+                    <Pressable
+                      key={mins}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSnoozeMinutes(mins);
+                      }}
+                      style={({ pressed }) => [{
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderRadius: 20,
+                        borderWidth: 1.5,
+                        borderColor: snoozeMinutes === mins ? colors.primary : colors.border,
+                        backgroundColor: snoozeMinutes === mins ? colors.primary + '18' : 'transparent',
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      <Text style={[{ fontSize: 14, fontWeight: '700', color: snoozeMinutes === mins ? colors.primary : colors.muted }]}>
+                        {mins} min
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
               {/* Require check-in toggle */}
               <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
                 <IconSymbol name="lock.fill" size={16} color={colors.muted} />
@@ -441,7 +480,7 @@ export default function SettingsScreen() {
 
               {/* Preview check-in button */}
               <Pressable
-                onPress={() => router.push('/checkin?fromAlarm=1&preview=1')}
+                onPress={() => router.push('/alarm-preview' as never)}
                 style={({ pressed }) => [{
                   flexDirection: 'row',
                   alignItems: 'center',
