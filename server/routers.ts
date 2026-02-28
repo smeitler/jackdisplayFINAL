@@ -17,6 +17,17 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    /**
+     * Permanently delete the authenticated user's account and all associated data.
+     * Required by Apple App Store guidelines (apps with user accounts must offer in-app deletion).
+     */
+    deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
+      await db.deleteUser(ctx.user.id);
+      // Clear the session cookie after deletion
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
   }),
 
   // ─── Categories / Goals ──────────────────────────────────────────────────────

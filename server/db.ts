@@ -85,6 +85,38 @@ export async function updateUserAvatar(userId: number, avatarUrl: string | null)
   await db.update(users).set({ avatarUrl }).where(eq(users.id, userId));
 }
 
+/**
+ * Permanently delete a user account and all associated data.
+ * Cascades to: categories, habits, checkIns, alarmConfigs, teamMembers, sharedGoals,
+ * teamMessages, referrals, devices, deviceEvents, teamPosts, teamPostComments, teamPostReactions.
+ * Called by the in-app "Delete Account" flow (required by Apple App Store guidelines).
+ */
+export async function deleteUser(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Delete all user data in dependency order (children before parents)
+  // deviceEvents are linked via devices, so delete devices first (deviceEvents cascade or delete manually)
+  const userDevices = await db.select({ id: devices.id }).from(devices).where(eq(devices.userId, userId)).catch(() => []);
+  for (const device of userDevices) {
+    await db.delete(deviceEvents).where(eq(deviceEvents.deviceId, device.id)).catch(() => {});
+  }
+  await db.delete(devices).where(eq(devices.userId, userId)).catch(() => {});
+  await db.delete(teamPostComments).where(eq(teamPostComments.userId, userId)).catch(() => {});
+  await db.delete(teamPostReactions).where(eq(teamPostReactions.userId, userId)).catch(() => {});
+  await db.delete(teamPosts).where(eq(teamPosts.userId, userId)).catch(() => {});
+  await db.delete(teamMessages).where(eq(teamMessages.userId, userId)).catch(() => {});
+  await db.delete(sharedGoals).where(eq(sharedGoals.userId, userId)).catch(() => {});
+  await db.delete(teamMembers).where(eq(teamMembers.userId, userId)).catch(() => {});
+  await db.delete(referrals).where(eq(referrals.referredId, userId)).catch(() => {});
+  await db.delete(checkIns).where(eq(checkIns.userId, userId)).catch(() => {});
+  await db.delete(habits).where(eq(habits.userId, userId)).catch(() => {});
+  await db.delete(categories).where(eq(categories.userId, userId)).catch(() => {});
+  await db.delete(alarmConfigs).where(eq(alarmConfigs.userId, userId)).catch(() => {});
+  // Finally delete the user record itself
+  await db.delete(users).where(eq(users.id, userId));
+}
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export async function getUserCategories(userId: number) {

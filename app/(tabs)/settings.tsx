@@ -13,6 +13,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useThemeContext } from "@/lib/theme-provider";
 import { type AppTheme } from "@/constants/theme";
 import { clearLocalData } from "@/lib/storage";
+import { trpc } from "@/lib/trpc";
+import { Alert } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
@@ -83,6 +86,7 @@ export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
+  const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
   const { appTheme, setAppTheme } = useThemeContext();
   const maxWidth = useContentMaxWidth();
 
@@ -698,6 +702,39 @@ export default function SettingsScreen() {
               <Text style={[styles.manageHabitsBtnText, { color: '#EF4444' }]}>Sign Out</Text>
               <IconSymbol name="chevron.right" size={16} color={colors.muted} />
             </Pressable>
+            {/* Delete Account — required by Apple App Store guidelines */}
+            <Pressable
+              onPress={() => {
+                Alert.alert(
+                  'Delete Account',
+                  'This will permanently delete your account and all your data — habits, goals, check-ins, and progress. This cannot be undone.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete My Account',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                          await deleteAccountMutation.mutateAsync();
+                          await clearLocalData();
+                          router.replace('/login');
+                        } catch {
+                          Alert.alert('Error', 'Failed to delete account. Please try again.');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              style={({ pressed }) => [
+                styles.manageHabitsBtn,
+                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Text style={[styles.manageHabitsBtnText, { color: '#EF4444', fontSize: 13 }]}>Delete Account & Data</Text>
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            </Pressable>
           </View>
         )}
 
@@ -709,6 +746,21 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
+        {/* Privacy & Legal links — required for App Store */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 8, marginBottom: 4 }}>
+          <Pressable
+            onPress={() => WebBrowser.openBrowserAsync('https://jackalarm.com/privacy')}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
+            <Text style={{ fontSize: 12, color: colors.muted, textDecorationLine: 'underline' }}>Privacy Policy</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => WebBrowser.openBrowserAsync('https://jackalarm.com/terms')}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
+            <Text style={{ fontSize: 12, color: colors.muted, textDecorationLine: 'underline' }}>Terms of Service</Text>
+          </Pressable>
+        </View>
         <View style={{ height: 30 }} />
         </View>
       </ScrollView>

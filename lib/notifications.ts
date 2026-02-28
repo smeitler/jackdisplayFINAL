@@ -33,6 +33,22 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   return status === 'granted';
 }
 
+/**
+ * Maps a soundId string to the bundled .caf filename for iOS notification sounds.
+ * .caf files must be included in the iOS bundle (assets/audio/).
+ * Android uses the channel sound set in requestNotificationPermissions.
+ */
+function getSoundFilename(soundId?: string): string {
+  const map: Record<string, string> = {
+    classic:  'alarm_classic.caf',
+    buzzer:   'alarm_buzzer.caf',
+    digital:  'alarm_digital.caf',
+    gentle:   'alarm_gentle.caf',
+    urgent:   'alarm_urgent.caf',
+  };
+  return map[soundId ?? 'classic'] ?? 'alarm_classic.caf';
+}
+
 /** Schedule one notification per enabled day-of-week. Returns notification IDs. */
 export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
   // Cancel any previously scheduled alarms
@@ -40,6 +56,7 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
 
   if (!config.isEnabled || config.days.length === 0) return [];
 
+  const soundFile = Platform.OS === 'ios' ? getSoundFilename(config.soundId) : 'default';
   const ids: string[] = [];
 
   for (const day of config.days) {
@@ -48,7 +65,7 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
         title: "Good morning! Time to check in 🌅",
         body: "How did yesterday go? Tap to log your progress.",
         data: { action: 'open_checkin' },
-        sound: 'default',
+        sound: soundFile,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.WEEKLY,

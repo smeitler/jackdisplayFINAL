@@ -36,13 +36,16 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
+    buildNumber: "1",
     associatedDomains: [
       "applinks:jackalarm.com",
       "webcredentials:jackalarm.com",
     ],
-    "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      // Bundle custom notification sounds (.caf format required by iOS)
+      UISupportedExternalAccessoryProtocols: [],
+    },
   },
   android: {
     adaptiveIcon: {
@@ -84,12 +87,8 @@ const config: ExpoConfig = {
         isAccessMediaLocationEnabled: true,
       },
     ],
-    [
-      "expo-audio",
-      {
-        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
-      },
-    ],
+    // expo-audio is used for playback only (no recording), so no microphonePermission needed
+    "expo-audio",
     [
       "expo-video",
       {

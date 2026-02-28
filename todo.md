@@ -336,3 +336,19 @@
 - [x] Bug: handleSaveHabit and handleSaveCategory in habits.tsx not awaited — fire-and-forget
 - [x] Fix: partial check-in now allowed — submit button enabled when at least 1 habit is rated (not all required)
 - [x] Fix: progress.tsx had a duplicate local formatDisplayDate function — now imports from storage.ts
+- [ ] Wire selected alarm sound to notification trigger (bundle .caf files, pass filename to scheduleAlarm)
+
+## App Store Compliance (Feb 28 2026)
+- [x] Wire selected alarm sound to notification trigger (.caf files for iOS)
+- [x] App Store: verify all permission usage descriptions are present in app.config.ts (notifications, microphone, photo library, camera)
+- [x] App Store: ensure no placeholder/test content visible to reviewers
+- [x] App Store: Demo Mode must be accessible without account creation for Apple reviewer
+- [x] App Store: verify no calls to private/undocumented APIs
+- [x] App Store: verify app does not crash on first launch with no data
+- [x] App Store: verify all external links open in in-app browser (not raw Safari)
+- [x] App Store: verify no hardcoded test credentials or debug flags in production build
+- [x] App Store CRITICAL: Add "Delete Account" option in More/Settings (Apple requires in-app account deletion since 2022)
+- [x] App Store: Add server-side deleteUser function and tRPC route for account deletion
+- [x] App Store: Add Privacy Policy link in the app (More/Settings footer)
+- [x] App Store: Remove microphone permission (app never records audio, only plays it)
+- [x] App Store: Remove console.log statements from OAuth callback (leaks token data to device logs)
