@@ -219,9 +219,9 @@ interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
   entryCount: number;
-  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => void;
-  onDelete: (habitId: string) => void;
-  onDeactivate: (habitId: string) => void;
+  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => Promise<void>;
+  onDelete: (id: string) => void;
+  onDeactivate: (id: string) => void;
   onClose: () => void;
 }
 
@@ -236,9 +236,9 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(editHabit?.monthlyGoal);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  function handleSave() {
+  async function handleSave() {
     if (!name.trim()) return;
-    onSave(name.trim(), '', description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
+    await onSave(name.trim(), '', description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
     onClose();
   }
 
@@ -479,8 +479,8 @@ interface CategoryModalProps {
   visible: boolean;
   editCategory?: CategoryDef | null;
   habitCount: number;
-  onSave: (label: string, emoji: string, lifeArea?: LifeArea, deadline?: string) => void;
-  onDelete: (catId: string) => void;
+  onSave: (label: string, emoji: string, lifeArea?: LifeArea, deadline?: string) => Promise<void>;
+  onDelete: (id: string) => void;
   onClose: () => void;
 }
 
@@ -494,12 +494,12 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  function handleSave() {
+  async function handleSave() {
     if (!label.trim()) return;
     if (!lifeArea) return; // Life Area is required
     const selectedArea = LIFE_AREAS.find(a => a.id === lifeArea);
     const finalEmoji = selectedArea?.emoji ?? emoji;
-    onSave(label.trim(), finalEmoji, lifeArea, deadline);
+    await onSave(label.trim(), finalEmoji, lifeArea, deadline);
     onClose();
   }
 
@@ -709,19 +709,19 @@ export default function HabitsScreen() {
     setExpandedCat((prev) => (prev === id ? null : id));
   }
 
-  function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) {
+  async function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) {
     if (habitModal.edit) {
-      updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal });
+      await updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal });
     } else {
-      addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal);
+      await addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal);
     }
   }
 
-  function handleSaveCategory(label: string, emoji: string, lifeArea?: LifeArea, deadline?: string) {
+  async function handleSaveCategory(label: string, emoji: string, lifeArea?: LifeArea, deadline?: string) {
     if (categoryModal.edit) {
-      updateCategory(categoryModal.edit.id, { label, emoji, lifeArea, deadline });
+      await updateCategory(categoryModal.edit.id, { label, emoji, lifeArea, deadline });
     } else {
-      addCategory(label, emoji, lifeArea);
+      await addCategory(label, emoji, lifeArea);
     }
   }
 

@@ -11,21 +11,12 @@ import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet"
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { toDateString } from "@/lib/storage";
+import { toDateString, formatDisplayDate } from "@/lib/storage";
 
 const MONTH_NAMES = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
 ];
-
-function formatDisplayDate(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00");
-  const today = new Date();
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
-  if (dateStr === toDateString(today)) return "Today";
-  if (dateStr === toDateString(yesterday)) return "Yesterday";
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
-}
 
 export default function ProgressScreen() {
   const {

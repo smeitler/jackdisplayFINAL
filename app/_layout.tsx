@@ -39,8 +39,13 @@ function CheckinGate() {
     if (!isLoaded) return;
     if (!alarm.requireCheckin) return;
     if (!isPendingCheckIn) return;
-    // Don't redirect if already on check-in or login screens
-    if (pathname === '/checkin' || pathname === '/login' || pathname.startsWith('/oauth')) return;
+    // Don't redirect if already on check-in, alarm-preview, or login screens
+    if (
+      pathname === '/checkin' ||
+      pathname === '/alarm-preview' ||
+      pathname === '/login' ||
+      pathname.startsWith('/oauth')
+    ) return;
     router.push('/checkin?fromAlarm=1' as never);
   }, [isLoaded, alarm.requireCheckin, isPendingCheckIn, pathname, router]);
 
@@ -132,6 +137,12 @@ export default function RootLayout() {
               <Stack.Screen name="oauth/callback" />
               <Stack.Screen name="checkin" options={{ presentation: 'modal' }} />
               <Stack.Screen name="habits" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="alarm-preview" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="category-detail" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="habit-detail" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="mind-dump" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="team/[id]" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="team/chat/[id]" options={{ presentation: 'modal' }} />
             </Stack>
             <StatusBar style="auto" />
           </AppProvider>

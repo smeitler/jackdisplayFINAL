@@ -203,6 +203,10 @@ export default function CheckInScreen() {
     router.back();
   }
 
+  // Allow submission when at least 1 habit has been rated (partial check-in is valid)
+  const anyRated = activeHabits.length > 0 &&
+    activeHabits.some((h) => ratings[h.id] && ratings[h.id] !== 'none');
+  // Keep allRated for display purposes (full completion indicator)
   const allRated = activeHabits.length > 0 &&
     activeHabits.every((h) => ratings[h.id] && ratings[h.id] !== 'none');
 
@@ -550,18 +554,22 @@ export default function CheckInScreen() {
         )}
 
         <Pressable
-          onPress={allRated ? handleSubmit : undefined}
+          onPress={anyRated ? handleSubmit : undefined}
           style={({ pressed }) => [
             styles.saveBtn,
             {
-              backgroundColor: allRated ? colors.primary : colors.border,
-              transform: [{ scale: allRated && pressed ? 0.97 : 1 }],
-              opacity: allRated ? 1 : 0.55,
+              backgroundColor: anyRated ? colors.primary : colors.border,
+              transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
+              opacity: anyRated ? 1 : 0.55,
             },
           ]}
         >
-          <Text style={[styles.saveBtnText, { color: allRated ? '#fff' : colors.muted }]}>
-            {allRated ? 'Save Review' : `Rate all habits (${ratedEntries.length}/${totalActive})`}
+          <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
+            {allRated
+              ? 'Save Review'
+              : anyRated
+              ? `Save Partial Review (${ratedEntries.length}/${totalActive})`
+              : `Rate at least one habit to save`}
           </Text>
         </Pressable>
       </View>

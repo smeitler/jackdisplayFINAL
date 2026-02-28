@@ -325,3 +325,14 @@
 - [x] Add snooze interval picker in alarm settings (5, 10, 15, 20, 30 min options)
 - [x] Persist snooze interval in AlarmConfig
 - [x] Snooze: schedule a new notification for snoozeInterval minutes in the future and dismiss current screen
+
+## Deep Audit Fixes (Feb 28 2026)
+- [x] Bug: alarm-preview, category-detail, habit-detail, mind-dump, team screens not registered in Stack — caused navigation crashes
+- [x] Bug: CheckinGate infinite redirect loop when opening alarm-preview — excluded alarm-preview from gate
+- [x] Bug: isPendingCheckIn triggered even with 0 active habits — now gated on activeHabits.length > 0
+- [x] Bug: submitCheckIn did not persist lastCheckIn to AsyncStorage — gate re-triggered after app restart even after check-in was done
+- [x] Bug: serverAlarmToLocal discarded local-only alarm fields (soundId, meditationId, requireCheckin, snoozeMinutes) on every server sync
+- [x] Bug: HabitModal and CategoryModal handleSave fired onSave without await — modal closed before save completed
+- [x] Bug: handleSaveHabit and handleSaveCategory in habits.tsx not awaited — fire-and-forget
+- [x] Fix: partial check-in now allowed — submit button enabled when at least 1 habit is rated (not all required)
+- [x] Fix: progress.tsx had a duplicate local formatDisplayDate function — now imports from storage.ts

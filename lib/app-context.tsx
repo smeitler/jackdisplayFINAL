@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Habit, CheckInEntry, AlarmConfig, Rating, CategoryDef, LifeArea,
   loadHabits, saveHabits,
@@ -119,13 +120,18 @@ function serverCheckInToLocal(row: { habitClientId: string; date: string; rating
   };
 }
 
-function serverAlarmToLocal(row: { hour: number; minute: number; days: string; enabled: boolean }): AlarmConfig {
+function serverAlarmToLocal(row: { hour: number; minute: number; days: string; enabled: boolean }, localAlarm?: AlarmConfig): AlarmConfig {
+  // Preserve local-only fields (sound, meditation, requireCheckin, snooze) that are not synced to server
   return {
     hour: row.hour,
     minute: row.minute,
     days: row.days.split(',').map(Number),
     isEnabled: row.enabled,
-    notificationIds: [],
+    notificationIds: localAlarm?.notificationIds ?? [],
+    soundId: localAlarm?.soundId,
+    meditationId: localAlarm?.meditationId,
+    requireCheckin: localAlarm?.requireCheckin,
+    snoozeMinutes: localAlarm?.snoozeMinutes,
   };
 }
 
@@ -273,7 +279,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cats = serverCats.map(serverCatToLocal);
           const habits = serverHabits.map(serverHabitToLocal);
           const checkIns = serverCheckIns.map(serverCheckInToLocal);
-          const alarm = serverAlarm ? serverAlarmToLocal(serverAlarm) : localAlarm;
+          const alarm = serverAlarm ? serverAlarmToLocal(serverAlarm, localAlarm) : localAlarm;
 
           // Compute lastCheckInDate from server check-ins
           const dates = checkIns.map((e) => e.date).sort();
@@ -547,7 +553,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const existing = state.checkIns.filter((e) => e.date !== date);
     const updated = [...existing, ...newEntries];
 
-    await saveCheckIns(updated);
+    // Persist both check-ins and lastCheckIn date to AsyncStorage atomically
+    await Promise.all([
+      saveCheckIns(updated),
+      AsyncStorage.setItem('daycheck:lastcheckin', date),
+    ]);
     dispatch({ type: 'SET_CHECKINS', checkIns: updated });
     dispatch({ type: 'SET_LAST_CHECKIN', date });
 
@@ -594,7 +604,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ag !== bg) return ag - bg;
       return (a.order ?? 0) - (b.order ?? 0);
     });
-  const isPendingCheckIn = !state.checkIns.some((e) => e.date === yesterdayString());
+  // Only show pending check-in banner/gate if there are active habits to rate
+  const isPendingCheckIn = activeHabits.length > 0 && !state.checkIns.some((e) => e.date === yesterdayString());
 
   const getEntriesForDate = useCallback((date: string) =>
     state.checkIns.filter((e) => e.date === date),
