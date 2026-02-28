@@ -41,7 +41,7 @@ const AFTER_ALARM_META: Record<string, { label: string; emoji: string; descripti
 };
 
 export default function CheckInScreen() {
-  const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm } = useApp();
+  const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm, isPendingCheckIn } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
   const router = useRouter();
@@ -298,15 +298,23 @@ export default function CheckInScreen() {
 
       {/* ── Alarm banner (fixed at top when opened from alarm) ── */}
       {fromAlarm && !isPreview && (
-        <View style={[styles.alarmBanner, { backgroundColor: colors.primary }]}>
-          <Text style={styles.alarmBannerText}>⏰ Complete your check-in to dismiss the alarm</Text>
+        <View style={[styles.alarmBanner, { backgroundColor: alarm.requireCheckin ? '#DC2626' : colors.primary }]}>
+          <Text style={styles.alarmBannerText}>
+            {alarm.requireCheckin
+              ? '🔒 Complete your habits to turn off the alarm'
+              : '⏰ Complete your check-in to dismiss the alarm'}
+          </Text>
         </View>
       )}
 
       {/* ── Preview banner ── */}
       {isPreview && (
-        <View style={[styles.alarmBanner, { backgroundColor: '#6B7280' }]}>
-          <Text style={styles.alarmBannerText}>👁 Preview Mode — this is what your alarm check-in looks like</Text>
+        <View style={[styles.alarmBanner, { backgroundColor: alarm.requireCheckin ? '#DC2626' : colors.primary }]}>
+          <Text style={styles.alarmBannerText}>
+            {alarm.requireCheckin
+              ? '🔒 Preview: “Complete your habits to turn off the alarm”'
+              : '👁 Preview Mode — this is what your alarm check-in looks like'}
+          </Text>
         </View>
       )}
 

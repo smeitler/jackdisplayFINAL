@@ -53,7 +53,11 @@ export function ScreenContainer({
 
   if (isNova) {
     return (
-      <View className={cn("flex-1", containerClassName)} {...props}>
+      <View
+        className={cn("flex-1", containerClassName)}
+        style={{ backgroundColor: '#050510' }}
+        {...props}
+      >
         <NovaBackground style={{ flex: 1 }}>
           {inner}
         </NovaBackground>

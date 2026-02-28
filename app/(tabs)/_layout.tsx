@@ -7,15 +7,21 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useAuth } from "@/hooks/use-auth";
 import { useApp } from "@/lib/app-context";
 import { useEffect } from "react";
+import { useIsNova } from "@/components/nova-effects";
 
 export default function TabLayout() {
   const colors = useColors();
+  const isNova = useIsNova();
   const insets = useSafeAreaInsets();
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + bottomPadding;
   const { isAuthenticated, loading } = useAuth();
   const { isDemoMode } = useApp();
   const router = useRouter();
+
+  // Nova theme: deep space black tab bar to match aurora background
+  const tabBarBg = isNova ? '#050510' : colors.surface;
+  const tabBarBorderColor = isNova ? '#2D1B69' : colors.border;
 
   useEffect(() => {
     // Allow demo mode users through without authentication
@@ -35,8 +41,8 @@ export default function TabLayout() {
           paddingTop: 8,
           paddingBottom: bottomPadding,
           height: tabBarHeight,
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
+          backgroundColor: tabBarBg,
+          borderTopColor: tabBarBorderColor,
           borderTopWidth: 0.5,
         },
         tabBarLabelStyle: {

@@ -317,3 +317,6 @@
 - [x] Alarm settings: add "Preview Check-in" button that opens the check-in popup so user can see/test it
 - [x] Alarm settings: add toggle "Require check-in to unlock app" — blocks app access until yesterday's check-in is done
 - [x] Implement app lockout gate on app open when requireCheckin is enabled and yesterday's check-in is incomplete
+- [x] Fix: Nova theme home screen has large blank white/lavender area below goal cards — fill space or fix background color
+- [x] Alarm check-in banner: when requireCheckin lockout is active, say "Complete your habits to turn off the alarm" instead of generic dismiss text
+- [x] Fix: Nova theme white space below goal cards — set deep space background on ScreenContainer and tab bar
