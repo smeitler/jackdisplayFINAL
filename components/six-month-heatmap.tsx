@@ -1,6 +1,6 @@
 /**
- * SixMonthHeatmap (now supports 1–5 year ranges)
- * - Dropdown to select 1 / 2 / 3 / 4 / 5 years
+ * SixMonthHeatmap (now supports 6 months – 5 year ranges)
+ * - Dropdown to select 6 months / 1 / 2 / 3 / 4 / 5 years
  * - Days flow LEFT → RIGHT across each row (26 days per row)
  * - Oldest top-left, newest bottom-right
  * - No labels, no scrolling
@@ -24,6 +24,7 @@ const GAP = 2;
 const DAYS_PER_ROW = 26;
 
 const YEAR_OPTIONS = [
+  { label: "6 Months", years: 0.5 },
   { label: "1 Year", years: 1 },
   { label: "2 Years", years: 2 },
   { label: "3 Years", years: 3 },
@@ -45,10 +46,10 @@ interface Props {
 export function SixMonthHeatmap({ scoreByDate }: Props) {
   const colors = useColors();
   const [containerWidth, setContainerWidth] = useState(0);
-  const [selectedYears, setSelectedYears] = useState(1);
+  const [selectedYears, setSelectedYears] = useState(0.5);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const totalDays = selectedYears * 365;
+  const totalDays = Math.round(selectedYears * 365);
 
   // Cell size: fill full width across DAYS_PER_ROW cells
   const cellSize = containerWidth > 0
@@ -94,7 +95,7 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
     setContainerWidth(e.nativeEvent.layout.width);
   };
 
-  const selectedLabel = YEAR_OPTIONS.find((o) => o.years === selectedYears)?.label ?? "1 Year";
+  const selectedLabel = YEAR_OPTIONS.find((o) => o.years === selectedYears)?.label ?? "6 Months";
 
   return (
     <View onLayout={handleLayout} style={styles.container}>
