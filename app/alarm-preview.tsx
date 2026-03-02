@@ -19,6 +19,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { CategoryIcon } from "@/components/category-icon";
 import { yesterdayString, formatDisplayDate, Rating } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 
@@ -186,7 +187,12 @@ export default function AlarmPreviewScreen() {
           return (
             <View key={cat.id} style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionEmoji}>{cat.emoji}</Text>
+                <CategoryIcon
+                  categoryId={cat.id}
+                  lifeArea={cat.lifeArea}
+                  size={18}
+                  color={colors.primary}
+                />
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
                 <View style={{ flex: 1 }} />
                 <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>

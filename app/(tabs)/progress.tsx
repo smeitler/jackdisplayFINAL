@@ -12,6 +12,7 @@ import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, formatDisplayDate } from "@/lib/storage";
+import { CategoryIcon } from "@/components/category-icon";
 
 const MONTH_NAMES = [
   "January","February","March","April","May","June",
@@ -149,7 +150,15 @@ export default function ProgressScreen() {
                 }}
                 style={({ pressed }) => [styles.catHeader, { opacity: pressed ? 0.75 : 1 }]}
               >
-                <Text style={styles.catEmoji}>{cat.emoji}</Text>
+                <CategoryIcon
+                  categoryId={cat.id}
+                  lifeArea={cat.lifeArea}
+                  size={20}
+                  color={rateColor}
+                  bgColor={rateColor + '18'}
+                  bgSize={40}
+                  borderRadius={10}
+                />
                 <View style={styles.catInfo}>
                   <Text style={[styles.catName, { color: colors.foreground }]}>{cat.label}</Text>
                   <Text style={[styles.catSub, { color: colors.muted }]}>

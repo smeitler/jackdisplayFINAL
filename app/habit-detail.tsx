@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { CategoryCalendar } from "@/components/category-calendar";
 import { SixMonthHeatmap } from "@/components/six-month-heatmap";
+import { CategoryIcon } from "@/components/category-icon";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -313,7 +314,7 @@ export default function HabitDetailScreen() {
             <Text style={[styles.heroName, { color: colors.foreground }]}>{habit.name}</Text>
             {category && (
               <Text style={[styles.heroCat, { color: colors.muted }]}>
-                {category.emoji} {category.label}
+                {category.label}
               </Text>
             )}
             {habit.description ? (

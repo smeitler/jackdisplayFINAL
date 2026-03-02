@@ -12,6 +12,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { CategoryIcon } from "@/components/category-icon";
 import {
   loadVisionBoard, saveVisionBoard, VisionBoard,
   loadVisionMotivations, saveVisionMotivations, VisionMotivations,
@@ -154,7 +155,7 @@ function GoalDetailModal({
   colors,
 }: {
   visible: boolean;
-  cat: { id: string; label: string; emoji: string; deadline?: string };
+  cat: { id: string; label: string; emoji: string; lifeArea?: string; deadline?: string };
   images: string[];
   motivations: string[];
   onClose: () => void;
@@ -199,7 +200,15 @@ function GoalDetailModal({
       >
         {/* Header */}
         <View style={[detailStyles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[detailStyles.headerEmoji]}>{cat.emoji}</Text>
+          <CategoryIcon
+            categoryId={cat.id}
+            lifeArea={cat.lifeArea}
+            size={22}
+            color={colors.primary}
+            bgColor={colors.primary + '22'}
+            bgSize={44}
+            borderRadius={12}
+          />
           <Text style={[detailStyles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>
             {cat.label}
           </Text>
@@ -495,7 +504,15 @@ export default function VisionBoardScreen() {
                 onPress={() => setDetailCatId(cat.id)}
                 style={({ pressed }) => [styles.catHeader, { opacity: pressed ? 0.75 : 1 }]}
               >
-                <Text style={styles.catEmoji}>{cat.emoji}</Text>
+                <CategoryIcon
+                  categoryId={cat.id}
+                  lifeArea={cat.lifeArea}
+                  size={20}
+                  color={colors.primary}
+                  bgColor={colors.primary + '18'}
+                  bgSize={40}
+                  borderRadius={10}
+                />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
                   {deadlineLabel && (

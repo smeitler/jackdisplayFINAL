@@ -17,6 +17,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, LIFE_AREAS } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 import { SixMonthHeatmap } from "@/components/six-month-heatmap";
+import { CategoryIcon } from "@/components/category-icon";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
@@ -170,7 +171,7 @@ export default function CategoryDetailScreen() {
           <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
         </Pressable>
         <Text style={[styles.navTitle, { color: colors.foreground }]} numberOfLines={1}>
-          {category.emoji} {category.label}
+          {category.label}
         </Text>
         <View style={{ width: 70 }} />
       </View>
@@ -179,13 +180,19 @@ export default function CategoryDetailScreen() {
 
         {/* ── Hero card ── */}
         <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.heroIconWrap, { backgroundColor: colors.primary + "22" }]}>
-            <Text style={styles.heroEmoji}>{category.emoji}</Text>
-          </View>
+          <CategoryIcon
+            categoryId={category.id}
+            lifeArea={category.lifeArea}
+            size={26}
+            color={colors.primary}
+            bgColor={colors.primary + "22"}
+            bgSize={52}
+            borderRadius={14}
+          />
           <View style={styles.heroInfo}>
             <Text style={[styles.heroName, { color: colors.foreground }]}>{category.label}</Text>
             {lifeArea && (
-              <Text style={[styles.heroCat, { color: colors.muted }]}>{lifeArea.emoji} {lifeArea.label}</Text>
+              <Text style={[styles.heroCat, { color: colors.muted }]}>{lifeArea.label}</Text>
             )}
 
           </View>

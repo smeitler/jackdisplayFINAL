@@ -9,6 +9,7 @@ import { yesterdayString, formatDisplayDate, LIFE_AREAS } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import Svg, { Circle, Rect } from "react-native-svg";
+import { CategoryIcon } from "@/components/category-icon";
 
 const RANGES = [1, 7, 14, 30, 60, 90] as const;
 type Range = typeof RANGES[number];
@@ -24,10 +25,10 @@ function getGreeting(): string {
 
 /** Card with a rounded-rect SVG border that fills clockwise based on pct */
 function GoalCard({
-  rate, emoji, label, lifeArea, deadline, breakdown, onPress, colors,
+  rate, categoryId, label, lifeArea, deadline, breakdown, onPress, colors,
 }: {
   rate: number;
-  emoji: string;
+  categoryId: string;
   label: string;
   lifeArea?: string;
   deadline?: string;
@@ -130,8 +131,16 @@ function GoalCard({
           </View>
         )}
 
-        {/* Emoji — no box, just centered */}
-        <Text style={styles.emojiText}>{emoji}</Text>
+        {/* Category icon — clean vector instead of emoji */}
+        <CategoryIcon
+          categoryId={categoryId}
+          lifeArea={lifeArea}
+          size={28}
+          color={accentColor}
+          bgColor={accentColor + '22'}
+          bgSize={52}
+          borderRadius={14}
+        />
 
         {/* Goal name */}
         <Text style={[styles.cardLabel, { color: labelColor, textAlign: 'center' }]} numberOfLines={2}>{label}</Text>
@@ -307,7 +316,7 @@ export default function HomeScreen() {
                 <GoalCard
                   key={cat.id}
                   rate={getCategoryRate(cat.id, range)}
-                  emoji={cat.emoji}
+                  categoryId={cat.id}
                   label={cat.label}
                   lifeArea={cat.lifeArea}
                   deadline={cat.deadline}

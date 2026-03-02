@@ -82,6 +82,15 @@ const MAPPING = {
   "stop.fill": "stop",
   "moon.stars.fill": "bedtime",
   "waveform": "graphic-eq",
+  // Life area / category icons
+  "figure.strengthtraining.traditional": "fitness-center",
+  "brain.head.profile.fill": "psychology",
+  "heart.circle.fill": "favorite",
+  "scope": "my-location",
+  "briefcase.fill": "work",
+  "banknote.fill": "payments",
+  "hands.and.sparkles.fill": "volunteer-activism",
+  "sun.max.fill": "wb-sunny",
 } as IconMapping;
 
 export function IconSymbol({
