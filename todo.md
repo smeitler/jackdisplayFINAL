@@ -361,3 +361,4 @@
 - [x] Heatmap: add "6 Months" as first option in year-range dropdown (default selection)
 - [x] Add SixMonthHeatmap to individual habit detail screen (per-habit daily score history)
 - [x] Replace emoji icons on goal/category cards with clean vector icons (SF Symbols / Material Icons) throughout the app
+- [x] Replace emojis in life area picker UI with matching vector icons

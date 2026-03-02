@@ -18,6 +18,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { CategoryIcon } from "@/components/category-icon";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useApp } from "@/lib/app-context";
@@ -557,7 +558,7 @@ function CreateTeamGoalModal({ teamId, visible, onClose }: { teamId: number; vis
                       }]}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ fontSize: 14 }}>{area.emoji}</Text>
+                      <CategoryIcon categoryId={area.id} lifeArea={area.id} size={14} color={lifeArea === area.id ? colors.primary : colors.muted} />
                       <Text style={[{ fontSize: 12, fontWeight: "600" }, { color: lifeArea === area.id ? colors.primary : colors.muted }]}>{area.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -803,7 +804,7 @@ function GoalProposalCard({ proposal, teamId }: { proposal: GoalProposal; teamId
                   style={[{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, borderWidth: 1 }, { backgroundColor: colors.background, borderColor: colors.border }]}
                   activeOpacity={0.75}
                 >
-                  <Text style={{ fontSize: 24 }}>{cat.emoji}</Text>
+                  <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={22} color={colors.primary} bgColor={colors.primary + '18'} bgSize={44} borderRadius={12} />
                   <Text style={[{ fontSize: 15, fontWeight: "600", flex: 1 }, { color: colors.foreground }]}>{cat.label}</Text>
                   <IconSymbol name="chevron.right" size={16} color={colors.muted} />
                 </TouchableOpacity>
@@ -873,7 +874,7 @@ function ShareGoalsModal({ teamId, visible, onClose }: { teamId: number; visible
                 onPress={() => toggle(item.id)}
                 activeOpacity={0.75}
               >
-                <Text style={styles.goalToggleEmoji}>{item.emoji}</Text>
+                <CategoryIcon categoryId={item.id} lifeArea={item.lifeArea} size={18} color={colors.primary} bgColor={colors.primary + '18'} bgSize={36} borderRadius={10} />
                 <Text style={[styles.goalToggleLabel, { color: colors.foreground }]}>{item.label}</Text>
                 <View style={[styles.goalToggleCheck, { backgroundColor: isSelected ? colors.primary : "transparent", borderColor: isSelected ? colors.primary : colors.border }]}>
                   {isSelected && <IconSymbol name="checkmark" size={14} color="#fff" />}

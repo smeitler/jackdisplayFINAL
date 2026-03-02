@@ -14,6 +14,7 @@ import { useApp } from '@/lib/app-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/storage';
+import { CategoryIcon, getCategoryIconName } from '@/components/category-icon';
 import { trpc } from '@/lib/trpc';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 
@@ -537,11 +538,13 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
             </Text>
 
             <View style={styles.inputRow}>
-              {/* Show Life Area emoji if selected, else placeholder */}
-              <View style={[styles.emojiBtn, { backgroundColor: colors.background, borderColor: lifeArea ? colors.primary + '60' : colors.border }]}>
-                <Text style={styles.emojiBtnText}>
-                  {lifeArea ? (LIFE_AREAS.find(a => a.id === lifeArea)?.emoji ?? '🌟') : '?'}
-                </Text>
+              {/* Show Life Area icon if selected, else placeholder */}
+              <View style={[styles.emojiBtn, { backgroundColor: lifeArea ? colors.primary + '22' : colors.background, borderColor: lifeArea ? colors.primary + '60' : colors.border, alignItems: 'center', justifyContent: 'center' }]}>
+                {lifeArea ? (
+                  <CategoryIcon categoryId={lifeArea} lifeArea={lifeArea} size={22} color={colors.primary} />
+                ) : (
+                  <Text style={[styles.emojiBtnText, { color: colors.muted }]}>?</Text>
+                )}
               </View>
               <TextInput
                 style={[styles.nameInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
@@ -590,7 +593,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
                     ]}
                     activeOpacity={0.7}
                   >
-                    <Text style={{ fontSize: 14 }}>{area.emoji}</Text>
+                    <CategoryIcon categoryId={area.id} lifeArea={area.id} size={14} color={lifeArea === area.id ? colors.primary : colors.muted} />
                     <Text style={[styles.lifeAreaChipText, { color: lifeArea === area.id ? colors.primary : colors.muted }]}>
                       {area.label}
                     </Text>
@@ -794,13 +797,21 @@ export default function HabitsScreen() {
                     <IconSymbol name="line.3.horizontal" size={18} color={colors.muted} />
                   </TouchableOpacity>
 
-                  {/* Emoji */}
+                  {/* Category icon */}
                   <TouchableOpacity
                     onPress={() => setCategoryModal({ open: true, edit: cat })}
                     style={styles.catEmojiBtn}
                     activeOpacity={0.6}
                   >
-                    <Text style={styles.catEmoji}>{cat.emoji}</Text>
+                    <CategoryIcon
+                      categoryId={cat.id}
+                      lifeArea={cat.lifeArea}
+                      size={20}
+                      color={colors.primary}
+                      bgColor={colors.primary + '18'}
+                      bgSize={36}
+                      borderRadius={10}
+                    />
                   </TouchableOpacity>
 
                   {/* Label area */}
