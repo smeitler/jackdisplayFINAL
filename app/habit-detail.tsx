@@ -329,6 +329,11 @@ export default function HabitDetailScreen() {
           )}
         </View>
 
+        {/* ── Long-range heatmap ── */}
+        <View style={[styles.heatmapCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <SixMonthHeatmap scoreByDate={habitScoreByDate} />
+        </View>
+
         {/* ── Stat tiles ── */}
         <View style={styles.statRow}>
           <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -424,11 +429,6 @@ export default function HabitDetailScreen() {
               );
             })}
           </View>
-        </View>
-
-        {/* ── Long-range heatmap ── */}
-        <View style={[styles.heatmapCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <SixMonthHeatmap scoreByDate={habitScoreByDate} />
         </View>
 
         {/* ── Full calendar heatmap ── */}
