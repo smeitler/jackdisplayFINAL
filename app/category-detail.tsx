@@ -16,6 +16,7 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, LIFE_AREAS } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
+import { SixMonthHeatmap } from "@/components/six-month-heatmap";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
@@ -102,6 +103,29 @@ export default function CategoryDetailScreen() {
     });
   }, [habits, checkIns, getHabitWeeklyDone, getHabitMonthlyDone, todayStr]);
 
+  // 6-month heatmap: daily weighted score for this category
+  const heatmapScores = useMemo(() => {
+    const habitIds = new Set(habits.map((h) => h.id));
+    // Group check-ins by date
+    const byDate: Record<string, { green: number; yellow: number; red: number }> = {};
+    for (const e of checkIns) {
+      if (!habitIds.has(e.habitId) || e.rating === "none") continue;
+      if (!byDate[e.date]) byDate[e.date] = { green: 0, yellow: 0, red: 0 };
+      if (e.rating === "green") byDate[e.date].green++;
+      else if (e.rating === "yellow") byDate[e.date].yellow++;
+      else if (e.rating === "red") byDate[e.date].red++;
+    }
+    // Convert to weighted score per date
+    const scoreByDate: Record<string, number> = {};
+    for (const [date, counts] of Object.entries(byDate)) {
+      const total = counts.green + counts.yellow + counts.red;
+      if (total > 0) {
+        scoreByDate[date] = (counts.green * 1 + counts.yellow * 0.5) / total;
+      }
+    }
+    return scoreByDate;
+  }, [habits, checkIns]);
+
   // Category-level stats (last 30 days)
   const categoryStats = useMemo(() => {
     const habitIds = new Set(habits.map((h) => h.id));
@@ -172,6 +196,12 @@ export default function CategoryDetailScreen() {
               </Text>
             </View>
           )}
+        </View>
+
+        {/* ── 6-Month Heatmap ── */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>6-Month History</Text>
+          <SixMonthHeatmap scoreByDate={heatmapScores} />
         </View>
 
         {/* ── Category rating breakdown ── */}

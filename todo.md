@@ -352,3 +352,4 @@
 - [x] App Store: Add Privacy Policy link in the app (More/Settings footer)
 - [x] App Store: Remove microphone permission (app never records audio, only plays it)
 - [x] App Store: Remove console.log statements from OAuth callback (leaks token data to device logs)
+- [x] Goal detail screen: add 6-month heatmap grid (columns=weeks, rows=days of week, red/yellow/green per day, X for untracked days)
