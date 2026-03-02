@@ -1,20 +1,35 @@
 /**
- * SixMonthHeatmap
- * Days flow LEFT → RIGHT across each row, like reading a book.
- * - Oldest day = top-left, newest day = bottom-right
- * - Each row = one week (7 cells)
- * - ~26 rows = 6 months
+ * SixMonthHeatmap (now supports 1–5 year ranges)
+ * - Dropdown to select 1 / 2 / 3 / 4 / 5 years
+ * - Days flow LEFT → RIGHT across each row (26 days per row)
+ * - Oldest top-left, newest bottom-right
  * - No labels, no scrolling
  * - Green / yellow / red by weighted score, × for skipped past days
  */
 import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, LayoutChangeEvent } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  LayoutChangeEvent,
+  TouchableOpacity,
+  Modal,
+  FlatList,
+  Platform,
+} from "react-native";
 import { useColors } from "@/hooks/use-colors";
 import { toDateString } from "@/lib/storage";
 
 const GAP = 2;
-const DAYS_PER_ROW = 26;  // 26 days per row — fits full 6 months compactly (7 rows)
-const TOTAL_DAYS = 182;   // ~6 months
+const DAYS_PER_ROW = 26;
+
+const YEAR_OPTIONS = [
+  { label: "1 Year", years: 1 },
+  { label: "2 Years", years: 2 },
+  { label: "3 Years", years: 3 },
+  { label: "4 Years", years: 4 },
+  { label: "5 Years", years: 5 },
+];
 
 interface DayData {
   dateStr: string;
@@ -30,24 +45,26 @@ interface Props {
 export function SixMonthHeatmap({ scoreByDate }: Props) {
   const colors = useColors();
   const [containerWidth, setContainerWidth] = useState(0);
+  const [selectedYears, setSelectedYears] = useState(1);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // Cell size: fill full width across 26 cells per row — small, compact cells
+  const totalDays = selectedYears * 365;
+
+  // Cell size: fill full width across DAYS_PER_ROW cells
   const cellSize = containerWidth > 0
     ? Math.floor((containerWidth - (DAYS_PER_ROW - 1) * GAP) / DAYS_PER_ROW)
     : 10;
 
-  // Build a flat array of days oldest → newest, then chunk into rows of 26
   const rows = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = toDateString(today);
 
-    // Start from TOTAL_DAYS ago
     const startDate = new Date(today);
-    startDate.setDate(today.getDate() - TOTAL_DAYS + 1);
+    startDate.setDate(today.getDate() - totalDays + 1);
 
     const days: DayData[] = [];
-    for (let i = 0; i < TOTAL_DAYS; i++) {
+    for (let i = 0; i < totalDays; i++) {
       const d = new Date(startDate);
       d.setDate(startDate.getDate() + i);
       const dateStr = toDateString(d);
@@ -57,13 +74,12 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
       days.push({ dateStr, score, hasData, isFuture });
     }
 
-    // Chunk into rows of DAYS_PER_ROW
     const result: DayData[][] = [];
     for (let i = 0; i < days.length; i += DAYS_PER_ROW) {
       result.push(days.slice(i, i + DAYS_PER_ROW));
     }
     return result;
-  }, [scoreByDate]);
+  }, [scoreByDate, totalDays]);
 
   function cellBg(day: DayData): string {
     if (day.isFuture) return colors.border + "33";
@@ -78,11 +94,67 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
     setContainerWidth(e.nativeEvent.layout.width);
   };
 
+  const selectedLabel = YEAR_OPTIONS.find((o) => o.years === selectedYears)?.label ?? "1 Year";
+
   return (
     <View onLayout={handleLayout} style={styles.container}>
+      {/* Header row with dropdown */}
+      <View style={styles.header}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>History</Text>
+        <TouchableOpacity
+          style={[styles.dropdownBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => setDropdownOpen(true)}
+        >
+          <Text style={[styles.dropdownBtnText, { color: colors.foreground }]}>{selectedLabel}</Text>
+          <Text style={[styles.dropdownChevron, { color: colors.muted }]}>▾</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Dropdown modal */}
+      <Modal
+        visible={dropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDropdownOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setDropdownOpen(false)}
+        >
+          <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {YEAR_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.years}
+                style={[
+                  styles.dropdownItem,
+                  opt.years === selectedYears && { backgroundColor: colors.primary + "22" },
+                ]}
+                onPress={() => {
+                  setSelectedYears(opt.years);
+                  setDropdownOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    { color: opt.years === selectedYears ? colors.primary : colors.foreground },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+                {opt.years === selectedYears && (
+                  <Text style={{ color: colors.primary, fontSize: 14 }}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Grid */}
       {containerWidth > 0 && (
         <>
-          {/* Rows of days */}
           <View style={{ gap: GAP }}>
             {rows.map((row, rowIdx) => (
               <View key={rowIdx} style={{ flexDirection: "row", gap: GAP }}>
@@ -104,7 +176,7 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
                       {isPastNoData && (
                         <Text
                           style={{
-                            fontSize: Math.max(6, cellSize * 0.6),
+                            fontSize: Math.max(5, cellSize * 0.6),
                             fontWeight: "900",
                             color: "#EF4444",
                             lineHeight: cellSize,
@@ -121,7 +193,7 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
             ))}
           </View>
 
-          {/* Minimal legend */}
+          {/* Legend */}
           <View style={styles.legend}>
             <Text style={[styles.legendText, { color: colors.muted }]}>Less</Text>
             {[colors.border + "55", "#EF4444", "#F59E0B", "#22C55E"].map((c, i) => (
@@ -141,6 +213,39 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
 
 const styles = StyleSheet.create({
   container: { width: "100%", gap: 8 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sectionTitle: { fontSize: 15, fontWeight: "700" },
+  dropdownBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  dropdownBtnText: { fontSize: 13, fontWeight: "600" },
+  dropdownChevron: { fontSize: 12 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dropdownMenu: {
+    width: 200,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  dropdownItemText: { fontSize: 15, fontWeight: "500" },
   legend: { flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" },
   legendCell: { width: 10, height: 10 },
   legendText: { fontSize: 10 },
