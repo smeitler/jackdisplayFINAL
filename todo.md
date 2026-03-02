@@ -356,3 +356,4 @@
 - [x] Fix: heatmap should fit on screen without horizontal scrolling — auto-size cells to fill width
 - [x] Fix: heatmap — remove month/day labels, oldest week left → newest week right
 - [x] Fix: heatmap days should flow left-to-right across rows, not top-to-bottom in columns
+- [x] Fix: heatmap cell size — keep left-to-right rows but fit 26 days per row (smaller cells) so full 6 months is compact

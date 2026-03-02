@@ -13,7 +13,7 @@ import { useColors } from "@/hooks/use-colors";
 import { toDateString } from "@/lib/storage";
 
 const GAP = 2;
-const DAYS_PER_ROW = 7;   // one week per row
+const DAYS_PER_ROW = 26;  // 26 days per row — fits full 6 months compactly (7 rows)
 const TOTAL_DAYS = 182;   // ~6 months
 
 interface DayData {
@@ -31,12 +31,12 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
   const colors = useColors();
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Cell size: fill full width across 7 cells per row
+  // Cell size: fill full width across 26 cells per row — small, compact cells
   const cellSize = containerWidth > 0
     ? Math.floor((containerWidth - (DAYS_PER_ROW - 1) * GAP) / DAYS_PER_ROW)
     : 10;
 
-  // Build a flat array of days oldest → newest, then chunk into rows of 7
+  // Build a flat array of days oldest → newest, then chunk into rows of 26
   const rows = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
