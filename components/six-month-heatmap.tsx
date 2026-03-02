@@ -1,11 +1,11 @@
 /**
  * SixMonthHeatmap
- * Clean grid — no labels, no scrolling.
- * - Oldest week on the LEFT, newest week on the RIGHT
- * - Columns = weeks, rows = days of week (Sun top → Sat bottom)
- * - Green / yellow / red by weighted score
- * - × for past days with no check-in
- * - Future days are dimmed
+ * Days flow LEFT → RIGHT across each row, like reading a book.
+ * - Oldest day = top-left, newest day = bottom-right
+ * - Each row = one week (7 cells)
+ * - ~26 rows = 6 months
+ * - No labels, no scrolling
+ * - Green / yellow / red by weighted score, × for skipped past days
  */
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, LayoutChangeEvent } from "react-native";
@@ -13,7 +13,8 @@ import { useColors } from "@/hooks/use-colors";
 import { toDateString } from "@/lib/storage";
 
 const GAP = 2;
-const WEEKS = 26;
+const DAYS_PER_ROW = 7;   // one week per row
+const TOTAL_DAYS = 182;   // ~6 months
 
 interface DayData {
   dateStr: string;
@@ -30,39 +31,38 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
   const colors = useColors();
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Cell size fills the full container width across all 26 columns + gaps
+  // Cell size: fill full width across 7 cells per row
   const cellSize = containerWidth > 0
-    ? Math.floor((containerWidth - (WEEKS - 1) * GAP) / WEEKS)
+    ? Math.floor((containerWidth - (DAYS_PER_ROW - 1) * GAP) / DAYS_PER_ROW)
     : 10;
 
-  const grid = useMemo(() => {
+  // Build a flat array of days oldest → newest, then chunk into rows of 7
+  const rows = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = toDateString(today);
 
-    // Sunday that starts the current week
-    const currentWeekStart = new Date(today);
-    currentWeekStart.setDate(today.getDate() - today.getDay());
+    // Start from TOTAL_DAYS ago
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - TOTAL_DAYS + 1);
 
-    // Build columns oldest → newest (w=WEEKS-1 is oldest, w=0 is current week)
-    const cols: DayData[][] = [];
-    for (let w = WEEKS - 1; w >= 0; w--) {
-      const weekStart = new Date(currentWeekStart);
-      weekStart.setDate(currentWeekStart.getDate() - w * 7);
-
-      const col: DayData[] = [];
-      for (let d = 0; d < 7; d++) {
-        const day = new Date(weekStart);
-        day.setDate(weekStart.getDate() + d);
-        const dateStr = toDateString(day);
-        const isFuture = dateStr > todayStr;
-        const hasData = !isFuture && dateStr in scoreByDate;
-        const score = hasData ? scoreByDate[dateStr] : null;
-        col.push({ dateStr, score, hasData, isFuture });
-      }
-      cols.push(col);
+    const days: DayData[] = [];
+    for (let i = 0; i < TOTAL_DAYS; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const dateStr = toDateString(d);
+      const isFuture = dateStr > todayStr;
+      const hasData = !isFuture && dateStr in scoreByDate;
+      const score = hasData ? scoreByDate[dateStr] : null;
+      days.push({ dateStr, score, hasData, isFuture });
     }
-    return cols;
+
+    // Chunk into rows of DAYS_PER_ROW
+    const result: DayData[][] = [];
+    for (let i = 0; i < days.length; i += DAYS_PER_ROW) {
+      result.push(days.slice(i, i + DAYS_PER_ROW));
+    }
+    return result;
   }, [scoreByDate]);
 
   function cellBg(day: DayData): string {
@@ -82,15 +82,15 @@ export function SixMonthHeatmap({ scoreByDate }: Props) {
     <View onLayout={handleLayout} style={styles.container}>
       {containerWidth > 0 && (
         <>
-          {/* Grid */}
-          <View style={{ flexDirection: "row", gap: GAP }}>
-            {grid.map((col, colIdx) => (
-              <View key={colIdx} style={{ flexDirection: "column", gap: GAP }}>
-                {col.map((day, rowIdx) => {
+          {/* Rows of days */}
+          <View style={{ gap: GAP }}>
+            {rows.map((row, rowIdx) => (
+              <View key={rowIdx} style={{ flexDirection: "row", gap: GAP }}>
+                {row.map((day, colIdx) => {
                   const isPastNoData = !day.isFuture && !day.hasData;
                   return (
                     <View
-                      key={rowIdx}
+                      key={colIdx}
                       style={{
                         width: cellSize,
                         height: cellSize,
