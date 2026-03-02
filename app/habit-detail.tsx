@@ -13,6 +13,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { CategoryCalendar } from "@/components/category-calendar";
+import { SixMonthHeatmap } from "@/components/six-month-heatmap";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -226,6 +227,17 @@ export default function HabitDetailScreen() {
     return months;
   }, [habitCheckIns, today]);
 
+  // Build scoreByDate for this habit: green=1, yellow=0.5, red=0
+  const habitScoreByDate = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const e of habitCheckIns) {
+      if (e.rating === "green") m[e.date] = 1;
+      else if (e.rating === "yellow") m[e.date] = 0.5;
+      else if (e.rating === "red") m[e.date] = 0;
+    }
+    return m;
+  }, [habitCheckIns]);
+
   const goalInfo = useMemo(() => {
     if (!habit) return null;
     const isMonthly = habit.frequencyType === "monthly";
@@ -414,6 +426,11 @@ export default function HabitDetailScreen() {
           </View>
         </View>
 
+        {/* ── Long-range heatmap ── */}
+        <View style={[styles.heatmapCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <SixMonthHeatmap scoreByDate={habitScoreByDate} />
+        </View>
+
         {/* ── Full calendar heatmap ── */}
         <View
           style={[styles.calCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -597,6 +614,9 @@ const styles = StyleSheet.create({
   trendMonthLabel: { fontSize: 10, fontWeight: "600" },
   trendPct: { fontSize: 9, fontWeight: "700" },
 
+  heatmapCard: {
+    borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 14,
+  },
   calCard: {
     borderRadius: 16, borderWidth: 1, marginBottom: 14, overflow: "hidden",
   },

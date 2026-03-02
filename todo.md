@@ -359,3 +359,4 @@
 - [x] Fix: heatmap cell size — keep left-to-right rows but fit 26 days per row (smaller cells) so full 6 months is compact
 - [x] Heatmap: add year-range dropdown (1, 2, 3, 4, 5 years) — grid adjusts dynamically
 - [x] Heatmap: add "6 Months" as first option in year-range dropdown (default selection)
+- [x] Add SixMonthHeatmap to individual habit detail screen (per-habit daily score history)
