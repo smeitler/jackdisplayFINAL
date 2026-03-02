@@ -354,3 +354,4 @@
 - [x] App Store: Remove console.log statements from OAuth callback (leaks token data to device logs)
 - [x] Goal detail screen: add 6-month heatmap grid (columns=weeks, rows=days of week, red/yellow/green per day, X for untracked days)
 - [x] Fix: heatmap should fit on screen without horizontal scrolling — auto-size cells to fill width
+- [x] Fix: heatmap — remove month/day labels, oldest week left → newest week right
