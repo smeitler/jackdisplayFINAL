@@ -1,8 +1,8 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -42,6 +42,8 @@ const AFTER_ALARM_META: Record<string, { label: string; emoji: string; descripti
   journaling:    { label: 'Journaling',        emoji: '📓', description: 'Morning pages, free write' },
 };
 
+const COUNTDOWN_SECONDS = 15;
+
 export default function CheckInScreen() {
   const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm, isPendingCheckIn } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
@@ -56,6 +58,76 @@ export default function CheckInScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [shareToTeam, setShareToTeam] = useState(true);
   const [shared, setShared] = useState(false);
+
+  // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
+  const countdownAnim = useRef(new Animated.Value(1)).current;
+  const countdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const isAlarmActive = fromAlarm && !isPreview && !submitted;
+
+  const fireAlarmAgain = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '⏰ Keep going! Rate your habits.',
+          body: 'You stopped interacting — alarm re-fired.',
+          sound: 'default',
+        },
+        trigger: null,
+      });
+    } catch { /* ignore */ }
+  }, []);
+
+  const startCountdown = useCallback(() => {
+    // Cancel any existing animation/timer
+    if (countdownAnimRef.current) { countdownAnimRef.current.stop(); }
+    if (countdownRef.current) { clearTimeout(countdownRef.current); }
+
+    // Reset bar to full
+    countdownAnim.setValue(1);
+
+    // Animate bar to 0 over COUNTDOWN_SECONDS
+    const anim = Animated.timing(countdownAnim, {
+      toValue: 0,
+      duration: COUNTDOWN_SECONDS * 1000,
+      useNativeDriver: false,
+    });
+    countdownAnimRef.current = anim;
+    anim.start(({ finished }) => {
+      if (finished) {
+        // Timer expired — re-fire alarm
+        fireAlarmAgain();
+        // Restart countdown
+        startCountdown();
+      }
+    });
+  }, [countdownAnim, fireAlarmAgain]);
+
+  const resetCountdown = useCallback(() => {
+    if (!isAlarmActive) return;
+    startCountdown();
+  }, [isAlarmActive, startCountdown]);
+
+  // Start countdown when alarm check-in opens
+  useEffect(() => {
+    if (!isAlarmActive) return;
+    startCountdown();
+    return () => {
+      if (countdownAnimRef.current) countdownAnimRef.current.stop();
+      if (countdownRef.current) clearTimeout(countdownRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAlarmActive]);
+
+  // Stop countdown when submitted
+  useEffect(() => {
+    if (submitted) {
+      if (countdownAnimRef.current) countdownAnimRef.current.stop();
+      if (countdownRef.current) clearTimeout(countdownRef.current);
+    }
+  }, [submitted]);
 
   // After-alarm audio state
   const [afterAlarmPlaying, setAfterAlarmPlaying] = useState(false);
@@ -174,6 +246,9 @@ export default function CheckInScreen() {
 
   async function handleSubmit() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Stop countdown before submitting
+    if (countdownAnimRef.current) countdownAnimRef.current.stop();
+    if (countdownRef.current) clearTimeout(countdownRef.current);
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
   }
@@ -328,6 +403,32 @@ export default function CheckInScreen() {
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
 
+      {/* ── Countdown bar (alarm mode only) ── */}
+      {isAlarmActive && (
+        <Pressable onPress={resetCountdown} style={{ width: '100%' }}>
+          <View style={styles.countdownTrack}>
+            <Animated.View
+              style={[
+                styles.countdownFill,
+                {
+                  width: countdownAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                  backgroundColor: countdownAnim.interpolate({
+                    inputRange: [0, 0.3, 0.6, 1],
+                    outputRange: ['#EF4444', '#EF4444', '#F59E0B', '#22C55E'],
+                  }),
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.countdownLabelRow}>
+            <Text style={styles.countdownLabel}>Keep going — tap or scroll to reset timer</Text>
+          </View>
+        </Pressable>
+      )}
+
       {/* ── Alarm banner (fixed at top when opened from alarm) ── */}
       {fromAlarm && !isPreview && (
         <View style={[styles.alarmBanner, { backgroundColor: alarm.requireCheckin ? '#DC2626' : colors.primary }]}>
@@ -429,6 +530,9 @@ export default function CheckInScreen() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={resetCountdown}
+        onMomentumScrollBegin={resetCountdown}
+        scrollEventThrottle={400}
       >
         {sortedCategories.map((cat) => {
           const habits = habitsByCategory[cat.id] ?? [];
@@ -598,6 +702,17 @@ const styles = StyleSheet.create({
 
   progressTrack: { height: 2 },
   progressFill: { height: 2, borderRadius: 1 },
+
+  countdownTrack: { height: 6, backgroundColor: '#1a1a1a', width: '100%' },
+  countdownFill: { height: 6, borderRadius: 0 },
+  countdownLabelRow: {
+    backgroundColor: '#1a0000',
+    paddingVertical: 5, paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  countdownLabel: {
+    color: '#EF444499', fontSize: 11, fontWeight: '600', textAlign: 'center',
+  },
 
   legendRow: {
     flexDirection: 'row', justifyContent: 'center', gap: 20,
