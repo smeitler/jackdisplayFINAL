@@ -10,8 +10,8 @@ import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
 
-const RANGES = [1, 7, 14, 30, 60, 90] as const;
-type Range = typeof RANGES[number];
+// Period toggle options — what the goal section header shows
+type PeriodView = 'week' | 'month';
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
@@ -22,59 +22,65 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-// ── Goal Progress Chip ────────────────────────────────────────────────────────
+// ── Period Chip (This Week / Last Week / This Month / Last Month) ─────────────
 
-function GoalChip({
-  label,
-  done,
-  goal,
+function PeriodGoalChip({
+  currentDone,
+  currentGoal,
   lastDone,
   lastGoal,
+  period,
   colors,
 }: {
-  label: string; // "W" or "M"
-  done: number;
-  goal: number;
+  currentDone: number;
+  currentGoal: number;
   lastDone: number;
   lastGoal: number;
+  period: PeriodView;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
 }) {
-  const hitCurrent = done >= goal;
-  const hitLast = lastDone >= lastGoal;
+  const hitCurrent = currentDone >= currentGoal;
+  const hitLast = lastGoal > 0 && lastDone >= lastGoal;
 
-  // Current period status color
-  const pct = goal > 0 ? done / goal : 0;
-  const chipColor = hitCurrent
-    ? '#22C55E'
-    : pct >= 0.6
-    ? '#F59E0B'
-    : '#EF4444';
+  const pct = currentGoal > 0 ? currentDone / currentGoal : 0;
+  const currentColor = hitCurrent ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : '#EF4444';
+
+  const thisLabel = period === 'week' ? 'This Week' : 'This Month';
+  const lastLabel = period === 'week' ? 'Last Week' : 'Last Month';
 
   return (
-    <View style={styles.goalChipWrap}>
-      {/* Current period chip */}
-      <View style={[
-        styles.goalChip,
-        { backgroundColor: chipColor + '18', borderColor: chipColor + '55' },
-      ]}>
-        <Text style={[styles.goalChipLabel, { color: chipColor }]}>{label}</Text>
-        <Text style={[styles.goalChipCount, { color: chipColor }]}>
-          {hitCurrent ? '✓' : `${done}/${goal}`}
-        </Text>
-      </View>
-      {/* Last period badge — only shown if goal was set */}
-      {lastGoal > 0 && (
-        <View style={[
-          styles.lastBadge,
-          hitLast
-            ? { backgroundColor: '#FFD700' + '22', borderColor: '#FFD700' + '66' }
-            : { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}>
-          <Text style={[styles.lastBadgeText, { color: hitLast ? '#FFD700' : colors.muted }]}>
-            {hitLast ? '👑' : `${lastDone}/${lastGoal}`}
+    <View style={styles.periodChipGroup}>
+      {/* This period */}
+      <View style={styles.periodChipBlock}>
+        <Text style={[styles.periodChipPeriodLabel, { color: colors.muted }]}>{thisLabel}</Text>
+        <View style={[styles.periodChip, { backgroundColor: currentColor + '18', borderColor: currentColor + '55' }]}>
+          <Text style={[styles.periodChipValue, { color: currentColor }]}>
+            {hitCurrent ? `✓ ${currentDone}/${currentGoal}` : `${currentDone}/${currentGoal}`}
           </Text>
         </View>
-      )}
+      </View>
+
+      {/* Divider */}
+      <View style={[styles.periodChipDivider, { backgroundColor: colors.border }]} />
+
+      {/* Last period */}
+      <View style={styles.periodChipBlock}>
+        <Text style={[styles.periodChipPeriodLabel, { color: colors.muted }]}>{lastLabel}</Text>
+        {lastGoal > 0 ? (
+          <View style={[
+            styles.periodChip,
+            hitLast
+              ? { backgroundColor: '#FFD70022', borderColor: '#FFD70066' }
+              : { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}>
+            <Text style={[styles.periodChipValue, { color: hitLast ? '#FFD700' : colors.muted }]}>
+              {hitLast ? `👑 ${lastDone}/${lastGoal}` : `${lastDone}/${lastGoal}`}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.periodChipNoGoal, { color: colors.muted }]}>—</Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -83,10 +89,12 @@ function GoalChip({
 
 function HabitGoalRow({
   habit,
+  period,
   colors,
   onPress,
 }: {
   habit: Habit;
+  period: PeriodView;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
   onPress: () => void;
 }) {
@@ -95,14 +103,15 @@ function HabitGoalRow({
     getHabitLastWeekDone, getHabitLastMonthDone,
   } = useApp();
 
-  const hasWeekly = (habit.weeklyGoal ?? 0) > 0 && (!habit.frequencyType || habit.frequencyType === 'weekly');
-  const hasMonthly = (habit.monthlyGoal ?? 0) > 0 && habit.frequencyType === 'monthly';
-  const hasAnyGoal = hasWeekly || hasMonthly;
+  const hasWeeklyGoal = (habit.weeklyGoal ?? 0) > 0 && (!habit.frequencyType || habit.frequencyType === 'weekly');
+  const hasMonthlyGoal = (habit.monthlyGoal ?? 0) > 0 && habit.frequencyType === 'monthly';
 
-  const weeklyDone = hasWeekly ? getHabitWeeklyDone(habit.id) : 0;
-  const monthlyDone = hasMonthly ? getHabitMonthlyDone(habit.id) : 0;
-  const lastWeekDone = hasWeekly ? getHabitLastWeekDone(habit.id) : 0;
-  const lastMonthDone = hasMonthly ? getHabitLastMonthDone(habit.id) : 0;
+  // Show chip only for the active period view
+  const showChip = period === 'week' ? hasWeeklyGoal : hasMonthlyGoal;
+
+  const currentDone = period === 'week' ? getHabitWeeklyDone(habit.id) : getHabitMonthlyDone(habit.id);
+  const lastDone = period === 'week' ? getHabitLastWeekDone(habit.id) : getHabitLastMonthDone(habit.id);
+  const goal = period === 'week' ? (habit.weeklyGoal ?? 0) : (habit.monthlyGoal ?? 0);
 
   return (
     <TouchableOpacity
@@ -115,30 +124,21 @@ function HabitGoalRow({
         {habit.name}
       </Text>
 
-      {/* Goal chips — right side */}
-      <View style={styles.habitChips}>
-        {hasWeekly && (
-          <GoalChip
-            label="W"
-            done={weeklyDone}
-            goal={habit.weeklyGoal!}
-            lastDone={lastWeekDone}
-            lastGoal={habit.weeklyGoal!}
+      {/* Right side: goal chip or no-goal label */}
+      <View style={styles.habitRight}>
+        {showChip ? (
+          <PeriodGoalChip
+            currentDone={currentDone}
+            currentGoal={goal}
+            lastDone={lastDone}
+            lastGoal={goal}
+            period={period}
             colors={colors}
           />
-        )}
-        {hasMonthly && (
-          <GoalChip
-            label="M"
-            done={monthlyDone}
-            goal={habit.monthlyGoal!}
-            lastDone={lastMonthDone}
-            lastGoal={habit.monthlyGoal!}
-            colors={colors}
-          />
-        )}
-        {!hasAnyGoal && (
-          <Text style={[styles.noGoalText, { color: colors.muted }]}>No goal</Text>
+        ) : (
+          <Text style={[styles.noGoalText, { color: colors.muted }]}>
+            {period === 'week' ? 'No weekly goal' : 'No monthly goal'}
+          </Text>
         )}
         <IconSymbol name="chevron.right" size={13} color={colors.muted} />
       </View>
@@ -152,6 +152,7 @@ function GoalCard({
   cat,
   habits,
   rate,
+  period,
   colors,
   onPressGoal,
   onPressHabit,
@@ -159,6 +160,7 @@ function GoalCard({
   cat: import('@/lib/storage').CategoryDef;
   habits: Habit[];
   rate: number;
+  period: PeriodView;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
   onPressGoal: () => void;
   onPressHabit: (habitId: string) => void;
@@ -172,10 +174,10 @@ function GoalCard({
   const accentColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.border;
   const cardBg = isOnTrack ? '#0a1f10' : isOkay ? '#1f1500' : isBehind ? '#1f0808' : colors.surface;
   const pctColor = isOnTrack ? '#4ade80' : isOkay ? '#fbbf24' : isBehind ? '#f87171' : colors.muted;
+  const titleColor = isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground;
 
   const lifeAreaDef = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
 
-  // Deadline
   let deadlineLabel = '';
   let deadlineColor = colors.muted;
   if (cat.deadline) {
@@ -188,12 +190,8 @@ function GoalCard({
 
   return (
     <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: accentColor + '40' }]}>
-      {/* Goal header — tappable */}
-      <TouchableOpacity
-        onPress={onPressGoal}
-        style={styles.goalCardHeader}
-        activeOpacity={0.8}
-      >
+      {/* Goal header */}
+      <TouchableOpacity onPress={onPressGoal} style={styles.goalCardHeader} activeOpacity={0.8}>
         <CategoryIcon
           categoryId={cat.id}
           lifeArea={cat.lifeArea}
@@ -204,14 +202,11 @@ function GoalCard({
           borderRadius={10}
         />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.goalCardTitle, { color: isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground }]} numberOfLines={1}>
-            {cat.label}
-          </Text>
+          <Text style={[styles.goalCardTitle, { color: titleColor }]} numberOfLines={1}>{cat.label}</Text>
           {lifeAreaDef && (
             <Text style={[styles.goalCardLifeArea, { color: accentColor + 'bb' }]}>{lifeAreaDef.label}</Text>
           )}
         </View>
-        {/* Score + deadline */}
         <View style={{ alignItems: 'flex-end', gap: 3 }}>
           <Text style={[styles.goalCardPct, { color: pctColor }]}>
             {hasData ? `${Math.round(pct * 100)}%` : '—'}
@@ -225,7 +220,6 @@ function GoalCard({
         <IconSymbol name="chevron.right" size={14} color={accentColor + '88'} />
       </TouchableOpacity>
 
-      {/* Divider */}
       <View style={[styles.goalCardDivider, { backgroundColor: accentColor + '25' }]} />
 
       {/* Habit rows */}
@@ -236,6 +230,7 @@ function GoalCard({
           <HabitGoalRow
             key={h.id}
             habit={h}
+            period={period}
             colors={colors}
             onPress={() => onPressHabit(h.id)}
           />
@@ -249,20 +244,13 @@ function GoalCard({
 
 export default function HomeScreen() {
   const {
-    alarm, isPendingCheckIn, getCategoryRate, streak,
-    isLoaded, categories, activeHabits,
+    alarm, isPendingCheckIn, getCategoryRate,
+    streak, categories, activeHabits,
   } = useApp();
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
-  const [range, setRange] = useState<Range>(1);
-  const [rangeOpen, setRangeOpen] = useState(false);
-
-  function handleRangeSelect(r: Range) {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRange(r);
-    setRangeOpen(false);
-  }
+  const [period, setPeriod] = useState<PeriodView>('week');
 
   const yesterday = yesterdayString();
 
@@ -272,12 +260,13 @@ export default function HomeScreen() {
   }
 
   function formatAlarmTime(h: number, m: number): string {
-    const period = h >= 12 ? 'PM' : 'AM';
+    const ph = h >= 12 ? 'PM' : 'AM';
     const hour = h % 12 === 0 ? 12 : h % 12;
-    return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+    return `${hour}:${m.toString().padStart(2, '0')} ${ph}`;
   }
 
-  const rangeLabel = range === 1 ? "Yesterday's Goals" : `${range}-Day Goals`;
+  // For the goal card score, use 7 days for week view, 30 days for month view
+  const rateRange = period === 'week' ? 7 : 30;
 
   return (
     <ScreenContainer>
@@ -335,67 +324,67 @@ export default function HomeScreen() {
             <IconSymbol name="chevron.right" size={14} color={colors.muted} />
           </Pressable>
 
-          {/* ── Goals section header ── */}
-          <View style={[styles.sectionRow, { zIndex: 10 }]}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{rangeLabel}</Text>
-            <View>
-              <Pressable
-                onPress={() => setRangeOpen((o) => !o)}
-                style={({ pressed }) => [
-                  styles.rangeChip,
-                  { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44', opacity: pressed ? 0.7 : 1 },
+          {/* ── Period toggle + section title ── */}
+          <View style={styles.sectionRow}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
+            {/* Week / Month toggle */}
+            <View style={[styles.periodToggle, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setPeriod('week');
+                }}
+                style={[
+                  styles.periodToggleBtn,
+                  period === 'week' && { backgroundColor: colors.primary },
                 ]}
+                activeOpacity={0.8}
               >
-                <Text style={[styles.rangeChipText, { color: colors.primary }]}>{range}d</Text>
-                <IconSymbol name={rangeOpen ? 'chevron.up' : 'chevron.down'} size={11} color={colors.primary} />
-              </Pressable>
-              {rangeOpen && (
-                <View style={[styles.rangeDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  {RANGES.map((r) => (
-                    <Pressable
-                      key={r}
-                      onPress={() => handleRangeSelect(r)}
-                      style={({ pressed }) => [
-                        styles.rangeDropdownItem,
-                        r === range && { backgroundColor: colors.primary + '18' },
-                        { opacity: pressed ? 0.7 : 1 },
-                      ]}
-                    >
-                      <Text style={[
-                        styles.rangeDropdownText,
-                        { color: r === range ? colors.primary : colors.foreground, fontWeight: r === range ? '700' : '500' },
-                      ]}>
-                        {r === 1 ? 'Yesterday' : `${r} days`}
-                      </Text>
-                      {r === range && <IconSymbol name="checkmark" size={13} color={colors.primary} />}
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+                <Text style={[
+                  styles.periodToggleBtnText,
+                  { color: period === 'week' ? '#fff' : colors.muted },
+                ]}>Weekly</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setPeriod('month');
+                }}
+                style={[
+                  styles.periodToggleBtn,
+                  period === 'month' && { backgroundColor: colors.primary },
+                ]}
+                activeOpacity={0.8}
+              >
+                <Text style={[
+                  styles.periodToggleBtnText,
+                  { color: period === 'month' ? '#fff' : colors.muted },
+                ]}>Monthly</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* ── Goal legend ── */}
+          {/* ── Legend ── */}
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#22C55E' }]} />
-              <Text style={[styles.legendText, { color: colors.muted }]}>On Track</Text>
+              <Text style={[styles.legendText, { color: colors.muted }]}>Hit</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={[styles.legendText, { color: colors.muted }]}>Okay</Text>
+              <Text style={[styles.legendText, { color: colors.muted }]}>On Track</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
               <Text style={[styles.legendText, { color: colors.muted }]}>Behind</Text>
             </View>
             <View style={styles.legendItem}>
-              <Text style={[styles.legendText, { color: '#FFD700' }]}>👑</Text>
+              <Text style={{ fontSize: 11 }}>👑</Text>
               <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
             </View>
           </View>
 
-          {/* ── Goal cards (full-width, habits inside) ── */}
+          {/* ── Goal cards ── */}
           {categories.length === 0 ? (
             <View style={[styles.emptyState, { borderColor: colors.border }]}>
               <Text style={[styles.emptyText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
@@ -409,7 +398,8 @@ export default function HomeScreen() {
                     key={cat.id}
                     cat={cat}
                     habits={catHabits}
-                    rate={getCategoryRate(cat.id, range)}
+                    rate={getCategoryRate(cat.id, rateRange)}
+                    period={period}
                     colors={colors}
                     onPressGoal={() => {
                       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -486,23 +476,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 10,
   },
   sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-  rangeChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 20, borderWidth: 1,
+
+  // Period toggle
+  periodToggle: {
+    flexDirection: 'row', borderRadius: 10, borderWidth: 1,
+    overflow: 'hidden', padding: 2, gap: 2,
   },
-  rangeChipText: { fontSize: 13, fontWeight: '700' },
-  rangeDropdown: {
-    position: 'absolute', right: 0, top: 36, zIndex: 100,
-    borderRadius: 12, borderWidth: 1, minWidth: 130, overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+  periodToggleBtn: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8,
   },
-  rangeDropdownItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingVertical: 11,
-  },
-  rangeDropdownText: { fontSize: 14 },
+  periodToggleBtnText: { fontSize: 13, fontWeight: '700' },
 
   // Legend
   legendRow: {
@@ -516,11 +499,8 @@ const styles = StyleSheet.create({
   // Goal list
   goalList: { gap: 12, marginBottom: 24 },
 
-  // Goal card (full-width)
-  goalCard: {
-    borderRadius: 16, borderWidth: 1,
-    overflow: 'hidden',
-  },
+  // Goal card
+  goalCard: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
   goalCardHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 14, paddingVertical: 12,
@@ -528,9 +508,9 @@ const styles = StyleSheet.create({
   goalCardTitle: { fontSize: 15, fontWeight: '700', lineHeight: 20 },
   goalCardLifeArea: { fontSize: 11, fontWeight: '500', marginTop: 1 },
   goalCardPct: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  goalCardDivider: { height: 1, marginHorizontal: 0 },
+  goalCardDivider: { height: 1 },
 
-  // Deadline tag
+  // Deadline
   deadlineTag: {
     borderRadius: 6, borderWidth: 1,
     paddingHorizontal: 6, paddingVertical: 2,
@@ -545,26 +525,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   habitName: { flex: 1, fontSize: 13, fontWeight: '600' },
-  habitChips: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  habitRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   noGoalText: { fontSize: 11, fontStyle: 'italic' },
   noHabitsText: { fontSize: 12, padding: 12, textAlign: 'center' },
 
-  // Goal chip (current period)
-  goalChipWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  goalChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    borderRadius: 8, borderWidth: 1,
-    paddingHorizontal: 6, paddingVertical: 3,
+  // Period chip group (This Week + Last Week side by side)
+  periodChipGroup: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
   },
-  goalChipLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  goalChipCount: { fontSize: 11, fontWeight: '700' },
-
-  // Last period badge
-  lastBadge: {
-    borderRadius: 6, borderWidth: 1,
-    paddingHorizontal: 4, paddingVertical: 2,
+  periodChipBlock: { alignItems: 'center', gap: 2 },
+  periodChipPeriodLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  periodChip: {
+    borderRadius: 7, borderWidth: 1,
+    paddingHorizontal: 7, paddingVertical: 3,
   },
-  lastBadgeText: { fontSize: 10, fontWeight: '700' },
+  periodChipValue: { fontSize: 11, fontWeight: '700' },
+  periodChipDivider: { width: 1, height: 28, borderRadius: 1 },
+  periodChipNoGoal: { fontSize: 11 },
 
   // Empty state
   emptyState: {
