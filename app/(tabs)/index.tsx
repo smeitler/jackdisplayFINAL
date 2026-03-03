@@ -10,9 +10,6 @@ import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
 
-// Period toggle options — what the goal section header shows
-type PeriodView = 'week' | 'month';
-
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
 function getGreeting(): string {
@@ -37,7 +34,7 @@ function getDaysLeftInMonth(): number {
   return lastDay - now.getDate(); // 0 means today is the last day
 }
 
-function daysLeftLabel(daysLeft: number, period: PeriodView): string {
+function daysLeftLabel(daysLeft: number, period: 'week' | 'month'): string {
   if (daysLeft === 0) return period === 'week' ? 'Last day of week!' : 'Last day of month!';
   if (daysLeft === 1) return '1 day left';
   return `${daysLeft} days left`;
@@ -57,7 +54,7 @@ function PeriodGoalChip({
   currentGoal: number;
   lastDone: number;
   lastGoal: number;
-  period: PeriodView;
+  period: 'week' | 'month';
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
 }) {
   const hitCurrent = currentDone >= currentGoal;
@@ -126,12 +123,10 @@ function PeriodGoalChip({
 
 function HabitGoalRow({
   habit,
-  period,
   colors,
   onPress,
 }: {
   habit: Habit;
-  period: PeriodView;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
   onPress: () => void;
 }) {
@@ -140,15 +135,17 @@ function HabitGoalRow({
     getHabitLastWeekDone, getHabitLastMonthDone,
   } = useApp();
 
-  const hasWeeklyGoal = (habit.weeklyGoal ?? 0) > 0 && (!habit.frequencyType || habit.frequencyType === 'weekly');
-  const hasMonthlyGoal = (habit.monthlyGoal ?? 0) > 0 && habit.frequencyType === 'monthly';
+  // Each habit self-determines its period from its frequencyType
+  const isMonthly = habit.frequencyType === 'monthly';
+  const period: 'week' | 'month' = isMonthly ? 'month' : 'week';
 
-  // Show chip only for the active period view
-  const showChip = period === 'week' ? hasWeeklyGoal : hasMonthlyGoal;
+  const hasWeeklyGoal = (habit.weeklyGoal ?? 0) > 0 && !isMonthly;
+  const hasMonthlyGoal = (habit.monthlyGoal ?? 0) > 0 && isMonthly;
+  const showChip = isMonthly ? hasMonthlyGoal : hasWeeklyGoal;
 
-  const currentDone = period === 'week' ? getHabitWeeklyDone(habit.id) : getHabitMonthlyDone(habit.id);
-  const lastDone = period === 'week' ? getHabitLastWeekDone(habit.id) : getHabitLastMonthDone(habit.id);
-  const goal = period === 'week' ? (habit.weeklyGoal ?? 0) : (habit.monthlyGoal ?? 0);
+  const currentDone = isMonthly ? getHabitMonthlyDone(habit.id) : getHabitWeeklyDone(habit.id);
+  const lastDone = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
+  const goal = isMonthly ? (habit.monthlyGoal ?? 0) : (habit.weeklyGoal ?? 0);
 
   return (
     <TouchableOpacity
@@ -174,7 +171,7 @@ function HabitGoalRow({
           />
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
-            {period === 'week' ? 'No weekly goal' : 'No monthly goal'}
+            {isMonthly ? 'No monthly goal' : 'No weekly goal'}
           </Text>
         )}
         <IconSymbol name="chevron.right" size={13} color={colors.muted} />
@@ -189,7 +186,6 @@ function GoalCard({
   cat,
   habits,
   rate,
-  period,
   colors,
   onPressGoal,
   onPressHabit,
@@ -197,7 +193,6 @@ function GoalCard({
   cat: import('@/lib/storage').CategoryDef;
   habits: Habit[];
   rate: number;
-  period: PeriodView;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
   onPressGoal: () => void;
   onPressHabit: (habitId: string) => void;
@@ -267,7 +262,6 @@ function GoalCard({
           <HabitGoalRow
             key={h.id}
             habit={h}
-            period={period}
             colors={colors}
             onPress={() => onPressHabit(h.id)}
           />
@@ -287,8 +281,6 @@ export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
-  const [period, setPeriod] = useState<PeriodView>('week');
-
   const yesterday = yesterdayString();
 
   function handleCheckIn(date?: string) {
@@ -302,8 +294,8 @@ export default function HomeScreen() {
     return `${hour}:${m.toString().padStart(2, '0')} ${ph}`;
   }
 
-  // For the goal card score, use 7 days for week view, 30 days for month view
-  const rateRange = period === 'week' ? 7 : 30;
+  // Use 7-day rolling window for goal card score
+  const rateRange = 7;
 
   return (
     <ScreenContainer>
@@ -361,44 +353,9 @@ export default function HomeScreen() {
             <IconSymbol name="chevron.right" size={14} color={colors.muted} />
           </Pressable>
 
-          {/* ── Period toggle + section title ── */}
+          {/* ── Section title ── */}
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
-            {/* Week / Month toggle */}
-            <View style={[styles.periodToggle, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <TouchableOpacity
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setPeriod('week');
-                }}
-                style={[
-                  styles.periodToggleBtn,
-                  period === 'week' && { backgroundColor: colors.primary },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.periodToggleBtnText,
-                  { color: period === 'week' ? '#fff' : colors.muted },
-                ]}>Weekly</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setPeriod('month');
-                }}
-                style={[
-                  styles.periodToggleBtn,
-                  period === 'month' && { backgroundColor: colors.primary },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.periodToggleBtnText,
-                  { color: period === 'month' ? '#fff' : colors.muted },
-                ]}>Monthly</Text>
-              </TouchableOpacity>
-            </View>
           </View>
 
           {/* ── Legend ── */}
@@ -436,7 +393,6 @@ export default function HomeScreen() {
                     cat={cat}
                     habits={catHabits}
                     rate={getCategoryRate(cat.id, rateRange)}
-                    period={period}
                     colors={colors}
                     onPressGoal={() => {
                       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
