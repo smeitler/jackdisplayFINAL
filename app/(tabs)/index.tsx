@@ -1,14 +1,13 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform, useWindowDimensions } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity } from "react-native";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
-import Svg, { Circle, Rect } from "react-native-svg";
 import { CategoryIcon } from "@/components/category-icon";
 
 const RANGES = [1, 7, 14, 30, 60, 90] as const;
@@ -23,32 +22,148 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-/** Card with a rounded-rect SVG border that fills clockwise based on pct */
-function GoalCard({
-  rate, categoryId, label, lifeArea, deadline, breakdown, onPress, colors,
+// ── Goal Progress Chip ────────────────────────────────────────────────────────
+
+function GoalChip({
+  label,
+  done,
+  goal,
+  lastDone,
+  lastGoal,
+  colors,
 }: {
-  rate: number;
-  categoryId: string;
-  label: string;
-  lifeArea?: string;
-  deadline?: string;
-  breakdown: { green: number; yellow: number; red: number; none: number };
-  onPress: () => void;
+  label: string; // "W" or "M"
+  done: number;
+  goal: number;
+  lastDone: number;
+  lastGoal: number;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
 }) {
-  const { width } = useWindowDimensions();
-  // 2 per row: 20px padding each side, 12px gap
-  const cardW = Math.floor((width - 40 - 12) / 2);
-  const cardH = cardW + 20; // slightly taller than wide
+  const hitCurrent = done >= goal;
+  const hitLast = lastDone >= lastGoal;
 
+  // Current period status color
+  const pct = goal > 0 ? done / goal : 0;
+  const chipColor = hitCurrent
+    ? '#22C55E'
+    : pct >= 0.6
+    ? '#F59E0B'
+    : '#EF4444';
+
+  return (
+    <View style={styles.goalChipWrap}>
+      {/* Current period chip */}
+      <View style={[
+        styles.goalChip,
+        { backgroundColor: chipColor + '18', borderColor: chipColor + '55' },
+      ]}>
+        <Text style={[styles.goalChipLabel, { color: chipColor }]}>{label}</Text>
+        <Text style={[styles.goalChipCount, { color: chipColor }]}>
+          {hitCurrent ? '✓' : `${done}/${goal}`}
+        </Text>
+      </View>
+      {/* Last period badge — only shown if goal was set */}
+      {lastGoal > 0 && (
+        <View style={[
+          styles.lastBadge,
+          hitLast
+            ? { backgroundColor: '#FFD700' + '22', borderColor: '#FFD700' + '66' }
+            : { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}>
+          <Text style={[styles.lastBadgeText, { color: hitLast ? '#FFD700' : colors.muted }]}>
+            {hitLast ? '👑' : `${lastDone}/${lastGoal}`}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Habit Row ─────────────────────────────────────────────────────────────────
+
+function HabitGoalRow({
+  habit,
+  colors,
+  onPress,
+}: {
+  habit: Habit;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+  onPress: () => void;
+}) {
+  const {
+    getHabitWeeklyDone, getHabitMonthlyDone,
+    getHabitLastWeekDone, getHabitLastMonthDone,
+  } = useApp();
+
+  const hasWeekly = (habit.weeklyGoal ?? 0) > 0 && (!habit.frequencyType || habit.frequencyType === 'weekly');
+  const hasMonthly = (habit.monthlyGoal ?? 0) > 0 && habit.frequencyType === 'monthly';
+  const hasAnyGoal = hasWeekly || hasMonthly;
+
+  const weeklyDone = hasWeekly ? getHabitWeeklyDone(habit.id) : 0;
+  const monthlyDone = hasMonthly ? getHabitMonthlyDone(habit.id) : 0;
+  const lastWeekDone = hasWeekly ? getHabitLastWeekDone(habit.id) : 0;
+  const lastMonthDone = hasMonthly ? getHabitLastMonthDone(habit.id) : 0;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.habitRow, { borderTopColor: colors.border }]}
+      activeOpacity={0.7}
+    >
+      {/* Habit name */}
+      <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>
+        {habit.name}
+      </Text>
+
+      {/* Goal chips — right side */}
+      <View style={styles.habitChips}>
+        {hasWeekly && (
+          <GoalChip
+            label="W"
+            done={weeklyDone}
+            goal={habit.weeklyGoal!}
+            lastDone={lastWeekDone}
+            lastGoal={habit.weeklyGoal!}
+            colors={colors}
+          />
+        )}
+        {hasMonthly && (
+          <GoalChip
+            label="M"
+            done={monthlyDone}
+            goal={habit.monthlyGoal!}
+            lastDone={lastMonthDone}
+            lastGoal={habit.monthlyGoal!}
+            colors={colors}
+          />
+        )}
+        {!hasAnyGoal && (
+          <Text style={[styles.noGoalText, { color: colors.muted }]}>No goal</Text>
+        )}
+        <IconSymbol name="chevron.right" size={13} color={colors.muted} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── Goal Card (full-width) ────────────────────────────────────────────────────
+
+function GoalCard({
+  cat,
+  habits,
+  rate,
+  colors,
+  onPressGoal,
+  onPressHabit,
+}: {
+  cat: import('@/lib/storage').CategoryDef;
+  habits: Habit[];
+  rate: number;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+  onPressGoal: () => void;
+  onPressHabit: (habitId: string) => void;
+}) {
   const pct = Math.min(Math.max(rate, 0), 1);
-  const strokeW = 1.5;
-  const r = 16; // border-radius of card
-  // Perimeter of rounded rect
-  const perimeter = 2 * (cardW - 2 * r) + 2 * (cardH - 2 * r) + 2 * Math.PI * r;
-  const dashOffset = perimeter * (1 - pct);
-
-  // Colors
   const isOnTrack = pct >= 0.8;
   const isOkay = pct >= 0.5 && pct < 0.8;
   const isBehind = pct > 0 && pct < 0.5;
@@ -56,105 +171,49 @@ function GoalCard({
 
   const accentColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.border;
   const cardBg = isOnTrack ? '#0a1f10' : isOkay ? '#1f1500' : isBehind ? '#1f0808' : colors.surface;
-  const badgeLabel = isOnTrack ? '✓ On Track' : isOkay ? '~ Doing Okay' : isBehind ? '✗ Behind' : null;
   const pctColor = isOnTrack ? '#4ade80' : isOkay ? '#fbbf24' : isBehind ? '#f87171' : colors.muted;
-  const labelColor = isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground;
+
+  const lifeAreaDef = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
 
   // Deadline
   let deadlineLabel = '';
   let deadlineColor = colors.muted;
-  if (deadline) {
-    const dl = new Date(deadline + 'T12:00:00');
+  if (cat.deadline) {
+    const dl = new Date(cat.deadline + 'T12:00:00');
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const days = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
     deadlineLabel = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d left`;
     deadlineColor = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : '#6b7280';
   }
 
-  // Progress bar totals
-  const total = breakdown.green + breakdown.yellow + breakdown.red + breakdown.none;
-  const greenW = total > 0 ? (breakdown.green / total) : 0;
-  const yellowW = total > 0 ? (breakdown.yellow / total) : 0;
-  const redW = total > 0 ? (breakdown.red / total) : 0;
-
-  const lifeAreaDef = lifeArea ? LIFE_AREA_MAP[lifeArea] : null;
-
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.cardOuter, { width: cardW, height: cardH, opacity: pressed ? 0.82 : 1 }]}
-    >
-      {/* SVG arc border — drawn on top of card */}
-      <Svg
-        width={cardW}
-        height={cardH}
-        style={StyleSheet.absoluteFillObject}
-        pointerEvents="none"
+    <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: accentColor + '40' }]}>
+      {/* Goal header — tappable */}
+      <TouchableOpacity
+        onPress={onPressGoal}
+        style={styles.goalCardHeader}
+        activeOpacity={0.8}
       >
-        {/* Track (full border, dim) */}
-        <Rect
-          x={strokeW / 2}
-          y={strokeW / 2}
-          width={cardW - strokeW}
-          height={cardH - strokeW}
-          rx={r}
-          ry={r}
-          fill={cardBg}
-          stroke={accentColor + '30'}
-          strokeWidth={strokeW}
-        />
-        {/* Progress arc */}
-        {hasData && (
-          <Rect
-            x={strokeW / 2}
-            y={strokeW / 2}
-            width={cardW - strokeW}
-            height={cardH - strokeW}
-            rx={r}
-            ry={r}
-            fill="none"
-            stroke={accentColor}
-            strokeWidth={strokeW}
-            strokeDasharray={`${perimeter} ${perimeter}`}
-            strokeDashoffset={dashOffset}
-            strokeLinecap="round"
-          />
-        )}
-      </Svg>
-
-      {/* Card content */}
-      <View style={[styles.cardContent, { padding: 12, alignItems: 'center' }]}>
-        {/* Status badge */}
-        {badgeLabel && (
-          <View style={[styles.badge, { borderColor: accentColor, backgroundColor: accentColor + '18' }]}>
-            <Text style={[styles.badgeText, { color: accentColor }]}>{badgeLabel}</Text>
-          </View>
-        )}
-
-        {/* Category icon — clean vector instead of emoji */}
         <CategoryIcon
-          categoryId={categoryId}
-          lifeArea={lifeArea}
-          size={28}
+          categoryId={cat.id}
+          lifeArea={cat.lifeArea}
+          size={20}
           color={accentColor}
           bgColor={accentColor + '22'}
-          bgSize={52}
-          borderRadius={14}
+          bgSize={38}
+          borderRadius={10}
         />
-
-        {/* Goal name */}
-        <Text style={[styles.cardLabel, { color: labelColor, textAlign: 'center' }]} numberOfLines={2}>{label}</Text>
-
-        {/* Life area tag */}
-        {lifeAreaDef && (
-          <Text style={[styles.cardLifeArea, { color: accentColor + 'cc', textAlign: 'center' }]}>
-            {lifeAreaDef.label}
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.goalCardTitle, { color: isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground }]} numberOfLines={1}>
+            {cat.label}
           </Text>
-        )}
-
-        {/* Percentage + deadline */}
-        <View style={[styles.cardScoreRow, { justifyContent: 'center' }]}>
-          <Text style={[styles.cardPct, { color: pctColor }]}>
+          {lifeAreaDef && (
+            <Text style={[styles.goalCardLifeArea, { color: accentColor + 'bb' }]}>{lifeAreaDef.label}</Text>
+          )}
+        </View>
+        {/* Score + deadline */}
+        <View style={{ alignItems: 'flex-end', gap: 3 }}>
+          <Text style={[styles.goalCardPct, { color: pctColor }]}>
             {hasData ? `${Math.round(pct * 100)}%` : '—'}
           </Text>
           {deadlineLabel ? (
@@ -163,25 +222,36 @@ function GoalCard({
             </View>
           ) : null}
         </View>
+        <IconSymbol name="chevron.right" size={14} color={accentColor + '88'} />
+      </TouchableOpacity>
 
-        {/* Progress bar */}
-        {total > 0 && (
-          <View style={[styles.barsWrap, { width: '100%' }]}>
-            <View style={styles.bar}>
-              <View style={[styles.barSeg, { flex: greenW, backgroundColor: '#22C55E' }]} />
-              <View style={[styles.barSeg, { flex: yellowW, backgroundColor: '#F59E0B' }]} />
-              <View style={[styles.barSeg, { flex: redW, backgroundColor: '#EF4444' }]} />
-              <View style={[styles.barSeg, { flex: Math.max(1 - greenW - yellowW - redW, 0), backgroundColor: '#1e2a3a' }]} />
-            </View>
-          </View>
-        )}
-      </View>
-    </Pressable>
+      {/* Divider */}
+      <View style={[styles.goalCardDivider, { backgroundColor: accentColor + '25' }]} />
+
+      {/* Habit rows */}
+      {habits.length === 0 ? (
+        <Text style={[styles.noHabitsText, { color: colors.muted }]}>No habits yet</Text>
+      ) : (
+        habits.map((h) => (
+          <HabitGoalRow
+            key={h.id}
+            habit={h}
+            colors={colors}
+            onPress={() => onPressHabit(h.id)}
+          />
+        ))
+      )}
+    </View>
   );
 }
 
+// ── Home Screen ───────────────────────────────────────────────────────────────
+
 export default function HomeScreen() {
-  const { alarm, isPendingCheckIn, getCategoryRate, getCategoryBreakdown, streak, isLoaded, categories } = useApp();
+  const {
+    alarm, isPendingCheckIn, getCategoryRate, streak,
+    isLoaded, categories, activeHabits,
+  } = useApp();
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
@@ -305,29 +375,53 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── 2-column goal cards ── */}
+          {/* ── Goal legend ── */}
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#22C55E' }]} />
+              <Text style={[styles.legendText, { color: colors.muted }]}>On Track</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+              <Text style={[styles.legendText, { color: colors.muted }]}>Okay</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+              <Text style={[styles.legendText, { color: colors.muted }]}>Behind</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <Text style={[styles.legendText, { color: '#FFD700' }]}>👑</Text>
+              <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
+            </View>
+          </View>
+
+          {/* ── Goal cards (full-width, habits inside) ── */}
           {categories.length === 0 ? (
             <View style={[styles.emptyState, { borderColor: colors.border }]}>
               <Text style={[styles.emptyText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
             </View>
           ) : (
-            <View style={styles.cardGrid}>
-              {categories.map((cat) => (
-                <GoalCard
-                  key={cat.id}
-                  rate={getCategoryRate(cat.id, range)}
-                  categoryId={cat.id}
-                  label={cat.label}
-                  lifeArea={cat.lifeArea}
-                  deadline={cat.deadline}
-                  breakdown={getCategoryBreakdown(cat.id, range)}
-                  colors={colors}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push((`/category-detail?categoryId=${cat.id}`) as never);
-                  }}
-                />
-              ))}
+            <View style={styles.goalList}>
+              {categories.map((cat) => {
+                const catHabits = activeHabits.filter((h) => h.category === cat.id);
+                return (
+                  <GoalCard
+                    key={cat.id}
+                    cat={cat}
+                    habits={catHabits}
+                    rate={getCategoryRate(cat.id, range)}
+                    colors={colors}
+                    onPressGoal={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push((`/category-detail?categoryId=${cat.id}`) as never);
+                    }}
+                    onPressHabit={(habitId) => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push((`/habit-detail?habitId=${habitId}`) as never);
+                    }}
+                  />
+                );
+              })}
             </View>
           )}
 
@@ -389,7 +483,7 @@ const styles = StyleSheet.create({
   // Section header
   sectionRow: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 14,
+    justifyContent: 'space-between', marginBottom: 10,
   },
   sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
   rangeChip: {
@@ -410,56 +504,67 @@ const styles = StyleSheet.create({
   },
   rangeDropdownText: { fontSize: 14 },
 
-  // Card grid
-  cardGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 12, marginBottom: 24,
-    justifyContent: 'space-between',
+  // Legend
+  legendRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginBottom: 14, flexWrap: 'wrap',
   },
-  cardOuter: {
-    borderRadius: 16,
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 11, fontWeight: '500' },
+
+  // Goal list
+  goalList: { gap: 12, marginBottom: 24 },
+
+  // Goal card (full-width)
+  goalCard: {
+    borderRadius: 16, borderWidth: 1,
     overflow: 'hidden',
   },
-  cardContent: {
-    flex: 1, gap: 6,
+  goalCardHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
   },
-
-  // Badge
-  badge: {
-    alignSelf: 'flex-start',
-    borderRadius: 20, borderWidth: 1.5,
-    paddingHorizontal: 10, paddingVertical: 4,
-    marginBottom: 2,
-  },
-  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-
-  // Emoji icon box
-  emojiBox: {
-    width: 44, height: 44, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  emojiText: { fontSize: 22 },
-
-  // Card text
-  cardLabel: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
-  cardLifeArea: { fontSize: 11, fontWeight: '500', marginTop: -2 },
-  cardScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  cardPct: { fontSize: 26, fontWeight: '900', letterSpacing: -1 },
+  goalCardTitle: { fontSize: 15, fontWeight: '700', lineHeight: 20 },
+  goalCardLifeArea: { fontSize: 11, fontWeight: '500', marginTop: 1 },
+  goalCardPct: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+  goalCardDivider: { height: 1, marginHorizontal: 0 },
 
   // Deadline tag
   deadlineTag: {
     borderRadius: 6, borderWidth: 1,
-    paddingHorizontal: 7, paddingVertical: 2,
+    paddingHorizontal: 6, paddingVertical: 2,
   },
-  deadlineText: { fontSize: 11, fontWeight: '700' },
+  deadlineText: { fontSize: 10, fontWeight: '700' },
 
-  // Progress bars
-  barsWrap: { gap: 4, marginTop: 2 },
-  bar: {
-    height: 5, borderRadius: 3, overflow: 'hidden',
-    flexDirection: 'row', backgroundColor: '#1e2a3a',
+  // Habit row
+  habitRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
   },
-  barSeg: { height: 5 },
+  habitName: { flex: 1, fontSize: 13, fontWeight: '600' },
+  habitChips: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  noGoalText: { fontSize: 11, fontStyle: 'italic' },
+  noHabitsText: { fontSize: 12, padding: 12, textAlign: 'center' },
+
+  // Goal chip (current period)
+  goalChipWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  goalChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: 6, paddingVertical: 3,
+  },
+  goalChipLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  goalChipCount: { fontSize: 11, fontWeight: '700' },
+
+  // Last period badge
+  lastBadge: {
+    borderRadius: 6, borderWidth: 1,
+    paddingHorizontal: 4, paddingVertical: 2,
+  },
+  lastBadgeText: { fontSize: 10, fontWeight: '700' },
 
   // Empty state
   emptyState: {
