@@ -22,6 +22,27 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
+// ── Helpers: days remaining in current week / month ─────────────────────────
+
+function getDaysLeftInWeek(): number {
+  const now = new Date();
+  // Week ends Sunday (day 0). Days left = days until end of Sunday
+  const day = now.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  return day === 0 ? 0 : 7 - day; // 0 means today is the last day
+}
+
+function getDaysLeftInMonth(): number {
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return lastDay - now.getDate(); // 0 means today is the last day
+}
+
+function daysLeftLabel(daysLeft: number, period: PeriodView): string {
+  if (daysLeft === 0) return period === 'week' ? 'Last day of week!' : 'Last day of month!';
+  if (daysLeft === 1) return '1 day left';
+  return `${daysLeft} days left`;
+}
+
 // ── Period Chip (This Week / Last Week / This Month / Last Month) ─────────────
 
 function PeriodGoalChip({
@@ -48,6 +69,17 @@ function PeriodGoalChip({
   const thisLabel = period === 'week' ? 'This Week' : 'This Month';
   const lastLabel = period === 'week' ? 'Last Week' : 'Last Month';
 
+  const daysLeft = period === 'week' ? getDaysLeftInWeek() : getDaysLeftInMonth();
+  const needMore = currentGoal - currentDone; // how many more days needed
+  const canStillHit = !hitCurrent && needMore > 0 && needMore <= daysLeft + 1;
+  const motivationLabel = hitCurrent
+    ? null
+    : canStillHit
+    ? daysLeftLabel(daysLeft, period)
+    : daysLeft === 0
+    ? (period === 'week' ? 'Last day of week!' : 'Last day of month!')
+    : null;
+
   return (
     <View style={styles.periodChipGroup}>
       {/* This period */}
@@ -58,6 +90,11 @@ function PeriodGoalChip({
             {hitCurrent ? `✓ ${currentDone}/${currentGoal}` : `${currentDone}/${currentGoal}`}
           </Text>
         </View>
+        {motivationLabel && (
+          <Text style={[styles.periodChipMotivation, { color: canStillHit ? '#F59E0B' : colors.muted }]}>
+            {motivationLabel}
+          </Text>
+        )}
       </View>
 
       {/* Divider */}
@@ -540,6 +577,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7, paddingVertical: 3,
   },
   periodChipValue: { fontSize: 11, fontWeight: '700' },
+  periodChipMotivation: { fontSize: 9, fontWeight: '600', textAlign: 'center', marginTop: 1 },
   periodChipDivider: { width: 1, height: 28, borderRadius: 1 },
   periodChipNoGoal: { fontSize: 11 },
 

@@ -366,3 +366,4 @@
 - [x] Home screen: verify W/M goal calculations are correct and label chips as "This Week/Last Week" and "This Month/Last Month"
 - [x] Home screen: replace range dropdown with period-comparison toggle that fits the new goal card format
 - [x] Check-in screen: 15s countdown bar that re-fires alarm on timeout, resets on any touch/scroll, only dismisses on full completion
+- [x] Home screen: show days remaining in current week/month on habit goal chips to motivate users
