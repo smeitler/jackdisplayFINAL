@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { startOAuthLogin } from "@/constants/oauth";
+import { startOAuthLogin, getApiBaseUrl } from "@/constants/oauth";
 import { useAuth } from "@/hooks/use-auth";
 import { useApp } from "@/lib/app-context";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
+import * as Auth from "@/lib/_core/auth";
+import * as AppleAuthentication from "expo-apple-authentication";
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -41,6 +44,49 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleAppleSignIn() {
+    if (Platform.OS !== "ios") return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSigningIn(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      // Exchange Apple identity token for a session token via our server
+      const apiBase = getApiBaseUrl();
+      const resp = await fetch(`${apiBase}/api/auth/apple`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identityToken: credential.identityToken,
+          user: credential.user,
+          fullName: credential.fullName,
+          email: credential.email,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(err || "Apple sign-in failed");
+      }
+      const data = await resp.json();
+      if (data.app_session_id) {
+        await Auth.setSessionToken(data.app_session_id);
+        if (data.user) await Auth.setUserInfo(data.user);
+        router.replace("/(tabs)");
+      } else {
+        throw new Error("No session token returned");
+      }
+    } catch (err: any) {
+      if (err?.code !== "ERR_REQUEST_CANCELED") {
+        console.error("[Login] Apple sign-in failed:", err);
+      }
+      setSigningIn(false);
+    }
+  }
+
   async function handleTryDemo() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setStartingDemo(true);
@@ -69,7 +115,7 @@ export default function LoginScreen() {
         {/* Logo / Hero */}
         <View style={styles.hero}>
           <View style={[styles.logoWrap, { backgroundColor: colors.primary + "22" }]}>
-            <Text style={styles.logoEmoji}>📈</Text>
+            <IconSymbol name="chart.bar.fill" size={44} color={colors.primary} />
           </View>
           <Text style={[styles.appName, { color: colors.foreground }]}>Jack</Text>
           <Text style={[styles.tagline, { color: colors.muted }]}>
@@ -121,6 +167,17 @@ export default function LoginScreen() {
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
           </View>
 
+          {/* Apple Sign In — iOS only, required by App Store guidelines */}
+          {Platform.OS === "ios" && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={16}
+              style={styles.appleBtn}
+              onPress={handleAppleSignIn}
+            />
+          )}
+
           {/* Secondary: Try Demo */}
           <Pressable
             onPress={handleTryDemo}
@@ -143,6 +200,23 @@ export default function LoginScreen() {
           <Text style={[styles.disclaimer, { color: colors.muted }]}>
             Your data is securely tied to your account and syncs across devices.
           </Text>
+
+          {/* Privacy Policy & Terms — must be visible before sign-in per Apple guidelines */}
+          <View style={styles.legalRow}>
+            <Pressable
+              onPress={() => WebBrowser.openBrowserAsync('https://jackalarm.com/privacy')}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={[styles.legalLink, { color: colors.muted }]}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={[styles.legalSep, { color: colors.muted }]}>·</Text>
+            <Pressable
+              onPress={() => WebBrowser.openBrowserAsync('https://jackalarm.com/terms')}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={[styles.legalLink, { color: colors.muted }]}>Terms of Service</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </ScreenContainer>
@@ -154,7 +228,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 28, paddingTop: 40, paddingBottom: 32, justifyContent: "space-between" },
   hero: { alignItems: "center", gap: 12, marginTop: 20 },
   logoWrap: { width: 96, height: 96, borderRadius: 28, alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  logoEmoji: { fontSize: 52 },
   appName: { fontSize: 36, fontWeight: "800", letterSpacing: -1 },
   tagline: { fontSize: 16, textAlign: "center", lineHeight: 22, maxWidth: 260 },
   features: { gap: 14 },
@@ -176,4 +249,8 @@ const styles = StyleSheet.create({
   },
   demoBtnText: { fontSize: 16, fontWeight: "600" },
   disclaimer: { fontSize: 12, textAlign: "center", lineHeight: 18 },
+  appleBtn: { height: 54, width: '100%' },
+  legalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
+  legalLink: { fontSize: 12, textDecorationLine: 'underline' },
+  legalSep: { fontSize: 12 },
 });

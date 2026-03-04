@@ -316,7 +316,7 @@ export default function CheckInScreen() {
         await createPost.mutateAsync({
           teamId: team.id,
           type: 'checkin',
-          content: score >= 70 ? 'Crushed it today! 🔥' : score >= 40 ? 'Solid effort today 💪' : 'Showing up every day 🙏',
+          content: score >= 70 ? 'Crushed it today!' : score >= 40 ? 'Solid effort today' : 'Showing up every day',
           checkinScore: score,
           checkinDate: currentDate,
         });
@@ -359,7 +359,7 @@ export default function CheckInScreen() {
                   style={({ pressed }) => [styles.afterAlarmStopBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
                   onPress={stopAfterAlarm}
                 >
-                  <Text style={[styles.afterAlarmStopText, { color: colors.muted }]}>⏹ Stop</Text>
+                  <Text style={[styles.afterAlarmStopText, { color: colors.muted }]}>Stop</Text>
                 </Pressable>
               )}
             </View>
@@ -381,7 +381,7 @@ export default function CheckInScreen() {
                   onPress={handleShareToTeams}
                   disabled={createPost.isPending}
                 >
-                  <Text style={styles.shareTeamBtnText}>{createPost.isPending ? 'Sharing...' : '🔥 Share'}</Text>
+                  <Text style={styles.shareTeamBtnText}>{createPost.isPending ? 'Sharing...' : 'Share'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -392,7 +392,7 @@ export default function CheckInScreen() {
               style={({ pressed }) => [styles.successDoneBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
               onPress={() => { stopAfterAlarm(); router.back(); }}
             >
-              <Text style={styles.successDoneBtnText}>{shared ? '✅ Shared!' : 'Done'}</Text>
+              <Text style={styles.successDoneBtnText}>{shared ? 'Shared!' : 'Done'}</Text>
             </Pressable>
           )}
         </View>

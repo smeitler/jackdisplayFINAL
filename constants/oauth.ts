@@ -120,7 +120,6 @@ export async function startOAuthLogin(): Promise<string | null> {
       dismissButtonStyle: "cancel",
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     });
-    console.log("[OAuth] WebBrowser result:", result);
     // If the user completed auth, the deep link callback in app/oauth/callback.tsx
     // will fire and handle the token exchange automatically.
     if (result.type === "success" && result.url) {

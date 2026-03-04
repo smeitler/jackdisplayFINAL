@@ -109,7 +109,7 @@ function PeriodGoalChip({
               : { backgroundColor: colors.surface, borderColor: colors.border },
           ]}>
             <Text style={[styles.periodChipValue, { color: hitLast ? '#FFD700' : colors.muted }]}>
-              {hitLast ? `👑 ${lastDone}/${lastGoal}` : `${lastDone}/${lastGoal}`}
+              {`${lastDone}/${lastGoal}`}
             </Text>
           </View>
         ) : (
@@ -122,20 +122,21 @@ function PeriodGoalChip({
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
+// Fixed container height = label height (12) + gap (3) + ring size (46)
+const RING_SIZE = 46;
+const RING_LABEL_HEIGHT = 12;
+const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
+
 function CircleRing({
   done,
   goal,
-  size = 44,
-  label,
+  size = RING_SIZE,
   periodLabel,
-  isLast = false,
 }: {
   done: number;
   goal: number;
   size?: number;
-  label?: string;
   periodLabel?: string;
-  isLast?: boolean;
 }) {
   const pct = goal > 0 ? Math.min(done / goal, 1) : 0;
   const hit = goal > 0 && done >= goal;
@@ -152,18 +153,21 @@ function CircleRing({
 
   // Fraction text: always show plain fraction (e.g. 5/6)
   const fractionText = goal > 0 ? `${done}/${goal}` : '\u2014';
-  const fractionFontSize = goal > 0 && !isLast ? (size <= 36 ? 8 : 10) : (size <= 36 ? 9 : 11);
+  const fractionFontSize = 10;
 
   return (
-    <View style={{ alignItems: 'center', gap: 3 }}>
-      {/* Period label above ring */}
-      {periodLabel ? (
-        <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
-          {periodLabel}
-        </Text>
-      ) : null}
-      {/* Ring + fraction */}
-      <View style={{ position: 'relative', width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+    // Fixed height container so both rings in a pair always align regardless of label text
+    <View style={{ alignItems: 'center', height: RING_CONTAINER_HEIGHT, justifyContent: 'flex-end' }}>
+      {/* Period label above ring — always reserve space even if empty */}
+      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', marginBottom: 3 }}>
+        {periodLabel ? (
+          <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            {periodLabel}
+          </Text>
+        ) : null}
+      </View>
+      {/* Ring + fraction — fixed size */}
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
           <Circle cx={cx} cy={cy} r={r} stroke="#334155" strokeWidth={strokeWidth} fill="none" />
           {pct > 0 && (
@@ -235,9 +239,7 @@ function HabitGoalRow({
             <CircleRing
               done={currentDone}
               goal={goal}
-              size={46}
               periodLabel={thisLabel}
-              isLast={false}
             />
             {/* Divider */}
             <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
@@ -245,9 +247,7 @@ function HabitGoalRow({
             <CircleRing
               done={lastDone}
               goal={goal}
-              size={40}
               periodLabel={lastLabel}
-              isLast={true}
             />
           </View>
         ) : (
@@ -393,7 +393,7 @@ export default function HomeScreen() {
             </View>
             {streak > 0 && (
               <View style={styles.streakPill}>
-                <Text style={styles.streakFire}>🔥</Text>
+                <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
                 <Text style={styles.streakNum}>{streak}</Text>
               </View>
             )}
@@ -410,7 +410,7 @@ export default function HomeScreen() {
             >
               <View style={styles.checkInLeft}>
                 <Text style={styles.checkInTitle}>Yesterday's Review</Text>
-                <Text style={styles.checkInSub}>{formatDisplayDate(yesterday)} · Tap to rate 🔴🟡🟢</Text>
+                <Text style={styles.checkInSub}>{formatDisplayDate(yesterday)} · Tap to rate habits</Text>
               </View>
               <IconSymbol name="chevron.right" size={18} color="rgba(255,255,255,0.8)" />
             </Pressable>
@@ -454,7 +454,7 @@ export default function HomeScreen() {
               <Text style={[styles.legendText, { color: colors.muted }]}>Behind</Text>
             </View>
             <View style={styles.legendItem}>
-              <Text style={{ fontSize: 11 }}>👑</Text>
+              <IconSymbol name="crown.fill" size={11} color="#FFD700" />
               <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
             </View>
           </View>
@@ -521,7 +521,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B3520', borderRadius: 20,
     paddingHorizontal: 12, paddingVertical: 7, marginTop: 2,
   },
-  streakFire: { fontSize: 16 },
   streakNum: { fontSize: 17, fontWeight: '800', color: '#FF6B35' },
 
   // Check-in banner

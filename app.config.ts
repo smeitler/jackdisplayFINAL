@@ -37,6 +37,7 @@ const config: ExpoConfig = {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
     buildNumber: "1",
+    usesAppleSignIn: true,
     associatedDomains: [
       "applinks:jackalarm.com",
       "webcredentials:jackalarm.com",
@@ -79,6 +80,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-apple-authentication",
     [
       "expo-media-library",
       {

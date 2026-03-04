@@ -338,17 +338,17 @@ export default function HabitDetailScreen() {
         {/* ── Stat tiles ── */}
         <View style={styles.statRow}>
           <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={styles.statIcon}>🔥</Text>
+            <IconSymbol name="flame.fill" size={22} color="#FF6B35" />
             <Text style={[styles.statValue, { color: colors.foreground }]}>{currentStreak}</Text>
             <Text style={[styles.statLabel, { color: colors.muted }]}>Streak</Text>
           </View>
           <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.statIcon, { color: '#22C55E' }]}>🏆</Text>
+            <IconSymbol name="trophy.fill" size={22} color="#22C55E" />
             <Text style={[styles.statValue, { color: '#22C55E' }]}>{bestStreak}</Text>
             <Text style={[styles.statLabel, { color: colors.muted }]}>Best Streak</Text>
           </View>
           <View style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={styles.statIcon}>📅</Text>
+            <IconSymbol name="calendar" size={22} color={colors.primary} />
             <Text style={[styles.statValue, { color: colors.foreground }]}>{total}</Text>
             <Text style={[styles.statLabel, { color: colors.muted }]}>Total Days</Text>
           </View>
@@ -384,12 +384,12 @@ export default function HabitDetailScreen() {
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Rating Breakdown</Text>
             <View style={styles.distRow}>
               {[
-                { label: "Crushed", count: green, color: "#22C55E", emoji: "🟢" },
-                { label: "Okay",    count: yellow, color: "#F59E0B", emoji: "🟡" },
-                { label: "Missed",  count: red,    color: "#EF4444", emoji: "🔴" },
+                { label: "Crushed", count: green, color: "#22C55E" },
+                { label: "Okay",    count: yellow, color: "#F59E0B" },
+                { label: "Missed",  count: red,    color: "#EF4444" },
               ].map((item) => (
                 <View key={item.label} style={styles.distItem}>
-                  <Text style={styles.distEmoji}>{item.emoji}</Text>
+                  <View style={[styles.distDot, { backgroundColor: item.color }]} />
                   <Text style={[styles.distCount, { color: item.color }]}>{item.count}</Text>
                   <Text style={[styles.distLabel, { color: colors.muted }]}>{item.label}</Text>
                   <View style={[styles.distBarBg, { backgroundColor: colors.border }]}>
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
   },
   distRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 12 },
   distItem: { alignItems: "center", gap: 4, flex: 1 },
-  distEmoji: { fontSize: 20 },
+  distDot: { width: 10, height: 10, borderRadius: 5, marginBottom: 2 },
   distCount: { fontSize: 20, fontWeight: "800" },
   distLabel: { fontSize: 11, fontWeight: "500" },
   distBarBg: { width: 8, height: 60, borderRadius: 4, overflow: "hidden", justifyContent: "flex-end" },

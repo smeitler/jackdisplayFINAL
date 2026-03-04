@@ -376,3 +376,13 @@
 - [x] Apple review: expand demo account seed data to cover all features (habits, goals, check-ins history, community posts, team)
 - [x] Apple review: ensure demo login is stable and prepare credentials for App Store Connect
 - [x] Apple review: fix delete account still failing on device (iPad Air iPadOS 26.3) — clear session token before navigating away, cookie cleared before DB delete
+- [x] Home screen: make all habit progress rings the same size (uniform width/height)
+- [x] Apple compliance: add Sign in with Apple button on login screen
+- [x] Apple compliance: ensure Privacy Policy URL opens in in-app browser
+- [x] Apple compliance: verify delete account works end-to-end on device
+- [x] Apple compliance: ensure demo mode shows all features (community, vision, progress, habits)
+- [x] Apple compliance: add NSUserTrackingUsageDescription if any tracking is used (no tracking used — not required)
+- [x] Apple compliance: verify no broken links or empty screens
+- [x] Apple compliance: verify all buttons have working onPress handlers
+- [x] Apple compliance: add Terms of Service link alongside Privacy Policy
+- [x] Apple compliance: verify app works with no internet connection (graceful degradation — community/team screens show empty state, core habit tracking is fully local)

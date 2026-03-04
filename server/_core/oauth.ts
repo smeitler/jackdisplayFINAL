@@ -3,6 +3,7 @@ import type { Express, Request, Response } from "express";
 import { getUserByOpenId, upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -60,6 +61,9 @@ function buildUserResponse(
     lastSignedIn: (user?.lastSignedIn ?? new Date()).toISOString(),
   };
 }
+
+// Apple public key set for verifying identity tokens
+const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
 
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
@@ -125,6 +129,70 @@ export function registerOAuthRoutes(app: Express) {
     } catch (error) {
       console.error("[OAuth] Mobile exchange failed", error);
       res.status(500).json({ error: "OAuth mobile exchange failed" });
+    }
+  });
+
+  /**
+   * Apple Sign In endpoint — verifies Apple identity token and creates a session.
+   * Required by Apple App Store guidelines when offering any third-party sign-in.
+   */
+  app.post("/api/auth/apple", async (req: Request, res: Response) => {
+    try {
+      const { identityToken, user: appleUserId, fullName, email } = req.body ?? {};
+
+      if (!identityToken || !appleUserId) {
+        res.status(400).json({ error: "identityToken and user are required" });
+        return;
+      }
+
+      // Verify the Apple identity token using Apple's public keys
+      let payload: any;
+      try {
+        const { payload: p } = await jwtVerify(identityToken, APPLE_JWKS, {
+          issuer: "https://appleid.apple.com",
+          audience: "com.jackalarm.app",
+        });
+        payload = p;
+      } catch (verifyErr) {
+        console.error("[Apple Auth] Token verification failed:", verifyErr);
+        res.status(401).json({ error: "Invalid Apple identity token" });
+        return;
+      }
+
+      // Build a stable openId from the Apple user sub (unique per app per user)
+      const openId = `apple:${payload.sub ?? appleUserId}`;
+
+      // Derive name from Apple's fullName object (only provided on first sign-in)
+      let name: string | null = null;
+      if (fullName?.givenName || fullName?.familyName) {
+        name = [fullName.givenName, fullName.familyName].filter(Boolean).join(" ");
+      }
+
+      // Derive email — Apple may relay a private email
+      const resolvedEmail: string | null = email ?? payload.email ?? null;
+
+      const user = await syncUser({
+        openId,
+        name,
+        email: resolvedEmail,
+        loginMethod: "apple",
+      });
+
+      const sessionToken = await sdk.createSessionToken(openId, {
+        name: name || "",
+        expiresInMs: ONE_YEAR_MS,
+      });
+
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+      res.json({
+        app_session_id: sessionToken,
+        user: buildUserResponse(user),
+      });
+    } catch (error) {
+      console.error("[Apple Auth] Sign-in failed:", error);
+      res.status(500).json({ error: "Apple sign-in failed" });
     }
   });
 
