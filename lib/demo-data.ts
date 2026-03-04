@@ -139,12 +139,35 @@ export const DEMO_MOTIVATIONS: VisionMotivations = {
 };
 
 /**
+ * Web-compatible demo board: uses the bundled asset remote/data URIs directly.
+ * On web, Image source can be a require() number, but VisionBoard stores strings.
+ * We resolve each asset's uri (which is a data URL or CDN URL on web) synchronously.
+ */
+export function buildDemoVisionBoardWeb(): VisionBoard {
+  const board: VisionBoard = {};
+  for (const [catId, modules] of Object.entries(DEMO_VISION_ASSETS)) {
+    board[catId] = modules.map((mod) => {
+      try {
+        return Asset.fromModule(mod).uri;
+      } catch {
+        return '';
+      }
+    }).filter(Boolean);
+  }
+  return board;
+}
+
+/**
  * Copies bundled demo images into the document directory so the vision board
  * URI validation (which requires file:// paths in documentDirectory) passes.
  * Returns a VisionBoard map of categoryId -> [file:// URIs].
+ * On web, falls back to buildDemoVisionBoardWeb() which uses asset URIs directly.
  */
 export async function buildDemoVisionBoard(): Promise<VisionBoard> {
-  if (!FileSystem.documentDirectory) return {};
+  // Web: FileSystem is not available, use asset URIs directly
+  if (!FileSystem.documentDirectory) {
+    return buildDemoVisionBoardWeb();
+  }
   const board: VisionBoard = {};
   for (const [catId, modules] of Object.entries(DEMO_VISION_ASSETS)) {
     const uris: string[] = [];

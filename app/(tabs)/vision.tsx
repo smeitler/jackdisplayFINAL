@@ -371,7 +371,7 @@ function GoalDetailModal({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function VisionBoardScreen() {
-  const { categories } = useApp();
+  const { categories, isDemoMode } = useApp();
   const colors = useColors();
   const maxWidth = useContentMaxWidth();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
@@ -383,6 +383,7 @@ export default function VisionBoardScreen() {
   useEffect(() => {
     // Load board and strip any stale ph:// or non-file:// URIs saved by older app versions.
     // Those URIs are ephemeral iOS asset references that expire after app restart.
+    // Re-runs when isDemoMode changes so demo photos appear immediately after entering demo mode.
     loadVisionBoard().then(async (loaded) => {
       if (Platform.OS !== "web") {
         const docDir = FileSystem.documentDirectory ?? "";
@@ -414,7 +415,7 @@ export default function VisionBoardScreen() {
       }
     });
     loadVisionMotivations().then(setMotivations);
-  }, []);
+  }, [isDemoMode]);
 
   async function updateBoard(newBoard: VisionBoard) {
     setBoard(newBoard);

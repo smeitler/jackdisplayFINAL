@@ -415,3 +415,7 @@
 
 - [x] Demo mode: seed vision board with bundled royalty-free photos per goal (Body, Mind, Money, Relationships, Focus)
 - [x] Demo mode: seed vision board motivations/reasons per goal (4 motivations per goal)
+
+## Demo Vision Board Fix (Mar 04 2026)
+
+- [x] Fix: demo vision board photos not appearing in Vision Board screen after entering demo mode
