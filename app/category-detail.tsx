@@ -17,7 +17,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, LIFE_AREAS } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 import { CategoryIcon } from "@/components/category-icon";
-import { ScrollableCalendar } from "@/components/scrollable-calendar";
+import { CategoryCalendar } from "@/components/category-calendar";
 import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
@@ -51,13 +51,25 @@ export default function CategoryDetailScreen() {
   const today = new Date();
   const todayStr = toDateString(today);
 
-  // Scrollable calendar state
+  // Month calendar state
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [cardWidth, setCardWidth] = useState(0);
   const onCardLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width - 32;
     if (w > 0) setCardWidth(w);
   }, []);
+  function prevMonth() {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (calYear === today.getFullYear() && calMonth >= today.getMonth()) return;
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  }
+  const canGoForward = !(calYear === today.getFullYear() && calMonth >= today.getMonth());
 
   const selectedDayCategoryScores: CategoryDayScore[] = useMemo(() => {
     if (!selectedDate || !category) return [];
@@ -229,30 +241,43 @@ export default function CategoryDetailScreen() {
           onLayout={onCardLayout}
           style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Calendar</Text>
+          {/* Month nav */}
+          <View style={styles.monthNav}>
+            <Pressable
+              onPress={prevMonth}
+              style={({ pressed }) => [styles.monthNavBtn, { opacity: pressed ? 0.5 : 1 }]}
+            >
+              <IconSymbol name="chevron.left" size={16} color={colors.primary} />
+            </Pressable>
+            <Text style={[styles.monthTitle, { color: colors.foreground }]}>
+              {["January","February","March","April","May","June","July","August","September","October","November","December"][calMonth]} {calYear}
+            </Text>
+            <Pressable
+              onPress={canGoForward ? nextMonth : undefined}
+              style={({ pressed }) => [styles.monthNavBtn, { opacity: canGoForward ? (pressed ? 0.5 : 1) : 0.2 }]}
+            >
+              <IconSymbol name="chevron.right" size={16} color={colors.primary} />
+            </Pressable>
+          </View>
 
           {habits.length > 0 ? (
-            <ScrollView
-              style={styles.calendarScroll}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-            >
-              <ScrollableCalendar
-                habits={habits}
-                checkIns={checkIns}
-                monthCount={6}
-                onDayPress={(date) => {
-                  const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
-                  if (!hasEntry) {
-                    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push(`/checkin?date=${date}` as never);
-                  } else {
-                    setSelectedDate(date);
-                  }
-                }}
-                containerWidth={cardWidth > 0 ? cardWidth : undefined}
-              />
-            </ScrollView>
+            <CategoryCalendar
+              year={calYear}
+              month={calMonth}
+              habits={habits}
+              checkIns={checkIns}
+              onDayPress={(date) => {
+                const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
+                if (!hasEntry) {
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/checkin?date=${date}` as never);
+                } else {
+                  setSelectedDate(date);
+                }
+              }}
+              containerWidth={cardWidth > 0 ? cardWidth : undefined}
+              selectedHabitId={null}
+            />
           ) : (
             <Text style={[styles.emptyText, { color: colors.muted }]}>No habits yet.</Text>
           )}
