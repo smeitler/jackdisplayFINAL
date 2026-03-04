@@ -232,21 +232,27 @@ export default function CategoryDetailScreen() {
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Calendar</Text>
 
           {habits.length > 0 ? (
-            <ScrollableCalendar
-              habits={habits}
-              checkIns={checkIns}
-              monthCount={6}
-              onDayPress={(date) => {
-                const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
-                if (!hasEntry) {
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/checkin?date=${date}` as never);
-                } else {
-                  setSelectedDate(date);
-                }
-              }}
-              containerWidth={cardWidth > 0 ? cardWidth : undefined}
-            />
+            <ScrollView
+              style={styles.calendarScroll}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
+              <ScrollableCalendar
+                habits={habits}
+                checkIns={checkIns}
+                monthCount={6}
+                onDayPress={(date) => {
+                  const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
+                  if (!hasEntry) {
+                    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push(`/checkin?date=${date}` as never);
+                  } else {
+                    setSelectedDate(date);
+                  }
+                }}
+                containerWidth={cardWidth > 0 ? cardWidth : undefined}
+              />
+            </ScrollView>
           ) : (
             <Text style={[styles.emptyText, { color: colors.muted }]}>No habits yet.</Text>
           )}
@@ -522,6 +528,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   teamBadgeText: { fontSize: 11, fontWeight: '600' },
+
+  calendarScroll: { maxHeight: 420 },
 
   // Habit key legend
   habitKeySection: { marginTop: 12, gap: 6 },
