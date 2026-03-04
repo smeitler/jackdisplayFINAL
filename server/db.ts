@@ -718,9 +718,9 @@ export async function getTeamStreak(teamId: number) {
   return { streak, todayStatus };
 }
 
-// ─── Weekly Leaderboard ───────────────────────────────────────────────────────
+// ─── Team Leaderboard (supports week / month / alltime) ──────────────────────
 
-export async function getTeamLeaderboard(teamId: number) {
+export async function getTeamLeaderboard(teamId: number, period: "week" | "month" | "alltime" = "week") {
   const db = await getDb();
   if (!db) return [];
 
@@ -732,42 +732,71 @@ export async function getTeamLeaderboard(teamId: number) {
 
   if (members.length === 0) return [];
 
-  // Get start of current week (Monday)
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sun
-  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - daysFromMonday);
-  weekStart.setHours(0, 0, 0, 0);
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-  const weekDates: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    if (d <= now) {
-      weekDates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  // Build date list for the period (null = all-time, no date filter)
+  let periodDates: string[] | null = null;
+  if (period === "week") {
+    const dayOfWeek = now.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - daysFromMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    const dates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      if (d <= now) dates.push(toDateStr(d));
     }
+    periodDates = dates;
+  } else if (period === "month") {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const dates: string[] = [];
+    const d = new Date(monthStart);
+    while (d <= now) {
+      dates.push(toDateStr(d));
+      d.setDate(d.getDate() + 1);
+    }
+    periodDates = dates;
   }
-
-  if (weekDates.length === 0) return members.map((m) => ({ ...m, weeklyScore: 0, checkInsCount: 0 }));
+  // alltime: periodDates stays null → no date filter
 
   const memberIds = members.map((m) => m.userId);
-  const weekCheckIns = await db
+  const periodCheckIns = await db
     .select({ userId: checkIns.userId, rating: checkIns.rating })
     .from(checkIns)
-    .where(and(inArray(checkIns.userId, memberIds), inArray(checkIns.date, weekDates)));
+    .where(
+      periodDates
+        ? and(inArray(checkIns.userId, memberIds), inArray(checkIns.date, periodDates))
+        : inArray(checkIns.userId, memberIds)
+    );
+
+  // Today's check-in status for each member
+  const todayStr = toDateStr(now);
+  const todayCheckIns = await db
+    .select({ userId: checkIns.userId })
+    .from(checkIns)
+    .where(and(inArray(checkIns.userId, memberIds), eq(checkIns.date, todayStr)));
+  const checkedInToday = new Set(todayCheckIns.map((c) => c.userId));
 
   return members.map((m) => {
-    const myCheckIns = weekCheckIns.filter((c) => c.userId === m.userId);
+    const myCheckIns = periodCheckIns.filter((c) => c.userId === m.userId);
     const total = myCheckIns.length;
-    if (total === 0) return { ...m, weeklyScore: 0, checkInsCount: 0 };
-    const score = myCheckIns.reduce((sum, c) => {
+    if (total === 0) return { ...m, score: 0, checkInsCount: 0, checkedInToday: checkedInToday.has(m.userId) };
+    const scoreSum = myCheckIns.reduce((sum, c) => {
       if (c.rating === "green") return sum + 1;
       if (c.rating === "yellow") return sum + 0.5;
       return sum;
     }, 0);
-    return { ...m, weeklyScore: Math.round((score / total) * 100), checkInsCount: total };
-  }).sort((a, b) => b.weeklyScore - a.weeklyScore);
+    return {
+      ...m,
+      score: Math.round((scoreSum / total) * 100),
+      checkInsCount: total,
+      checkedInToday: checkedInToday.has(m.userId),
+    };
+  }).sort((a, b) => b.score - a.score);
 }
 
 // ─── Team Goal Proposals ──────────────────────────────────────────────────────

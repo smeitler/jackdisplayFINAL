@@ -296,7 +296,7 @@ export const appRouter = router({
         return {
           rank: idx + 1,
           total: board.length,
-          weeklyScore: board[idx].weeklyScore,
+          weeklyScore: board[idx].score,
         };
       }),
   }),
@@ -397,11 +397,11 @@ export const appRouter = router({
       }),
 
     leaderboard: protectedProcedure
-      .input(z.object({ teamId: z.number() }))
+      .input(z.object({ teamId: z.number(), period: z.enum(["week", "month", "alltime"]).default("week") }))
       .query(async ({ ctx, input }) => {
         const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
         if (!isMember) throw new Error("Not a member of this team");
-        return db.getTeamLeaderboard(input.teamId);
+        return db.getTeamLeaderboard(input.teamId, input.period);
       }),
   }),
 

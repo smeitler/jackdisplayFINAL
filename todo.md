@@ -401,3 +401,12 @@
 
 - [x] Add expo-notifications plugin to app.config.ts with .caf sound files so alarm sounds bundle into iOS binary
 - [x] Add expo-image-picker plugin to app.config.ts so NSPhotoLibraryUsageDescription is set correctly for photo picker
+
+## Team Leaderboard Redesign (Mar 04 2026)
+
+- [x] Team leaderboard: podium view for top 3 (gold/silver/bronze) with member name and score
+- [x] Team leaderboard: ranked list below podium for remaining members with rank number, score %, and check-in status today
+- [x] Team leaderboard: period selector (This Week / This Month / All Time)
+- [x] Team leaderboard: show each member's current streak alongside their score (via check-in count per period)
+- [x] Team leaderboard: highlight the current user's row (primary tint background)
+- [x] Team leaderboard: show team average score at the top as a summary stat

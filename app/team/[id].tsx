@@ -87,53 +87,136 @@ function TeamStreakBanner({ teamId, myUserId }: { teamId: number; myUserId?: num
   );
 }
 
-// ─── Weekly Leaderboard ───────────────────────────────────────────────────────
+// ─── Team Leaderboard ───────────────────────────────────────────────────────
 
-function WeeklyLeaderboard({ teamId, myUserId }: { teamId: number; myUserId?: number }) {
+const LB_PERIODS = [
+  { key: "week" as const, label: "This Week" },
+  { key: "month" as const, label: "This Month" },
+  { key: "alltime" as const, label: "All Time" },
+];
+
+function TeamLeaderboard({ teamId, myUserId, demoBoard }: { teamId: number; myUserId?: number; demoBoard?: typeof DEMO_BOARD }) {
   const colors = useColors();
-  const { data: board } = trpc.teamFeed.leaderboard.useQuery({ teamId });
+  const [period, setPeriod] = useState<"week" | "month" | "alltime">("week");
+  const { data: liveBoard, isLoading } = trpc.teamFeed.leaderboard.useQuery({ teamId, period }, { enabled: !demoBoard });
+  const board = demoBoard ?? liveBoard;
 
+  if (isLoading) {
+    return (
+      <View style={[styles.lbCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 24 }} />
+      </View>
+    );
+  }
   if (!board || board.length === 0) return null;
 
-  return (
-    <View style={[styles.leaderboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <View style={styles.leaderboardHeader}>
-        <IconSymbol name="trophy.fill" size={16} color={colors.warning} />
-        <Text style={[styles.leaderboardTitle, { color: colors.foreground }]}>This Week</Text>
+  const avg = Math.round(board.reduce((s, m) => s + m.score, 0) / board.length);
+  const avgColor = avg >= 80 ? colors.success : avg >= 50 ? colors.warning : colors.error;
+
+  const first = board[0];
+  const second = board[1];
+  const third = board[2];
+  const rest = board.slice(3);
+
+  type BoardMember = typeof board[0];
+
+  const PodiumAvatar = ({ member, size, borderColor }: { member: BoardMember; size: number; borderColor: string }) => (
+    <View style={[styles.podiumAvatarWrap, { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.primary + "20", borderWidth: 2.5, borderColor }]}>
+      <Text style={[styles.podiumAvatarText, { fontSize: size * 0.36, color: colors.primary }]}>
+        {getInitials(member.name, member.email)}
+      </Text>
+    </View>
+  );
+
+  const PodiumSlot = ({ member, rank, height, medalColor }: { member: BoardMember | undefined; rank: 1 | 2 | 3; height: number; medalColor: string }) => {
+    if (!member) return <View style={{ flex: 1 }} />;
+    const isMe = member.userId === myUserId;
+    const displayName = isMe ? "You" : (member.name?.split(" ")[0] ?? member.email?.split("@")[0] ?? "?");
+    const scoreColor = member.score >= 80 ? colors.success : member.score >= 50 ? colors.warning : colors.error;
+    return (
+      <View style={[styles.podiumSlot, isMe && { backgroundColor: colors.primary + "08", borderRadius: 12 }]}>
+        <View style={[styles.podiumTodayDot, { backgroundColor: member.checkedInToday ? colors.success : colors.border }]} />
+        <PodiumAvatar member={member} size={rank === 1 ? 52 : 44} borderColor={medalColor} />
+        <Text style={[styles.podiumName, { color: colors.foreground }]} numberOfLines={1}>{displayName}</Text>
+        <Text style={[styles.podiumScore, { color: scoreColor }]}>{member.score}%</Text>
+        <Text style={[styles.podiumCheckins, { color: colors.muted }]}>{member.checkInsCount} check-ins</Text>
+        <View style={[styles.podiumBase, { height, backgroundColor: medalColor + "30", borderTopLeftRadius: 6, borderTopRightRadius: 6 }]}>
+          <Text style={[styles.podiumRankNum, { color: medalColor }]}>{rank}</Text>
+        </View>
       </View>
-      {board.map((member, index) => {
-        const isMe = member.userId === myUserId;
-        const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
-        return (
-          <View
-            key={member.userId}
-            style={[
-              styles.leaderboardRow,
-              isMe && { backgroundColor: colors.primary + "10" },
-            ]}
+    );
+  };
+
+  return (
+    <View style={[styles.lbCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Header */}
+      <View style={styles.lbHeader}>
+        <View style={styles.lbHeaderLeft}>
+          <IconSymbol name="trophy.fill" size={16} color={colors.warning} />
+          <Text style={[styles.lbTitle, { color: colors.foreground }]}>Leaderboard</Text>
+        </View>
+        <View style={[styles.lbAvgChip, { backgroundColor: avgColor + "18" }]}>
+          <Text style={[styles.lbAvgLabel, { color: colors.muted }]}>Team avg </Text>
+          <Text style={[styles.lbAvgScore, { color: avgColor }]}>{avg}%</Text>
+        </View>
+      </View>
+
+      {/* Period selector */}
+      <View style={[styles.lbPeriodRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+        {LB_PERIODS.map((p) => (
+          <TouchableOpacity
+            key={p.key}
+            style={[styles.lbPeriodBtn, period === p.key && { backgroundColor: colors.primary }]}
+            onPress={() => setPeriod(p.key)}
           >
-            <Text style={styles.leaderboardRank}>{medal ?? `${index + 1}`}</Text>
-            <View style={[styles.leaderboardAvatar, { backgroundColor: colors.primary + "20" }]}>
-              <Text style={[styles.leaderboardAvatarText, { color: colors.primary }]}>
-                {getInitials(member.name, member.email)}
-              </Text>
-            </View>
-            <Text style={[styles.leaderboardName, { color: colors.foreground }]} numberOfLines={1}>
-              {isMe ? "You" : (member.name ?? member.email ?? "?")}
+            <Text style={[styles.lbPeriodText, { color: period === p.key ? colors.background : colors.muted }]}>
+              {p.label}
             </Text>
-            <View style={styles.leaderboardScoreWrap}>
-              <Text style={[styles.leaderboardScore, {
-                color: member.weeklyScore >= 80 ? colors.success : member.weeklyScore >= 50 ? colors.warning : colors.muted,
-              }]}>
-                {member.weeklyScore}%
-              </Text>
-              <Text style={[styles.leaderboardCheckins, { color: colors.muted }]}>
-                {member.checkInsCount} check-ins
-              </Text>
-            </View>
-          </View>
-        );
-      })}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Podium */}
+      <View style={styles.podiumRow}>
+        <PodiumSlot member={second} rank={2} height={48} medalColor="#C0C0C0" />
+        <PodiumSlot member={first} rank={1} height={64} medalColor="#FFD700" />
+        <PodiumSlot member={third} rank={3} height={36} medalColor="#CD7F32" />
+      </View>
+
+      {/* Ranked list for 4th+ */}
+      {rest.length > 0 && (
+        <View style={styles.lbRestList}>
+          {rest.map((member, idx) => {
+            const isMe = member.userId === myUserId;
+            const scoreColor = member.score >= 80 ? colors.success : member.score >= 50 ? colors.warning : colors.error;
+            return (
+              <View
+                key={member.userId}
+                style={[
+                  styles.lbRestRow,
+                  { borderTopColor: colors.border },
+                  isMe && { backgroundColor: colors.primary + "08" },
+                ]}
+              >
+                <Text style={[styles.lbRestRank, { color: colors.muted }]}>{idx + 4}</Text>
+                <View style={[styles.lbRestAvatar, { backgroundColor: colors.primary + "18" }]}>
+                  <Text style={[styles.lbRestAvatarText, { color: colors.primary }]}>
+                    {getInitials(member.name, member.email)}
+                  </Text>
+                </View>
+                <View style={styles.lbRestInfo}>
+                  <Text style={[styles.lbRestName, { color: colors.foreground }]} numberOfLines={1}>
+                    {isMe ? "You" : (member.name ?? member.email ?? "?")}
+                  </Text>
+                  <Text style={[styles.lbRestCheckins, { color: colors.muted }]}>{member.checkInsCount} check-ins</Text>
+                </View>
+                <View style={[styles.lbRestTodayDot, { backgroundColor: member.checkedInToday ? colors.success : colors.border }]} />
+                <Text style={[styles.lbRestScore, { color: scoreColor }]}>{member.score}%</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -906,6 +989,12 @@ const DEMO_MEMBERS = [
   { userId: 3, name: 'Jordan Lee',   email: 'jordan@example.com', role: 'member' as const, joinedAt: new Date().toISOString() },
 ];
 
+const DEMO_BOARD = [
+  { userId: 2, name: 'Sam Rivera',   email: 'sam@example.com',  score: 94, checkInsCount: 18, checkedInToday: true },
+  { userId: 1, name: 'Alex Johnson', email: 'alex@example.com', score: 87, checkInsCount: 15, checkedInToday: true },
+  { userId: 3, name: 'Jordan Lee',   email: 'jordan@example.com', score: 72, checkInsCount: 12, checkedInToday: false },
+];
+
 const DEMO_FEED: FeedPost[] = [
   {
     id: 1, userId: 2, type: 'post', content: 'Hit the gym at 6am today — 5 days in a row! Feeling unstoppable.',
@@ -1037,7 +1126,7 @@ export default function TeamDetailScreen() {
               <TeamStreakBanner teamId={teamId} myUserId={myUserId} />
 
               {/* Leaderboard */}
-              <WeeklyLeaderboard teamId={teamId} myUserId={myUserId} />
+              <TeamLeaderboard teamId={teamId} myUserId={myUserId} demoBoard={isDemoMode ? DEMO_BOARD : undefined} />
 
               {/* Post Composer */}
               <PostComposer teamId={teamId} myUserId={myUserId} onPosted={() => refetchFeed()} />
@@ -1096,8 +1185,7 @@ export default function TeamDetailScreen() {
               <TeamStreakBanner teamId={teamId} myUserId={myUserId} />
 
               {/* Leaderboard in Stats */}
-              <WeeklyLeaderboard teamId={teamId} myUserId={myUserId} />
-
+              <TeamLeaderboard teamId={teamId} myUserId={myUserId} demoBoard={isDemoMode ? DEMO_BOARD : undefined} />
               {/* Members list */}
               {effectiveMembersLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
@@ -1237,6 +1325,40 @@ const styles = StyleSheet.create({
   leaderboardScoreWrap: { alignItems: "flex-end" },
   leaderboardScore: { fontSize: 15, fontWeight: "700" },
   leaderboardCheckins: { fontSize: 10 },
+
+  // New Leaderboard Card
+  lbCard: { borderRadius: 16, borderWidth: 1, overflow: "hidden", marginBottom: 4 },
+  lbHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  lbHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  lbTitle: { fontSize: 15, fontWeight: "700" },
+  lbAvgChip: { flexDirection: "row", alignItems: "center", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  lbAvgLabel: { fontSize: 11 },
+  lbAvgScore: { fontSize: 13, fontWeight: "700" },
+  lbPeriodRow: { flexDirection: "row", marginHorizontal: 12, marginBottom: 12, borderRadius: 10, borderWidth: 1, overflow: "hidden" },
+  lbPeriodBtn: { flex: 1, alignItems: "center", paddingVertical: 7 },
+  lbPeriodText: { fontSize: 12, fontWeight: "600" },
+  // Podium
+  podiumRow: { flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 8, paddingBottom: 12, gap: 4 },
+  podiumSlot: { flex: 1, alignItems: "center", paddingTop: 8, paddingHorizontal: 4 },
+  podiumTodayDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 6 },
+  podiumAvatarWrap: { alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  podiumAvatarText: { fontWeight: "700" },
+  podiumName: { fontSize: 12, fontWeight: "600", textAlign: "center", marginBottom: 2 },
+  podiumScore: { fontSize: 14, fontWeight: "700", textAlign: "center", marginBottom: 1 },
+  podiumCheckins: { fontSize: 9, textAlign: "center", marginBottom: 6 },
+  podiumBase: { width: "100%", alignItems: "center", justifyContent: "center" },
+  podiumRankNum: { fontSize: 16, fontWeight: "800" },
+  // Rest list
+  lbRestList: { borderTopWidth: 1, borderTopColor: "transparent" },
+  lbRestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  lbRestRank: { fontSize: 13, fontWeight: "700", width: 20, textAlign: "center" },
+  lbRestAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  lbRestAvatarText: { fontSize: 12, fontWeight: "700" },
+  lbRestInfo: { flex: 1 },
+  lbRestName: { fontSize: 14, fontWeight: "600" },
+  lbRestCheckins: { fontSize: 10 },
+  lbRestTodayDot: { width: 8, height: 8, borderRadius: 4 },
+  lbRestScore: { fontSize: 14, fontWeight: "700", minWidth: 40, textAlign: "right" },
 
   // Composer
   composer: { borderRadius: 16, borderWidth: 1, padding: 12, gap: 10 },
