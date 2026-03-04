@@ -182,10 +182,10 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-// Fixed container height = label area (24, allows 2 lines at 8px) + gap (3) + ring size (38)
+// Fixed container height = label height (12) + gap (3) + ring size (38)
 // Smaller rings (38px) to fit 3 in a row without crowding the habit name
 const RING_SIZE = 38;
-const RING_LABEL_HEIGHT = 24; // 2 lines of 8px text with line height
+const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
 function CircleRing({
@@ -220,9 +220,9 @@ function CircleRing({
     // Fixed height container so both rings in a pair always align regardless of label text
     <View style={{ alignItems: 'center', height: RING_CONTAINER_HEIGHT, justifyContent: 'flex-end' }}>
       {/* Period label above ring — always reserve space even if empty */}
-      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', alignItems: 'center', marginBottom: 3 }}>
+      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', marginBottom: 3 }}>
         {periodLabel ? (
-          <Text style={{ fontSize: 8, fontWeight: '500', color: '#9BA1A6', textAlign: 'center', lineHeight: 11 }} numberOfLines={2}>
+          <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
             {periodLabel}
           </Text>
         ) : null}
@@ -277,10 +277,10 @@ function HabitGoalRow({
   const p1Done = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
   const p2Done = isMonthly ? getHabitMonthBeforeDone(habit.id) : getHabitWeekBeforeDone(habit.id);
 
-  // Date range labels — computed once per render
-  const p0Label = isMonthly ? currentMonthRange() : currentWeekRange();
-  const p1Label = isMonthly ? lastMonthRange() : lastWeekRange();
-  const p2Label = isMonthly ? monthBeforeRange() : weekBeforeRange();
+  // Period labels
+  const p0Label = isMonthly ? 'This Mo' : 'This Wk';
+  const p1Label = isMonthly ? 'Last Mo' : 'Last Wk';
+  const p2Label = isMonthly ? '2 Mo Ago' : '2 Wks Ago';
 
   return (
     <TouchableOpacity
