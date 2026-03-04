@@ -96,24 +96,63 @@ export async function deleteUser(userId: number): Promise<void> {
   if (!db) throw new Error("Database not available");
 
   // Delete all user data in dependency order (children before parents)
-  // deviceEvents are linked via devices, so delete devices first (deviceEvents cascade or delete manually)
+
+  // 1. Device events (linked via devices)
   const userDevices = await db.select({ id: devices.id }).from(devices).where(eq(devices.userId, userId)).catch(() => []);
   for (const device of userDevices) {
     await db.delete(deviceEvents).where(eq(deviceEvents.deviceId, device.id)).catch(() => {});
   }
   await db.delete(devices).where(eq(devices.userId, userId)).catch(() => {});
+
+  // 2. Team goal votes and proposals created by this user
+  const userProposals = await db.select({ id: teamGoalProposals.id }).from(teamGoalProposals).where(eq(teamGoalProposals.creatorId, userId)).catch(() => []);
+  for (const proposal of userProposals) {
+    await db.delete(teamGoalVotes).where(eq(teamGoalVotes.proposalId, proposal.id)).catch(() => {});
+  }
+  await db.delete(teamGoalVotes).where(eq(teamGoalVotes.userId, userId)).catch(() => {});
+  await db.delete(teamGoalProposals).where(eq(teamGoalProposals.creatorId, userId)).catch(() => {});
+
+  // 3. Team posts, messages, reactions, comments
   await db.delete(teamPostComments).where(eq(teamPostComments.userId, userId)).catch(() => {});
   await db.delete(teamPostReactions).where(eq(teamPostReactions.userId, userId)).catch(() => {});
   await db.delete(teamPosts).where(eq(teamPosts.userId, userId)).catch(() => {});
   await db.delete(teamMessages).where(eq(teamMessages.userId, userId)).catch(() => {});
+
+  // 4. Team memberships and shared goals
   await db.delete(sharedGoals).where(eq(sharedGoals.userId, userId)).catch(() => {});
   await db.delete(teamMembers).where(eq(teamMembers.userId, userId)).catch(() => {});
+
+  // 5. Teams created by this user (delete members, posts, messages, goals first)
+  const ownedTeams = await db.select({ id: teams.id }).from(teams).where(eq(teams.creatorId, userId)).catch(() => []);
+  for (const team of ownedTeams) {
+    const teamProposals = await db.select({ id: teamGoalProposals.id }).from(teamGoalProposals).where(eq(teamGoalProposals.teamId, team.id)).catch(() => []);
+    for (const p of teamProposals) {
+      await db.delete(teamGoalVotes).where(eq(teamGoalVotes.proposalId, p.id)).catch(() => {});
+    }
+    await db.delete(teamGoalProposals).where(eq(teamGoalProposals.teamId, team.id)).catch(() => {});
+    const teamPostsList = await db.select({ id: teamPosts.id }).from(teamPosts).where(eq(teamPosts.teamId, team.id)).catch(() => []);
+    for (const post of teamPostsList) {
+      await db.delete(teamPostComments).where(eq(teamPostComments.postId, post.id)).catch(() => {});
+      await db.delete(teamPostReactions).where(eq(teamPostReactions.postId, post.id)).catch(() => {});
+    }
+    await db.delete(teamPosts).where(eq(teamPosts.teamId, team.id)).catch(() => {});
+    await db.delete(teamMessages).where(eq(teamMessages.teamId, team.id)).catch(() => {});
+    await db.delete(sharedGoals).where(eq(sharedGoals.teamId, team.id)).catch(() => {});
+    await db.delete(teamMembers).where(eq(teamMembers.teamId, team.id)).catch(() => {});
+  }
+  await db.delete(teams).where(eq(teams.creatorId, userId)).catch(() => {});
+
+  // 6. Referrals (both as referrer and as referred)
   await db.delete(referrals).where(eq(referrals.referredId, userId)).catch(() => {});
+  await db.delete(referrals).where(eq(referrals.referrerId, userId)).catch(() => {});
+
+  // 7. Core user data
   await db.delete(checkIns).where(eq(checkIns.userId, userId)).catch(() => {});
   await db.delete(habits).where(eq(habits.userId, userId)).catch(() => {});
   await db.delete(categories).where(eq(categories.userId, userId)).catch(() => {});
   await db.delete(alarmConfigs).where(eq(alarmConfigs.userId, userId)).catch(() => {});
-  // Finally delete the user record itself
+
+  // 8. Finally delete the user record itself
   await db.delete(users).where(eq(users.id, userId));
 }
 

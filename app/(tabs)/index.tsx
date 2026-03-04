@@ -150,10 +150,8 @@ function CircleRing({
   const dash = pct * circumference;
   const gap = circumference - dash;
 
-  // Fraction text: "5/6" or crown if last period hit
-  const fractionText = goal > 0
-    ? (isLast && hit ? '👑' : `${done}/${goal}`)
-    : '—';
+  // Fraction text: always show plain fraction (e.g. 5/6)
+  const fractionText = goal > 0 ? `${done}/${goal}` : '\u2014';
   const fractionFontSize = goal > 0 && !isLast ? (size <= 36 ? 8 : 10) : (size <= 36 ? 9 : 11);
 
   return (

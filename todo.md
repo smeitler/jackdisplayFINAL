@@ -371,3 +371,5 @@
 - [x] Home screen: circular progress ring around each habit showing current period fill (green=hit, yellow=on track, red=behind)
 - [x] Fix Apple App Store rejection: replace external browser OAuth with in-app browser (SFSafariViewController / expo-web-browser)
 - [x] Home screen: move habit rings to right side, show fraction (5/6) inside ring, label "This Wk / Last Wk" above each ring
+- [x] Home screen: remove crown from last-week ring, show plain fraction number instead
+- [x] Settings: fix "Failed to delete account" error — added missing cascade deletes for teamGoalVotes, teamGoalProposals, teams owned by user, and referrals as referrer
