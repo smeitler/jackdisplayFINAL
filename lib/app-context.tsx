@@ -159,6 +159,8 @@ type AppContextValue = AppState & {
   getHabitMonthlyDone: (habitId: string) => number; // count of days this calendar month with green or yellow rating
   getHabitLastWeekDone: (habitId: string) => number; // count of days last Mon-Sun week with green or yellow rating
   getHabitLastMonthDone: (habitId: string) => number; // count of days last calendar month with green or yellow rating
+  getHabitWeekBeforeDone: (habitId: string) => number; // count of days 2 weeks ago (Mon-Sun) with green or yellow rating
+  getHabitMonthBeforeDone: (habitId: string) => number; // count of days 2 months ago with green or yellow rating
   streak: number;
   startDemo: () => Promise<void>;
   exitDemo: () => Promise<void>;
@@ -705,6 +707,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return count;
   }, [state.checkIns]);
 
+  const getHabitWeekBeforeDone = useCallback((habitId: string) => {
+    // The week 2 weeks ago (Mon-Sun)
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() + mondayOffset);
+    const weekBeforeMonday = new Date(thisMonday);
+    weekBeforeMonday.setDate(thisMonday.getDate() - 14);
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekBeforeMonday);
+      d.setDate(weekBeforeMonday.getDate() + i);
+      const dateStr = toDateString(d);
+      const entry = state.checkIns.find((e) => e.habitId === habitId && e.date === dateStr);
+      if (entry && (entry.rating === 'green' || entry.rating === 'yellow')) count++;
+    }
+    return count;
+  }, [state.checkIns]);
+
+  const getHabitMonthBeforeDone = useCallback((habitId: string) => {
+    // 2 calendar months ago
+    const today = new Date();
+    let year = today.getFullYear();
+    let month = today.getMonth() - 2;
+    if (month < 0) { month += 12; year -= 1; }
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let count = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, month, day);
+      const dateStr = toDateString(d);
+      const entry = state.checkIns.find((e) => e.habitId === habitId && e.date === dateStr);
+      if (entry && (entry.rating === 'green' || entry.rating === 'yellow')) count++;
+    }
+    return count;
+  }, [state.checkIns]);
+
   const getCategoryBreakdown = useCallback((category: Category, days = 7) => {
     const habits = activeHabits.filter((h) => h.category === category);
     const habitIds = new Set(habits.map((h) => h.id));
@@ -763,6 +802,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       getEntriesForDate, getRatingsForDate,
       getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, getHabitMonthlyDone,
       getHabitLastWeekDone, getHabitLastMonthDone,
+      getHabitWeekBeforeDone, getHabitMonthBeforeDone,
       streak,
       startDemo, exitDemo,
     }}>

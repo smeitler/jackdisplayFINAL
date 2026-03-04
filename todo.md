@@ -386,3 +386,9 @@
 - [x] Apple compliance: verify all buttons have working onPress handlers
 - [x] Apple compliance: add Terms of Service link alongside Privacy Policy
 - [x] Apple compliance: verify app works with no internet connection (graceful degradation — community/team screens show empty state, core habit tracking is fully local)
+
+## Apple Rejection Round 2 + 3-Circles Feature (Mar 04 2026)
+- [x] Home screen: show 3 circles per habit (This Wk, Last Wk, Week Before for weekly; This Mo, Last Mo, Month Before for monthly)
+- [x] Apple Guideline 4: fix OAuth opening external browser — added WebBrowser.maybeCompleteAuthSession() to callback screen, removed Linking.openURL re-open
+- [x] Apple Guideline 2.1(a) bug: delete account hardened — removed swallowed .catch(), added try/catch with real error propagation
+- [x] Apple Guideline 2.1(a) info: demo team detail screen now shows 3 pre-populated posts, 3 members, reactions — Apple reviewer can explore full community feature

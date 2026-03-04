@@ -6,6 +6,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as WebBrowser from "expo-web-browser";
+
+// CRITICAL: This must be called at module level (not inside a component) to properly
+// dismiss the ASWebAuthenticationSession / Chrome Custom Tab that was opened by
+// WebBrowser.openAuthSessionAsync. Without this, iOS will open the system Safari
+// browser instead of staying in-app, which violates Apple Guideline 4.
+WebBrowser.maybeCompleteAuthSession();
 
 export default function OAuthCallback() {
   const router = useRouter();

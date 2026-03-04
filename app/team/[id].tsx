@@ -898,6 +898,38 @@ function ShareGoalsModal({ teamId, visible, onClose }: { teamId: number; visible
   );
 }
 
+// ─── Demo Mode Data ───────────────────────────────────────────────────────────
+
+const DEMO_MEMBERS = [
+  { userId: 1, name: 'Alex Johnson', email: 'alex@example.com', role: 'owner' as const, joinedAt: new Date().toISOString() },
+  { userId: 2, name: 'Sam Rivera',   email: 'sam@example.com',  role: 'member' as const, joinedAt: new Date().toISOString() },
+  { userId: 3, name: 'Jordan Lee',   email: 'jordan@example.com', role: 'member' as const, joinedAt: new Date().toISOString() },
+];
+
+const DEMO_FEED: FeedPost[] = [
+  {
+    id: 1, userId: 2, type: 'post', content: 'Hit the gym at 6am today — 5 days in a row! Feeling unstoppable.',
+    imageUrl: null, checkinScore: 92, checkinDate: null, createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    authorName: 'Sam Rivera', authorEmail: 'sam@example.com',
+    reactions: [{ postId: 1, userId: 2, emoji: '🔥' }, { postId: 1, userId: 3, emoji: '🔥' }, { postId: 1, userId: 3, emoji: '💪' }],
+    comments: [],
+  },
+  {
+    id: 2, userId: 3, type: 'post', content: 'Meditated for 20 minutes and read 30 pages before breakfast. Morning routine locked in.',
+    imageUrl: null, checkinScore: 85, checkinDate: null, createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
+    authorName: 'Jordan Lee', authorEmail: 'jordan@example.com',
+    reactions: [{ postId: 2, userId: 1, emoji: '👏' }, { postId: 2, userId: 2, emoji: '👏' }, { postId: 2, userId: 1, emoji: '❤️' }],
+    comments: [],
+  },
+  {
+    id: 3, userId: 1, type: 'post', content: 'Week 3 check-in: all habits green except sleep (still working on that one). Progress not perfection!',
+    imageUrl: null, checkinScore: 78, checkinDate: null, createdAt: new Date(Date.now() - 24 * 3600000).toISOString(),
+    authorName: 'Alex Johnson', authorEmail: 'alex@example.com',
+    reactions: [{ postId: 3, userId: 2, emoji: '🔥' }, { postId: 3, userId: 3, emoji: '🔥' }, { postId: 3, userId: 2, emoji: '💪' }],
+    comments: [],
+  },
+];
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function TeamDetailScreen() {
@@ -910,13 +942,21 @@ export default function TeamDetailScreen() {
   const [showCreateGoal, setShowCreateGoal] = useState(false);
   const [activeTab, setActiveTab] = useState<"feed" | "stats" | "more">("feed");
   const [proposalsExpanded, setProposalsExpanded] = useState(false);
+  const { isDemoMode } = useApp();
 
-  const { data: members, isLoading: membersLoading } = trpc.teams.members.useQuery({ teamId });
-  const { data: myTeams } = trpc.teams.list.useQuery();
-  const { data: me } = trpc.auth.me.useQuery();
-  const { data: feed, isLoading: feedLoading, refetch: refetchFeed } = trpc.teamFeed.list.useQuery({ teamId });
-  const { data: goalProposals } = trpc.goalProposals.list.useQuery({ teamId });
-  const myUserId = me?.id;
+  const { data: members, isLoading: membersLoading } = trpc.teams.members.useQuery({ teamId }, { enabled: !isDemoMode });
+  const { data: myTeams } = trpc.teams.list.useQuery(undefined, { enabled: !isDemoMode });
+  const { data: me } = trpc.auth.me.useQuery(undefined, { enabled: !isDemoMode });
+  const { data: feed, isLoading: feedLoading, refetch: refetchFeed } = trpc.teamFeed.list.useQuery({ teamId }, { enabled: !isDemoMode });
+  const { data: goalProposals } = trpc.goalProposals.list.useQuery({ teamId }, { enabled: !isDemoMode });
+
+  // In demo mode, use pre-populated data so Apple reviewers see real content
+  const effectiveMembers = isDemoMode ? DEMO_MEMBERS : members;
+  const effectiveFeed = isDemoMode ? DEMO_FEED : feed;
+  const effectiveFeedLoading = isDemoMode ? false : feedLoading;
+  const effectiveMembersLoading = isDemoMode ? false : membersLoading;
+  const demoMyTeam = isDemoMode ? { id: teamId, name: teamId === 1 ? 'Morning Warriors' : 'Fitness Squad', joinCode: teamId === 1 ? 'DEMO1234' : 'DEMO5678', creatorId: 0, role: 'owner' as const } : undefined;
+  const myUserId = isDemoMode ? 1 : me?.id;
 
   const leaveMutation = trpc.teams.leave.useMutation({
     onSuccess: () => { utils.teams.list.invalidate(); router.back(); },
@@ -927,7 +967,7 @@ export default function TeamDetailScreen() {
     onError: (err) => Alert.alert("Error", err.message),
   });
 
-  const myTeam = myTeams?.find((t) => t.id === teamId);
+  const myTeam = isDemoMode ? demoMyTeam : myTeams?.find((t) => t.id === teamId);
   const isOwner = myTeam?.role === "owner";
 
   const handleLeave = useCallback(() => {
@@ -1032,9 +1072,9 @@ export default function TeamDetailScreen() {
               )}
 
               {/* Feed */}
-              {feedLoading ? (
+              {effectiveFeedLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
-              ) : !feed || feed.length === 0 ? (
+              ) : !effectiveFeed || effectiveFeed.length === 0 ? (
                 <View style={styles.emptyFeed}>
                   <Text style={styles.emptyFeedEmoji}>💬</Text>
                   <Text style={[styles.emptyFeedTitle, { color: colors.foreground }]}>No posts yet</Text>
@@ -1042,7 +1082,7 @@ export default function TeamDetailScreen() {
                 </View>
               ) : (
                 <View style={styles.feedList}>
-                  {(feed as FeedPost[]).map((post) => (
+                  {(effectiveFeed as FeedPost[]).map((post) => (
                     <PostCard key={post.id} post={post} myUserId={myUserId} teamId={teamId} />
                   ))}
                 </View>
@@ -1059,12 +1099,12 @@ export default function TeamDetailScreen() {
               <WeeklyLeaderboard teamId={teamId} myUserId={myUserId} />
 
               {/* Members list */}
-              {membersLoading ? (
+              {effectiveMembersLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
               ) : (
                 <View style={[styles.leaderboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={[styles.leaderboardTitle, { color: colors.foreground }]}>Members</Text>
-                  {(members ?? []).map((member) => {
+                  {(effectiveMembers ?? []).map((member) => {
                     const displayName = member.name ?? member.email ?? `User ${member.userId}`;
                     const initials = getInitials(member.name, member.email);
                     const isMe = member.userId === myUserId;

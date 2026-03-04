@@ -122,8 +122,9 @@ function PeriodGoalChip({
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-// Fixed container height = label height (12) + gap (3) + ring size (46)
-const RING_SIZE = 46;
+// Fixed container height = label height (12) + gap (3) + ring size (38)
+// Smaller rings (38px) to fit 3 in a row without crowding the habit name
+const RING_SIZE = 38;
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -203,22 +204,22 @@ function HabitGoalRow({
   const {
     getHabitWeeklyDone, getHabitMonthlyDone,
     getHabitLastWeekDone, getHabitLastMonthDone,
+    getHabitWeekBeforeDone, getHabitMonthBeforeDone,
   } = useApp();
 
   // Each habit self-determines its period from its frequencyType
   const isMonthly = habit.frequencyType === 'monthly';
-  const period: 'week' | 'month' = isMonthly ? 'month' : 'week';
 
-  const hasWeeklyGoal = (habit.weeklyGoal ?? 0) > 0 && !isMonthly;
-  const hasMonthlyGoal = (habit.monthlyGoal ?? 0) > 0 && isMonthly;
-  const showChip = isMonthly ? hasMonthlyGoal : hasWeeklyGoal;
-
-  const currentDone = isMonthly ? getHabitMonthlyDone(habit.id) : getHabitWeeklyDone(habit.id);
-  const lastDone = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
   const goal = isMonthly ? (habit.monthlyGoal ?? 0) : (habit.weeklyGoal ?? 0);
 
-  const thisLabel = period === 'week' ? 'This Wk' : 'This Mo';
-  const lastLabel = period === 'week' ? 'Last Wk' : 'Last Mo';
+  // 3 rolling periods: current → last → one before
+  const p0Done = isMonthly ? getHabitMonthlyDone(habit.id) : getHabitWeeklyDone(habit.id);
+  const p1Done = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
+  const p2Done = isMonthly ? getHabitMonthBeforeDone(habit.id) : getHabitWeekBeforeDone(habit.id);
+
+  const p0Label = isMonthly ? 'This Mo' : 'This Wk';
+  const p1Label = isMonthly ? 'Last Mo' : 'Last Wk';
+  const p2Label = isMonthly ? '2 Mo Ago' : '2 Wks Ago';
 
   return (
     <TouchableOpacity
@@ -231,24 +232,15 @@ function HabitGoalRow({
         {habit.name}
       </Text>
 
-      {/* Right side: two rings + chevron */}
+      {/* Right side: three rings + chevron */}
       <View style={styles.habitRight}>
         {goal > 0 ? (
-          <View style={styles.ringPair}>
-            {/* Current period ring */}
-            <CircleRing
-              done={currentDone}
-              goal={goal}
-              periodLabel={thisLabel}
-            />
-            {/* Divider */}
+          <View style={styles.ringTriple}>
+            <CircleRing done={p0Done} goal={goal} periodLabel={p0Label} />
             <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-            {/* Last period ring */}
-            <CircleRing
-              done={lastDone}
-              goal={goal}
-              periodLabel={lastLabel}
-            />
+            <CircleRing done={p1Done} goal={goal} periodLabel={p1Label} />
+            <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
+            <CircleRing done={p2Done} goal={goal} periodLabel={p2Label} />
           </View>
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
@@ -600,6 +592,7 @@ const styles = StyleSheet.create({
   periodLabels: { alignItems: 'flex-end', gap: 1 },
   periodLabelSmall: { fontSize: 9, fontWeight: '600' },
   ringPair: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ringTriple: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ringDivider: { width: StyleSheet.hairlineWidth, height: 36, borderRadius: 1 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',

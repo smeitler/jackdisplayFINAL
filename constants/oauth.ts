@@ -1,4 +1,3 @@
-import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
@@ -121,11 +120,9 @@ export async function startOAuthLogin(): Promise<string | null> {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     });
     // If the user completed auth, the deep link callback in app/oauth/callback.tsx
-    // will fire and handle the token exchange automatically.
-    if (result.type === "success" && result.url) {
-      // Manually trigger the deep link handler since WebBrowser intercepts the redirect
-      await Linking.openURL(result.url);
-    }
+    // will fire and handle the token exchange automatically via the deep link scheme.
+    // NOTE: Do NOT call Linking.openURL here — that would open the system browser.
+    // The deep link is already handled by Expo Router's linking configuration.
   } catch (error) {
     console.error("[OAuth] Failed to open in-app browser:", error);
   }
