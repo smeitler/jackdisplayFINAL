@@ -126,14 +126,21 @@ function CircleRing({
   done,
   goal,
   size = 44,
+  label,
+  periodLabel,
+  isLast = false,
 }: {
   done: number;
   goal: number;
   size?: number;
+  label?: string;
+  periodLabel?: string;
+  isLast?: boolean;
 }) {
   const pct = goal > 0 ? Math.min(done / goal, 1) : 0;
   const hit = goal > 0 && done >= goal;
-  const color = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
+  const ringColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
+  const textColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#9BA1A6';
 
   const strokeWidth = 3.5;
   const r = (size - strokeWidth) / 2;
@@ -143,27 +150,40 @@ function CircleRing({
   const dash = pct * circumference;
   const gap = circumference - dash;
 
+  // Fraction text: "5/6" or crown if last period hit
+  const fractionText = goal > 0
+    ? (isLast && hit ? '👑' : `${done}/${goal}`)
+    : '—';
+  const fractionFontSize = goal > 0 && !isLast ? (size <= 36 ? 8 : 10) : (size <= 36 ? 9 : 11);
+
   return (
-    <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-      {/* Track */}
-      <Circle
-        cx={cx} cy={cy} r={r}
-        stroke="#334155"
-        strokeWidth={strokeWidth}
-        fill="none"
-      />
-      {/* Progress arc */}
-      {pct > 0 && (
-        <Circle
-          cx={cx} cy={cy} r={r}
-          stroke={color}
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={`${dash} ${gap}`}
-          strokeLinecap="round"
-        />
-      )}
-    </Svg>
+    <View style={{ alignItems: 'center', gap: 3 }}>
+      {/* Period label above ring */}
+      {periodLabel ? (
+        <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+          {periodLabel}
+        </Text>
+      ) : null}
+      {/* Ring + fraction */}
+      <View style={{ position: 'relative', width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
+          <Circle cx={cx} cy={cy} r={r} stroke="#334155" strokeWidth={strokeWidth} fill="none" />
+          {pct > 0 && (
+            <Circle
+              cx={cx} cy={cy} r={r}
+              stroke={ringColor}
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={`${dash} ${gap}`}
+              strokeLinecap="round"
+            />
+          )}
+        </Svg>
+        <Text style={{ fontSize: fractionFontSize, fontWeight: '700', color: textColor, textAlign: 'center' }}>
+          {fractionText}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -195,50 +215,42 @@ function HabitGoalRow({
   const lastDone = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
   const goal = isMonthly ? (habit.monthlyGoal ?? 0) : (habit.weeklyGoal ?? 0);
 
+  const thisLabel = period === 'week' ? 'This Wk' : 'This Mo';
+  const lastLabel = period === 'week' ? 'Last Wk' : 'Last Mo';
+
   return (
     <TouchableOpacity
       onPress={onPress}
       style={[styles.habitRow, { borderTopColor: colors.border }]}
       activeOpacity={0.7}
     >
-      {/* Left: circle ring + habit name */}
-      <View style={styles.habitLeft}>
-        {/* Current period ring */}
-        <View style={styles.ringWrapper}>
-          <CircleRing done={currentDone} goal={goal} size={44} />
-          {/* Count label in center */}
-          <View style={styles.ringCenter}>
-            <Text style={[styles.ringCount, { color: goal > 0 && currentDone >= goal ? '#22C55E' : goal > 0 && currentDone / goal >= 0.6 ? '#F59E0B' : goal > 0 ? '#EF4444' : colors.muted }]}>
-              {goal > 0 ? `${currentDone}` : '—'}
-            </Text>
-          </View>
-        </View>
-        {/* Last period ring (smaller, muted) */}
-        {goal > 0 && (
-          <View style={[styles.ringWrapper, { marginLeft: -6 }]}>
-            <CircleRing done={lastDone} goal={goal} size={32} />
-            <View style={styles.ringCenterSmall}>
-              <Text style={[styles.ringCountSmall, { color: lastDone >= goal ? '#FFD700' : colors.muted }]}>
-                {lastDone >= goal ? '👑' : `${lastDone}`}
-              </Text>
-            </View>
-          </View>
-        )}
-        <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>
-          {habit.name}
-        </Text>
-      </View>
+      {/* Left: habit name */}
+      <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>
+        {habit.name}
+      </Text>
 
-      {/* Right side: period labels + chevron */}
+      {/* Right side: two rings + chevron */}
       <View style={styles.habitRight}>
-        {showChip && goal > 0 ? (
-          <View style={styles.periodLabels}>
-            <Text style={[styles.periodLabelSmall, { color: colors.muted }]}>
-              {period === 'week' ? 'This Wk' : 'This Mo'}
-            </Text>
-            <Text style={[styles.periodLabelSmall, { color: colors.muted }]}>
-              {period === 'week' ? 'Last Wk' : 'Last Mo'}
-            </Text>
+        {goal > 0 ? (
+          <View style={styles.ringPair}>
+            {/* Current period ring */}
+            <CircleRing
+              done={currentDone}
+              goal={goal}
+              size={46}
+              periodLabel={thisLabel}
+              isLast={false}
+            />
+            {/* Divider */}
+            <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
+            {/* Last period ring */}
+            <CircleRing
+              done={lastDone}
+              goal={goal}
+              size={40}
+              periodLabel={lastLabel}
+              isLast={true}
+            />
           </View>
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
@@ -590,6 +602,8 @@ const styles = StyleSheet.create({
   ringCountSmall: { fontSize: 9, fontWeight: '700' },
   periodLabels: { alignItems: 'flex-end', gap: 1 },
   periodLabelSmall: { fontSize: 9, fontWeight: '600' },
+  ringPair: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ringDivider: { width: StyleSheet.hairlineWidth, height: 36, borderRadius: 1 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 10,

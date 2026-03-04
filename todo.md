@@ -370,3 +370,4 @@
 - [x] Home screen: remove Weekly/Monthly toggle; each habit auto-shows its own period chip based on its frequencyType setting
 - [x] Home screen: circular progress ring around each habit showing current period fill (green=hit, yellow=on track, red=behind)
 - [x] Fix Apple App Store rejection: replace external browser OAuth with in-app browser (SFSafariViewController / expo-web-browser)
+- [x] Home screen: move habit rings to right side, show fraction (5/6) inside ring, label "This Wk / Last Wk" above each ring
