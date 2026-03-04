@@ -6,7 +6,7 @@
 import {
   View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent,
 } from "react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -16,17 +16,11 @@ import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, LIFE_AREAS } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
-import { SixMonthHeatmap } from "@/components/six-month-heatmap";
 import { CategoryIcon } from "@/components/category-icon";
-import { CategoryCalendar } from "@/components/category-calendar";
+import { ScrollableCalendar } from "@/components/scrollable-calendar";
 import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
-
-const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
 
 function ratingColor(r: "green" | "yellow" | "red" | string) {
   if (r === "green") return "#22C55E";
@@ -57,25 +51,13 @@ export default function CategoryDetailScreen() {
   const today = new Date();
   const todayStr = toDateString(today);
 
-  // Month calendar state
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [calMonth, setCalMonth] = useState(today.getMonth());
+  // Scrollable calendar state
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [cardWidth, setCardWidth] = useState(0);
-  function onCardLayout(e: LayoutChangeEvent) {
+  const onCardLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width - 32;
     if (w > 0) setCardWidth(w);
-  }
-  function prevMonth() {
-    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
-    else setCalMonth(m => m - 1);
-  }
-  function nextMonth() {
-    if (calYear === today.getFullYear() && calMonth >= today.getMonth()) return;
-    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
-    else setCalMonth(m => m + 1);
-  }
-  const canGoForward = !(calYear === today.getFullYear() && calMonth >= today.getMonth());
+  }, []);
 
   const selectedDayCategoryScores: CategoryDayScore[] = useMemo(() => {
     if (!selectedDate || !category) return [];
@@ -242,36 +224,18 @@ export default function CategoryDetailScreen() {
           )}
         </View>
 
-        {/* ── Month Calendar ── */}
+        {/* ── Scrollable Calendar ── */}
         <View
           onLayout={onCardLayout}
           style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
-          {/* Month nav */}
-          <View style={styles.monthNav}>
-            <Pressable
-              onPress={prevMonth}
-              style={({ pressed }) => [styles.monthNavBtn, { opacity: pressed ? 0.5 : 1 }]}
-            >
-              <IconSymbol name="chevron.left" size={16} color={colors.primary} />
-            </Pressable>
-            <Text style={[styles.monthTitle, { color: colors.foreground }]}>
-              {MONTH_NAMES[calMonth]} {calYear}
-            </Text>
-            <Pressable
-              onPress={canGoForward ? nextMonth : undefined}
-              style={({ pressed }) => [styles.monthNavBtn, { opacity: canGoForward ? (pressed ? 0.5 : 1) : 0.2 }]}
-            >
-              <IconSymbol name="chevron.right" size={16} color={colors.primary} />
-            </Pressable>
-          </View>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Calendar</Text>
 
           {habits.length > 0 ? (
-            <CategoryCalendar
-              year={calYear}
-              month={calMonth}
+            <ScrollableCalendar
               habits={habits}
               checkIns={checkIns}
+              monthCount={6}
               onDayPress={(date) => {
                 const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
                 if (!hasEntry) {
@@ -282,7 +246,6 @@ export default function CategoryDetailScreen() {
                 }
               }}
               containerWidth={cardWidth > 0 ? cardWidth : undefined}
-              selectedHabitId={null}
             />
           ) : (
             <Text style={[styles.emptyText, { color: colors.muted }]}>No habits yet.</Text>
