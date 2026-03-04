@@ -19,6 +19,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useRouter } from "expo-router";
+import { useApp } from "@/lib/app-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -320,13 +321,24 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+// Demo mode mock teams shown to Apple reviewers
+const DEMO_TEAMS: TeamItem[] = [
+  { id: 1, name: 'Morning Warriors', description: 'Early risers holding each other accountable every day.', joinCode: 'DEMO1234', creatorId: 0, role: 'owner' },
+  { id: 2, name: 'Fitness Squad', description: 'Gym and nutrition goals — no excuses.', joinCode: 'DEMO5678', creatorId: 1, role: 'member' },
+];
+
 export default function CommunityScreen() {
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const [showModal, setShowModal] = useState(false);
+  const { isDemoMode } = useApp();
 
-  const { data: teams, isLoading, refetch } = trpc.teams.list.useQuery();
+  const { data: serverTeams, isLoading, refetch } = trpc.teams.list.useQuery(
+    undefined,
+    { enabled: !isDemoMode }
+  );
+  const teams = isDemoMode ? DEMO_TEAMS : serverTeams;
 
   return (
     <ScreenContainer>

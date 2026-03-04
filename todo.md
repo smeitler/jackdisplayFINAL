@@ -373,3 +373,6 @@
 - [x] Home screen: move habit rings to right side, show fraction (5/6) inside ring, label "This Wk / Last Wk" above each ring
 - [x] Home screen: remove crown from last-week ring, show plain fraction number instead
 - [x] Settings: fix "Failed to delete account" error — added missing cascade deletes for teamGoalVotes, teamGoalProposals, teams owned by user, and referrals as referrer
+- [x] Apple review: expand demo account seed data to cover all features (habits, goals, check-ins history, community posts, team)
+- [x] Apple review: ensure demo login is stable and prepare credentials for App Store Connect
+- [x] Apple review: fix delete account still failing on device (iPad Air iPadOS 26.3) — clear session token before navigating away, cookie cleared before DB delete

@@ -10,6 +10,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { DAY_LABELS, formatAlarmTime } from "@/lib/notifications";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/hooks/use-auth";
+import * as Auth from "@/lib/_core/auth";
 import { useThemeContext } from "@/lib/theme-provider";
 import { type AppTheme } from "@/constants/theme";
 import { clearLocalData } from "@/lib/storage";
@@ -717,9 +718,13 @@ export default function SettingsScreen() {
                         try {
                           if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                           await deleteAccountMutation.mutateAsync();
+                          // Clear session token immediately so no further authenticated requests are made
+                          await Auth.removeSessionToken();
+                          await Auth.clearUserInfo();
                           await clearLocalData();
                           router.replace('/login');
-                        } catch {
+                        } catch (err) {
+                          console.error('[DeleteAccount] Error:', err);
                           Alert.alert('Error', 'Failed to delete account. Please try again.');
                         }
                       },

@@ -22,10 +22,14 @@ export const appRouter = router({
      * Required by Apple App Store guidelines (apps with user accounts must offer in-app deletion).
      */
     deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
-      await db.deleteUser(ctx.user.id);
-      // Clear the session cookie after deletion
+      // Save user id before any async operations
+      const userId = ctx.user.id;
+      // Clear the session cookie FIRST to prevent the auth middleware from
+      // auto-recreating the user on any subsequent requests
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      // Now delete all user data
+      await db.deleteUser(userId);
       return { success: true } as const;
     }),
   }),
