@@ -120,12 +120,72 @@ function PeriodGoalChip({
   );
 }
 
+// ── Date Range Helpers ──────────────────────────────────────────────────────
+
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function fmtDate(d: Date): string {
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** Returns "Mon D – Mon D" for the current ISO week (Mon–Sun). */
+function currentWeekRange(): string {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const mon = new Date(now); mon.setDate(now.getDate() + diffToMon);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  return `${fmtDate(mon)} – ${fmtDate(sun)}`;
+}
+
+/** Returns "Mon D – Mon D" for the previous ISO week. */
+function lastWeekRange(): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const thisMon = new Date(now); thisMon.setDate(now.getDate() + diffToMon);
+  const lastMon = new Date(thisMon); lastMon.setDate(thisMon.getDate() - 7);
+  const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6);
+  return `${fmtDate(lastMon)} – ${fmtDate(lastSun)}`;
+}
+
+/** Returns "Mon D – Mon D" for two weeks ago. */
+function weekBeforeRange(): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const thisMon = new Date(now); thisMon.setDate(now.getDate() + diffToMon);
+  const wbMon = new Date(thisMon); wbMon.setDate(thisMon.getDate() - 14);
+  const wbSun = new Date(wbMon); wbSun.setDate(wbMon.getDate() + 6);
+  return `${fmtDate(wbMon)} – ${fmtDate(wbSun)}`;
+}
+
+/** Returns "Mon YYYY" for the current month. */
+function currentMonthRange(): string {
+  const now = new Date();
+  return `${MONTH_ABBR[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+/** Returns "Mon YYYY" for last month. */
+function lastMonthRange(): string {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Returns "Mon YYYY" for two months ago. */
+function monthBeforeRange(): string {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-// Fixed container height = label height (12) + gap (3) + ring size (38)
+// Fixed container height = label area (24, allows 2 lines at 8px) + gap (3) + ring size (38)
 // Smaller rings (38px) to fit 3 in a row without crowding the habit name
 const RING_SIZE = 38;
-const RING_LABEL_HEIGHT = 12;
+const RING_LABEL_HEIGHT = 24; // 2 lines of 8px text with line height
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
 function CircleRing({
@@ -160,9 +220,9 @@ function CircleRing({
     // Fixed height container so both rings in a pair always align regardless of label text
     <View style={{ alignItems: 'center', height: RING_CONTAINER_HEIGHT, justifyContent: 'flex-end' }}>
       {/* Period label above ring — always reserve space even if empty */}
-      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', marginBottom: 3 }}>
+      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', alignItems: 'center', marginBottom: 3 }}>
         {periodLabel ? (
-          <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+          <Text style={{ fontSize: 8, fontWeight: '500', color: '#9BA1A6', textAlign: 'center', lineHeight: 11 }} numberOfLines={2}>
             {periodLabel}
           </Text>
         ) : null}
@@ -217,9 +277,10 @@ function HabitGoalRow({
   const p1Done = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
   const p2Done = isMonthly ? getHabitMonthBeforeDone(habit.id) : getHabitWeekBeforeDone(habit.id);
 
-  const p0Label = isMonthly ? 'This Mo' : 'This Wk';
-  const p1Label = isMonthly ? 'Last Mo' : 'Last Wk';
-  const p2Label = isMonthly ? '2 Mo Ago' : '2 Wks Ago';
+  // Date range labels — computed once per render
+  const p0Label = isMonthly ? currentMonthRange() : currentWeekRange();
+  const p1Label = isMonthly ? lastMonthRange() : lastWeekRange();
+  const p2Label = isMonthly ? monthBeforeRange() : weekBeforeRange();
 
   return (
     <TouchableOpacity
@@ -232,15 +293,15 @@ function HabitGoalRow({
         {habit.name}
       </Text>
 
-      {/* Right side: three rings + chevron */}
+      {/* Right side: three rings (oldest left → newest right) + chevron */}
       <View style={styles.habitRight}>
         {goal > 0 ? (
           <View style={styles.ringTriple}>
-            <CircleRing done={p0Done} goal={goal} periodLabel={p0Label} />
+            <CircleRing done={p2Done} goal={goal} periodLabel={p2Label} />
             <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
             <CircleRing done={p1Done} goal={goal} periodLabel={p1Label} />
             <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-            <CircleRing done={p2Done} goal={goal} periodLabel={p2Label} />
+            <CircleRing done={p0Done} goal={goal} periodLabel={p0Label} />
           </View>
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>

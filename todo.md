@@ -392,3 +392,7 @@
 - [x] Apple Guideline 4: fix OAuth opening external browser — added WebBrowser.maybeCompleteAuthSession() to callback screen, removed Linking.openURL re-open
 - [x] Apple Guideline 2.1(a) bug: delete account hardened — removed swallowed .catch(), added try/catch with real error propagation
 - [x] Apple Guideline 2.1(a) info: demo team detail screen now shows 3 pre-populated posts, 3 members, reactions — Apple reviewer can explore full community feature
+
+## Circle Order + Date Labels (Mar 04 2026)
+- [x] Home screen: reverse 3-circle order so oldest is on the left and most recent is on the right
+- [x] Home screen: add date range label under each ring (e.g. "Mar 3–9" or "Feb 1–28") for clarity
