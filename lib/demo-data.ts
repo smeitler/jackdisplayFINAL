@@ -5,7 +5,7 @@
 
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
-import { CategoryDef, Habit, CheckInEntry, AlarmConfig, Rating, VisionBoard, VisionMotivations } from './storage';
+import { CategoryDef, Habit, CheckInEntry, AlarmConfig, Rating, VisionBoard, VisionMotivations, Reward } from './storage';
 
 // ─── Demo Categories ──────────────────────────────────────────────────────────
 
@@ -191,6 +191,62 @@ export async function buildDemoVisionBoard(): Promise<VisionBoard> {
 }
 
 // ─── Demo Alarm ───────────────────────────────────────────────────────────────
+
+// ─── Demo Rewards ────────────────────────────────────────────────────────────
+
+export const DEMO_REWARDS: Reward[] = [
+  {
+    id: 'dr1',
+    name: 'New Running Shoes',
+    description: 'Reward myself with a fresh pair of Nikes after crushing my gym habit.',
+    emoji: '👟',
+    habitId: 'dh1',
+    milestoneCount: 20,
+    createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+    color: '#22C55E',
+  },
+  {
+    id: 'dr2',
+    name: 'Spa Day',
+    description: 'A full day of rest and recovery — I earned it.',
+    emoji: '🛁',
+    habitId: 'dh3',
+    milestoneCount: 30,
+    claimedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+    color: '#EC4899',
+  },
+  {
+    id: 'dr3',
+    name: 'New Book Collection',
+    description: 'Buy 5 books from my reading list.',
+    emoji: '📚',
+    habitId: 'dm2',
+    milestoneCount: 25,
+    createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+    color: '#6C63FF',
+  },
+  {
+    id: 'dr4',
+    name: 'Weekend Trip',
+    description: 'Plan a weekend getaway as a reward for deep work consistency.',
+    emoji: '✈️',
+    habitId: 'df1',
+    milestoneCount: 50,
+    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+    color: '#F59E0B',
+  },
+  {
+    id: 'dr5',
+    name: 'Invest $500',
+    description: 'Put $500 into index funds after 30 budget reviews.',
+    emoji: '💸',
+    habitId: 'dmo1',
+    milestoneCount: 30,
+    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+    color: '#F59E0B',
+  },
+];
 
 export const DEMO_ALARM: AlarmConfig = {
   hour: 7,

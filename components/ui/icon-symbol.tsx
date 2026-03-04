@@ -91,6 +91,7 @@ const MAPPING = {
   "banknote.fill": "payments",
   "hands.and.sparkles.fill": "volunteer-activism",
   "sun.max.fill": "wb-sunny",
+  "rosette": "workspace-premium",
 } as IconMapping;
 
 export function IconSymbol({

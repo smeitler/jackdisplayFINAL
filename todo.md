@@ -423,3 +423,16 @@
 ## Team Stats Habit Rings (Mar 04 2026)
 
 - [x] Team Stats tab: show shared team habit with 3 rolling-period rings matching home screen personal habit card style (2 Wks Ago / Last Wk / This Wk)
+
+## Rewards Tab (Mar 04 2026)
+
+- [ ] Rewards: data model (id, title, description, emoji, milestoneType: habit_count|streak|score, milestoneValue, habitId|null, status: locked|unlocked|claimed, claimedAt)
+- [ ] Rewards: AsyncStorage persistence (saveRewards, loadRewards, claimReward)
+- [ ] Rewards: tab screen with reward cards showing progress bar toward milestone
+- [ ] Rewards: create/edit reward modal (title, description, emoji picker, milestone type + value, linked habit or any habit)
+- [ ] Rewards: unlock animation when milestone is reached (confetti + haptic)
+- [ ] Rewards: claim button on unlocked rewards (marks as claimed with timestamp)
+- [ ] Rewards: claimed rewards section (history of earned rewards)
+- [ ] Rewards: add tab to bottom navigation with gift/trophy icon
+- [ ] Rewards: icon mapping added to icon-symbol.tsx before use in tabs
+- [ ] Rewards: demo mode seeds 3 sample rewards with varying progress states

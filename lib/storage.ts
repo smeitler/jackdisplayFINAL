@@ -94,6 +94,7 @@ const KEYS = {
   lastCheckIn:'daycheck:lastcheckin',
   lastUserId: 'daycheck:lastUserId',
   demoMode:   'daycheck:demoMode',
+  rewards:    'daycheck:rewards',
 } as const;
 
 /** Returns true if the app is currently running in Demo Mode. */
@@ -416,7 +417,73 @@ export async function clearLocalData(): Promise<void> {
     VISION_BOARD_KEY,
     VISION_MOTIVATIONS_KEY,
     DAY_NOTES_KEY,
+    KEYS.rewards,
   ]);
+}
+
+// ─── Rewards ─────────────────────────────────────────────────────────────────
+
+/** A reward the user creates to celebrate reaching a habit milestone. */
+export type Reward = {
+  id: string;
+  /** Display name, e.g. "New Running Shoes" */
+  name: string;
+  /** Optional longer description */
+  description?: string;
+  /** Emoji icon for the reward, e.g. "👟" */
+  emoji: string;
+  /** The habit ID this reward is tied to (or 'any' for total completions across all habits) */
+  habitId: string;
+  /** Number of completions (green check-ins) needed to unlock this reward */
+  milestoneCount: number;
+  /** ISO date string when the reward was claimed (unlocked), or null if not yet */
+  claimedAt?: string;
+  /** ISO date string when the reward was created */
+  createdAt: string;
+  /** Optional color accent for the card */
+  color?: string;
+};
+
+export async function loadRewards(): Promise<Reward[]> {
+  const raw = await AsyncStorage.getItem(KEYS.rewards);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as Reward[];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveRewards(rewards: Reward[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.rewards, JSON.stringify(rewards));
+}
+
+export async function addReward(reward: Reward): Promise<void> {
+  const rewards = await loadRewards();
+  rewards.push(reward);
+  await saveRewards(rewards);
+}
+
+export async function updateReward(updated: Reward): Promise<void> {
+  const rewards = await loadRewards();
+  const idx = rewards.findIndex(r => r.id === updated.id);
+  if (idx >= 0) {
+    rewards[idx] = updated;
+    await saveRewards(rewards);
+  }
+}
+
+export async function deleteReward(id: string): Promise<void> {
+  const rewards = await loadRewards();
+  await saveRewards(rewards.filter(r => r.id !== id));
+}
+
+/** Count how many green check-ins a habit (or all habits) has accumulated. */
+export function countGreenCheckIns(checkIns: CheckInEntry[], habitId: string): number {
+  if (habitId === 'any') {
+    return checkIns.filter(c => c.rating === 'green').length;
+  }
+  return checkIns.filter(c => c.habitId === habitId && c.rating === 'green').length;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
