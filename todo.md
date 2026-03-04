@@ -410,3 +410,8 @@
 - [x] Team leaderboard: show each member's current streak alongside their score (via check-in count per period)
 - [x] Team leaderboard: highlight the current user's row (primary tint background)
 - [x] Team leaderboard: show team average score at the top as a summary stat
+
+## Demo Vision Board (Mar 04 2026)
+
+- [x] Demo mode: seed vision board with bundled royalty-free photos per goal (Body, Mind, Money, Relationships, Focus)
+- [x] Demo mode: seed vision board motivations/reasons per goal (4 motivations per goal)

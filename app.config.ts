@@ -82,6 +82,13 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-apple-authentication",
     [
+      "expo-asset",
+      {
+        // Bundle demo vision board images so they are available offline
+        assets: ["./assets/demo"],
+      },
+    ],
+    [
       "expo-notifications",
       {
         // Bundle all custom alarm sounds (.caf for iOS, .wav for Android)

@@ -20,8 +20,10 @@ import {
   setLastUserId,
   getIsDemoMode,
   setDemoMode,
+  saveVisionBoard,
+  saveVisionMotivations,
 } from './storage';
-import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns } from './demo-data';
+import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns, buildDemoVisionBoard, DEMO_MOTIVATIONS } from './demo-data';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
 
@@ -776,6 +778,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const lastDate = demoCheckIns.map((e) => e.date).sort().pop() ?? null;
     dispatch({ type: 'LOADED', habits: DEMO_HABITS, categories: DEMO_CATEGORIES, checkIns: demoCheckIns, alarm: DEMO_ALARM, lastCheckInDate: lastDate });
     dispatch({ type: 'SET_DEMO_MODE', isDemoMode: true });
+    // Seed vision board photos and motivations for demo mode
+    try {
+      const [demoBoard] = await Promise.all([
+        buildDemoVisionBoard(),
+        saveVisionMotivations(DEMO_MOTIVATIONS),
+      ]);
+      await saveVisionBoard(demoBoard);
+    } catch {
+      // non-critical — demo still works without vision board photos
+    }
   }, []);
 
   const exitDemo = useCallback(async () => {

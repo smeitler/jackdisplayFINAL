@@ -3,7 +3,9 @@
  * Used by Apple App Store reviewers and curious users who don't want to create an account.
  */
 
-import { CategoryDef, Habit, CheckInEntry, AlarmConfig, Rating } from './storage';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system/legacy';
+import { CategoryDef, Habit, CheckInEntry, AlarmConfig, Rating, VisionBoard, VisionMotivations } from './storage';
 
 // ─── Demo Categories ──────────────────────────────────────────────────────────
 
@@ -74,6 +76,95 @@ export function buildDemoCheckIns(): CheckInEntry[] {
     }
   }
   return entries;
+}
+
+// ─── Demo Vision Board ───────────────────────────────────────────────────────
+
+/** Bundled demo images for each goal category */
+const DEMO_VISION_ASSETS: Record<string, number[]> = {
+  demo_body: [
+    require('../assets/demo/body1.webp'),
+    require('../assets/demo/body2.jpg'),
+  ],
+  demo_mind: [
+    require('../assets/demo/mind1.jpg'),
+    require('../assets/demo/mind2.jpg'),
+  ],
+  demo_money: [
+    require('../assets/demo/money1.jpg'),
+    require('../assets/demo/money2.jpg'),
+  ],
+  demo_relationships: [
+    require('../assets/demo/relationships1.jpg'),
+    require('../assets/demo/relationships2.jpg'),
+  ],
+  demo_focus: [
+    require('../assets/demo/focus1.webp'),
+    require('../assets/demo/focus2.jpg'),
+  ],
+};
+
+/** Motivations ("why this matters") for each demo goal category */
+export const DEMO_MOTIVATIONS: VisionMotivations = {
+  demo_body: [
+    'Energy to show up fully for the people I love',
+    'Confidence that comes from keeping promises to myself',
+    'A body that performs — not just looks — at its best',
+    'Proving to myself that consistency beats motivation',
+  ],
+  demo_mind: [
+    'Clarity of thought is my greatest competitive edge',
+    'Reading 30 pages a day compounds into 20 books a year',
+    'Journaling helps me process, decide, and grow faster',
+    'A calm mind makes every other habit easier',
+  ],
+  demo_money: [
+    'Financial freedom means options, not obligations',
+    'Building wealth is how I protect my family\'s future',
+    'Every dollar invested today is working while I sleep',
+    'My side project could replace my salary in 3 years',
+  ],
+  demo_relationships: [
+    'Deep connections are the only thing I\'ll never regret investing in',
+    'The people around me are my greatest source of joy',
+    'Showing up consistently builds trust that lasts a lifetime',
+    'Quality time > quantity of contacts',
+  ],
+  demo_focus: [
+    'Two focused hours beat eight distracted ones every time',
+    'My best work happens in protected blocks of deep work',
+    'Cutting social media before noon reclaims my mornings',
+    'Focus is the skill that separates good from great',
+  ],
+};
+
+/**
+ * Copies bundled demo images into the document directory so the vision board
+ * URI validation (which requires file:// paths in documentDirectory) passes.
+ * Returns a VisionBoard map of categoryId -> [file:// URIs].
+ */
+export async function buildDemoVisionBoard(): Promise<VisionBoard> {
+  if (!FileSystem.documentDirectory) return {};
+  const board: VisionBoard = {};
+  for (const [catId, modules] of Object.entries(DEMO_VISION_ASSETS)) {
+    const uris: string[] = [];
+    for (let i = 0; i < modules.length; i++) {
+      try {
+        const asset = Asset.fromModule(modules[i]);
+        await asset.downloadAsync();
+        const src = asset.localUri;
+        if (!src) continue;
+        const ext = asset.type ?? 'jpg';
+        const dest = `${FileSystem.documentDirectory}demo_vision_${catId}_${i}.${ext}`;
+        await FileSystem.copyAsync({ from: src, to: dest });
+        uris.push(dest);
+      } catch {
+        // skip this image if copy fails
+      }
+    }
+    board[catId] = uris;
+  }
+  return board;
 }
 
 // ─── Demo Alarm ───────────────────────────────────────────────────────────────
