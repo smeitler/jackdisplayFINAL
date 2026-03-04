@@ -368,3 +368,4 @@
 - [x] Check-in screen: 15s countdown bar that re-fires alarm on timeout, resets on any touch/scroll, only dismisses on full completion
 - [x] Home screen: show days remaining in current week/month on habit goal chips to motivate users
 - [x] Home screen: remove Weekly/Monthly toggle; each habit auto-shows its own period chip based on its frequencyType setting
+- [x] Home screen: circular progress ring around each habit showing current period fill (green=hit, yellow=on track, red=behind)

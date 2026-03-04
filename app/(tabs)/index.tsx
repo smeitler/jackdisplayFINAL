@@ -9,6 +9,7 @@ import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit } from "@/lib/sto
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
+import Svg, { Circle } from "react-native-svg";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
@@ -119,6 +120,53 @@ function PeriodGoalChip({
   );
 }
 
+// ── Circular Progress Ring ───────────────────────────────────────────────────
+
+function CircleRing({
+  done,
+  goal,
+  size = 44,
+}: {
+  done: number;
+  goal: number;
+  size?: number;
+}) {
+  const pct = goal > 0 ? Math.min(done / goal, 1) : 0;
+  const hit = goal > 0 && done >= goal;
+  const color = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
+
+  const strokeWidth = 3.5;
+  const r = (size - strokeWidth) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const dash = pct * circumference;
+  const gap = circumference - dash;
+
+  return (
+    <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+      {/* Track */}
+      <Circle
+        cx={cx} cy={cy} r={r}
+        stroke="#334155"
+        strokeWidth={strokeWidth}
+        fill="none"
+      />
+      {/* Progress arc */}
+      {pct > 0 && (
+        <Circle
+          cx={cx} cy={cy} r={r}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${dash} ${gap}`}
+          strokeLinecap="round"
+        />
+      )}
+    </Svg>
+  );
+}
+
 // ── Habit Row ─────────────────────────────────────────────────────────────────
 
 function HabitGoalRow({
@@ -153,22 +201,45 @@ function HabitGoalRow({
       style={[styles.habitRow, { borderTopColor: colors.border }]}
       activeOpacity={0.7}
     >
-      {/* Habit name */}
-      <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>
-        {habit.name}
-      </Text>
+      {/* Left: circle ring + habit name */}
+      <View style={styles.habitLeft}>
+        {/* Current period ring */}
+        <View style={styles.ringWrapper}>
+          <CircleRing done={currentDone} goal={goal} size={44} />
+          {/* Count label in center */}
+          <View style={styles.ringCenter}>
+            <Text style={[styles.ringCount, { color: goal > 0 && currentDone >= goal ? '#22C55E' : goal > 0 && currentDone / goal >= 0.6 ? '#F59E0B' : goal > 0 ? '#EF4444' : colors.muted }]}>
+              {goal > 0 ? `${currentDone}` : '—'}
+            </Text>
+          </View>
+        </View>
+        {/* Last period ring (smaller, muted) */}
+        {goal > 0 && (
+          <View style={[styles.ringWrapper, { marginLeft: -6 }]}>
+            <CircleRing done={lastDone} goal={goal} size={32} />
+            <View style={styles.ringCenterSmall}>
+              <Text style={[styles.ringCountSmall, { color: lastDone >= goal ? '#FFD700' : colors.muted }]}>
+                {lastDone >= goal ? '👑' : `${lastDone}`}
+              </Text>
+            </View>
+          </View>
+        )}
+        <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>
+          {habit.name}
+        </Text>
+      </View>
 
-      {/* Right side: goal chip or no-goal label */}
+      {/* Right side: period labels + chevron */}
       <View style={styles.habitRight}>
-        {showChip ? (
-          <PeriodGoalChip
-            currentDone={currentDone}
-            currentGoal={goal}
-            lastDone={lastDone}
-            lastGoal={goal}
-            period={period}
-            colors={colors}
-          />
+        {showChip && goal > 0 ? (
+          <View style={styles.periodLabels}>
+            <Text style={[styles.periodLabelSmall, { color: colors.muted }]}>
+              {period === 'week' ? 'This Wk' : 'This Mo'}
+            </Text>
+            <Text style={[styles.periodLabelSmall, { color: colors.muted }]}>
+              {period === 'week' ? 'Last Wk' : 'Last Mo'}
+            </Text>
+          </View>
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
             {isMonthly ? 'No monthly goal' : 'No weekly goal'}
@@ -511,13 +582,21 @@ const styles = StyleSheet.create({
   deadlineText: { fontSize: 10, fontWeight: '700' },
 
   // Habit row
+  habitLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, minWidth: 0 },
+  ringWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0, left: 0, right: 0, bottom: 0 },
+  ringCenterSmall: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0, left: 0, right: 0, bottom: 0 },
+  ringCount: { fontSize: 11, fontWeight: '700' },
+  ringCountSmall: { fontSize: 9, fontWeight: '700' },
+  periodLabels: { alignItems: 'flex-end', gap: 1 },
+  periodLabelSmall: { fontSize: 9, fontWeight: '600' },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },
-  habitName: { flex: 1, fontSize: 13, fontWeight: '600' },
+  habitName: { flex: 1, fontSize: 13, fontWeight: '600', flexShrink: 1 },
   habitRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   noGoalText: { fontSize: 11, fontStyle: 'italic' },
   noHabitsText: { fontSize: 12, padding: 12, textAlign: 'center' },
