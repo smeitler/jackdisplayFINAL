@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from "react";
+import Svg, { Circle } from "react-native-svg";
 import {
   View,
   Text,
@@ -40,6 +41,124 @@ function timeAgo(date: Date | string) {
 function getInitials(name: string | null, email: string | null) {
   const src = name ?? email ?? "?";
   return src.slice(0, 2).toUpperCase();
+}
+
+// ─── Team Habit Rings (matches home screen CircleRing style) ─────────────────
+
+const RING_SIZE = 38;
+const RING_LABEL_HEIGHT = 12;
+const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
+
+function CircleRing({
+  done,
+  goal,
+  size = RING_SIZE,
+  periodLabel,
+}: {
+  done: number;
+  goal: number;
+  size?: number;
+  periodLabel?: string;
+}) {
+  const pct = goal > 0 ? Math.min(done / goal, 1) : 0;
+  const hit = goal > 0 && done >= goal;
+  const ringColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
+  const textColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#9BA1A6';
+  const strokeWidth = 3.5;
+  const r = (size - strokeWidth) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const dash = pct * circumference;
+  const gap = circumference - dash;
+  const fractionText = goal > 0 ? `${done}/${goal}` : '\u2014';
+  return (
+    <View style={{ alignItems: 'center', height: RING_CONTAINER_HEIGHT, justifyContent: 'flex-end' }}>
+      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', marginBottom: 3 }}>
+        {periodLabel ? (
+          <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            {periodLabel}
+          </Text>
+        ) : null}
+      </View>
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
+          <Circle cx={cx} cy={cy} r={r} stroke="#334155" strokeWidth={strokeWidth} fill="none" />
+          {pct > 0 && (
+            <Circle
+              cx={cx} cy={cy} r={r}
+              stroke={ringColor}
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={`${dash} ${gap}`}
+              strokeLinecap="round"
+            />
+          )}
+        </Svg>
+        <Text style={{ fontSize: 10, fontWeight: '700', color: textColor, textAlign: 'center' }}>
+          {fractionText}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+type DemoHabitStats = {
+  thisWeek: number;
+  lastWeek: number;
+  weekBefore: number;
+  memberCount: number;
+  proposals: { id: number; habitName: string; habitEmoji: string; lifeArea: string | null }[];
+};
+
+function TeamHabitRings({
+  teamId,
+  demoStats,
+}: {
+  teamId: number;
+  demoStats?: DemoHabitStats;
+}) {
+  const colors = useColors();
+  const { data: liveStats, isLoading } = trpc.teamFeed.habitStats.useQuery(
+    { teamId },
+    { enabled: !demoStats }
+  );
+  const stats = demoStats ?? liveStats;
+
+  if (!demoStats && isLoading) {
+    return (
+      <View style={[styles.habitRingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 16 }} />
+      </View>
+    );
+  }
+  if (!stats || (stats.proposals.length === 0 && !demoStats)) return null;
+
+  const habitName = stats.proposals[0]?.habitName ?? 'Team Habit';
+  const habitEmoji = stats.proposals[0]?.habitEmoji ?? '';
+  // Goal = memberCount × 5 days/week (reasonable default for weekly team habit)
+  const weeklyGoal = stats.memberCount * 5;
+
+  return (
+    <View style={[styles.habitRingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.habitRingHeader}>
+        <Text style={[styles.habitRingTitle, { color: colors.foreground }]}>
+          {habitEmoji ? `${habitEmoji}  ` : ''}{habitName}
+        </Text>
+        <Text style={[styles.habitRingSubtitle, { color: colors.muted }]}>Team Progress</Text>
+      </View>
+      <View style={styles.habitRingRow}>
+        <CircleRing done={stats.weekBefore} goal={weeklyGoal} periodLabel="2 Wks Ago" />
+        <View style={[styles.habitRingDivider, { backgroundColor: colors.border }]} />
+        <CircleRing done={stats.lastWeek} goal={weeklyGoal} periodLabel="Last Wk" />
+        <View style={[styles.habitRingDivider, { backgroundColor: colors.border }]} />
+        <CircleRing done={stats.thisWeek} goal={weeklyGoal} periodLabel="This Wk" />
+      </View>
+      <Text style={[styles.habitRingNote, { color: colors.muted }]}>
+        {stats.memberCount} member{stats.memberCount !== 1 ? 's' : ''} · combined check-ins
+      </Text>
+    </View>
+  );
 }
 
 // ─── Team Streak Banner ───────────────────────────────────────────────────────
@@ -995,6 +1114,14 @@ const DEMO_BOARD = [
   { userId: 3, name: 'Jordan Lee',   email: 'jordan@example.com', score: 72, checkInsCount: 12, checkedInToday: false },
 ];
 
+const DEMO_HABIT_STATS: DemoHabitStats = {
+  thisWeek: 11,
+  lastWeek: 14,
+  weekBefore: 9,
+  memberCount: 3,
+  proposals: [{ id: 1, habitName: 'Morning Workout', habitEmoji: '💪', lifeArea: 'body' }],
+};
+
 const DEMO_FEED: FeedPost[] = [
   {
     id: 1, userId: 2, type: 'post', content: 'Hit the gym at 6am today — 5 days in a row! Feeling unstoppable.',
@@ -1186,6 +1313,8 @@ export default function TeamDetailScreen() {
 
               {/* Leaderboard in Stats */}
               <TeamLeaderboard teamId={teamId} myUserId={myUserId} demoBoard={isDemoMode ? DEMO_BOARD : undefined} />
+              {/* Team Habit Rings */}
+              <TeamHabitRings teamId={teamId} demoStats={isDemoMode ? DEMO_HABIT_STATS : undefined} />
               {/* Members list */}
               {effectiveMembersLoading ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
@@ -1483,4 +1612,12 @@ const styles = StyleSheet.create({
   // Life Area Chips
   lifeAreaChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 20, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
   lifeAreaChipLabel: { fontSize: 13, fontWeight: "600" },
+  // Team Habit Rings card
+  habitRingCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
+  habitRingHeader: { marginBottom: 12 },
+  habitRingTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  habitRingSubtitle: { fontSize: 12 },
+  habitRingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  habitRingDivider: { width: 1, height: 32, opacity: 0.5 },
+  habitRingNote: { fontSize: 11, marginTop: 10, textAlign: 'center' },
 });

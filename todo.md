@@ -419,3 +419,7 @@
 ## Demo Vision Board Fix (Mar 04 2026)
 
 - [x] Fix: demo vision board photos not appearing in Vision Board screen after entering demo mode
+
+## Team Stats Habit Rings (Mar 04 2026)
+
+- [x] Team Stats tab: show shared team habit with 3 rolling-period rings matching home screen personal habit card style (2 Wks Ago / Last Wk / This Wk)

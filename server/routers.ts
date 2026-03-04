@@ -403,6 +403,14 @@ export const appRouter = router({
         if (!isMember) throw new Error("Not a member of this team");
         return db.getTeamLeaderboard(input.teamId, input.period);
       }),
+
+    habitStats: protectedProcedure
+      .input(z.object({ teamId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const isMember = await db.isTeamMember(input.teamId, ctx.user.id);
+        if (!isMember) throw new Error("Not a member of this team");
+        return db.getTeamHabitStats(input.teamId);
+      }),
   }),
 
   // ─── Community: Goal Proposals ────────────────────────────────────────────

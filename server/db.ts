@@ -996,3 +996,98 @@ export async function deleteDevice(deviceId: number, userId: number) {
     .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)));
   return true;
 }
+
+// ─── Team Habit Stats (3 rolling periods) ─────────────────────────────────────
+/**
+ * Returns team-aggregate check-in counts for 3 rolling weekly periods:
+ * thisWeek, lastWeek, weekBefore.
+ * Also returns the team's accepted habit proposals (for habit name display).
+ */
+export async function getTeamHabitStats(teamId: number) {
+  const db = await getDb();
+  if (!db) return { thisWeek: 0, lastWeek: 0, weekBefore: 0, memberCount: 0, proposals: [] };
+
+  const members = await db
+    .select({ userId: teamMembers.userId })
+    .from(teamMembers)
+    .where(eq(teamMembers.teamId, teamId));
+  const memberCount = members.length;
+  if (memberCount === 0) return { thisWeek: 0, lastWeek: 0, weekBefore: 0, memberCount: 0, proposals: [] };
+
+  const memberIds = members.map((m) => m.userId);
+
+  const now = new Date();
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // Build ISO week start (Monday) for current week
+  const dayOfWeek = now.getDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - daysFromMonday);
+  thisMonday.setHours(0, 0, 0, 0);
+
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(thisMonday.getDate() - 7);
+
+  const weekBeforeMonday = new Date(thisMonday);
+  weekBeforeMonday.setDate(thisMonday.getDate() - 14);
+
+  const buildWeekDates = (start: Date): string[] => {
+    const dates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      if (d <= now) dates.push(toDateStr(d));
+    }
+    return dates;
+  };
+
+  const thisWeekDates = buildWeekDates(thisMonday);
+  const lastWeekDates = buildWeekDates(lastMonday);
+  const weekBeforeDates = buildWeekDates(weekBeforeMonday);
+
+  const allDates = [...thisWeekDates, ...lastWeekDates, ...weekBeforeDates];
+  const allCheckIns = await db
+    .select({ userId: checkIns.userId, date: checkIns.date, rating: checkIns.rating })
+    .from(checkIns)
+    .where(and(inArray(checkIns.userId, memberIds), inArray(checkIns.date, allDates)));
+
+  const countForDates = (dates: string[]) =>
+    allCheckIns.filter(
+      (c) => dates.includes(c.date) && (c.rating === "green" || c.rating === "yellow")
+    ).length;
+
+  // Fetch proposals and compute accept/decline counts from votes table
+  const proposalRows = await db
+    .select({
+      id: teamGoalProposals.id,
+      habitName: teamGoalProposals.habitName,
+      habitEmoji: teamGoalProposals.habitEmoji,
+      lifeArea: teamGoalProposals.lifeArea,
+    })
+    .from(teamGoalProposals)
+    .where(eq(teamGoalProposals.teamId, teamId));
+
+  const proposalIds = proposalRows.map((p) => p.id);
+  const allVotes = proposalIds.length > 0
+    ? await db.select().from(teamGoalVotes).where(inArray(teamGoalVotes.proposalId, proposalIds))
+    : [];
+
+  const acceptedProposals = proposalRows
+    .map((p) => {
+      const pVotes = allVotes.filter((v) => v.proposalId === p.id);
+      const acceptCount = pVotes.filter((v) => v.vote === "accept").length;
+      const declineCount = pVotes.filter((v) => v.vote === "decline").length;
+      return { ...p, acceptCount, declineCount };
+    })
+    .filter((p) => p.acceptCount > 0 && p.acceptCount >= p.declineCount);
+
+  return {
+    thisWeek: countForDates(thisWeekDates),
+    lastWeek: countForDates(lastWeekDates),
+    weekBefore: countForDates(weekBeforeDates),
+    memberCount,
+    proposals: acceptedProposals,
+  };
+}
