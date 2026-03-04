@@ -60,10 +60,7 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="progress"
-        options={{
-          title: "Progress",
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="chart.bar.fill" color={color} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="vision"

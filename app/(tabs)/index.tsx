@@ -1,5 +1,5 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity } from "react-native";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
@@ -410,8 +410,15 @@ function GoalCard({
 export default function HomeScreen() {
   const {
     alarm, isPendingCheckIn, getCategoryRate,
-    streak, categories, activeHabits,
+    streak, categories, activeHabits, checkIns,
   } = useApp();
+
+  const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
+  const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
+  const overallRate = useMemo(() => {
+    if (sortedCategories.length === 0) return 0;
+    return sortedCategories.reduce((s, c) => s + getCategoryRate(c.id, 30), 0) / sortedCategories.length;
+  }, [sortedCategories, getCategoryRate]);
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
@@ -450,6 +457,25 @@ export default function HomeScreen() {
                 <Text style={styles.streakNum}>{streak}</Text>
               </View>
             )}
+          </View>
+
+          {/* ── Stats row ── */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>{streak}</Text>
+              <Text style={[styles.statLabel, { color: colors.muted }]}>Streak</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <IconSymbol name="calendar" size={16} color={colors.primary} />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>{totalDaysLogged}</Text>
+              <Text style={[styles.statLabel, { color: colors.muted }]}>Days Logged</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <IconSymbol name="trophy.fill" size={16} color="#F59E0B" />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>{Math.round(overallRate * 100)}%</Text>
+              <Text style={[styles.statLabel, { color: colors.muted }]}>30-Day Avg</Text>
+            </View>
           </View>
 
           {/* ── Yesterday's review banner ── */}
@@ -687,6 +713,15 @@ const styles = StyleSheet.create({
     padding: 24, alignItems: 'center', marginBottom: 24,
   },
   emptyText: { fontSize: 14, textAlign: 'center' },
+
+  // Stats row
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  statCard: {
+    flex: 1, borderRadius: 14, padding: 10,
+    alignItems: 'center', gap: 3, borderWidth: 1,
+  },
+  statValue: { fontSize: 20, fontWeight: '700' },
+  statLabel: { fontSize: 10, fontWeight: '500', textAlign: 'center' },
 
   // Manage button
   manageBtn: {

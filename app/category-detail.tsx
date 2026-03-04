@@ -4,9 +4,9 @@
  * Shows all habits in the category with stats, progress, and breakdown.
  */
 import {
-  View, Text, ScrollView, Pressable, StyleSheet,
+  View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent,
 } from "react-native";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -18,11 +18,15 @@ import { toDateString, LIFE_AREAS } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 import { SixMonthHeatmap } from "@/components/six-month-heatmap";
 import { CategoryIcon } from "@/components/category-icon";
+import { CategoryCalendar } from "@/components/category-calendar";
+import { DayDetailSheet, CategoryDayScore } from "@/components/day-detail-sheet";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
-const RANGES = [7, 14, 30] as const;
-type Range = typeof RANGES[number];
+const MONTH_NAMES = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
 
 function ratingColor(r: "green" | "yellow" | "red" | string) {
   if (r === "green") return "#22C55E";
@@ -52,6 +56,39 @@ export default function CategoryDetailScreen() {
 
   const today = new Date();
   const todayStr = toDateString(today);
+
+  // Month calendar state
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [cardWidth, setCardWidth] = useState(0);
+  function onCardLayout(e: LayoutChangeEvent) {
+    const w = e.nativeEvent.layout.width - 32;
+    if (w > 0) setCardWidth(w);
+  }
+  function prevMonth() {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (calYear === today.getFullYear() && calMonth >= today.getMonth()) return;
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  }
+  const canGoForward = !(calYear === today.getFullYear() && calMonth >= today.getMonth());
+
+  const selectedDayCategoryScores: CategoryDayScore[] = useMemo(() => {
+    if (!selectedDate || !category) return [];
+    const dateEntries = checkIns.filter((e) => e.date === selectedDate);
+    const catHabitIds = new Set(habits.map((h) => h.id));
+    const catEntries = dateEntries.filter((e) => catHabitIds.has(e.habitId) && e.rating !== "none");
+    const green = catEntries.filter((e) => e.rating === "green").length;
+    const yellow = catEntries.filter((e) => e.rating === "yellow").length;
+    const red = catEntries.filter((e) => e.rating === "red").length;
+    const total = green + yellow + red;
+    const score = total === 0 ? null : (green * 1 + yellow * 0.5) / total;
+    return [{ category, score, green, yellow, red, total }];
+  }, [selectedDate, checkIns, habits, category]);
 
   // Per-habit stats
   const habitStats = useMemo(() => {
@@ -211,6 +248,67 @@ export default function CategoryDetailScreen() {
           <SixMonthHeatmap scoreByDate={heatmapScores} />
         </View>
 
+        {/* ── Month Calendar ── */}
+        <View
+          onLayout={onCardLayout}
+          style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          {/* Month nav */}
+          <View style={styles.monthNav}>
+            <Pressable
+              onPress={prevMonth}
+              style={({ pressed }) => [styles.monthNavBtn, { opacity: pressed ? 0.5 : 1 }]}
+            >
+              <IconSymbol name="chevron.left" size={16} color={colors.primary} />
+            </Pressable>
+            <Text style={[styles.monthTitle, { color: colors.foreground }]}>
+              {MONTH_NAMES[calMonth]} {calYear}
+            </Text>
+            <Pressable
+              onPress={canGoForward ? nextMonth : undefined}
+              style={({ pressed }) => [styles.monthNavBtn, { opacity: canGoForward ? (pressed ? 0.5 : 1) : 0.2 }]}
+            >
+              <IconSymbol name="chevron.right" size={16} color={colors.primary} />
+            </Pressable>
+          </View>
+
+          {habits.length > 0 ? (
+            <CategoryCalendar
+              year={calYear}
+              month={calMonth}
+              habits={habits}
+              checkIns={checkIns}
+              onDayPress={(date) => {
+                const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
+                if (!hasEntry) {
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/checkin?date=${date}` as never);
+                } else {
+                  setSelectedDate(date);
+                }
+              }}
+              containerWidth={cardWidth > 0 ? cardWidth : undefined}
+              selectedHabitId={null}
+            />
+          ) : (
+            <Text style={[styles.emptyText, { color: colors.muted }]}>No habits yet.</Text>
+          )}
+
+          {/* Dot legend */}
+          <View style={styles.inlineLegend}>
+            {[
+              { color: "#22C55E", label: "Crushed" },
+              { color: "#F59E0B", label: "Okay" },
+              { color: "#EF4444", label: "Missed" },
+            ].map((item) => (
+              <View key={item.label} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                <Text style={[styles.legendText, { color: colors.muted }]}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
         {/* ── Category rating breakdown ── */}
         {categoryStats.total > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -350,6 +448,19 @@ export default function CategoryDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <DayDetailSheet
+        visible={selectedDate !== null}
+        date={selectedDate ?? ""}
+        displayDate={selectedDate ?? ""}
+        categoryScores={selectedDayCategoryScores}
+        onClose={() => setSelectedDate(null)}
+        onEdit={() => {
+          const d = selectedDate;
+          setSelectedDate(null);
+          setTimeout(() => router.push(`/checkin?date=${d}` as never), 100);
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -430,4 +541,20 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   teamBadgeText: { fontSize: 11, fontWeight: '600' },
+
+  // Month calendar
+  monthNav: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  monthNavBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  monthTitle: { fontSize: 15, fontWeight: '700' },
+  inlineLegend: {
+    flexDirection: 'row', justifyContent: 'center',
+    gap: 12, marginTop: 10, flexWrap: 'wrap',
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 10 },
 });
