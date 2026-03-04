@@ -396,3 +396,8 @@
 ## Circle Order + Date Labels (Mar 04 2026)
 - [x] Home screen: reverse 3-circle order so oldest is on the left and most recent is on the right
 - [x] Home screen: add date range label under each ring (e.g. "Mar 3–9" or "Feb 1–28") for clarity
+
+## Missing Plugin Fixes (Mar 04 2026)
+
+- [x] Add expo-notifications plugin to app.config.ts with .caf sound files so alarm sounds bundle into iOS binary
+- [x] Add expo-image-picker plugin to app.config.ts so NSPhotoLibraryUsageDescription is set correctly for photo picker

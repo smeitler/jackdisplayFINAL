@@ -82,6 +82,26 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-apple-authentication",
     [
+      "expo-notifications",
+      {
+        // Bundle all custom alarm sounds (.caf for iOS, .wav for Android)
+        // These are referenced by filename in scheduleNotificationAsync({ content: { sound: 'alarm_classic.caf' } })
+        sounds: [
+          "./assets/audio/alarm_classic.wav",
+          "./assets/audio/alarm_buzzer.wav",
+          "./assets/audio/alarm_digital.wav",
+          "./assets/audio/alarm_gentle.wav",
+          "./assets/audio/alarm_urgent.wav",
+        ],
+      },
+    ],
+    [
+      "expo-image-picker",
+      {
+        photosPermission: "Allow $(PRODUCT_NAME) to access your photos to add images to your Vision Board.",
+      },
+    ],
+    [
       "expo-media-library",
       {
         photosPermission: "Allow $(PRODUCT_NAME) to access your photos to add them to your Vision Board.",
