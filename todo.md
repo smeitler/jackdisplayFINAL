@@ -369,3 +369,4 @@
 - [x] Home screen: show days remaining in current week/month on habit goal chips to motivate users
 - [x] Home screen: remove Weekly/Monthly toggle; each habit auto-shows its own period chip based on its frequencyType setting
 - [x] Home screen: circular progress ring around each habit showing current period fill (green=hit, yellow=on track, red=behind)
+- [x] Fix Apple App Store rejection: replace external browser OAuth with in-app browser (SFSafariViewController / expo-web-browser)

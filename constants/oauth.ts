@@ -1,5 +1,6 @@
 import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 // Deep link scheme matching app.config.ts — must be manus* for OAuth to work
 const schemeFromBundleId = "manus20260220151145";
@@ -92,8 +93,9 @@ export const getLoginUrl = () => {
 /**
  * Start OAuth login flow.
  *
- * On native platforms (iOS/Android), open the system browser directly so
- * the OAuth callback returns via deep link to the app.
+ * On native platforms (iOS/Android), uses WebBrowser.openAuthSessionAsync which
+ * opens an in-app browser (ASWebAuthenticationSession on iOS, Chrome Custom Tabs on Android).
+ * This satisfies Apple's requirement that authentication must happen within the app.
  *
  * On web, this simply redirects to the login URL.
  *
@@ -101,6 +103,7 @@ export const getLoginUrl = () => {
  */
 export async function startOAuthLogin(): Promise<string | null> {
   const loginUrl = getLoginUrl();
+  const redirectUri = getRedirectUri();
 
   if (ReactNative.Platform.OS === "web") {
     // On web, just redirect
@@ -110,20 +113,23 @@ export async function startOAuthLogin(): Promise<string | null> {
     return null;
   }
 
-  const supported = await Linking.canOpenURL(loginUrl);
-  if (!supported) {
-    console.warn("[OAuth] Cannot open login URL: URL scheme not supported");
-    // 可考虑抛出错误或返回错误状态，让调用方处理
-    return null;
-  }
-
   try {
-    await Linking.openURL(loginUrl);
+    // openAuthSessionAsync uses ASWebAuthenticationSession on iOS (SFSafariViewController-based)
+    // and Chrome Custom Tabs on Android — both keep the user inside the app.
+    const result = await WebBrowser.openAuthSessionAsync(loginUrl, redirectUri, {
+      dismissButtonStyle: "cancel",
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    });
+    console.log("[OAuth] WebBrowser result:", result);
+    // If the user completed auth, the deep link callback in app/oauth/callback.tsx
+    // will fire and handle the token exchange automatically.
+    if (result.type === "success" && result.url) {
+      // Manually trigger the deep link handler since WebBrowser intercepts the redirect
+      await Linking.openURL(result.url);
+    }
   } catch (error) {
-    console.error("[OAuth] Failed to open login URL:", error);
-    // 可考虑抛出错误让调用方处理
+    console.error("[OAuth] Failed to open in-app browser:", error);
   }
 
-  // The OAuth callback will reopen the app via deep link.
   return null;
 }
