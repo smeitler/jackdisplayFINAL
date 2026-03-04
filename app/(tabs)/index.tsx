@@ -337,10 +337,10 @@ function GoalCard({
   const isBehind = pct > 0 && pct < 0.5;
   const hasData = pct > 0;
 
-  const accentColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.border;
-  const cardBg = isOnTrack ? '#0a1f10' : isOkay ? '#1f1500' : isBehind ? '#1f0808' : colors.surface;
-  const pctColor = isOnTrack ? '#4ade80' : isOkay ? '#fbbf24' : isBehind ? '#f87171' : colors.muted;
-  const titleColor = isOnTrack ? '#e2fce8' : isOkay ? '#fef3c7' : isBehind ? '#fee2e2' : colors.foreground;
+  const accentColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.muted as string;
+  const cardBg = colors.surface;
+  const pctColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.muted as string;
+  const titleColor = colors.foreground;
 
   const lifeAreaDef = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
 
@@ -355,7 +355,7 @@ function GoalCard({
   }
 
   return (
-    <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: accentColor + '40' }]}>
+    <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: colors.border, borderLeftColor: accentColor, borderLeftWidth: 3 }]}>
       {/* Goal header */}
       <TouchableOpacity onPress={onPressGoal} style={styles.goalCardHeader} activeOpacity={0.8}>
         <CategoryIcon

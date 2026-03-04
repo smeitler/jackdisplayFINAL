@@ -242,12 +242,6 @@ export default function CategoryDetailScreen() {
           )}
         </View>
 
-        {/* ── 6-Month Heatmap ── */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>6-Month History</Text>
-          <SixMonthHeatmap scoreByDate={heatmapScores} />
-        </View>
-
         {/* ── Month Calendar ── */}
         <View
           onLayout={onCardLayout}
@@ -294,7 +288,31 @@ export default function CategoryDetailScreen() {
             <Text style={[styles.emptyText, { color: colors.muted }]}>No habits yet.</Text>
           )}
 
-          {/* Dot legend */}
+          {/* Habit key — number badge + name */}
+          {habits.length > 0 && (
+            <View style={styles.habitKeySection}>
+              <View style={[styles.habitKeyDivider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.habitKeyTitle, { color: colors.muted }]}>Habits in this goal</Text>
+              {habits.map((h, idx) => (
+                <Pressable
+                  key={h.id}
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push(`/habit-detail?habitId=${h.id}` as never);
+                  }}
+                  style={({ pressed }) => [styles.habitKeyRow, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <View style={[styles.habitKeyBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44' }]}>
+                    <Text style={[styles.habitKeyBadgeNum, { color: colors.primary }]}>{idx + 1}</Text>
+                  </View>
+                  <Text style={[styles.habitKeyName, { color: colors.foreground }]} numberOfLines={1}>{h.name}</Text>
+                  <IconSymbol name="chevron.right" size={12} color={colors.muted} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* Rating legend */}
           <View style={styles.inlineLegend}>
             {[
               { color: "#22C55E", label: "Crushed" },
@@ -541,6 +559,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   teamBadgeText: { fontSize: 11, fontWeight: '600' },
+
+  // Habit key legend
+  habitKeySection: { marginTop: 12, gap: 6 },
+  habitKeyDivider: { height: StyleSheet.hairlineWidth, marginBottom: 8 },
+  habitKeyTitle: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  habitKeyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  habitKeyBadge: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  habitKeyBadgeNum: { fontSize: 11, fontWeight: '800' },
+  habitKeyName: { flex: 1, fontSize: 13, fontWeight: '500' },
 
   // Month calendar
   monthNav: {
