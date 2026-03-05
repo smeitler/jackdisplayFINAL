@@ -462,3 +462,8 @@ test line
 ## Critical Regression: Data Not Saving (Mar 05 2026)
 - [x] Fix: after latest Railway deploy, data not saving and not syncing after sign-out/sign-in
 - [x] Fix: Apple Sign In users not re-created from JWT on new device/after sign-out (was calling Manus OAuth server which fails for Apple users)
+
+## Critical Bugs Round 4 (Mar 05 2026)
+- [x] Fix: check-ins not persisting after sign-out and sign back in (push local-only check-ins to server during syncFromServer)
+- [x] Fix: delete account not working when typing DELETE (normalize comparison to .trim().toUpperCase())
+- [x] Fix: data not syncing between iPhone and iPad (reduce foreground sync cooldown from 30s to 5s)
