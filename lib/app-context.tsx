@@ -27,6 +27,8 @@ import {
 import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns, buildDemoVisionBoard, DEMO_MOTIVATIONS, DEMO_REWARDS } from './demo-data';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
+import * as Auth from './_core/auth';
+import { getApiBaseUrl } from '@/constants/oauth';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -216,6 +218,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await utils.invalidate();
 
         // Fetch all user data from server in parallel.
+        // staleTime: 0 forces a fresh network request, bypassing any cached results
+        // from before login (including cached 401 errors).
         // If the user is not authenticated, this will throw a 401/403 error.
         const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
           utils.auth.me.fetch(),
