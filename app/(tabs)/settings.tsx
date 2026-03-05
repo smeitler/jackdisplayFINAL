@@ -805,7 +805,7 @@ export default function SettingsScreen() {
                     returnKeyType="done"
                     style={{
                       borderWidth: 1.5,
-                      borderColor: deleteConfirmText === 'DELETE' ? '#EF4444' : '#FCA5A5',
+                      borderColor: deleteConfirmText.trim().toUpperCase() === 'DELETE' ? '#EF4444' : '#FCA5A5',
                       borderRadius: 10,
                       paddingHorizontal: 14,
                       paddingVertical: 10,
@@ -820,9 +820,9 @@ export default function SettingsScreen() {
 
                 {/* Final delete button — only active when DELETE is typed */}
                 <Pressable
-                  disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                  disabled={deleteConfirmText.trim().toUpperCase() !== 'DELETE' || isDeleting}
                   onPress={async () => {
-                    if (deleteConfirmText !== 'DELETE') return;
+                    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') return;
                     try {
                       setIsDeleting(true);
                       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -843,7 +843,7 @@ export default function SettingsScreen() {
                     paddingVertical: 14,
                     borderRadius: 12,
                     alignItems: 'center',
-                    backgroundColor: deleteConfirmText === 'DELETE' ? '#EF4444' : '#FCA5A5',
+                    backgroundColor: deleteConfirmText.trim().toUpperCase() === 'DELETE' ? '#EF4444' : '#FCA5A5',
                     opacity: pressed ? 0.85 : 1,
                   })}
                 >

@@ -300,20 +300,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Existing user — use server data as source of truth
           const cats = serverCats.map(serverCatToLocal);
           const habits = serverHabits.map(serverHabitToLocal);
-          const checkIns = serverCheckIns.map(serverCheckInToLocal);
+          const serverCheckInsList = serverCheckIns.map(serverCheckInToLocal);
           const alarm = serverAlarm ? serverAlarmToLocal(serverAlarm, localAlarm) : localAlarm;
 
-          // Compute lastCheckInDate from server check-ins
-          const dates = checkIns.map((e) => e.date).sort();
+          // ── Push local-only check-ins to server ─────────────────────────────
+          // If the user submitted check-ins while offline or before isAuthenticated
+          // was set (e.g. immediately after sign-in), those entries are in local
+          // storage but not on the server. Detect them and push the diff.
+          const serverKeySet = new Set(
+            serverCheckInsList.map((e) => `${e.habitId}|${e.date}`)
+          );
+          const localOnlyCheckIns = safeLocalCheckIns.filter(
+            (e) => !serverKeySet.has(`${e.habitId}|${e.date}`)
+          );
+          if (localOnlyCheckIns.length > 0) {
+            console.log(`[AppContext] Pushing ${localOnlyCheckIns.length} local-only check-ins to server`);
+            try {
+              await utils.client.checkIns.bulkSync.mutate(
+                localOnlyCheckIns.map((e) => ({
+                  habitClientId: e.habitId,
+                  date: e.date,
+                  rating: e.rating,
+                  loggedAt: e.loggedAt,
+                }))
+              );
+            } catch (err) {
+              console.warn('[AppContext] Failed to push local-only check-ins:', err);
+            }
+          }
+
+          // Merge: server is source of truth, but include local-only entries too
+          const mergedCheckIns = [...serverCheckInsList, ...localOnlyCheckIns];
+
+          // Compute lastCheckInDate from merged check-ins
+          const dates = mergedCheckIns.map((e) => e.date).sort();
           const lastDate = dates.length > 0 ? dates[dates.length - 1] : null;
 
-          dispatch({ type: 'LOADED', habits, categories: cats, checkIns, alarm, lastCheckInDate: lastDate });
+          dispatch({ type: 'LOADED', habits, categories: cats, checkIns: mergedCheckIns, alarm, lastCheckInDate: lastDate });
 
           // Update local cache
           await Promise.all([
             saveCategories(cats),
             saveHabits(habits),
-            saveCheckIns(checkIns),
+            saveCheckIns(mergedCheckIns),
             saveAlarm(alarm),
           ]);
         }
@@ -341,9 +370,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Foreground resume sync ─────────────────────────────────────────────────
   // When the app comes back to the foreground, re-sync from the server so that
   // deletions/changes made on another device are reflected immediately.
-  // A 30-second cooldown prevents hammering the server on quick app switches.
+  // A 5-second cooldown prevents hammering the server on quick app switches.
   const lastSyncTimeRef = useRef<number>(0);
-  const SYNC_COOLDOWN_MS = 30_000;
+  const SYNC_COOLDOWN_MS = 5_000; // 5s — fast enough for cross-device sync, prevents hammering
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
