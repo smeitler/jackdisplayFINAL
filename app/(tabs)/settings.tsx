@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator } from "react-native";
+import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator, TextInput } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useRef } from "react";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
@@ -102,6 +102,9 @@ export default function SettingsScreen() {
   const [meditationOpen, setMeditationOpen] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [debugLoading, setDebugLoading] = useState(false);
+  const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function runDiagnostics() {
     setDebugLoading(true);
@@ -733,17 +736,17 @@ export default function SettingsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account</Text>
                 {user?.name && (
-                  <Text style={[{ fontSize: 13, color: colors.foreground, fontWeight: '500', marginBottom: 1 }]}>{user.name}</Text>
+                  <Text style={{ fontSize: 13, color: colors.foreground, fontWeight: '500', marginBottom: 1 }}>{user.name}</Text>
                 )}
                 {user?.email && (
-                  <Text style={[{ fontSize: 12, color: colors.muted }]}>{user.email}</Text>
+                  <Text style={{ fontSize: 12, color: colors.muted }}>{user.email}</Text>
                 )}
               </View>
             </View>
+            {/* Sign Out */}
             <Pressable
               onPress={async () => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                // Clear all local user data so the next account starts fresh
                 await clearLocalData();
                 await logout();
                 router.replace('/login');
@@ -756,43 +759,102 @@ export default function SettingsScreen() {
               <Text style={[styles.manageHabitsBtnText, { color: '#EF4444' }]}>Sign Out</Text>
               <IconSymbol name="chevron.right" size={16} color={colors.muted} />
             </Pressable>
-            {/* Delete Account — required by Apple App Store guidelines */}
+          </View>
+        )}
+
+        {/* Danger Zone — hidden by default, required by Apple App Store guidelines */}
+        {isAuthenticated && (
+          <View style={{ marginTop: 4, marginBottom: 4 }}>
             <Pressable
               onPress={() => {
-                Alert.alert(
-                  'Delete Account',
-                  'This will permanently delete your account and all your data — habits, goals, check-ins, and progress. This cannot be undone.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Delete My Account',
-                      style: 'destructive',
-                      onPress: async () => {
-                        try {
-                          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                          await deleteAccountMutation.mutateAsync();
-                          // Clear session token immediately so no further authenticated requests are made
-                          await Auth.removeSessionToken();
-                          await Auth.clearUserInfo();
-                          await clearLocalData();
-                          router.replace('/login');
-                        } catch (err) {
-                          console.error('[DeleteAccount] Error:', err);
-                          Alert.alert('Error', 'Failed to delete account. Please try again.');
-                        }
-                      },
-                    },
-                  ]
-                );
+                setDangerZoneExpanded(v => !v);
+                setDeleteConfirmText('');
               }}
-              style={({ pressed }) => [
-                styles.manageHabitsBtn,
-                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
-              ]}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, alignItems: 'center', paddingVertical: 8 })}
             >
-              <Text style={[styles.manageHabitsBtnText, { color: '#EF4444', fontSize: 13 }]}>Delete Account & Data</Text>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              <Text style={{ fontSize: 11, color: colors.muted, letterSpacing: 0.5 }}>
+                {dangerZoneExpanded ? '▲ Hide danger zone' : '▼ Danger zone'}
+              </Text>
             </Pressable>
+
+            {dangerZoneExpanded && (
+              <View style={[styles.section, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', marginTop: 0 }]}>
+                {/* Warning header */}
+                <View style={[styles.sectionHeader, { backgroundColor: '#FEE2E2' }]}>
+                  <Text style={{ fontSize: 18 }}>⚠️</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#991B1B' }}>Delete Account & All Data</Text>
+                    <Text style={{ fontSize: 12, color: '#B91C1C', marginTop: 2, lineHeight: 17 }}>
+                      This permanently deletes your account, all habits, goals, check-ins, and progress. This action cannot be undone.
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Confirmation input */}
+                <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: '#FCA5A5' }}>
+                  <Text style={{ fontSize: 13, color: '#7F1D1D', marginBottom: 8, fontWeight: '600' }}>
+                    Type DELETE to confirm:
+                  </Text>
+                  <TextInput
+                    value={deleteConfirmText}
+                    onChangeText={setDeleteConfirmText}
+                    placeholder="DELETE"
+                    placeholderTextColor="#FCA5A5"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    style={{
+                      borderWidth: 1.5,
+                      borderColor: deleteConfirmText === 'DELETE' ? '#EF4444' : '#FCA5A5',
+                      borderRadius: 10,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      fontSize: 15,
+                      fontWeight: '700',
+                      color: '#991B1B',
+                      backgroundColor: '#FFF',
+                      letterSpacing: 2,
+                    }}
+                  />
+                </View>
+
+                {/* Final delete button — only active when DELETE is typed */}
+                <Pressable
+                  disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                  onPress={async () => {
+                    if (deleteConfirmText !== 'DELETE') return;
+                    try {
+                      setIsDeleting(true);
+                      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                      await deleteAccountMutation.mutateAsync();
+                      await Auth.removeSessionToken();
+                      await Auth.clearUserInfo();
+                      await clearLocalData();
+                      router.replace('/login');
+                    } catch (err) {
+                      console.error('[DeleteAccount] Error:', err);
+                      setIsDeleting(false);
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                    }
+                  }}
+                  style={({ pressed }) => ({
+                    margin: 16,
+                    marginTop: 0,
+                    paddingVertical: 14,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    backgroundColor: deleteConfirmText === 'DELETE' ? '#EF4444' : '#FCA5A5',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Permanently Delete My Account</Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
           </View>
         )}
 

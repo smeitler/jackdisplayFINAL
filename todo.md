@@ -444,3 +444,9 @@ test line
 - [x] Login screen: show Syncing your data text while syncFromServer runs
 - [x] Settings screen: show user name in Account section
 - [x] Version bump to 1.0.19 / build 10019
+
+## Account Deletion Fix + UX (Mar 05 2026)
+- [x] Fix account deletion not working (server-side deleteUser endpoint)
+- [x] Move Delete Account to hidden Danger Zone section at bottom of More screen (collapsed by default)
+- [x] Multi-step delete confirmation: tap Delete → warning sheet → type "DELETE" → final red confirm button
+- [x] Set up GitHub→Railway auto-deploy: always push server changes to smeitler/daily-progress-alarm

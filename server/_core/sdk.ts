@@ -18,6 +18,15 @@ import type {
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
 
+// In-memory set of openIds that have been deleted this server session.
+// Prevents the auth middleware from re-creating a user immediately after deletion.
+const deletedOpenIds = new Set<string>();
+
+/** Call this from the deleteAccount mutation BEFORE deleting from DB. */
+export function markOpenIdAsDeleted(openId: string): void {
+  deletedOpenIds.add(openId);
+}
+
 export type SessionPayload = {
   openId: string;
   appId: string;
@@ -248,10 +257,13 @@ class SDKServer {
       throw ForbiddenError("Invalid session cookie");
     }
 
-    const sessionUserId = session.openId;
+     const sessionUserId = session.openId;
     const signedInAt = new Date();
+    // If this openId was just deleted, refuse to re-create the user
+    if (deletedOpenIds.has(sessionUserId)) {
+      throw ForbiddenError("Account has been deleted");
+    }
     let user = await db.getUserByOpenId(sessionUserId);
-
     // If user not in DB, sync from OAuth server automatically
     if (!user) {
       try {
