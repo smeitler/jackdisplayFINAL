@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform } from "react-native";
+import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useRef } from "react";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
@@ -100,6 +100,56 @@ export default function SettingsScreen() {
   const [appearanceExpanded, setAppearanceExpanded] = useState(false);
   const [soundOpen, setSoundOpen] = useState(false);
   const [meditationOpen, setMeditationOpen] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
+
+  async function runDiagnostics() {
+    setDebugLoading(true);
+    setDebugInfo(null);
+    try {
+      const lines: string[] = [];
+      // 1. Session token
+      const token = await Auth.getSessionToken();
+      lines.push(`Token: ${token ? token.substring(0, 30) + '...' : 'MISSING'}`);
+      // 2. Cached user
+      const cachedUser = await Auth.getUserInfo();
+      lines.push(`Cached user: ${cachedUser ? `id=${cachedUser.id} openId=${cachedUser.openId?.substring(0,20)}` : 'NONE'}`);
+      // 3. Ping server
+      const apiBase = 'https://api.jackalarm.com';
+      try {
+        const pingResp = await fetch(`${apiBase}/api/auth/me`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const pingData = await pingResp.json();
+        lines.push(`/api/auth/me status: ${pingResp.status}`);
+        lines.push(`Server user: ${pingData?.user ? `id=${pingData.user.id}` : JSON.stringify(pingData).substring(0, 60)}`);
+      } catch (e: any) {
+        lines.push(`/api/auth/me error: ${e?.message}`);
+      }
+      // 4. Fetch habits from server
+      if (token) {
+        try {
+          const habitsResp = await fetch(`${apiBase}/api/trpc/habits.list`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const habitsData = await habitsResp.json();
+          const habits = habitsData?.result?.data?.json;
+          lines.push(`habits.list status: ${habitsResp.status}`);
+          lines.push(`Habits count: ${Array.isArray(habits) ? habits.length : 'error: ' + JSON.stringify(habitsData).substring(0, 80)}`);
+          if (Array.isArray(habits) && habits.length > 0) {
+            lines.push(`First habit: ${habits[0]?.name}`);
+          }
+        } catch (e: any) {
+          lines.push(`habits.list error: ${e?.message}`);
+        }
+      }
+      setDebugInfo(lines.join('\n'));
+    } catch (e: any) {
+      setDebugInfo(`Error: ${e?.message}`);
+    } finally {
+      setDebugLoading(false);
+    }
+  }
   const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
   const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
   const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
@@ -742,6 +792,37 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         )}
+
+        {/* Debug Diagnostics Panel */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>🔧 Diagnostics</Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={runDiagnostics}
+            disabled={debugLoading}
+            style={({ pressed }) => [
+              styles.manageHabitsBtn,
+              { borderTopColor: colors.border, opacity: pressed || debugLoading ? 0.7 : 1 },
+            ]}
+          >
+            {debugLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={[styles.manageHabitsBtnText, { color: colors.primary }]}>Run Connection Test</Text>
+            )}
+            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+          </Pressable>
+          {debugInfo && (
+            <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.foreground, lineHeight: 18 }}>
+                {debugInfo}
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Info */}
         <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
