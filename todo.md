@@ -436,3 +436,11 @@
 - [ ] Rewards: add tab to bottom navigation with gift/trophy icon
 - [ ] Rewards: icon mapping added to icon-symbol.tsx before use in tabs
 - [ ] Rewards: demo mode seeds 3 sample rewards with varying progress states
+test line
+## Apple Sign In Fix Mar 05 2026
+- [x] Railway server: fix /api/auth/apple endpoint returning 404
+- [x] Railway server: fix verifySession requiring non-empty name
+- [x] Home screen: add pull-to-refresh to sync data from server
+- [x] Login screen: show Syncing your data text while syncFromServer runs
+- [x] Settings screen: show user name in Account section
+- [x] Version bump to 1.0.19 / build 10019

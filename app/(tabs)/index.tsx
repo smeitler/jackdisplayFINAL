@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, RefreshControl } from "react-native";
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -411,6 +411,7 @@ export default function HomeScreen() {
   const {
     alarm, isPendingCheckIn, getCategoryRate,
     streak, categories, activeHabits, checkIns,
+    isSyncing, syncFromServer,
   } = useApp();
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
@@ -423,6 +424,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
+  async function handleRefresh() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await syncFromServer();
+  }
 
   function handleCheckIn(date?: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -440,7 +445,17 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isSyncing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
           {/* ── Header ── */}

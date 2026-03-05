@@ -732,6 +732,9 @@ export default function SettingsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account</Text>
+                {user?.name && (
+                  <Text style={[{ fontSize: 13, color: colors.foreground, fontWeight: '500', marginBottom: 1 }]}>{user.name}</Text>
+                )}
                 {user?.email && (
                   <Text style={[{ fontSize: 12, color: colors.muted }]}>{user.email}</Text>
                 )}

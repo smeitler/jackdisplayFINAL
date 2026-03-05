@@ -18,6 +18,7 @@ export default function LoginScreen() {
   const { isAuthenticated, loading } = useAuth();
   const { startDemo, syncFromServer } = useApp();
   const [signingIn, setSigningIn] = useState(false);
+  const [syncingData, setSyncingData] = useState(false);
   const [webSigningIn, setWebSigningIn] = useState(false);
   const [startingDemo, setStartingDemo] = useState(false);
 
@@ -72,7 +73,9 @@ export default function LoginScreen() {
         if (data.user) await Auth.setUserInfo(data.user);
         // Immediately sync server data so the app shows the user's real habits
         // (AppProvider's load() already ran on mount with no token — we must re-sync now)
+        setSyncingData(true);
         await syncFromServer();
+        setSyncingData(false);
         router.replace("/(tabs)");
       } else {
         throw new Error("No session token returned");
@@ -175,7 +178,9 @@ export default function LoginScreen() {
           {signingIn && (
             <View style={[styles.loadingRow]}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.loadingText, { color: colors.muted }]}>Signing in…</Text>
+              <Text style={[styles.loadingText, { color: colors.muted }]}>
+                {syncingData ? "Syncing your data…" : "Signing in…"}
+              </Text>
             </View>
           )}
 
