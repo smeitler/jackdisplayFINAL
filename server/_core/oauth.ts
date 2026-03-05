@@ -178,8 +178,13 @@ export function registerOAuthRoutes(app: Express) {
         loginMethod: "apple",
       });
 
+      // For the session token, always use a non-empty name.
+      // Apple only provides the name on first sign-in; on subsequent logins it's null.
+      // Fall back to the stored name in the database so the token is always valid.
+      const tokenName = name || user?.name || "User";
+
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: name || "",
+        name: tokenName,
         expiresInMs: ONE_YEAR_MS,
       });
 
