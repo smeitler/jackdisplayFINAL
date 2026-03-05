@@ -455,3 +455,10 @@ test line
 - [x] Fix: deletions on one device not reflected on other devices after sync
 - [x] syncFromServer already replaces local data with server data (source of truth confirmed)
 - [x] Add AppState foreground listener: auto-sync when app comes to foreground (30s cooldown)
+
+## iPad Delete Bug (Mar 05 2026)
+- [ ] Fix: delete habit/category not working on iPad
+
+## Critical Regression: Data Not Saving (Mar 05 2026)
+- [x] Fix: after latest Railway deploy, data not saving and not syncing after sign-out/sign-in
+- [x] Fix: Apple Sign In users not re-created from JWT on new device/after sign-out (was calling Manus OAuth server which fails for Apple users)

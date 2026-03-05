@@ -264,21 +264,41 @@ class SDKServer {
       throw ForbiddenError("Account has been deleted");
     }
     let user = await db.getUserByOpenId(sessionUserId);
-    // If user not in DB, sync from OAuth server automatically
+    // If user not in DB, try to re-create them
     if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
+      // Apple Sign In users (openId starts with 'apple:') are self-contained in the JWT —
+      // do NOT call the Manus OAuth server for them, just create from session data.
+      if (sessionUserId.startsWith('apple:')) {
+        try {
+          await db.upsertUser({
+            openId: sessionUserId,
+            name: session.name || null,
+            email: null,
+            loginMethod: 'apple',
+            lastSignedIn: signedInAt,
+          });
+          user = await db.getUserByOpenId(sessionUserId);
+          console.log(`[Auth] Re-created Apple user ${sessionUserId} from JWT session`);
+        } catch (error) {
+          console.error("[Auth] Failed to re-create Apple user:", error);
+          throw ForbiddenError("Failed to restore Apple user");
+        }
+      } else {
+        // Non-Apple users: sync from Manus OAuth server
+        try {
+          const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
+          await db.upsertUser({
+            openId: userInfo.openId,
+            name: userInfo.name || null,
+            email: userInfo.email ?? null,
+            loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+            lastSignedIn: signedInAt,
+          });
+          user = await db.getUserByOpenId(userInfo.openId);
+        } catch (error) {
+          console.error("[Auth] Failed to sync user from OAuth:", error);
+          throw ForbiddenError("Failed to sync user info");
+        }
       }
     }
 
