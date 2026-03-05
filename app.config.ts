@@ -38,10 +38,6 @@ const config: ExpoConfig = {
     bundleIdentifier: env.iosBundleId,
     buildNumber: "10015",
     usesAppleSignIn: true,
-    associatedDomains: [
-      "applinks:jackalarm.com",
-      "webcredentials:jackalarm.com",
-    ],
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       // Bundle custom notification sounds (.caf format required by iOS)
