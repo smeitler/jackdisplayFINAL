@@ -1,6 +1,6 @@
 import { Tabs, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Platform, View, Text } from "react-native";
+import { Platform } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -88,18 +88,7 @@ export default function TabLayout() {
         options={{
           title: "More",
           tabBarIcon: ({ color }) => (
-            <View>
-              <IconSymbol size={26} name="line.3.horizontal.decrease" color={color} />
-              {isDemoMode && (
-                <View style={{
-                  position: 'absolute', top: -4, right: -8,
-                  backgroundColor: '#F59E0B', borderRadius: 6,
-                  paddingHorizontal: 4, paddingVertical: 1,
-                }}>
-                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800' }}>DEMO</Text>
-                </View>
-              )}
-            </View>
+            <IconSymbol size={26} name="line.3.horizontal.decrease" color={color} />
           ),
         }}
       />

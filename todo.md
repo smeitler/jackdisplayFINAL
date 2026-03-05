@@ -436,34 +436,7 @@
 - [ ] Rewards: add tab to bottom navigation with gift/trophy icon
 - [ ] Rewards: icon mapping added to icon-symbol.tsx before use in tabs
 - [ ] Rewards: demo mode seeds 3 sample rewards with varying progress states
-test line
-## Apple Sign In Fix Mar 05 2026
-- [x] Railway server: fix /api/auth/apple endpoint returning 404
-- [x] Railway server: fix verifySession requiring non-empty name
-- [x] Home screen: add pull-to-refresh to sync data from server
-- [x] Login screen: show Syncing your data text while syncFromServer runs
-- [x] Settings screen: show user name in Account section
-- [x] Version bump to 1.0.19 / build 10019
 
-## Account Deletion Fix + UX (Mar 05 2026)
-- [x] Fix account deletion not working (server-side deleteUser endpoint)
-- [x] Move Delete Account to hidden Danger Zone section at bottom of More screen (collapsed by default)
-- [x] Multi-step delete confirmation: tap Delete → warning sheet → type "DELETE" → final red confirm button
-- [x] Set up GitHub→Railway auto-deploy: always push server changes to smeitler/daily-progress-alarm
+## UI Polish (Mar 05 2026)
 
-## Cross-Device Sync Fix (Mar 05 2026)
-- [x] Fix: deletions on one device not reflected on other devices after sync
-- [x] syncFromServer already replaces local data with server data (source of truth confirmed)
-- [x] Add AppState foreground listener: auto-sync when app comes to foreground (30s cooldown)
-
-## iPad Delete Bug (Mar 05 2026)
-- [ ] Fix: delete habit/category not working on iPad
-
-## Critical Regression: Data Not Saving (Mar 05 2026)
-- [x] Fix: after latest Railway deploy, data not saving and not syncing after sign-out/sign-in
-- [x] Fix: Apple Sign In users not re-created from JWT on new device/after sign-out (was calling Manus OAuth server which fails for Apple users)
-
-## Critical Bugs Round 4 (Mar 05 2026)
-- [x] Fix: check-ins not persisting after sign-out and sign back in (push local-only check-ins to server during syncFromServer)
-- [x] Fix: delete account not working when typing DELETE (normalize comparison to .trim().toUpperCase())
-- [x] Fix: data not syncing between iPhone and iPad (reduce foreground sync cooldown from 30s to 5s)
+- [x] Remove yellow DEMO badge overlaid on the More tab icon in the bottom tab bar

@@ -28,8 +28,6 @@ import {
 import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns, buildDemoVisionBoard, DEMO_MOTIVATIONS, DEMO_REWARDS } from './demo-data';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
-import * as Auth from './_core/auth';
-import { getApiBaseUrl } from '@/constants/oauth';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -170,7 +168,6 @@ type AppContextValue = AppState & {
   streak: number;
   startDemo: () => Promise<void>;
   exitDemo: () => Promise<void>;
-  syncFromServer: () => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -219,8 +216,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await utils.invalidate();
 
         // Fetch all user data from server in parallel.
-        // staleTime: 0 forces a fresh network request, bypassing any cached results
-        // from before login (including cached 401 errors).
+        // staleTime: 0 forces a fresh network request, bypassing any cached results.
         // If the user is not authenticated, this will throw a 401/403 error.
         const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
           utils.auth.me.fetch(),
@@ -310,6 +306,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const serverKeySet = new Set(
             serverCheckInsList.map((e) => `${e.habitId}|${e.date}`)
           );
+          const safeLocalCheckIns = accountSwitched ? [] : localCheckIns;
           const localOnlyCheckIns = safeLocalCheckIns.filter(
             (e) => !serverKeySet.has(`${e.habitId}|${e.date}`)
           );
@@ -372,7 +369,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // deletions/changes made on another device are reflected immediately.
   // A 5-second cooldown prevents hammering the server on quick app switches.
   const lastSyncTimeRef = useRef<number>(0);
-  const SYNC_COOLDOWN_MS = 5_000; // 5s — fast enough for cross-device sync, prevents hammering
+  const SYNC_COOLDOWN_MS = 5_000;
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
@@ -889,7 +886,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       getHabitWeekBeforeDone, getHabitMonthBeforeDone,
       streak,
       startDemo, exitDemo,
-      syncFromServer,
     }}>
       {children}
     </AppContext.Provider>

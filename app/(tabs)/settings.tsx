@@ -100,59 +100,9 @@ export default function SettingsScreen() {
   const [appearanceExpanded, setAppearanceExpanded] = useState(false);
   const [soundOpen, setSoundOpen] = useState(false);
   const [meditationOpen, setMeditationOpen] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  const [debugLoading, setDebugLoading] = useState(false);
   const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-
-  async function runDiagnostics() {
-    setDebugLoading(true);
-    setDebugInfo(null);
-    try {
-      const lines: string[] = [];
-      // 1. Session token
-      const token = await Auth.getSessionToken();
-      lines.push(`Token: ${token ? token.substring(0, 30) + '...' : 'MISSING'}`);
-      // 2. Cached user
-      const cachedUser = await Auth.getUserInfo();
-      lines.push(`Cached user: ${cachedUser ? `id=${cachedUser.id} openId=${cachedUser.openId?.substring(0,20)}` : 'NONE'}`);
-      // 3. Ping server
-      const apiBase = 'https://api.jackalarm.com';
-      try {
-        const pingResp = await fetch(`${apiBase}/api/auth/me`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const pingData = await pingResp.json();
-        lines.push(`/api/auth/me status: ${pingResp.status}`);
-        lines.push(`Server user: ${pingData?.user ? `id=${pingData.user.id}` : JSON.stringify(pingData).substring(0, 60)}`);
-      } catch (e: any) {
-        lines.push(`/api/auth/me error: ${e?.message}`);
-      }
-      // 4. Fetch habits from server
-      if (token) {
-        try {
-          const habitsResp = await fetch(`${apiBase}/api/trpc/habits.list`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const habitsData = await habitsResp.json();
-          const habits = habitsData?.result?.data?.json;
-          lines.push(`habits.list status: ${habitsResp.status}`);
-          lines.push(`Habits count: ${Array.isArray(habits) ? habits.length : 'error: ' + JSON.stringify(habitsData).substring(0, 80)}`);
-          if (Array.isArray(habits) && habits.length > 0) {
-            lines.push(`First habit: ${habits[0]?.name}`);
-          }
-        } catch (e: any) {
-          lines.push(`habits.list error: ${e?.message}`);
-        }
-      }
-      setDebugInfo(lines.join('\n'));
-    } catch (e: any) {
-      setDebugInfo(`Error: ${e?.message}`);
-    } finally {
-      setDebugLoading(false);
-    }
-  }
   const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
   const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
   const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
@@ -735,18 +685,15 @@ export default function SettingsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account</Text>
-                {user?.name && (
-                  <Text style={{ fontSize: 13, color: colors.foreground, fontWeight: '500', marginBottom: 1 }}>{user.name}</Text>
-                )}
                 {user?.email && (
-                  <Text style={{ fontSize: 12, color: colors.muted }}>{user.email}</Text>
+                  <Text style={[{ fontSize: 12, color: colors.muted }]}>{user.email}</Text>
                 )}
               </View>
             </View>
-            {/* Sign Out */}
             <Pressable
               onPress={async () => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                // Clear all local user data so the next account starts fresh
                 await clearLocalData();
                 await logout();
                 router.replace('/login');
@@ -763,23 +710,18 @@ export default function SettingsScreen() {
         )}
 
         {/* Danger Zone — hidden by default, required by Apple App Store guidelines */}
-        {isAuthenticated && (
-          <View style={{ marginTop: 4, marginBottom: 4 }}>
+        {user && (
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
             <Pressable
-              onPress={() => {
-                setDangerZoneExpanded(v => !v);
-                setDeleteConfirmText('');
-              }}
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, alignItems: 'center', paddingVertical: 8 })}
+              onPress={() => setDangerZoneExpanded(v => !v)}
+              style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.7 : 1 }]}
             >
-              <Text style={{ fontSize: 11, color: colors.muted, letterSpacing: 0.5 }}>
+              <Text style={{ fontSize: 13, color: '#EF4444', fontWeight: '600' }}>
                 {dangerZoneExpanded ? '▲ Hide danger zone' : '▼ Danger zone'}
               </Text>
             </Pressable>
-
             {dangerZoneExpanded && (
               <View style={[styles.section, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', marginTop: 0 }]}>
-                {/* Warning header */}
                 <View style={[styles.sectionHeader, { backgroundColor: '#FEE2E2' }]}>
                   <Text style={{ fontSize: 18 }}>⚠️</Text>
                   <View style={{ flex: 1 }}>
@@ -789,8 +731,6 @@ export default function SettingsScreen() {
                     </Text>
                   </View>
                 </View>
-
-                {/* Confirmation input */}
                 <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: '#FCA5A5' }}>
                   <Text style={{ fontSize: 13, color: '#7F1D1D', marginBottom: 8, fontWeight: '600' }}>
                     Type DELETE to confirm:
@@ -817,8 +757,6 @@ export default function SettingsScreen() {
                     }}
                   />
                 </View>
-
-                {/* Final delete button — only active when DELETE is typed */}
                 <Pressable
                   disabled={deleteConfirmText.trim().toUpperCase() !== 'DELETE' || isDeleting}
                   onPress={async () => {
@@ -857,37 +795,6 @@ export default function SettingsScreen() {
             )}
           </View>
         )}
-
-        {/* Debug Diagnostics Panel */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
-          <View style={styles.sectionHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>🔧 Diagnostics</Text>
-            </View>
-          </View>
-          <Pressable
-            onPress={runDiagnostics}
-            disabled={debugLoading}
-            style={({ pressed }) => [
-              styles.manageHabitsBtn,
-              { borderTopColor: colors.border, opacity: pressed || debugLoading ? 0.7 : 1 },
-            ]}
-          >
-            {debugLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Text style={[styles.manageHabitsBtnText, { color: colors.primary }]}>Run Connection Test</Text>
-            )}
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </Pressable>
-          {debugInfo && (
-            <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: colors.border }}>
-              <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.foreground, lineHeight: 18 }}>
-                {debugInfo}
-              </Text>
-            </View>
-          )}
-        </View>
 
         {/* Info */}
         <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
