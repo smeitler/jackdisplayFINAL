@@ -182,6 +182,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Load data on mount ─────────────────────────────────────────────────────
   const syncFromServer = useCallback(async () => {
     async function load() {
+      // Reset auth state so we always re-validate with the current token.
+      // This is critical when called after login — the previous session's
+      // isAuthenticated.current value must not carry over.
+      isAuthenticated.current = false;
+
       // 0. Check if demo mode is active — if so, skip server sync entirely
       const demoActive = await getIsDemoMode();
       if (demoActive) {
@@ -206,6 +211,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_SYNCING', syncing: true });
 
       try {
+        // Invalidate the tRPC cache so we always make fresh requests with the current token.
+        // This is critical after login — without this, the cache may hold stale 401 errors.
+        await utils.invalidate();
+
         // Fetch all user data from server in parallel.
         // If the user is not authenticated, this will throw a 401/403 error.
         const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
