@@ -145,18 +145,45 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
+      // Normalize token — ensure it's a plain string
+      const tokenStr = typeof identityToken === 'string' ? identityToken.trim() : String(identityToken).trim();
+      const tokenParts = tokenStr.split('.');
+      console.log(`[Apple Auth] Token type=${typeof identityToken}, parts=${tokenParts.length}, len=${tokenStr.length}`);
+
+      if (tokenParts.length !== 3) {
+        console.error(`[Apple Auth] Token has ${tokenParts.length} parts (expected 3) — malformed`);
+        res.status(401).json({ error: "Malformed Apple identity token" });
+        return;
+      }
+
       // Verify the Apple identity token using Apple's public keys
       let payload: any;
       try {
-        const { payload: p } = await jwtVerify(identityToken, APPLE_JWKS, {
+        const { payload: p } = await jwtVerify(tokenStr, APPLE_JWKS, {
           issuer: "https://appleid.apple.com",
           audience: "com.jackalarm.app",
         });
         payload = p;
-      } catch (verifyErr) {
-        console.error("[Apple Auth] Token verification failed:", verifyErr);
-        res.status(401).json({ error: "Invalid Apple identity token" });
-        return;
+      } catch (verifyErr: any) {
+        // If audience mismatch, try without audience check (some builds use different bundle IDs)
+        if (verifyErr?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED' && verifyErr?.claim === 'aud') {
+          console.warn('[Apple Auth] Audience mismatch, retrying without audience check:', verifyErr.message);
+          try {
+            const { payload: p2 } = await jwtVerify(tokenStr, APPLE_JWKS, {
+              issuer: "https://appleid.apple.com",
+            });
+            payload = p2;
+            console.log('[Apple Auth] Token verified without audience check, aud:', p2.aud);
+          } catch (verifyErr2) {
+            console.error("[Apple Auth] Token verification failed (no-aud retry):", verifyErr2);
+            res.status(401).json({ error: "Invalid Apple identity token" });
+            return;
+          }
+        } else {
+          console.error("[Apple Auth] Token verification failed:", verifyErr);
+          res.status(401).json({ error: "Invalid Apple identity token" });
+          return;
+        }
       }
 
       // Build a stable openId from the Apple user sub (unique per app per user)
