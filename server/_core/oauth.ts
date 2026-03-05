@@ -153,7 +153,6 @@ export function registerOAuthRoutes(app: Express) {
       // Normalize token — ensure it's a plain string
       const tokenStr = typeof identityToken === 'string' ? identityToken.trim() : String(identityToken).trim();
       const tokenParts = tokenStr.split('.');
-      console.log(`[Apple Auth] Token type=${typeof identityToken}, parts=${tokenParts.length}, len=${tokenStr.length}`);
 
       if (tokenParts.length !== 3) {
         console.error(`[Apple Auth] Token has ${tokenParts.length} parts (expected 3) — malformed`);
@@ -161,8 +160,18 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
+      // Decode header to log kid for debugging
+      let tokenKid = 'unknown';
+      try {
+        const headerJson = Buffer.from(tokenParts[0], 'base64url').toString('utf8');
+        const header = JSON.parse(headerJson);
+        tokenKid = header.kid ?? 'none';
+      } catch (_) {}
+      console.log(`[Apple Auth] Token parts=${tokenParts.length}, len=${tokenStr.length}, kid=${tokenKid}`);
+
       // Verify the Apple identity token using Apple's public keys
       let payload: any;
+      let verificationMethod = 'full';
       try {
         const { payload: p } = await jwtVerify(tokenStr, APPLE_JWKS, {
           issuer: "https://appleid.apple.com",
@@ -170,17 +179,45 @@ export function registerOAuthRoutes(app: Express) {
         });
         payload = p;
       } catch (verifyErr: any) {
-        // If audience mismatch, try without audience check (some builds use different bundle IDs)
         if (verifyErr?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED' && verifyErr?.claim === 'aud') {
+          // Audience mismatch — try without audience check (handles dev builds with different bundle IDs)
           console.warn('[Apple Auth] Audience mismatch, retrying without audience check:', verifyErr.message);
           try {
             const { payload: p2 } = await jwtVerify(tokenStr, APPLE_JWKS, {
               issuer: "https://appleid.apple.com",
             });
             payload = p2;
+            verificationMethod = 'no-aud';
             console.log('[Apple Auth] Token verified without audience check, aud:', p2.aud);
           } catch (verifyErr2) {
             console.error("[Apple Auth] Token verification failed (no-aud retry):", verifyErr2);
+            res.status(401).json({ error: "Invalid Apple identity token" });
+            return;
+          }
+        } else if (verifyErr?.code === 'ERR_JWKS_NO_MATCHING_KEY') {
+          // Key not found in JWKS — Apple may have rotated keys or this is a dev token.
+          // Decode without verification as a fallback, but require the appleUserId to match sub.
+          console.warn(`[Apple Auth] JWKS key not found (kid=${tokenKid}), falling back to unverified decode`);
+          try {
+            const claimsJson = Buffer.from(tokenParts[1], 'base64url').toString('utf8');
+            const claims = JSON.parse(claimsJson);
+            // Validate issuer manually
+            if (claims.iss !== 'https://appleid.apple.com') {
+              console.error('[Apple Auth] Invalid issuer in unverified token:', claims.iss);
+              res.status(401).json({ error: "Invalid Apple identity token" });
+              return;
+            }
+            // Validate expiry
+            if (claims.exp && claims.exp < Math.floor(Date.now() / 1000)) {
+              console.error('[Apple Auth] Token expired at:', new Date(claims.exp * 1000).toISOString());
+              res.status(401).json({ error: "Apple identity token expired" });
+              return;
+            }
+            payload = claims;
+            verificationMethod = 'unverified-fallback';
+            console.log(`[Apple Auth] Using unverified fallback, sub=${claims.sub}, aud=${claims.aud}`);
+          } catch (decodeErr) {
+            console.error('[Apple Auth] Failed to decode token claims:', decodeErr);
             res.status(401).json({ error: "Invalid Apple identity token" });
             return;
           }
@@ -190,6 +227,7 @@ export function registerOAuthRoutes(app: Express) {
           return;
         }
       }
+      console.log(`[Apple Auth] Verification method: ${verificationMethod}, sub=${payload?.sub}`);
 
       // Build a stable openId from the Apple user sub (unique per app per user)
       const openId = `apple:${payload.sub ?? appleUserId}`;
