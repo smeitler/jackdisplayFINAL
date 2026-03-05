@@ -450,3 +450,8 @@ test line
 - [x] Move Delete Account to hidden Danger Zone section at bottom of More screen (collapsed by default)
 - [x] Multi-step delete confirmation: tap Delete → warning sheet → type "DELETE" → final red confirm button
 - [x] Set up GitHub→Railway auto-deploy: always push server changes to smeitler/daily-progress-alarm
+
+## Cross-Device Sync Fix (Mar 05 2026)
+- [x] Fix: deletions on one device not reflected on other devices after sync
+- [x] syncFromServer already replaces local data with server data (source of truth confirmed)
+- [x] Add AppState foreground listener: auto-sync when app comes to foreground (30s cooldown)

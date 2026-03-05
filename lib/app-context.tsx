@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback, useRef } from 'react';
+import { AppState as RNAppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Habit, CheckInEntry, AlarmConfig, Rating, CategoryDef, LifeArea,
@@ -336,6 +337,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncFromServer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Foreground resume sync ─────────────────────────────────────────────────
+  // When the app comes back to the foreground, re-sync from the server so that
+  // deletions/changes made on another device are reflected immediately.
+  // A 30-second cooldown prevents hammering the server on quick app switches.
+  const lastSyncTimeRef = useRef<number>(0);
+  const SYNC_COOLDOWN_MS = 30_000;
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        const now = Date.now();
+        if (now - lastSyncTimeRef.current > SYNC_COOLDOWN_MS) {
+          lastSyncTimeRef.current = now;
+          syncFromServer();
+        }
+      }
+    };
+    const subscription = RNAppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncFromServer]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
