@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { startOAuthLogin, getApiBaseUrl } from "@/constants/oauth";
+import { getApiBaseUrl } from "@/constants/oauth";
 import { useAuth } from "@/hooks/use-auth";
 import { useApp } from "@/lib/app-context";
 import * as Haptics from "expo-haptics";
@@ -26,23 +26,6 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     }
   }, [isAuthenticated, loading, router]);
-
-  async function handleLogin() {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSigningIn(true);
-    try {
-      await startOAuthLogin();
-      // On native, the OAuth callback will handle redirect
-      // On web, the page redirects so we never reach here
-    } catch (err) {
-      console.error("[Login] OAuth start failed:", err);
-      setSigningIn(false);
-    }
-    // Keep signingIn=true on native until the deep link callback fires
-    if (Platform.OS === "web") {
-      setSigningIn(false);
-    }
-  }
 
   async function handleAppleSignIn() {
     if (Platform.OS !== "ios") return;
@@ -141,33 +124,7 @@ export default function LoginScreen() {
 
         {/* Buttons */}
         <View style={styles.footer}>
-          {/* Primary: Sign in */}
-          <Pressable
-            onPress={handleLogin}
-            disabled={signingIn || startingDemo}
-            style={({ pressed }) => [
-              styles.signInBtn,
-              { backgroundColor: colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }], opacity: (signingIn || startingDemo) ? 0.7 : 1 },
-            ]}
-          >
-            {signingIn ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <IconSymbol name="person.fill" size={18} color="#fff" />
-            )}
-            <Text style={styles.signInBtnText}>
-              {signingIn ? "Opening login…" : "Sign in to get started"}
-            </Text>
-          </Pressable>
-
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            <Text style={[styles.dividerText, { color: colors.muted }]}>or</Text>
-            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          </View>
-
-          {/* Apple Sign In — iOS only, required by App Store guidelines */}
+          {/* Primary: Sign in with Apple (iOS only) */}
           {Platform.OS === "ios" && (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
@@ -176,6 +133,14 @@ export default function LoginScreen() {
               style={styles.appleBtn}
               onPress={handleAppleSignIn}
             />
+          )}
+
+          {/* Show loading state when signing in */}
+          {signingIn && (
+            <View style={[styles.loadingRow]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.muted }]}>Signing in…</Text>
+            </View>
           )}
 
           {/* Secondary: Try Demo */}
@@ -235,21 +200,15 @@ const styles = StyleSheet.create({
   featureIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   featureText: { fontSize: 16, fontWeight: "500" },
   footer: { gap: 12 },
-  signInBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    borderRadius: 16, paddingVertical: 18,
-  },
-  signInBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 2 },
-  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
-  dividerText: { fontSize: 13 },
+  appleBtn: { height: 54, width: '100%' },
+  loadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  loadingText: { fontSize: 14 },
   demoBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     borderRadius: 16, paddingVertical: 16, borderWidth: 1,
   },
   demoBtnText: { fontSize: 16, fontWeight: "600" },
   disclaimer: { fontSize: 12, textAlign: "center", lineHeight: 18 },
-  appleBtn: { height: 54, width: '100%' },
   legalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
   legalLink: { fontSize: 12, textDecorationLine: 'underline' },
   legalSep: { fontSize: 12 },
