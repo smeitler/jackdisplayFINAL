@@ -62,8 +62,13 @@ function buildUserResponse(
   };
 }
 
-// Apple public key set for verifying identity tokens
-const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
+// Apple public key set for verifying identity tokens.
+// cooldownDuration=0 ensures we always re-fetch when a key is not found (handles key rotation).
+// cacheMaxAge=300000 (5 min) keeps the cache fresh without hammering Apple's servers.
+const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"), {
+  cooldownDuration: 0,
+  cacheMaxAge: 300000,
+});
 
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
