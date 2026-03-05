@@ -1,0 +1,146 @@
+{
+  "query": "SELECT id, clientId, name, emoji, categoryClientId, isActive FROM habits WHERE userId = 2190001 ORDER BY categoryClientId, `order`;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute SELECT id, clientId, name, emoji, categoryClientId, isActive FROM habits WHERE userId = 2190001 ORDER BY categoryClientId, `order`;",
+  "rows": [
+    {
+      "id": "270001",
+      "clientId": "h1",
+      "name": "Exercise / Workout",
+      "emoji": "💪",
+      "categoryClientId": "body",
+      "isActive": "1"
+    },
+    {
+      "id": "270002",
+      "clientId": "h2",
+      "name": "Drink 8 glasses of water",
+      "emoji": "💧",
+      "categoryClientId": "body",
+      "isActive": "1"
+    },
+    {
+      "id": "270003",
+      "clientId": "h3",
+      "name": "Sleep 7+ hours",
+      "emoji": "😴",
+      "categoryClientId": "body",
+      "isActive": "1"
+    },
+    {
+      "id": "270011",
+      "clientId": "c1",
+      "name": "Work on main goal",
+      "emoji": "🚀",
+      "categoryClientId": "career",
+      "isActive": "1"
+    },
+    {
+      "id": "270012",
+      "clientId": "c2",
+      "name": "Learn a new skill",
+      "emoji": "📚",
+      "categoryClientId": "career",
+      "isActive": "1"
+    },
+    {
+      "id": "270015",
+      "clientId": "co1",
+      "name": "Help someone today",
+      "emoji": "🤝",
+      "categoryClientId": "contribution",
+      "isActive": "1"
+    },
+    {
+      "id": "270009",
+      "clientId": "f1",
+      "name": "Deep work block (2h+)",
+      "emoji": "🎯",
+      "categoryClientId": "focus",
+      "isActive": "1"
+    },
+    {
+      "id": "270010",
+      "clientId": "f2",
+      "name": "No phone first 30 min",
+      "emoji": "📵",
+      "categoryClientId": "focus",
+      "isActive": "1"
+    },
+    {
+      "id": "270004",
+      "clientId": "m1",
+      "name": "Meditate or breathe",
+      "emoji": "🧘",
+      "categoryClientId": "mind",
+      "isActive": "1"
+    },
+    {
+      "id": "270005",
+      "clientId": "m2",
+      "name": "Read 20+ minutes",
+      "emoji": "📖",
+      "categoryClientId": "mind",
+      "isActive": "1"
+    },
+    {
+      "id": "270006",
+      "clientId": "m3",
+      "name": "Journal / reflect",
+      "emoji": "✍️",
+      "categoryClientId": "mind",
+      "isActive": "1"
+    },
+    {
+      "id": "270013",
+      "clientId": "mo1",
+      "name": "Track expenses",
+      "emoji": "💰",
+      "categoryClientId": "money",
+      "isActive": "1"
+    },
+    {
+      "id": "270014",
+      "clientId": "mo2",
+      "name": "Review financial goals",
+      "emoji": "📈",
+      "categoryClientId": "money",
+      "isActive": "1"
+    },
+    {
+      "id": "270007",
+      "clientId": "r1",
+      "name": "Reach out to a friend",
+      "emoji": "📱",
+      "categoryClientId": "relationships",
+      "isActive": "1"
+    },
+    {
+      "id": "270008",
+      "clientId": "r2",
+      "name": "Quality time w/ loved ones",
+      "emoji": "❤️",
+      "categoryClientId": "relationships",
+      "isActive": "1"
+    },
+    {
+      "id": "270016",
+      "clientId": "sp1",
+      "name": "Gratitude practice",
+      "emoji": "🙏",
+      "categoryClientId": "spirituality",
+      "isActive": "1"
+    },
+    {
+      "id": "270017",
+      "clientId": "sp2",
+      "name": "Prayer or reflection",
+      "emoji": "✨",
+      "categoryClientId": "spirituality",
+      "isActive": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tclientId\tname\temoji\tcategoryClientId\tisActive\n270001\th1\tExercise / Workout\t💪\tbody\t1\n270002\th2\tDrink 8 glasses of water\t💧\tbody\t1\n270003\th3\tSleep 7+ hours\t😴\tbody\t1\n270011\tc1\tWork on main goal\t🚀\tcareer\t1\n270012\tc2\tLearn a new skill\t📚\tcareer\t1\n270015\tco1\tHelp someone today\t🤝\tcontribution\t1\n270009\tf1\tDeep work block (2h+)\t🎯\tfocus\t1\n270010\tf2\tNo phone first 30 min\t📵\tfocus\t1\n270004\tm1\tMeditate or breathe\t🧘\tmind\t1\n270005\tm2\tRead 20+ minutes\t📖\tmind\t1\n270006\tm3\tJournal / reflect\t✍️\tmind\t1\n270013\tmo1\tTrack expenses\t💰\tmoney\t1\n270014\tmo2\tReview financial goals\t📈\tmoney\t1\n270007\tr1\tReach out to a friend\t📱\trelationships\t1\n270008\tr2\tQuality time w/ loved ones\t❤️\trelationships\t1\n270016\tsp1\tGratitude practice\t🙏\tspirituality\t1\n270017\tsp2\tPrayer or reflection\t✨\tspirituality\t1\n",
+  "stderr": "",
+  "execution_time_ms": 352
+}

@@ -16,7 +16,7 @@ export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
   const { isAuthenticated, loading } = useAuth();
-  const { startDemo } = useApp();
+  const { startDemo, syncFromServer } = useApp();
   const [signingIn, setSigningIn] = useState(false);
   const [webSigningIn, setWebSigningIn] = useState(false);
   const [startingDemo, setStartingDemo] = useState(false);
@@ -70,6 +70,9 @@ export default function LoginScreen() {
       if (data.app_session_id) {
         await Auth.setSessionToken(data.app_session_id);
         if (data.user) await Auth.setUserInfo(data.user);
+        // Immediately sync server data so the app shows the user's real habits
+        // (AppProvider's load() already ran on mount with no token — we must re-sync now)
+        await syncFromServer();
         router.replace("/(tabs)");
       } else {
         throw new Error("No session token returned");

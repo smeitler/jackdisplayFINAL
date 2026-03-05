@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
+import { useApp } from "@/lib/app-context";
 
 // CRITICAL: This must be called at module level (not inside a component) to properly
 // dismiss the ASWebAuthenticationSession / Chrome Custom Tab that was opened by
@@ -16,6 +17,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function OAuthCallback() {
   const router = useRouter();
+  const { syncFromServer } = useApp();
   const params = useLocalSearchParams<{
     code?: string;
     state?: string;
@@ -55,6 +57,7 @@ export default function OAuthCallback() {
           }
 
           setStatus("success");
+          await syncFromServer();
           setTimeout(() => {
             router.replace("/(tabs)");
           }, 1000);
@@ -114,6 +117,7 @@ export default function OAuthCallback() {
         if (sessionToken) {
           await Auth.setSessionToken(sessionToken);
           setStatus("success");
+          await syncFromServer();
           setTimeout(() => {
             router.replace("/(tabs)");
           }, 1000);
@@ -144,6 +148,7 @@ export default function OAuthCallback() {
           }
 
           setStatus("success");
+          await syncFromServer();
           setTimeout(() => {
             router.replace("/(tabs)");
           }, 1000);

@@ -167,6 +167,7 @@ type AppContextValue = AppState & {
   streak: number;
   startDemo: () => Promise<void>;
   exitDemo: () => Promise<void>;
+  syncFromServer: () => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -179,7 +180,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const utils = trpc.useUtils();
 
   // ── Load data on mount ─────────────────────────────────────────────────────
-  useEffect(() => {
+  const syncFromServer = useCallback(async () => {
     async function load() {
       // 0. Check if demo mode is active — if so, skip server sync entirely
       const demoActive = await getIsDemoMode();
@@ -315,6 +316,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
     load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [utils]);
+
+  useEffect(() => {
+    syncFromServer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -819,6 +825,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       getHabitWeekBeforeDone, getHabitMonthBeforeDone,
       streak,
       startDemo, exitDemo,
+      syncFromServer,
     }}>
       {children}
     </AppContext.Provider>
