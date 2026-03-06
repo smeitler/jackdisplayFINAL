@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator, TextInput } from "react-native";
+import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator, TextInput, Share, Alert } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useRef } from "react";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
@@ -15,8 +15,164 @@ import { useThemeContext } from "@/lib/theme-provider";
 import { type AppTheme } from "@/constants/theme";
 import { clearLocalData } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
-import { Alert } from "react-native";
+
 import * as WebBrowser from "expo-web-browser";
+
+
+// ─── CrowPanel Device Pairing Section ───────────────────────────────────────
+function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/hooks/use-colors').useColors> }) {
+  const devicesQuery = trpc.devices.list.useQuery();
+  const createTokenMutation = trpc.devices.createPairingToken.useMutation();
+  const removeDeviceMutation = trpc.devices.remove.useMutation({
+    onSuccess: () => devicesQuery.refetch(),
+  });
+  const [pairingToken, setPairingToken] = useState<string | null>(null);
+  const [tokenExpiry, setTokenExpiry] = useState<Date | null>(null);
+  const [showPairingFlow, setShowPairingFlow] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleGenerateToken() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const result = await createTokenMutation.mutateAsync();
+      setPairingToken(result.token);
+      setTokenExpiry(new Date(result.expiresAt));
+      setShowPairingFlow(true);
+    } catch (err) {
+      Alert.alert('Error', 'Could not generate pairing token. Please try again.');
+    }
+  }
+
+  async function handleCopyToken() {
+    if (!pairingToken) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Share.share({ message: pairingToken, title: 'CrowPanel Pairing Token' });
+    } catch { /* user cancelled share */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleRemoveDevice(deviceId: number) {
+    Alert.alert(
+      'Remove Device',
+      'Unlink this CrowPanel from your account? The display will stop receiving your alarms.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removeDeviceMutation.mutate({ deviceId }),
+        },
+      ]
+    );
+  }
+
+  const devices = devicesQuery.data ?? [];
+
+  return (
+    <View style={[{ borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, marginTop: 20, backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 }}>
+        <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22' }}>
+          <IconSymbol name="desktopcomputer" size={18} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.foreground }}>CrowPanel Display</Text>
+          <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Connect your physical alarm clock</Text>
+        </View>
+        {devicesQuery.isLoading && <ActivityIndicator size="small" color={colors.muted} />}
+      </View>
+
+      {/* Linked devices list */}
+      {devices.length > 0 && (
+        <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+          {devices.map((device, idx) => (
+            <View
+              key={device.id}
+              style={[{
+                flexDirection: 'row', alignItems: 'center', gap: 12,
+                paddingHorizontal: 16, paddingVertical: 12,
+                borderTopWidth: idx > 0 ? 1 : 0, borderTopColor: colors.border,
+              }]}
+            >
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: device.lastSeenAt && (Date.now() - new Date(device.lastSeenAt).getTime()) < 10 * 60 * 1000 ? '#22C55E' : colors.muted }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>CrowPanel 7"</Text>
+                <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>
+                  {device.lastSeenAt ? `Last seen ${new Date(device.lastSeenAt).toLocaleString()}` : 'Never connected'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => handleRemoveDevice(device.id)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}
+              >
+                <IconSymbol name="xmark.circle.fill" size={20} color={colors.error ?? '#EF4444'} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Pairing flow */}
+      {showPairingFlow && pairingToken ? (
+        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, padding: 16, gap: 12 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>Step 1 — Copy this token:</Text>
+          <Pressable
+            onPress={handleCopyToken}
+            style={({ pressed }) => [{
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              backgroundColor: colors.background, borderRadius: 10,
+              borderWidth: 1, borderColor: colors.border,
+              padding: 12, opacity: pressed ? 0.7 : 1,
+            }]}
+          >
+            <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: colors.primary, fontVariant: ['tabular-nums'], letterSpacing: 1 }}>
+              {pairingToken}
+            </Text>
+            <IconSymbol name={copied ? 'checkmark.circle.fill' : 'doc.on.doc'} size={20} color={copied ? '#22C55E' : colors.muted} />
+          </Pressable>
+          <Text style={{ fontSize: 13, color: colors.muted, lineHeight: 18 }}>
+            Step 2 — On your CrowPanel, go to <Text style={{ fontWeight: '700', color: colors.foreground }}>Settings → Pair with App</Text> and enter this token.
+          </Text>
+          {tokenExpiry && (
+            <Text style={{ fontSize: 11, color: colors.muted }}>
+              Token expires at {tokenExpiry.toLocaleTimeString()}
+            </Text>
+          )}
+          <Pressable
+            onPress={() => { setShowPairingFlow(false); setPairingToken(null); devicesQuery.refetch(); }}
+            style={({ pressed }) => [{
+              alignItems: 'center', paddingVertical: 10, borderRadius: 10,
+              backgroundColor: colors.primary + '18', opacity: pressed ? 0.7 : 1,
+            }]}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Done — Close</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          onPress={handleGenerateToken}
+          disabled={createTokenMutation.isPending}
+          style={({ pressed }) => [{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+            borderTopWidth: 1, borderTopColor: colors.border,
+            paddingVertical: 14, paddingHorizontal: 16,
+            opacity: pressed ? 0.7 : 1,
+          }]}
+        >
+          {createTokenMutation.isPending
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <IconSymbol name="antenna.radiowaves.left.and.right" size={18} color={colors.primary} />
+          }
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>
+            {devices.length > 0 ? 'Pair Another Display' : 'Pair CrowPanel Display'}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
@@ -794,6 +950,11 @@ export default function SettingsScreen() {
               </View>
             )}
           </View>
+        )}
+
+        {/* CrowPanel Device Pairing */}
+        {isAuthenticated && (
+          <DevicePairingSection colors={colors} />
         )}
 
         {/* Info */}

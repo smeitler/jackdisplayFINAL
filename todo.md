@@ -229,8 +229,8 @@
 - [x] Server DB functions: createDevicePairingToken, registerDevice, getDeviceByApiKey, getDeviceSchedule, recordDeviceEvent, deleteDevice
 - [x] REST API endpoints for ESP32 firmware: POST /api/device/register, GET /api/device/schedule, POST /api/device/event, POST /api/device/heartbeat
 - [x] tRPC routes for app: devices.createPairingToken, devices.list, devices.remove
-- [ ] App UI: "Connect a Clock" setup wizard in More/Settings tab
-- [ ] App UI: connected devices list with online/offline status in More tab
+- [x] App UI: CrowPanel Device Pairing section in Settings (generate token, copy, pair)
+- [x] App UI: connected devices list with online/offline status in Settings tab
 - [ ] Push notification trigger when alarm_dismissed event received from device
 - [x] Fix home screen: Mindset category goal cards not showing target details like Financial goals do
 - [x] Fix Vision Board: photos not persisting after app restart (save/load from AsyncStorage)
@@ -440,3 +440,21 @@
 ## UI Polish (Mar 05 2026)
 
 - [x] Remove yellow DEMO badge overlaid on the More tab icon in the bottom tab bar
+
+## CrowPanel ESP32-S3 Firmware
+
+- [x] PlatformIO project with ESP32-S3, LVGL 8.4, LovyanGFX, ArduinoJson, Preferences
+- [x] Black background, white 12-hour clock UI (800x480)
+- [x] AM/PM label, date label, WiFi status indicator
+- [x] Alarm badge (pill) showing next alarm time
+- [x] Alarm popup screen: large time, Dismiss (white pill) + Snooze (dark pill) buttons
+- [x] Snooze logic: configurable minutes, reports snooze count to server
+- [x] Check-in screen: habit grid with category colors, Done button
+- [x] Pairing screen: on-screen keyboard, token input, Connect button
+- [x] NVS API key persistence (survives reboot)
+- [x] Device registration via POST /api/device/register with pairing token
+- [x] Schedule polling every 5 minutes from server
+- [x] Heartbeat every 5 minutes (uptime + RSSI)
+- [x] Event reporting: alarm_fired, alarm_dismissed, snooze
+- [x] NTP time sync (Mountain Time, auto DST)
+- [x] Firmware compiles: RAM 38.8%, Flash 42.5%
