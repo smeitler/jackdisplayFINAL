@@ -485,3 +485,8 @@
 
 - [x] Fix: multiple duplicate CrowPanel device entries in app UI — getUserDevices now filters to pairingToken IS NULL (registered only); test rows cleaned from DB
 - [x] Fix: saved alarm not showing on CrowPanel display — root cause: firmware config.h points to non-existent Railway URL; need to publish app and update firmware to use deployed URL
+
+## Device UI + Firmware (Mar 06 2026)
+
+- [x] Fix: X button to remove/disconnect device not working in settings screen — now uses window.confirm on web
+- [x] Firmware: update config.h API_BASE_URL to deployed server URL and rebuild — instructions written for Claude Code

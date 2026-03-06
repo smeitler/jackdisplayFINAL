@@ -54,6 +54,13 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
   }
 
   function handleRemoveDevice(deviceId: number) {
+    if (Platform.OS === 'web') {
+      // Alert.alert callbacks are unreliable on web — use native confirm instead
+      if (window.confirm('Unlink this CrowPanel from your account? The display will stop receiving your alarms.')) {
+        removeDeviceMutation.mutate({ deviceId });
+      }
+      return;
+    }
     Alert.alert(
       'Remove Device',
       'Unlink this CrowPanel from your account? The display will stop receiving your alarms.',
