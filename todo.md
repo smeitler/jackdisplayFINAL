@@ -490,3 +490,27 @@
 
 - [x] Fix: X button to remove/disconnect device not working in settings screen — now uses window.confirm on web
 - [x] Firmware: update config.h API_BASE_URL to deployed server URL and rebuild — instructions written for Claude Code
+
+## Railway Deployment (Mar 06 2026)
+
+- [ ] Check Railway project config and existing railway.toml / Dockerfile
+- [ ] Configure env vars on Railway (DB connection, etc.)
+- [ ] Deploy server to Railway and verify /api/device/schedule is reachable
+- [ ] Update firmware config.h API_BASE_URL to the Railway production URL
+
+## Railway ESM Fix (Mar 06 2026)
+
+- [x] Fix: Railway deploy crashes with "Cannot use import statement outside a module" — changed build output to dist/index.mjs and start script to node dist/index.mjs
+
+## CrowPanel Clock Display (Mar 06 2026)
+
+- [ ] Firmware: show next alarm time on clock face (currently only shows time, not alarm info)
+
+## Device Revocation Flow (Mar 06 2026)
+
+- [ ] Server: return HTTP 401 with {"revoked":true} when device key is not found (device was deleted in app)
+- [ ] Firmware: on 401 from schedule/heartbeat, clear NVS API key and show pairing screen
+
+## Alarm Popup Check-In Screen (Mar 06 2026)
+
+- [x] Firmware: check-in screen instructions written for Claude Code — red/yellow/green rating buttons per habit, fetched from /api/device/schedule habits array
