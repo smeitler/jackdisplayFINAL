@@ -519,3 +519,9 @@
 
 - [x] Server: update /api/device/schedule to include habits array in response
 - [x] Server: add POST /api/device/checkin endpoint to save ratings from CrowPanel
+
+## Immediate CrowPanel Sync (Mar 06 2026)
+
+- [x] Server: add scheduleVersion column to devices table; bump it when user saves habits or alarms
+- [x] Server: heartbeat response includes needsSync:true when scheduleVersion changed since last fetch
+- [ ] Firmware: on needsSync:true in heartbeat response, immediately re-fetch schedule (instructions below)
