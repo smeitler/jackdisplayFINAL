@@ -1,0 +1,58 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "alarmConfigs"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "categories"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "checkIns"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "habits"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "referrals"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "sharedGoals"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamGoalProposals"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamGoalVotes"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamMembers"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamMessages"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamPostComments"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamPostReactions"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teamPosts"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "teams"
+    },
+    {
+      "Tables_in_bFcyWdAL5JXed3bpyDvBEf": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_bFcyWdAL5JXed3bpyDvBEf\n__drizzle_migrations\nalarmConfigs\ncategories\ncheckIns\nhabits\nreferrals\nsharedGoals\nteamGoalProposals\nteamGoalVotes\nteamMembers\nteamMessages\nteamPostComments\nteamPostReactions\nteamPosts\nteams\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 349
+}

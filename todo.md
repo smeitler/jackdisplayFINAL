@@ -461,3 +461,8 @@
 
 - [x] Firmware: add WiFiManager captive portal (no reflashing to change WiFi)
 - [x] Firmware: hold-button reset to re-enter WiFi setup mode
+
+## Pairing Token Fix (Mar 06 2026)
+
+- [x] Fix: pairing token generation failing in web preview — devices/deviceEvents tables were missing from DB (migration not applied), created them directly
+- [x] Fix: web auth not sending session token as Bearer header — updated auth.ts to store/read session token in localStorage on web (was always returning null for web)
