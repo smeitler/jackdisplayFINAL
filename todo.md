@@ -458,3 +458,6 @@
 - [x] Event reporting: alarm_fired, alarm_dismissed, snooze
 - [x] NTP time sync (Mountain Time, auto DST)
 - [x] Firmware compiles: RAM 38.8%, Flash 42.5%
+
+- [x] Firmware: add WiFiManager captive portal (no reflashing to change WiFi)
+- [x] Firmware: hold-button reset to re-enter WiFi setup mode

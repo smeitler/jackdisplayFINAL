@@ -271,6 +271,33 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
+  // ─── DEV BYPASS: web-only dev login (development mode only) ─────────────────
+  app.post("/api/auth/dev-login", async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === "production") {
+      res.status(403).json({ error: "Not available in production" });
+      return;
+    }
+    try {
+      const openId = "dev:preview-user";
+      const user = await syncUser({
+        openId,
+        name: "Dev User",
+        email: "dev@daycheck.app",
+        loginMethod: "dev",
+      });
+      const sessionToken = await sdk.createSessionToken(openId, {
+        name: "Dev User",
+        expiresInMs: ONE_YEAR_MS,
+      });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.json({ app_session_id: sessionToken, user: buildUserResponse(user) });
+    } catch (err: any) {
+      console.error("[Dev Login]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/auth/logout", (req: Request, res: Response) => {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

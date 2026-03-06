@@ -82,6 +82,26 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleDevLogin() {
+    setWebSigningIn(true);
+    try {
+      const apiBase = getApiBaseUrl();
+      const resp = await fetch(`${apiBase}/api/auth/dev-login`, { method: "POST", credentials: "include" });
+      if (!resp.ok) throw new Error(await resp.text());
+      const data = await resp.json();
+      if (data.app_session_id) {
+        await Auth.setSessionToken(data.app_session_id);
+        if (data.user) await Auth.setUserInfo(data.user);
+        router.replace("/(tabs)");
+      } else {
+        throw new Error("No session token returned");
+      }
+    } catch (err) {
+      console.error("[Login] Dev login failed:", err);
+      setWebSigningIn(false);
+    }
+  }
+
   async function handleTryDemo() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setStartingDemo(true);
@@ -174,6 +194,27 @@ export default function LoginScreen() {
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={[styles.loadingText, { color: colors.muted }]}>Signing in…</Text>
             </View>
+          )}
+
+          {/* DEV ONLY: Dev bypass login — web preview only, never shown in production builds */}
+          {Platform.OS === "web" && (
+            <Pressable
+              onPress={handleDevLogin}
+              disabled={webSigningIn || startingDemo}
+              style={({ pressed }) => [
+                styles.demoBtn,
+                { borderColor: "#f59e0b", backgroundColor: "#78350f22", transform: [{ scale: pressed ? 0.97 : 1 }], opacity: (webSigningIn || startingDemo) ? 0.7 : 1 },
+              ]}
+            >
+              {webSigningIn ? (
+                <ActivityIndicator size="small" color="#f59e0b" />
+              ) : (
+                <IconSymbol name="chevron.left.forwardslash.chevron.right" size={16} color="#f59e0b" />
+              )}
+              <Text style={[styles.demoBtnText, { color: "#f59e0b" }]}>
+                {webSigningIn ? "Logging in…" : "Dev Login (Preview Only)"}
+              </Text>
+            </Pressable>
           )}
 
           {/* Secondary: Try Demo */}
