@@ -1,0 +1,23 @@
+# Expo / React Native — not needed on Railway (server only)
+.expo/
+android/
+ios/
+assets/
+app/
+components/
+hooks/
+constants/
+global.css
+tailwind.config.js
+theme.config.js
+theme.config.d.ts
+
+# Dev tools
+.pio/
+crowpanel-firmware/
+tests/
+scripts/
+
+# Build artifacts
+dist/
+node_modules/
