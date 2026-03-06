@@ -513,7 +513,7 @@
 
 ## Alarm Popup Check-In Screen (Mar 06 2026)
 
-- [x] Firmware: check-in screen instructions written for Claude Code — red/yellow/green rating buttons per habit, fetched from /api/device/schedule habits array
+- [x] Firmware: check-in screen implemented — red/yellow/green rating buttons per habit, fetched from /api/device/schedule habits array, ratings submitted via POST /api/device/checkin
 
 ## Device Checkin Endpoint (Mar 06 2026)
 
@@ -525,3 +525,12 @@
 - [x] Server: add scheduleVersion column to devices table; bump it when user saves habits or alarms
 - [x] Server: heartbeat response includes needsSync:true when scheduleVersion changed since last fetch
 - [ ] Firmware: on needsSync:true in heartbeat response, immediately re-fetch schedule (instructions below)
+
+## Alarm Popup + Check-In Screen Firmware (Mar 06 2026)
+
+- [x] Firmware: implement alarm popup (full-screen overlay when alarm fires, Snooze + Dismiss buttons)
+- [x] Firmware: implement check-in screen (habit rating buttons, Submit & Done to fully dismiss alarm)
+
+## Required Goal Field for Habits (Mar 06 2026)
+
+- [x] App: make goal field required when creating/editing a habit — disable Save until goal is filled, mark field as required

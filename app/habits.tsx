@@ -237,8 +237,11 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(editHabit?.monthlyGoal);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const currentGoal = frequencyType === 'weekly' ? weeklyGoal : monthlyGoal;
+  const canSave = name.trim().length > 0 && currentGoal !== undefined;
+
   async function handleSave() {
-    if (!name.trim()) return;
+    if (!canSave) return;
     await onSave(name.trim(), '', description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
     onClose();
   }
@@ -324,7 +327,10 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
 
             {/* Frequency type toggle */}
             <View style={styles.weeklyGoalRow}>
-              <Text style={[styles.weeklyGoalLabel, { color: colors.foreground }]}>Goal frequency</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={[styles.weeklyGoalLabel, { color: colors.foreground, marginBottom: 0 }]}>Goal frequency</Text>
+                <Text style={{ color: colors.error, fontSize: 13, marginLeft: 4, lineHeight: 18 }}> *</Text>
+              </View>
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                 {(['weekly', 'monthly'] as const).map((ft) => (
                   <Pressable
@@ -368,8 +374,8 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                       </Pressable>
                     ))}
                   </View>
-                  <Text style={[styles.weeklyGoalHint, { color: colors.muted }]}>
-                    {weeklyGoal ? `${weeklyGoal}x per week` : 'No goal set'}
+                  <Text style={[styles.weeklyGoalHint, { color: weeklyGoal ? colors.muted : colors.error }]}>
+                    {weeklyGoal ? `${weeklyGoal}x per week` : 'Required — tap a number above'}
                   </Text>
                 </>
               ) : (
@@ -393,8 +399,8 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                       </Pressable>
                     ))}
                   </ScrollView>
-                  <Text style={[styles.weeklyGoalHint, { color: colors.muted }]}>
-                    {monthlyGoal ? `${monthlyGoal}x per month` : 'No goal set'}
+                  <Text style={[styles.weeklyGoalHint, { color: monthlyGoal ? colors.muted : colors.error }]}>
+                    {monthlyGoal ? `${monthlyGoal}x per month` : 'Required — tap a number above'}
                   </Text>
                 </>
               )}
@@ -411,10 +417,11 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSave}
-                style={[styles.modalBtn, styles.modalBtnSave, { backgroundColor: colors.primary }]}
-                activeOpacity={0.8}
+                disabled={!canSave}
+                style={[styles.modalBtn, styles.modalBtnSave, { backgroundColor: canSave ? colors.primary : colors.border }]}
+                activeOpacity={canSave ? 0.8 : 1}
               >
-                <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
+                <Text style={[styles.modalBtnText, { color: canSave ? '#fff' : colors.muted }]}>Save</Text>
               </TouchableOpacity>
             </View>
 
