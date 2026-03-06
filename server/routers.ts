@@ -112,8 +112,8 @@ export const appRouter = router({
         frequencyType: z.string().max(16).optional().nullable(),
         monthlyGoal: z.number().int().min(1).max(31).optional().nullable(),
       }))
-      .mutation(({ ctx, input }) =>
-        db.upsertHabit({
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertHabit({
           userId: ctx.user.id,
           clientId: input.clientId,
           categoryClientId: input.categoryClientId,
@@ -125,8 +125,9 @@ export const appRouter = router({
           weeklyGoal: input.weeklyGoal ?? null,
           frequencyType: input.frequencyType ?? null,
           monthlyGoal: input.monthlyGoal ?? null,
-        })
-      ),
+        });
+        await db.bumpScheduleVersionForUser(ctx.user.id).catch(() => {});
+      }),
 
     delete: protectedProcedure
       .input(z.object({ clientId: z.string() }))
@@ -232,15 +233,16 @@ export const appRouter = router({
         days: z.string().max(20), // comma-separated
         enabled: z.boolean(),
       }))
-      .mutation(({ ctx, input }) =>
-        db.upsertAlarm({
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertAlarm({
           userId: ctx.user.id,
           hour: input.hour,
           minute: input.minute,
           days: input.days,
           enabled: input.enabled,
-        })
-      ),
+        });
+        await db.bumpScheduleVersionForUser(ctx.user.id).catch(() => {});
+      }),
   }),
 
   // ─── Community: Teams ────────────────────────────────────────────────────────

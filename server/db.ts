@@ -1,4 +1,4 @@
-import { and, eq, desc, gte, inArray, isNull, like } from "drizzle-orm";
+import { and, eq, desc, gte, inArray, isNull, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import crypto from "crypto";
 import {
@@ -1139,4 +1139,26 @@ export async function getTeamHabitStats(teamId: number) {
     memberCount,
     proposals: acceptedProposals,
   };
+}
+
+// ─── Device Schedule Version ──────────────────────────────────────────────────
+/** Bump scheduleVersion for all registered devices belonging to a user.
+ * Called whenever the user saves habits or alarm config so the CrowPanel
+ * knows to re-fetch the schedule on its next heartbeat. */
+export async function bumpScheduleVersionForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(devices)
+    .set({ scheduleVersion: sql`scheduleVersion + 1` })
+    .where(and(eq(devices.userId, userId), isNull(devices.pairingToken)));
+}
+
+/** Mark that the device has acknowledged the current scheduleVersion.
+ * Called after the device fetches /api/device/schedule successfully. */
+export async function markDeviceScheduleSeen(deviceId: number, version: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(devices)
+    .set({ lastScheduleVersionSeen: version })
+    .where(eq(devices.id, deviceId));
 }

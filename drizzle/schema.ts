@@ -296,6 +296,8 @@ export const devices = mysqlTable("devices", {
   pairingTokenExpiresAt: timestamp("pairingTokenExpiresAt"),
   firmwareVersion: varchar("firmwareVersion", { length: 16 }),
   lastSeenAt: timestamp("lastSeenAt"),
+  scheduleVersion: int("scheduleVersion").notNull().default(1),
+  lastScheduleVersionSeen: int("lastScheduleVersionSeen").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

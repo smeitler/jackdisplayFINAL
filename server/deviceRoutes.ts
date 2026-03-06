@@ -105,9 +105,13 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       category: h.categoryClientId,
     }));
 
+    // Mark device as having seen this version so needsSync clears
+    await db.markDeviceScheduleSeen(device.id, device.scheduleVersion ?? 1).catch(() => {});
+
     res.json({
       alarms,
       habits,
+      scheduleVersion: device.scheduleVersion ?? 1,
       updatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
@@ -169,7 +173,14 @@ router.post("/heartbeat", requireDeviceKey, async (req: Request, res: Response) 
     // lastSeenAt is updated by getDeviceByApiKey (called in requireDeviceKey middleware)
     console.log(`[device/heartbeat] device=${device.id} uptime=${uptime}s rssi=${wifiRssi}dBm`);
 
-    res.json({ ok: true, serverTime: new Date().toISOString() });
+    // Tell the firmware to re-fetch the schedule if the version has changed
+    const needsSync = (device.scheduleVersion ?? 1) !== (device.lastScheduleVersionSeen ?? 0);
+    res.json({
+      ok: true,
+      serverTime: new Date().toISOString(),
+      needsSync,
+      scheduleVersion: device.scheduleVersion ?? 1,
+    });
   } catch (err: any) {
     console.error("[device/heartbeat]", err);
     res.status(500).json({ error: "Internal server error" });
