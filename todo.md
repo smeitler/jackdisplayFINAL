@@ -514,3 +514,8 @@
 ## Alarm Popup Check-In Screen (Mar 06 2026)
 
 - [x] Firmware: check-in screen instructions written for Claude Code — red/yellow/green rating buttons per habit, fetched from /api/device/schedule habits array
+
+## Device Checkin Endpoint (Mar 06 2026)
+
+- [x] Server: update /api/device/schedule to include habits array in response
+- [x] Server: add POST /api/device/checkin endpoint to save ratings from CrowPanel
