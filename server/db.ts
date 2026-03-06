@@ -968,7 +968,7 @@ export async function getUserDevices(userId: number) {
   }).from(devices).where(and(eq(devices.userId, userId), isNull(devices.pairingToken)));
 }
 
-/** Get alarm schedule for a device (from the user's alarmConfigs) */
+/** Get alarm schedule for a device (from the user's alarmConfigs + active habits) */
 export async function getDeviceSchedule(deviceId: number) {
   const db = await getDb();
   if (!db) return null;
@@ -976,7 +976,43 @@ export async function getDeviceSchedule(deviceId: number) {
   if (rows.length === 0) return null;
   const device = rows[0];
   const alarms = await db.select().from(alarmConfigs).where(eq(alarmConfigs.userId, device.userId));
-  return { alarms, userId: device.userId };
+  const userHabits = await db
+    .select({
+      clientId: habits.clientId,
+      name: habits.name,
+      categoryClientId: habits.categoryClientId,
+      order: habits.order,
+    })
+    .from(habits)
+    .where(and(eq(habits.userId, device.userId), eq(habits.isActive, true)))
+    .orderBy(habits.order);
+  return { alarms, habits: userHabits, userId: device.userId };
+}
+
+/** Save check-in ratings submitted from the CrowPanel display */
+export async function submitDeviceCheckin(deviceId: number, date: string, ratings: Record<string, "red" | "yellow" | "green">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Get the userId from the device
+  const rows = await db.select({ userId: devices.userId }).from(devices).where(eq(devices.id, deviceId)).limit(1);
+  if (rows.length === 0) throw new Error("Device not found");
+  const userId = rows[0].userId;
+  // Validate date format YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid date format");
+  // Upsert each rating
+  for (const [habitClientId, rating] of Object.entries(ratings)) {
+    if (!["red", "yellow", "green"].includes(rating)) continue;
+    await db.insert(checkIns).values({
+      userId,
+      habitClientId,
+      date,
+      rating,
+      loggedAt: new Date(),
+    }).onDuplicateKeyUpdate({
+      set: { rating, loggedAt: new Date() },
+    });
+  }
+  return { saved: Object.keys(ratings).length };
 }
 
 /** Record a device event (alarm fired, dismissed, snooze, heartbeat) */

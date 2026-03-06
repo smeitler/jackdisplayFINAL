@@ -98,8 +98,16 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       enabled: a.enabled,
     }));
 
+    // Include active habits so the firmware can show the check-in screen
+    const habits = (schedule.habits ?? []).map((h) => ({
+      id: h.clientId,
+      name: h.name,
+      category: h.categoryClientId,
+    }));
+
     res.json({
       alarms,
+      habits,
       updatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
@@ -164,6 +172,52 @@ router.post("/heartbeat", requireDeviceKey, async (req: Request, res: Response) 
     res.json({ ok: true, serverTime: new Date().toISOString() });
   } catch (err: any) {
     console.error("[device/heartbeat]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/device/checkin ────────────────────────────────────────────────
+// Called by the CrowPanel after the user rates their habits on the check-in screen.
+// Saves the ratings to the database exactly like the mobile app does.
+
+router.post("/checkin", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const { date, ratings } = req.body as {
+      date?: string;
+      ratings?: Record<string, string>;
+    };
+
+    if (!date || !ratings || typeof ratings !== "object") {
+      res.status(400).json({ error: "date and ratings object are required" });
+      return;
+    }
+
+    // Validate date format YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "date must be in YYYY-MM-DD format" });
+      return;
+    }
+
+    // Filter to only valid rating values
+    const validRatings: Record<string, "red" | "yellow" | "green"> = {};
+    for (const [habitId, rating] of Object.entries(ratings)) {
+      if (["red", "yellow", "green"].includes(rating)) {
+        validRatings[habitId] = rating as "red" | "yellow" | "green";
+      }
+    }
+
+    if (Object.keys(validRatings).length === 0) {
+      res.status(400).json({ error: "No valid ratings provided (must be red, yellow, or green)" });
+      return;
+    }
+
+    const result = await db.submitDeviceCheckin(device.id, date, validRatings);
+    console.log(`[device/checkin] device=${device.id} date=${date} saved=${result.saved} ratings`);
+
+    res.json({ ok: true, saved: result.saved });
+  } catch (err: any) {
+    console.error("[device/checkin]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
