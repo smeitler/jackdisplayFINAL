@@ -1,0 +1,15 @@
+{
+  "query": "SELECT id, macAddress, apiKey FROM devices WHERE macAddress = '3C:DC:75:60:63:30' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute SELECT id, macAddress, apiKey FROM devices WHERE macAddress = '3C:DC:75:60:63:30' LIMIT 1;",
+  "rows": [
+    {
+      "id": "30001",
+      "macAddress": "3C:DC:75:60:63:30",
+      "apiKey": "bdf7a238123c897d2e3331aa4496fbb1edd2a5b5b47ef927808e910a3c21feeb"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmacAddress\tapiKey\n30001\t3C:DC:75:60:63:30\tbdf7a238123c897d2e3331aa4496fbb1edd2a5b5b47ef927808e910a3c21feeb\n",
+  "stderr": "",
+  "execution_time_ms": 363
+}

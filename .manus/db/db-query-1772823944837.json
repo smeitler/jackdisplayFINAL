@@ -1,0 +1,38 @@
+{
+  "query": "SELECT id, macAddress, LEFT(apiKey, 20) as apiKeyPrefix, firmwareVersion, lastSeenAt FROM devices ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute SELECT id, macAddress, LEFT(apiKey, 20) as apiKeyPrefix, firmwareVersion, lastSeenAt FROM devices ORDER BY id;",
+  "rows": [
+    {
+      "id": "30001",
+      "macAddress": "3C:DC:75:60:63:30",
+      "apiKeyPrefix": "bdf7a238123c897d2e33",
+      "firmwareVersion": "1.0.0",
+      "lastSeenAt": "2026-03-06 18:56:53"
+    },
+    {
+      "id": "30006",
+      "macAddress": "AA:BB:CC:DD:EE:FF",
+      "apiKeyPrefix": "7215b1c58ffef41f571d",
+      "firmwareVersion": "1.0.0",
+      "lastSeenAt": "2026-03-06 19:01:51"
+    },
+    {
+      "id": "30012",
+      "macAddress": "DE:AD:BE:EF:00:01",
+      "apiKeyPrefix": "153be7f783fe96e6431a",
+      "firmwareVersion": "1.0.0",
+      "lastSeenAt": "2026-03-06 19:02:20"
+    },
+    {
+      "id": "30014",
+      "macAddress": "DE:AD:BE:EF:00:02",
+      "apiKeyPrefix": "c8791e196c39fbc85d85",
+      "firmwareVersion": "1.0.1",
+      "lastSeenAt": "2026-03-06 19:02:21"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmacAddress\tapiKeyPrefix\tfirmwareVersion\tlastSeenAt\n30001\t3C:DC:75:60:63:30\tbdf7a238123c897d2e33\t1.0.0\t2026-03-06 18:56:53\n30006\tAA:BB:CC:DD:EE:FF\t7215b1c58ffef41f571d\t1.0.0\t2026-03-06 19:01:51\n30012\tDE:AD:BE:EF:00:01\t153be7f783fe96e6431a\t1.0.0\t2026-03-06 19:02:20\n30014\tDE:AD:BE:EF:00:02\tc8791e196c39fbc85d85\t1.0.1\t2026-03-06 19:02:21\n",
+  "stderr": "",
+  "execution_time_ms": 415
+}

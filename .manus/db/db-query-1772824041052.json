@@ -1,0 +1,17 @@
+{
+  "query": "DELETE FROM devices WHERE macAddress IN ('AA:BB:CC:DD:EE:FF', 'DE:AD:BE:EF:00:01', 'DE:AD:BE:EF:00:02');\nSELECT id, macAddress, pairingToken, firmwareVersion, lastSeenAt FROM devices ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute DELETE FROM devices WHERE macAddress IN ('AA:BB:CC:DD:EE:FF', 'DE:AD:BE:EF:00:01', 'DE:AD:BE:EF:00:02');\nSELECT id, macAddress, pairingToken, firmwareVersion, lastSeenAt FROM devices ORDER BY id;",
+  "rows": [
+    {
+      "id": "30001",
+      "macAddress": "3C:DC:75:60:63:30",
+      "pairingToken": "NULL",
+      "firmwareVersion": "1.0.0",
+      "lastSeenAt": "2026-03-06 18:56:53"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmacAddress\tpairingToken\tfirmwareVersion\tlastSeenAt\n30001\t3C:DC:75:60:63:30\tNULL\t1.0.0\t2026-03-06 18:56:53\n",
+  "stderr": "",
+  "execution_time_ms": 419
+}

@@ -1,4 +1,4 @@
-import { and, eq, desc, gte, inArray, like } from "drizzle-orm";
+import { and, eq, desc, gte, inArray, isNull, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import crypto from "crypto";
 import {
@@ -958,13 +958,14 @@ export async function getDeviceByApiKey(apiKey: string) {
 export async function getUserDevices(userId: number) {
   const db = await getDb();
   if (!db) return [];
+  // Only return fully-registered devices (pairingToken is null after registration)
   return db.select({
     id: devices.id,
     macAddress: devices.macAddress,
     firmwareVersion: devices.firmwareVersion,
     lastSeenAt: devices.lastSeenAt,
     createdAt: devices.createdAt,
-  }).from(devices).where(eq(devices.userId, userId));
+  }).from(devices).where(and(eq(devices.userId, userId), isNull(devices.pairingToken)));
 }
 
 /** Get alarm schedule for a device (from the user's alarmConfigs) */

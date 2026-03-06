@@ -480,3 +480,8 @@
 
 - [x] Fix: alarm save failing in web preview (tRPC alarm upsert returning error)
 - [x] Fix: /api/device/register returns 500 — duplicate MAC address unique constraint; now deletes old row before update so re-pairing works cleanly
+
+## CrowPanel Display Fixes (Mar 06 2026)
+
+- [x] Fix: multiple duplicate CrowPanel device entries in app UI — getUserDevices now filters to pairingToken IS NULL (registered only); test rows cleaned from DB
+- [x] Fix: saved alarm not showing on CrowPanel display — root cause: firmware config.h points to non-existent Railway URL; need to publish app and update firmware to use deployed URL
