@@ -1,4 +1,4 @@
-import { and, eq, desc, gte, inArray } from "drizzle-orm";
+import { and, eq, desc, gte, inArray, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import crypto from "crypto";
 import {
@@ -876,21 +876,29 @@ function generateApiKey(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-/** Generate a short-lived one-time pairing token */
+/** Generate a short-lived one-time pairing token — 6 uppercase alphanumeric chars (easy to type on display keyboard) */
 export function generatePairingToken(): string {
-  return crypto.randomBytes(24).toString("hex");
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 to avoid confusion
+  let token = "";
+  const bytes = crypto.randomBytes(6);
+  for (let i = 0; i < 6; i++) {
+    token += chars[bytes[i] % chars.length];
+  }
+  return token;
 }
-
 /** Create a pairing token for a user — returned to the app during setup wizard */
 export async function createDevicePairingToken(userId: number): Promise<{ token: string; expiresAt: Date }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  // Delete any existing PENDING rows for this user to avoid stale entries piling up
+  await db.delete(devices)
+    .where(and(eq(devices.userId, userId), like(devices.macAddress, "PENDING-%")));
   const token = generatePairingToken();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
   // Store token temporarily in a placeholder device row (macAddress unknown until device registers)
   await db.insert(devices).values({
     userId,
-    macAddress: `PENDING-${token.slice(0, 8)}`,
+    macAddress: `PENDING-${token}`,
     apiKey: `PENDING-${token}`,
     pairingToken: token,
     pairingTokenExpiresAt: expiresAt,

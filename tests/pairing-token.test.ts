@@ -40,7 +40,8 @@ describe("Device Pairing Token", () => {
     const data = await resp.json();
     expect(data.result?.data?.json?.token).toBeDefined();
     expect(typeof data.result.data.json.token).toBe("string");
-    expect(data.result.data.json.token.length).toBe(48); // 24 bytes hex = 48 chars
+    expect(data.result.data.json.token.length).toBe(6); // 6-char uppercase alphanumeric PIN
+    expect(data.result.data.json.token).toMatch(/^[A-Z2-9]{6}$/); // uppercase, no I/O/0/1
     expect(data.result?.data?.json?.expiresAt).toBeDefined();
   });
 
@@ -54,6 +55,29 @@ describe("Device Pairing Token", () => {
     const data = await resp.json();
     // Should return an error (UNAUTHORIZED or FORBIDDEN)
     expect(data.error).toBeDefined();
+  });
+
+  it("calling createPairingToken twice only leaves one pending row", async () => {
+    const sessionToken = await devLogin();
+
+    // Call three times
+    for (let i = 0; i < 3; i++) {
+      await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+        body: "{}",
+      });
+    }
+
+    // List devices — should only have 1 pending entry
+    const listResp = await fetch(`${API_BASE}/api/trpc/devices.list`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    const listData = await listResp.json();
+    const pendingDevices = listData.result.data.json.filter((d: any) =>
+      d.macAddress.startsWith("PENDING-")
+    );
+    expect(pendingDevices.length).toBe(1);
   });
 
   it("pairing token expires in ~10 minutes", async () => {

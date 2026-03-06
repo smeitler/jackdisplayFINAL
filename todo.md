@@ -466,3 +466,8 @@
 
 - [x] Fix: pairing token generation failing in web preview — devices/deviceEvents tables were missing from DB (migration not applied), created them directly
 - [x] Fix: web auth not sending session token as Bearer header — updated auth.ts to store/read session token in localStorage on web (was always returning null for web)
+
+## Pairing UX Fixes (Mar 06 2026)
+
+- [x] Fix: multiple pending CrowPanel entries appear — delete existing PENDING rows for the user before creating a new pairing token
+- [x] Fix: pairing token is 48 chars (too long to type) — shorten to 6-character uppercase alphanumeric PIN

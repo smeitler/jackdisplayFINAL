@@ -1,0 +1,13 @@
+{
+  "query": "DELETE FROM devices WHERE macAddress LIKE 'PENDING-%';\nSELECT COUNT(*) as remaining_pending FROM devices WHERE macAddress LIKE 'PENDING-%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute DELETE FROM devices WHERE macAddress LIKE 'PENDING-%';\nSELECT COUNT(*) as remaining_pending FROM devices WHERE macAddress LIKE 'PENDING-%';",
+  "rows": [
+    {
+      "remaining_pending": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "remaining_pending\n0\n",
+  "stderr": "",
+  "execution_time_ms": 426
+}
