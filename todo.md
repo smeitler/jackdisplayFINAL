@@ -471,3 +471,12 @@
 
 - [x] Fix: multiple pending CrowPanel entries appear — delete existing PENDING rows for the user before creating a new pairing token
 - [x] Fix: pairing token is 48 chars (too long to type) — shorten to 6-character uppercase alphanumeric PIN
+
+## Pairing Registration Debug (Mar 06 2026)
+
+- [x] Debug: firmware sends token to /api/device/register but gets "failed" — root cause was duplicate MAC constraint; fixed in registerDevice
+
+## Server Bug Fixes (Mar 06 2026)
+
+- [x] Fix: alarm save failing in web preview (tRPC alarm upsert returning error)
+- [x] Fix: /api/device/register returns 500 — duplicate MAC address unique constraint; now deletes old row before update so re-pairing works cleanly

@@ -926,6 +926,10 @@ export async function registerDevice(data: {
   // Check token hasn't expired
   if (pending.pairingTokenExpiresAt && pending.pairingTokenExpiresAt < new Date()) return null;
 
+  // If a device with this MAC already exists (e.g. re-pairing), delete it first to avoid unique constraint violation
+  await db.delete(devices)
+    .where(and(eq(devices.macAddress, data.macAddress), eq(devices.userId, pending.userId)));
+
   const apiKey = generateApiKey();
   await db.update(devices).set({
     macAddress: data.macAddress,

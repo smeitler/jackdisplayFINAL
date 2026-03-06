@@ -103,6 +103,13 @@ export async function cancelAllAlarms(): Promise<void> {
 
 /** Save alarm config with new notification IDs after scheduling. */
 export async function applyAlarm(config: AlarmConfig): Promise<AlarmConfig> {
+  // Web doesn't support push notifications — just persist the config as-is
+  if (Platform.OS === 'web') {
+    const updated = { ...config, notificationIds: [] };
+    await saveAlarm(updated);
+    return updated;
+  }
+
   const granted = await requestNotificationPermissions();
   if (!granted) {
     const updated = { ...config, isEnabled: false, notificationIds: [] };

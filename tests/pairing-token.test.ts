@@ -102,3 +102,86 @@ describe("Device Pairing Token", () => {
     expect(diffMinutes).toBeLessThan(11);
   });
 });
+
+describe("Device Registration", () => {
+  it("registers a device with a valid pairing token", async () => {
+    const sessionToken = await devLogin();
+
+    // Generate a pairing token
+    const pairResp = await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+      body: "{}",
+    });
+    const pairData = await pairResp.json();
+    const pairingToken = pairData.result.data.json.token;
+
+    // Register the device
+    const regResp = await fetch(`${API_BASE}/api/device/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairingToken, macAddress: "DE:AD:BE:EF:00:01", firmwareVersion: "1.0.0" }),
+    });
+    expect(regResp.ok).toBe(true);
+    const regData = await regResp.json();
+    expect(regData.deviceId).toBeDefined();
+    expect(typeof regData.apiKey).toBe("string");
+    expect(regData.apiKey.length).toBeGreaterThan(20);
+  });
+
+  it("re-registering same MAC does not 500 (replaces old entry)", async () => {
+    const sessionToken = await devLogin();
+    const MAC = "DE:AD:BE:EF:00:02";
+
+    // First registration
+    const pair1 = await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+      body: "{}",
+    });
+    const token1 = (await pair1.json()).result.data.json.token;
+    await fetch(`${API_BASE}/api/device/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairingToken: token1, macAddress: MAC, firmwareVersion: "1.0.0" }),
+    });
+
+    // Second registration with same MAC
+    const pair2 = await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+      body: "{}",
+    });
+    const token2 = (await pair2.json()).result.data.json.token;
+    const regResp = await fetch(`${API_BASE}/api/device/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairingToken: token2, macAddress: MAC, firmwareVersion: "1.0.1" }),
+    });
+    expect(regResp.ok).toBe(true);
+    const regData = await regResp.json();
+    expect(regData.deviceId).toBeDefined();
+  });
+});
+
+describe("Alarm Save", () => {
+  it("alarm.upsert saves and alarm.get returns the saved value", async () => {
+    const sessionToken = await devLogin();
+
+    const upsertResp = await fetch(`${API_BASE}/api/trpc/alarm.upsert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ json: { hour: 7, minute: 15, days: "1,2,3,4,5", enabled: true } }),
+    });
+    expect(upsertResp.ok).toBe(true);
+
+    const getResp = await fetch(`${API_BASE}/api/trpc/alarm.get`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    const getData = await getResp.json();
+    const alarm = getData.result.data.json;
+    expect(alarm.hour).toBe(7);
+    expect(alarm.minute).toBe(15);
+    expect(alarm.enabled).toBe(true);
+  });
+});
