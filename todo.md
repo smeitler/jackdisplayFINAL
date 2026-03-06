@@ -534,3 +534,12 @@
 ## Required Goal Field for Habits (Mar 06 2026)
 
 - [x] App: make goal field required when creating/editing a habit — disable Save until goal is filled, mark field as required
+
+## API Audit + Firmware Fixes (Mar 06 2026)
+
+- [x] Firmware: add daysOfWeek[7] + daysCount to AlarmEntry struct
+- [x] Firmware: fetchSchedule() parses daysOfWeek array from server response
+- [x] Firmware: checkAlarms() checks tm_wday against daysOfWeek before firing
+- [x] Firmware: sendHeartbeat() now parses needsSync from response and calls pollSchedule() immediately
+- [x] Write CROWPANEL_API_REFERENCE.md — definitive server contract, field names, timezone note, serial monitor checklist
+- [ ] Firmware: fix reportEvent() firedAt/dismissedAt — multiply epoch by 1000 (server expects ms) or send ISO 8601 string
