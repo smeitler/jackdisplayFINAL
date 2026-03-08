@@ -1,4 +1,12 @@
 import "dotenv/config";
+// Polyfill Web Crypto API for Node.js versions that don't expose it as a global.
+// Required by the `jose` library (webapi build) for Apple Sign In token verification.
+// Without this, jwtVerify throws "ReferenceError: crypto is not defined" on Railway.
+import { webcrypto } from "crypto";
+if (!globalThis.crypto) {
+  (globalThis as any).crypto = webcrypto;
+}
+
 import express from "express";
 import { createServer } from "http";
 import net from "net";
