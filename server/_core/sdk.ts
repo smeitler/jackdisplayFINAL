@@ -202,15 +202,17 @@ class SDKServer {
       });
       const { openId, appId, name } = payload as Record<string, unknown>;
 
-      // name is optional — Apple only provides it on first sign-in, subsequent logins have empty name
-      if (!isNonEmptyString(openId) || !isNonEmptyString(appId)) {
-        console.warn("[Auth] Session payload missing required fields (openId or appId)");
+      // openId is the only required field for authentication.
+      // appId may be an empty string when VITE_APP_ID is not set in the Railway environment
+      // (it is metadata only and not used for any security validation).
+      if (!isNonEmptyString(openId)) {
+        console.warn("[Auth] Session payload missing required field: openId");
         return null;
       }
 
       return {
         openId,
-        appId,
+        appId: typeof appId === 'string' ? appId : '',
         name: typeof name === 'string' ? name : '',
       };
     } catch (error) {

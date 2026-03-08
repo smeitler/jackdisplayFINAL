@@ -152,6 +152,18 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Warn about missing critical env vars before starting — these cause silent auth failures
+  const { ENV } = await import('./env.js');
+  if (!ENV.cookieSecret) {
+    console.error('[STARTUP] WARNING: JWT_SECRET is not set! Session tokens will be signed with an empty key — all sessions will be invalidated on every server restart. Set JWT_SECRET in Railway environment variables.');
+  }
+  if (!ENV.appId) {
+    console.warn('[STARTUP] NOTICE: VITE_APP_ID is not set. Apple Sign In will still work, but Manus OAuth login will not function.');
+  }
+  if (!ENV.databaseUrl) {
+    console.error('[STARTUP] WARNING: DATABASE_URL is not set! All data operations will fail silently.');
+  }
+
   server.listen(port, () => {
     console.log(`[api] server listening on port ${port}`);
   });

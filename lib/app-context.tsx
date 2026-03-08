@@ -260,6 +260,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (isFirstLogin) {
           // First time this user logs in — push local data to server
+          // Wrap in try/catch so a partial server failure doesn't prevent the UI from loading.
+          try {
           await Promise.all([
             utils.client.categories.bulkSync.mutate(safeLocalCategories.map((c) => ({
               clientId: c.id,
@@ -293,6 +295,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             days: safeLocalAlarm.days.join(','),
             enabled: safeLocalAlarm.isEnabled,
           });
+          // After pushing local data to server, dispatch LOADED so the UI
+          // reflects the current data and isAuthenticated.current stays true
+          // (it was set above at line 231 before reaching this branch).
+          // Also persist to local cache so the next cold-start loads correctly.
+          } catch (syncErr) {
+            console.warn('[AppContext] First-login bulkSync failed (will retry on next sync):', syncErr);
+          }
+          const firstLoginDates = safeLocalCheckIns.map((e) => e.date).sort();
+          const firstLoginLastDate = firstLoginDates.length > 0 ? firstLoginDates[firstLoginDates.length - 1] : null;
+          dispatch({ type: 'LOADED', habits: safeLocalHabits, categories: safeLocalCategories, checkIns: safeLocalCheckIns, alarm: safeLocalAlarm, lastCheckInDate: firstLoginLastDate });
+          await Promise.all([
+            saveCategories(safeLocalCategories),
+            saveHabits(safeLocalHabits),
+            saveCheckIns(safeLocalCheckIns),
+            saveAlarm(safeLocalAlarm),
+          ]);
         } else {
           // Existing user — use server data as source of truth
           const cats = serverCats.map(serverCatToLocal);
