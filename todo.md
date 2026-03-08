@@ -547,3 +547,9 @@
 ## TestFlight Login Fix (Mar 07 2026)
 
 - [x] Fix: Apple Sign In fails on Railway — ReferenceError: crypto is not defined in jose/dist/webapi — polyfill globalThis.crypto at server entry point
+
+## Data Sync Fix (Mar 08 2026)
+
+- [x] Fix: after Apple Sign In, syncFromServer was not called with the new session token — data appeared empty on every login
+- [x] Fix: syncFromServer not exposed from AppContext — added to context type and provider value
+- [x] Fix: lifeArea type error in crowpanel-preview.tsx (string | undefined not assignable to string)

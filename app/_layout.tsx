@@ -138,6 +138,7 @@ export default function RootLayout() {
               <Stack.Screen name="checkin" options={{ presentation: 'modal' }} />
               <Stack.Screen name="habits" options={{ presentation: 'modal' }} />
               <Stack.Screen name="alarm-preview" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="crowpanel-preview" options={{ presentation: 'modal' }} />
               <Stack.Screen name="category-detail" options={{ presentation: 'modal' }} />
               <Stack.Screen name="habit-detail" options={{ presentation: 'modal' }} />
               <Stack.Screen name="mind-dump" options={{ presentation: 'modal' }} />

@@ -1,0 +1,70 @@
+{
+  "query": "SELECT u.id, u.openId, u.name, u.email, u.loginMethod, u.createdAt, COUNT(h.id) as habitCount, COUNT(c.id) as checkInCount FROM users u LEFT JOIN habits h ON h.userId = u.id LEFT JOIN checkIns c ON c.userId = u.id GROUP BY u.id ORDER BY habitCount DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute SELECT u.id, u.openId, u.name, u.email, u.loginMethod, u.createdAt, COUNT(h.id) as habitCount, COUNT(c.id) as checkInCount FROM users u LEFT JOIN habits h ON h.userId = u.id LEFT JOIN checkIns c ON c.userId = u.id GROUP BY u.id ORDER BY habitCount DESC;",
+  "rows": [
+    {
+      "id": "720011",
+      "openId": "K3QQaNE9dd4cYvNxULryz9",
+      "name": "steven.meitler",
+      "email": "steven.meitler@gmail.com",
+      "loginMethod": "email",
+      "createdAt": "2026-02-25 20:10:31",
+      "habitCount": "1236",
+      "checkInCount": "1236"
+    },
+    {
+      "id": "1",
+      "openId": "Do29T8y8vnSTo4yL6TpwbG",
+      "name": "steven meitler",
+      "email": "steve@ceohero.com",
+      "loginMethod": "google",
+      "createdAt": "2026-02-22 05:40:46",
+      "habitCount": "725",
+      "checkInCount": "725"
+    },
+    {
+      "id": "2700001",
+      "openId": "dev:preview-user",
+      "name": "Dev User",
+      "email": "dev@daycheck.app",
+      "loginMethod": "dev",
+      "createdAt": "2026-03-06 18:31:15",
+      "habitCount": "102",
+      "checkInCount": "102"
+    },
+    {
+      "id": "2820003",
+      "openId": "apple:test.user",
+      "name": "NULL",
+      "email": "NULL",
+      "loginMethod": "apple",
+      "createdAt": "2026-03-08 00:19:30",
+      "habitCount": "0",
+      "checkInCount": "0"
+    },
+    {
+      "id": "2820017",
+      "openId": "apple:000854.2c6514eb9984430cb013762d5d4c7763.0357",
+      "name": "NULL",
+      "email": "steven.meitler@gmail.com",
+      "loginMethod": "apple",
+      "createdAt": "2026-03-08 00:27:32",
+      "habitCount": "0",
+      "checkInCount": "0"
+    },
+    {
+      "id": "2430001",
+      "openId": "apple:test.user.id",
+      "name": "NULL",
+      "email": "NULL",
+      "loginMethod": "apple",
+      "createdAt": "2026-03-05 18:18:33",
+      "habitCount": "0",
+      "checkInCount": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\topenId\tname\temail\tloginMethod\tcreatedAt\thabitCount\tcheckInCount\n720011\tK3QQaNE9dd4cYvNxULryz9\tsteven.meitler\tsteven.meitler@gmail.com\temail\t2026-02-25 20:10:31\t1236\t1236\n1\tDo29T8y8vnSTo4yL6TpwbG\tsteven meitler\tsteve@ceohero.com\tgoogle\t2026-02-22 05:40:46\t725\t725\n2700001\tdev:preview-user\tDev User\tdev@daycheck.app\tdev\t2026-03-06 18:31:15\t102\t102\n2820003\tapple:test.user\tNULL\tNULL\tapple\t2026-03-08 00:19:30\t0\t0\n2820017\tapple:000854.2c6514eb9984430cb013762d5d4c7763.0357\tNULL\tsteven.meitler@gmail.com\tapple\t2026-03-08 00:27:32\t0\t0\n2430001\tapple:test.user.id\tNULL\tNULL\tapple\t2026-03-05 18:18:33\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 376
+}

@@ -513,6 +513,26 @@ export default function HomeScreen() {
             <IconSymbol name="chevron.right" size={14} color={colors.muted} />
           </Pressable>
 
+          {/* ── CrowPanel Display Preview ── */}
+          <Pressable
+            onPress={() => router.push('/crowpanel-preview' as never)}
+            style={({ pressed }) => [{
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1,
+              borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10,
+              marginBottom: 10, opacity: pressed ? 0.7 : 1,
+            }]}
+          >
+            <View style={{ width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '18' }}>
+              <IconSymbol name="desktopcomputer" size={15} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>CrowPanel Display Preview</Text>
+              <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>Tap to preview the 800×480 alarm UI</Text>
+            </View>
+            <IconSymbol name="chevron.right" size={13} color={colors.muted} />
+          </Pressable>
+
           {/* ── Section title ── */}
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>

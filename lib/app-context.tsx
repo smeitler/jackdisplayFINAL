@@ -168,6 +168,7 @@ type AppContextValue = AppState & {
   streak: number;
   startDemo: () => Promise<void>;
   exitDemo: () => Promise<void>;
+  syncFromServer: () => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -886,6 +887,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       getHabitWeekBeforeDone, getHabitMonthBeforeDone,
       streak,
       startDemo, exitDemo,
+      syncFromServer,
     }}>
       {children}
     </AppContext.Provider>

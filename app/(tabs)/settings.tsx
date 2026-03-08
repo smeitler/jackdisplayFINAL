@@ -21,6 +21,7 @@ import * as WebBrowser from "expo-web-browser";
 
 // ─── CrowPanel Device Pairing Section ───────────────────────────────────────
 function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/hooks/use-colors').useColors> }) {
+  const router = useRouter();
   const devicesQuery = trpc.devices.list.useQuery();
   const createTokenMutation = trpc.devices.createPairingToken.useMutation();
   const removeDeviceMutation = trpc.devices.remove.useMutation({
@@ -177,6 +178,25 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
           </Text>
         </Pressable>
       )}
+      {/* Preview CrowPanel display button */}
+      <Pressable
+        onPress={() => router.push('/crowpanel-preview' as never)}
+        style={({ pressed }) => [{
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          borderTopWidth: 1, borderTopColor: colors.border,
+          paddingHorizontal: 16, paddingVertical: 13,
+          opacity: pressed ? 0.7 : 1,
+        }]}
+      >
+        <View style={{ width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '18' }}>
+          <IconSymbol name="desktopcomputer" size={16} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>Preview Display UI</Text>
+          <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>See the 800×480 alarm &amp; check-in screens</Text>
+        </View>
+        <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+      </Pressable>
     </View>
   );
 }

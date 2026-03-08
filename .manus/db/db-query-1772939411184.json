@@ -1,0 +1,70 @@
+{
+  "query": "SELECT id, openId, name, email, loginMethod, role, createdAt, lastSignedIn FROM users ORDER BY createdAt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute SELECT id, openId, name, email, loginMethod, role, createdAt, lastSignedIn FROM users ORDER BY createdAt DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "2820017",
+      "openId": "apple:000854.2c6514eb9984430cb013762d5d4c7763.0357",
+      "name": "NULL",
+      "email": "steven.meitler@gmail.com",
+      "loginMethod": "apple",
+      "role": "user",
+      "createdAt": "2026-03-08 00:27:32",
+      "lastSignedIn": "2026-03-08 03:08:12"
+    },
+    {
+      "id": "2820003",
+      "openId": "apple:test.user",
+      "name": "NULL",
+      "email": "NULL",
+      "loginMethod": "apple",
+      "role": "user",
+      "createdAt": "2026-03-08 00:19:30",
+      "lastSignedIn": "2026-03-08 00:19:40"
+    },
+    {
+      "id": "2700001",
+      "openId": "dev:preview-user",
+      "name": "Dev User",
+      "email": "dev@daycheck.app",
+      "loginMethod": "dev",
+      "role": "user",
+      "createdAt": "2026-03-06 18:31:15",
+      "lastSignedIn": "2026-03-08 00:49:36"
+    },
+    {
+      "id": "2430001",
+      "openId": "apple:test.user.id",
+      "name": "NULL",
+      "email": "NULL",
+      "loginMethod": "apple",
+      "role": "user",
+      "createdAt": "2026-03-05 18:18:33",
+      "lastSignedIn": "2026-03-05 18:18:33"
+    },
+    {
+      "id": "720011",
+      "openId": "K3QQaNE9dd4cYvNxULryz9",
+      "name": "steven.meitler",
+      "email": "steven.meitler@gmail.com",
+      "loginMethod": "email",
+      "role": "user",
+      "createdAt": "2026-02-25 20:10:31",
+      "lastSignedIn": "2026-03-05 03:53:45"
+    },
+    {
+      "id": "1",
+      "openId": "Do29T8y8vnSTo4yL6TpwbG",
+      "name": "steven meitler",
+      "email": "steve@ceohero.com",
+      "loginMethod": "google",
+      "role": "admin",
+      "createdAt": "2026-02-22 05:40:46",
+      "lastSignedIn": "2026-03-06 06:07:22"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\topenId\tname\temail\tloginMethod\trole\tcreatedAt\tlastSignedIn\n2820017\tapple:000854.2c6514eb9984430cb013762d5d4c7763.0357\tNULL\tsteven.meitler@gmail.com\tapple\tuser\t2026-03-08 00:27:32\t2026-03-08 03:08:12\n2820003\tapple:test.user\tNULL\tNULL\tapple\tuser\t2026-03-08 00:19:30\t2026-03-08 00:19:40\n2700001\tdev:preview-user\tDev User\tdev@daycheck.app\tdev\tuser\t2026-03-06 18:31:15\t2026-03-08 00:49:36\n2430001\tapple:test.user.id\tNULL\tNULL\tapple\tuser\t2026-03-05 18:18:33\t2026-03-05 18:18:33\n720011\tK3QQaNE9dd4cYvNxULryz9\tsteven.meitler\tsteven.meitler@gmail.com\temail\tuser\t2026-02-25 20:10:31\t2026-03-05 03:53:45\n1\tDo29T8y8vnSTo4yL6TpwbG\tsteven meitler\tsteve@ceohero.com\tgoogle\tadmin\t2026-02-22 05:40:46\t2026-03-06 06:07:22\n",
+  "stderr": "",
+  "execution_time_ms": 432
+}
