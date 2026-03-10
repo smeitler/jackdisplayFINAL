@@ -11,8 +11,6 @@
 #include <Adafruit_GFX.h>
 
 #include "ui.h"
-#include <time.h>
-
 
 /* Expand IO */
 #include <TCA9534.h>
@@ -87,18 +85,6 @@ void sendI2CCommand(uint8_t command) {
     Serial.print("命令发送错误，错误代码：");
     Serial.println(error);
   }
-}
-
-// LVGL timer callback — fires every second to refresh the clock label
-static void update_time_cb(lv_timer_t * timer)
-{
-  struct tm timeinfo;
-  time_t now = time(NULL);
-  localtime_r(&now, &timeinfo);
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
-           timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-  lv_label_set_text(ui_TimeLabel, buf);
 }
 
 void setup()
@@ -217,9 +203,6 @@ void setup()
   gfx.fillScreen(TFT_BLACK);
 
   ui_init();
-
-  // Create a 1-second LVGL timer to keep the clock label updated
-  lv_timer_create(update_time_cb, 1000, NULL);
 
   Serial.println( "Setup done" );
 }
