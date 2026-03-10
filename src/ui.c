@@ -20,6 +20,7 @@ void ui_event_Button3(lv_event_t * e);
 lv_obj_t * ui_Button3;
 lv_obj_t * ui_Label3;
 lv_obj_t * ui____initial_actions0;
+lv_obj_t * ui_TimeLabel;
 
 ///////////////////// TEST LVGL SETTINGS ////////////////////
 #if LV_COLOR_DEPTH != 16

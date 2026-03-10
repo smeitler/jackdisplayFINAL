@@ -26,6 +26,7 @@ void ui_event_Button3(lv_event_t * e);
 extern lv_obj_t * ui_Button3;
 extern lv_obj_t * ui_Label3;
 extern lv_obj_t * ui____initial_actions0;
+extern lv_obj_t * ui_TimeLabel;
 
 
 LV_IMG_DECLARE(ui_img_table_lamp_png);    // assets/table_lamp.png
