@@ -553,3 +553,5 @@
 - [x] Fix: after Apple Sign In, syncFromServer was not called with the new session token — data appeared empty on every login
 - [x] Fix: syncFromServer not exposed from AppContext — added to context type and provider value
 - [x] Fix: lifeArea type error in crowpanel-preview.tsx (string | undefined not assignable to string)
+
+- [x] Fix Apple App Store rejection (Guideline 2.5.4): remove expo-audio and expo-video background mode plugins from app.config.ts to eliminate UIBackgroundModes audio declaration. Bumped to version 1.0.23 / build 10023.

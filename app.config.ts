@@ -27,7 +27,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.22",
+  version: "1.0.23",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -36,7 +36,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10022",
+    buildNumber: "10023",
     usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -112,15 +112,8 @@ const config: ExpoConfig = {
         isAccessMediaLocationEnabled: true,
       },
     ],
-    // expo-audio is used for playback only (no recording), so no microphonePermission needed
-    "expo-audio",
-    [
-      "expo-video",
-      {
-        supportsBackgroundPlayback: true,
-        supportsPictureInPicture: true,
-      },
-    ],
+    // expo-audio: no plugin entry needed (avoids UIBackgroundModes audio declaration)
+    // expo-video: no background playback (avoids UIBackgroundModes audio declaration)
     [
       "expo-splash-screen",
       {
