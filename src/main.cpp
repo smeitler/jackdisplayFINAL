@@ -29,6 +29,7 @@
 #include <Wire.h>
 #include <stdbool.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -237,22 +238,27 @@ bool loadWifiCredentials(String &ssid, String &pass) {
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
 String httpGet(const String &path) {
   if (WiFi.status() != WL_CONNECTED) return "";
+  WiFiClientSecure client;
+  client.setInsecure(); // Skip cert verification — device has no root CA store
   HTTPClient http;
-  http.begin(String(API_BASE_URL) + path);
+  http.begin(client, String(API_BASE_URL) + path);
   http.addHeader("X-Device-Key", g_apiKey);
+  http.setTimeout(10000);
   int code = http.GET();
   String body = (code > 0) ? http.getString() : "";
   http.end();
   Serial.printf("[HTTP] GET %s -> %d\n", path.c_str(), code);
   return body;
 }
-
 String httpPost(const String &path, const String &payload, bool withAuth = true) {
   if (WiFi.status() != WL_CONNECTED) return "";
+  WiFiClientSecure client;
+  client.setInsecure(); // Skip cert verification — device has no root CA store
   HTTPClient http;
-  http.begin(String(API_BASE_URL) + path);
+  http.begin(client, String(API_BASE_URL) + path);
   http.addHeader("Content-Type", "application/json");
   if (withAuth) http.addHeader("X-Device-Key", g_apiKey);
+  http.setTimeout(10000);
   int code = http.POST(payload);
   String body = (code > 0) ? http.getString() : "";
   http.end();
