@@ -626,7 +626,7 @@ void buildWifiPassScreen() {
   lv_obj_set_style_bg_color(scr_wifi_pass, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
   lv_obj_clear_flag(scr_wifi_pass, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Title showing selected SSID
+  // Row 1 (y=14): Title — network name
   lbl_ssid_title = lv_label_create(scr_wifi_pass);
   lv_obj_set_style_text_font(lbl_ssid_title, &lv_font_montserrat_24, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_ssid_title, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
@@ -635,39 +635,10 @@ void buildWifiPassScreen() {
   snprintf(titleBuf, sizeof(titleBuf), "Password for: %s", g_selectedSsid);
   lv_label_set_text(lbl_ssid_title, titleBuf);
 
-  // Password text area
-  ta_password = lv_textarea_create(scr_wifi_pass);
-  lv_textarea_set_password_mode(ta_password, true);
-  lv_textarea_set_one_line(ta_password, true);
-  lv_textarea_set_placeholder_text(ta_password, "Enter password");
-  lv_obj_set_width(ta_password, LCD_H_RES - 40);
-  lv_obj_align(ta_password, LV_ALIGN_TOP_MID, 0, 56);
-  lv_obj_set_style_text_font(ta_password, &lv_font_montserrat_20, LV_PART_MAIN);
-
-  // Status label
-  lbl_wifi_status = lv_label_create(scr_wifi_pass);
-  lv_obj_set_style_text_font(lbl_wifi_status, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_wifi_status, lv_color_hex(0x9090B8), LV_PART_MAIN);
-  lv_obj_set_width(lbl_wifi_status, LCD_H_RES - 40);
-  lv_label_set_long_mode(lbl_wifi_status, LV_LABEL_LONG_WRAP);
-  lv_obj_align(lbl_wifi_status, LV_ALIGN_TOP_MID, 0, 100);
-  lv_label_set_text(lbl_wifi_status, "");
-
-  // Connect button
-  lv_obj_t *btnConnect = lv_btn_create(scr_wifi_pass);
-  lv_obj_set_size(btnConnect, 200, 52);
-  lv_obj_align(btnConnect, LV_ALIGN_TOP_RIGHT, -20, 52);
-  lv_obj_set_style_bg_color(btnConnect, lv_color_hex(0x7B74FF), LV_PART_MAIN);
-  lv_obj_add_event_cb(btnConnect, cb_wifi_connect, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *lblConnect = lv_label_create(btnConnect);
-  lv_label_set_text(lblConnect, "Connect");
-  lv_obj_set_style_text_font(lblConnect, &lv_font_montserrat_20, LV_PART_MAIN);
-  lv_obj_center(lblConnect);
-
-  // Back button
+  // Row 2 (y=56): Back button (left) + Connect button (right)
   lv_obj_t *btnBack = lv_btn_create(scr_wifi_pass);
   lv_obj_set_size(btnBack, 120, 52);
-  lv_obj_align(btnBack, LV_ALIGN_TOP_LEFT, 20, 52);
+  lv_obj_align(btnBack, LV_ALIGN_TOP_LEFT, 20, 56);
   lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x374151), LV_PART_MAIN);
   lv_obj_add_event_cb(btnBack, cb_wifi_back, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblBack = lv_label_create(btnBack);
@@ -675,7 +646,35 @@ void buildWifiPassScreen() {
   lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_18, LV_PART_MAIN);
   lv_obj_center(lblBack);
 
-  // On-screen keyboard linked to password field
+  lv_obj_t *btnConnect = lv_btn_create(scr_wifi_pass);
+  lv_obj_set_size(btnConnect, 200, 52);
+  lv_obj_align(btnConnect, LV_ALIGN_TOP_RIGHT, -20, 56);
+  lv_obj_set_style_bg_color(btnConnect, lv_color_hex(0x7B74FF), LV_PART_MAIN);
+  lv_obj_add_event_cb(btnConnect, cb_wifi_connect, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *lblConnect = lv_label_create(btnConnect);
+  lv_label_set_text(lblConnect, "Connect");
+  lv_obj_set_style_text_font(lblConnect, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_center(lblConnect);
+
+  // Row 3 (y=124): Password text area — full width, below the buttons
+  ta_password = lv_textarea_create(scr_wifi_pass);
+  lv_textarea_set_password_mode(ta_password, true);
+  lv_textarea_set_one_line(ta_password, true);
+  lv_textarea_set_placeholder_text(ta_password, "Enter password");
+  lv_obj_set_width(ta_password, LCD_H_RES - 40);
+  lv_obj_align(ta_password, LV_ALIGN_TOP_MID, 0, 124);
+  lv_obj_set_style_text_font(ta_password, &lv_font_montserrat_20, LV_PART_MAIN);
+
+  // Row 4 (y=178): Status label
+  lbl_wifi_status = lv_label_create(scr_wifi_pass);
+  lv_obj_set_style_text_font(lbl_wifi_status, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_wifi_status, lv_color_hex(0x9090B8), LV_PART_MAIN);
+  lv_obj_set_width(lbl_wifi_status, LCD_H_RES - 40);
+  lv_label_set_long_mode(lbl_wifi_status, LV_LABEL_LONG_WRAP);
+  lv_obj_align(lbl_wifi_status, LV_ALIGN_TOP_MID, 0, 178);
+  lv_label_set_text(lbl_wifi_status, "");
+
+  // On-screen keyboard at the bottom, linked to password field
   kb_password = lv_keyboard_create(scr_wifi_pass);
   lv_keyboard_set_textarea(kb_password, ta_password);
   lv_obj_set_size(kb_password, LCD_H_RES, 220);
