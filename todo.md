@@ -573,4 +573,4 @@
 
 ## Deployment Fix (Mar 11 2026)
 
-- [x] Fix deployment failure: dist/index.js not found — changed build format from esm/index.mjs to cjs/index.js
+- [x] Fix deployment failure: added type:module to package.json and reverted build to ESM format (dist/index.mjs)
