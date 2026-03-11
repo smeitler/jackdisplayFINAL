@@ -565,3 +565,8 @@
 - [x] Server: Add contentReports and blockedUsers DB tables + migration
 - [x] Server: Add moderation tRPC router (report, blockUser, unblockUser, blockedIds)
 - [x] Tests: Add moderation.test.ts — 7 tests all passing
+
+## Delete Post Fix (Mar 11 2026)
+
+- [x] Fix: delete post button in team feed not working — replaced Alert.alert with action sheet modal
+- [x] Audit all critical buttons for dead onPress handlers before App Store submission

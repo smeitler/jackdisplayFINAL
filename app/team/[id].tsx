@@ -517,10 +517,7 @@ function PostCard({
   };
 
   const handleDeletePost = () => {
-    Alert.alert("Delete Post", "Remove this post from the feed?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deletePost.mutate({ postId: post.id }) },
-    ]);
+    setShowDeleteConfirm(true);
   };
 
   const handleComment = () => {
@@ -529,6 +526,7 @@ function PostCard({
   };
 
   // UGC moderation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPostActions, setShowPostActions] = useState(false);
   const [showPostReasonSheet, setShowPostReasonSheet] = useState(false);
   const reportPost = trpc.moderation.report.useMutation({
@@ -543,11 +541,8 @@ function PostCard({
     reportPost.mutate({ contentType: "post", contentId: post.id, reason });
   };
   const handleBlockPostAuthor = () => {
-    Alert.alert("Block User", `Block ${displayName}? Their posts will be hidden from you.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Block", style: "destructive", onPress: () => blockPostAuthor.mutate({ userId: post.userId }) },
-    ]);
     setShowPostActions(false);
+    blockPostAuthor.mutate({ userId: post.userId });
   };
 
   return (
@@ -721,6 +716,26 @@ function PostCard({
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.sheetBtn} onPress={() => setShowPostReasonSheet(false)} activeOpacity={0.7}>
+              <Text style={[styles.sheetBtnText, { color: colors.muted }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+      {/* Delete confirm sheet */}
+      <Modal visible={showDeleteConfirm} transparent animationType="slide" onRequestClose={() => setShowDeleteConfirm(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }} onPress={() => setShowDeleteConfirm(false)}>
+          <View style={[styles.actionSheet, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.actionSheetTitle, { color: colors.foreground }]}>Delete Post</Text>
+            <Text style={[{ color: colors.muted, fontSize: 14, textAlign: "center", paddingHorizontal: 16, paddingBottom: 12 }]}>Remove this post from the feed? This cannot be undone.</Text>
+            <TouchableOpacity
+              style={[styles.sheetBtn, { borderBottomColor: colors.border }]}
+              onPress={() => { setShowDeleteConfirm(false); deletePost.mutate({ postId: post.id }); }}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="trash.fill" size={18} color={colors.error} />
+              <Text style={[styles.sheetBtnText, { color: colors.error }]}>Delete Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sheetBtn} onPress={() => setShowDeleteConfirm(false)} activeOpacity={0.7}>
               <Text style={[styles.sheetBtnText, { color: colors.muted }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
