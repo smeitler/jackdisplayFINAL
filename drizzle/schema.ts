@@ -322,3 +322,37 @@ export const deviceEvents = mysqlTable("deviceEvents", {
 
 export type DeviceEvent = typeof deviceEvents.$inferSelect;
 export type InsertDeviceEvent = typeof deviceEvents.$inferInsert;
+
+/**
+ * Content reports — users can flag chat messages or feed posts as abusive.
+ * Required by Apple App Store Guideline 1.2 (User-Generated Content).
+ * contentType: 'message' | 'post'
+ */
+export const contentReports = mysqlTable("contentReports", {
+  id: int("id").autoincrement().primaryKey(),
+  reporterId: int("reporterId").notNull(),
+  contentType: mysqlEnum("contentType", ["message", "post"]).notNull(),
+  contentId: int("contentId").notNull(),
+  reason: mysqlEnum("reason", ["spam", "harassment", "hate_speech", "inappropriate", "other"]).notNull(),
+  details: text("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  reporterContentIdx: uniqueIndex("contentReports_reporter_content_idx").on(t.reporterId, t.contentType, t.contentId),
+}));
+
+export type ContentReport = typeof contentReports.$inferSelect;
+
+/**
+ * Blocked users — a user can block another user to hide their content.
+ * Required by Apple App Store Guideline 1.2 (User-Generated Content).
+ */
+export const blockedUsers = mysqlTable("blockedUsers", {
+  id: int("id").autoincrement().primaryKey(),
+  blockerId: int("blockerId").notNull(),
+  blockedId: int("blockedId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  blockerBlockedIdx: uniqueIndex("blockedUsers_blocker_blocked_idx").on(t.blockerId, t.blockedId),
+}));
+
+export type BlockedUser = typeof blockedUsers.$inferSelect;

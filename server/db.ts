@@ -25,6 +25,8 @@ import {
   teamPostReactions,
   teamPostComments,
   InsertTeamPost,
+  contentReports,
+  blockedUsers,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1161,4 +1163,50 @@ export async function markDeviceScheduleSeen(deviceId: number, version: number) 
   await db.update(devices)
     .set({ lastScheduleVersionSeen: version })
     .where(eq(devices.id, deviceId));
+}
+
+// ─── UGC Moderation (Apple Guideline 1.2) ────────────────────────────────────
+
+/** Report a chat message or feed post as abusive. Idempotent — duplicate reports are silently ignored. */
+export async function reportContent(
+  reporterId: number,
+  contentType: "message" | "post",
+  contentId: number,
+  reason: "spam" | "harassment" | "hate_speech" | "inappropriate" | "other",
+  details?: string,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(contentReports)
+    .values({ reporterId, contentType, contentId, reason, details: details ?? null })
+    .onDuplicateKeyUpdate({ set: { reason, details: details ?? null } });
+}
+
+/** Block a user — their messages and posts will be hidden from the blocker. Idempotent. */
+export async function blockUser(blockerId: number, blockedId: number) {
+  if (blockerId === blockedId) throw new Error("Cannot block yourself");
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(blockedUsers)
+    .values({ blockerId, blockedId })
+    .onDuplicateKeyUpdate({ set: { blockerId } }); // no-op update to satisfy MySQL
+}
+
+/** Unblock a user. */
+export async function unblockUser(blockerId: number, blockedId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(blockedUsers).where(
+    and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedId, blockedId))
+  );
+}
+
+/** Get the list of user IDs that the given user has blocked. */
+export async function getBlockedUserIds(blockerId: number): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ blockedId: blockedUsers.blockedId })
+    .from(blockedUsers)
+    .where(eq(blockedUsers.blockerId, blockerId));
+  return rows.map((r) => r.blockedId);
 }

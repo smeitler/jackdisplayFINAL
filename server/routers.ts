@@ -486,6 +486,37 @@ export const appRouter = router({
       ),
   }),
 
+  // ─── Moderation (Apple Guideline 1.2) ─────────────────────────────────────────
+  moderation: router({
+    /** Report a chat message or feed post as abusive. */
+    report: protectedProcedure
+      .input(z.object({
+        contentType: z.enum(["message", "post"]),
+        contentId: z.number().int().positive(),
+        reason: z.enum(["spam", "harassment", "hate_speech", "inappropriate", "other"]),
+        details: z.string().max(500).optional(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.reportContent(ctx.user.id, input.contentType, input.contentId, input.reason, input.details)
+      ),
+    /** Block a user — hides their content from the blocker. */
+    blockUser: protectedProcedure
+      .input(z.object({ userId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        db.blockUser(ctx.user.id, input.userId)
+      ),
+    /** Unblock a previously blocked user. */
+    unblockUser: protectedProcedure
+      .input(z.object({ userId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        db.unblockUser(ctx.user.id, input.userId)
+      ),
+    /** Get the list of user IDs the current user has blocked. */
+    blockedIds: protectedProcedure.query(({ ctx }) =>
+      db.getBlockedUserIds(ctx.user.id)
+    ),
+  }),
+
   // ─── Community: Referrals ─────────────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>

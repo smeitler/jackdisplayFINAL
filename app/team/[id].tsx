@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Pressable,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -527,6 +528,28 @@ function PostCard({
     addComment.mutate({ postId: post.id, content: commentText.trim() });
   };
 
+  // UGC moderation
+  const [showPostActions, setShowPostActions] = useState(false);
+  const [showPostReasonSheet, setShowPostReasonSheet] = useState(false);
+  const reportPost = trpc.moderation.report.useMutation({
+    onSuccess: () => { Alert.alert("Report Submitted", "Thank you. Our team will review this post."); setShowPostActions(false); setShowPostReasonSheet(false); },
+    onError: () => Alert.alert("Error", "Could not submit report. Please try again."),
+  });
+  const blockPostAuthor = trpc.moderation.blockUser.useMutation({
+    onSuccess: () => { Alert.alert("User Blocked", "You will no longer see posts from this user."); setShowPostActions(false); utils.teamFeed.list.invalidate({ teamId }); },
+    onError: () => Alert.alert("Error", "Could not block user."),
+  });
+  const handleReportPost = (reason: "spam" | "harassment" | "hate_speech" | "inappropriate" | "other") => {
+    reportPost.mutate({ contentType: "post", contentId: post.id, reason });
+  };
+  const handleBlockPostAuthor = () => {
+    Alert.alert("Block User", `Block ${displayName}? Their posts will be hidden from you.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Block", style: "destructive", onPress: () => blockPostAuthor.mutate({ userId: post.userId }) },
+    ]);
+    setShowPostActions(false);
+  };
+
   return (
     <View style={[styles.postCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {/* Post Header */}
@@ -538,9 +561,13 @@ function PostCard({
           <Text style={[styles.postAuthor, { color: colors.foreground }]}>{displayName}</Text>
           <Text style={[styles.postTime, { color: colors.muted }]}>{timeAgo(post.createdAt)}</Text>
         </View>
-        {isMyPost && (
+        {isMyPost ? (
           <TouchableOpacity onPress={handleDeletePost} style={styles.postMoreBtn} activeOpacity={0.7}>
             <IconSymbol name="trash" size={16} color={colors.muted} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => setShowPostActions(true)} style={styles.postMoreBtn} activeOpacity={0.7}>
+            <IconSymbol name="flag.fill" size={14} color={colors.muted} />
           </TouchableOpacity>
         )}
       </View>
@@ -664,6 +691,41 @@ function PostCard({
           </View>
         </View>
       )}
+      {/* Post moderation action sheet */}
+      <Modal visible={showPostActions} transparent animationType="slide" onRequestClose={() => setShowPostActions(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }} onPress={() => setShowPostActions(false)}>
+          <View style={[styles.actionSheet, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.actionSheetTitle, { color: colors.foreground }]}>Post Options</Text>
+            <TouchableOpacity style={[styles.sheetBtn, { borderBottomColor: colors.border }]} onPress={() => { setShowPostActions(false); setShowPostReasonSheet(true); }} activeOpacity={0.7}>
+              <IconSymbol name="flag.fill" size={18} color={colors.error} />
+              <Text style={[styles.sheetBtnText, { color: colors.error }]}>Report Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.sheetBtn, { borderBottomColor: colors.border }]} onPress={handleBlockPostAuthor} activeOpacity={0.7}>
+              <IconSymbol name="person.fill.xmark" size={18} color={colors.error} />
+              <Text style={[styles.sheetBtnText, { color: colors.error }]}>Block User</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sheetBtn} onPress={() => setShowPostActions(false)} activeOpacity={0.7}>
+              <Text style={[styles.sheetBtnText, { color: colors.muted }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+      {/* Report reason sheet */}
+      <Modal visible={showPostReasonSheet} transparent animationType="slide" onRequestClose={() => setShowPostReasonSheet(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }} onPress={() => setShowPostReasonSheet(false)}>
+          <View style={[styles.actionSheet, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.actionSheetTitle, { color: colors.foreground }]}>Why are you reporting this?</Text>
+            {(["spam", "harassment", "hate_speech", "inappropriate", "other"] as const).map((r) => (
+              <TouchableOpacity key={r} style={[styles.sheetBtn, { borderBottomColor: colors.border }]} onPress={() => handleReportPost(r)} activeOpacity={0.7}>
+                <Text style={[styles.sheetBtnText, { color: colors.foreground }]}>{r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.sheetBtn} onPress={() => setShowPostReasonSheet(false)} activeOpacity={0.7}>
+              <Text style={[styles.sheetBtnText, { color: colors.muted }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1620,4 +1682,9 @@ const styles = StyleSheet.create({
   habitRingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   habitRingDivider: { width: 1, height: 32, opacity: 0.5 },
   habitRingNote: { fontSize: 11, marginTop: 10, textAlign: 'center' },
+  // Moderation action sheets
+  actionSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingBottom: 32 },
+  actionSheetTitle: { fontSize: 13, fontWeight: "600", textAlign: "center", paddingHorizontal: 16, paddingBottom: 12 },
+  sheetBtn: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16, paddingHorizontal: 24, borderBottomWidth: 0.5 },
+  sheetBtnText: { fontSize: 16 },
 });

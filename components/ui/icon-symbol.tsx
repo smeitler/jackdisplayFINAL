@@ -32,6 +32,8 @@ const MAPPING = {
   "checkmark.circle.fill": "check-circle",
   "checkmark.circle": "radio-button-unchecked",
   "xmark": "close",
+  "flag.fill": "flag",
+  "person.fill.xmark": "person-remove",
   "xmark.circle.fill": "cancel",
   // Content
   "heart.fill": "favorite",

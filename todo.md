@@ -556,3 +556,12 @@
 
 - [x] Fix Apple App Store rejection (Guideline 2.5.4): remove expo-audio and expo-video background mode plugins from app.config.ts to eliminate UIBackgroundModes audio declaration. Bumped to version 1.0.23 / build 10023.
 - [x] Fix CrowPanel pairing PIN not connecting to server (token mismatch or expiry issue)
+
+## App Store Compliance (Mar 11 2026)
+
+- [x] UGC: Add long-press "Report" action on chat messages (Guideline 1.2)
+- [x] UGC: Add Report flag button on team feed posts (Guideline 1.2)
+- [x] UGC: Add "Block User" option in report flow (Guideline 1.2)
+- [x] Server: Add contentReports and blockedUsers DB tables + migration
+- [x] Server: Add moderation tRPC router (report, blockUser, unblockUser, blockedIds)
+- [x] Tests: Add moderation.test.ts — 7 tests all passing
