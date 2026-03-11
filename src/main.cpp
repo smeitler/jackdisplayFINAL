@@ -792,10 +792,12 @@ static void cb_pair_connect(lv_event_t *e) {
     lv_label_set_text(lbl_status, "Enter the 6-char PIN from the Jack app");
     return;
   }
+  // Uppercase the token — server stores tokens in uppercase only
+  char upperToken[16] = {};
+  for (int i = 0; token[i] && i < 15; i++) upperToken[i] = toupper((unsigned char)token[i]);
   lv_label_set_text(lbl_status, "Connecting...");
   lv_timer_handler();
-
-  if (registerDevice(token)) {
+  if (registerDevice(upperToken)) {
     lv_label_set_text(lbl_status, "Paired! Fetching schedule...");
     lv_timer_handler();
     fetchSchedule();
@@ -852,6 +854,7 @@ void buildPairingScreen() {
 
   kb_pin = lv_keyboard_create(scr_pair);
   lv_keyboard_set_textarea(kb_pin, ta_pin);
+  lv_keyboard_set_mode(kb_pin, LV_KEYBOARD_MODE_USER_1); // uppercase alpha
   lv_obj_set_size(kb_pin, LCD_H_RES, 200);
   lv_obj_align(kb_pin, LV_ALIGN_BOTTOM_MID, 0, 0);
 }
