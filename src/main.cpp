@@ -4,8 +4,11 @@
  * Connects to the Jack app backend at https://api.jackalarm.com
  *
  * Flow:
- *   1. Boot → WiFiManager captive portal (if no saved credentials)
- *   2. NTP sync → Mountain Time (auto DST)
+ *   1. Boot → if no saved WiFi credentials, show on-panel WiFi Setup screen
+ *      a. Scan networks → scrollable list of SSIDs
+ *      b. Tap an SSID → password entry screen (on-screen keyboard)
+ *      c. Tap Connect → tries to connect; shows status; retries or proceeds
+ *   2. WiFi connected → NTP sync → Mountain Time (auto DST)
  *   3. NVS check → if no API key, show Pairing screen
  *   4. Pairing screen → user enters 6-char PIN from the Jack app
  *   5. POST /api/device/register → receive API key, save to NVS
@@ -26,7 +29,6 @@
 #include <Wire.h>
 #include <stdbool.h>
 #include <WiFi.h>
-#include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -39,8 +41,10 @@
 #define TZ_DST_SEC     3600          // 1 hour DST
 
 // ─── NVS keys ──────────────────────────────────────────────────────────────────
-#define NVS_NAMESPACE  "jack"
-#define NVS_KEY_APIKEY "apiKey"
+#define NVS_NAMESPACE     "jack"
+#define NVS_KEY_APIKEY    "apiKey"
+#define NVS_KEY_WIFI_SSID "wifiSsid"
+#define NVS_KEY_WIFI_PASS "wifiPass"
 
 // ─── Timing ────────────────────────────────────────────────────────────────────
 #define POLL_INTERVAL_MS   (5UL * 60UL * 1000UL)   // 5 minutes
@@ -95,7 +99,24 @@ unsigned long g_lastPoll      = 0;
 unsigned long g_lastHeartbeat = 0;
 unsigned long g_lastClockUpd  = 0;
 
+// ─── WiFi setup state ──────────────────────────────────────────────────────────
+#define MAX_NETWORKS 20
+static char   g_ssidList[MAX_NETWORKS][33]; // 32 chars + null
+static int    g_rssiList[MAX_NETWORKS];
+static int    g_networkCount = 0;
+static char   g_selectedSsid[33] = "";
+
 // ─── LVGL objects ──────────────────────────────────────────────────────────────
+// WiFi setup screens
+lv_obj_t *scr_wifi_scan    = nullptr;  // network list
+lv_obj_t *lbl_scan_status  = nullptr;
+lv_obj_t *list_networks    = nullptr;
+lv_obj_t *scr_wifi_pass    = nullptr;  // password entry
+lv_obj_t *lbl_ssid_title   = nullptr;
+lv_obj_t *ta_password      = nullptr;
+lv_obj_t *kb_password      = nullptr;
+lv_obj_t *lbl_wifi_status  = nullptr;
+
 // Clock face
 lv_obj_t *scr_clock   = nullptr;
 lv_obj_t *lbl_time    = nullptr;
@@ -112,7 +133,7 @@ lv_obj_t *kb_pin      = nullptr;
 lv_obj_t *lbl_status  = nullptr;
 
 // Alarm popup
-lv_obj_t *scr_alarm   = nullptr;
+lv_obj_t *scr_alarm    = nullptr;
 lv_obj_t *lbl_alm_time = nullptr;
 
 // Check-in screen
@@ -120,10 +141,14 @@ lv_obj_t *scr_checkin = nullptr;
 lv_obj_t *cont_habits = nullptr;
 
 // ─── Forward declarations ───────────────────────────────────────────────────────
+void buildWifiScanScreen();
+void buildWifiPassScreen();
 void buildClockScreen();
 void buildPairingScreen();
 void buildAlarmScreen();
 void buildCheckinScreen();
+void showWifiScanScreen();
+void showWifiPassScreen(const char *ssid);
 void showClockScreen();
 void showPairingScreen();
 void showAlarmScreen(int alarmIdx);
@@ -136,6 +161,7 @@ void submitCheckin();
 bool registerDevice(const char *token);
 String nextAlarmString();
 bool alarmShouldFire(int idx, struct tm *t);
+void doPostWifiConnect();
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -190,6 +216,22 @@ void clearApiKey() {
   prefs.end();
   g_apiKey = "";
   Serial.println("[NVS] apiKey cleared");
+}
+
+void saveWifiCredentials(const char *ssid, const char *pass) {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putString(NVS_KEY_WIFI_SSID, ssid);
+  prefs.putString(NVS_KEY_WIFI_PASS, pass);
+  prefs.end();
+  Serial.printf("[NVS] WiFi credentials saved for: %s\n", ssid);
+}
+
+bool loadWifiCredentials(String &ssid, String &pass) {
+  prefs.begin(NVS_NAMESPACE, true);
+  ssid = prefs.getString(NVS_KEY_WIFI_SSID, "");
+  pass = prefs.getString(NVS_KEY_WIFI_PASS, "");
+  prefs.end();
+  return !ssid.isEmpty();
 }
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -309,16 +351,16 @@ void sendEvent(const char *type, const char *alarmId, time_t firedAt, time_t dis
   doc["type"]         = type;
   doc["alarmId"]      = alarmId;
   doc["snoozedCount"] = snoozedCount;
-  char buf[32];
+  char tbuf[32];
   if (firedAt > 0) {
     struct tm t; gmtime_r(&firedAt, &t);
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &t);
-    doc["firedAt"] = buf;
+    strftime(tbuf, sizeof(tbuf), "%Y-%m-%dT%H:%M:%SZ", &t);
+    doc["firedAt"] = tbuf;
   }
   if (dismissedAt > 0) {
     struct tm t; gmtime_r(&dismissedAt, &t);
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &t);
-    doc["dismissedAt"] = buf;
+    strftime(tbuf, sizeof(tbuf), "%Y-%m-%dT%H:%M:%SZ", &t);
+    doc["dismissedAt"] = tbuf;
   }
   String payload;
   serializeJson(doc, payload);
@@ -364,19 +406,287 @@ bool alarmShouldFire(int idx, struct tm *t) {
 
 String nextAlarmString() {
   if (g_alarmCount == 0) return "No alarm set";
-  // Find first enabled alarm
   for (int i = 0; i < g_alarmCount; i++) {
     if (g_alarms[i].enabled) {
       int h = g_alarms[i].hour;
       int m = g_alarms[i].minute;
       bool pm = h >= 12;
       int h12 = h % 12; if (h12 == 0) h12 = 12;
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
-      return String(buf);
+      char tbuf[16];
+      snprintf(tbuf, sizeof(tbuf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
+      return String(tbuf);
     }
   }
   return "No alarm set";
+}
+
+// ─── Post-WiFi-connect actions (NTP + pairing/clock) ──────────────────────────
+void doPostWifiConnect() {
+  Serial.printf("[WiFi] Connected: %s\n", WiFi.localIP().toString().c_str());
+
+  // Update WiFi label on clock screen if already built
+  if (lbl_wifi) lv_label_set_text(lbl_wifi, "WiFi");
+
+  // NTP sync
+  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER);
+  Serial.println("[NTP] Syncing...");
+  time_t now = 0;
+  for (int i = 0; i < 20 && now < 1000000000; i++) { delay(500); now = time(nullptr); }
+  Serial.printf("[NTP] Time: %ld\n", now);
+
+  // Load NVS API key
+  loadApiKey();
+
+  if (g_apiKey.isEmpty()) {
+    showPairingScreen();
+  } else {
+    fetchSchedule();
+    showClockScreen();
+  }
+
+  g_lastPoll      = millis();
+  g_lastHeartbeat = millis();
+  g_lastClockUpd  = millis();
+}
+
+// ─── WiFi scan screen ──────────────────────────────────────────────────────────
+static void cb_network_selected(lv_event_t *e) {
+  lv_obj_t *btn = lv_event_get_target(e);
+  const char *ssid = (const char *)lv_event_get_user_data(e);
+  if (!ssid) return;
+  strncpy(g_selectedSsid, ssid, 32);
+  g_selectedSsid[32] = '\0';
+  showWifiPassScreen(g_selectedSsid);
+}
+
+static void cb_rescan(lv_event_t *e) {
+  showWifiScanScreen();
+}
+
+void buildWifiScanScreen() {
+  if (scr_wifi_scan) {
+    lv_obj_del(scr_wifi_scan);
+    scr_wifi_scan = nullptr;
+  }
+
+  scr_wifi_scan = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr_wifi_scan, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
+  lv_obj_clear_flag(scr_wifi_scan, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Title
+  lv_obj_t *title = lv_label_create(scr_wifi_scan);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(title, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 14);
+  lv_label_set_text(title, "Connect to WiFi");
+
+  // Status label
+  lbl_scan_status = lv_label_create(scr_wifi_scan);
+  lv_obj_set_style_text_font(lbl_scan_status, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_scan_status, lv_color_hex(0x9090B8), LV_PART_MAIN);
+  lv_obj_align(lbl_scan_status, LV_ALIGN_TOP_MID, 0, 52);
+  lv_label_set_text(lbl_scan_status, "Tap a network to connect");
+
+  // Scrollable list container
+  list_networks = lv_list_create(scr_wifi_scan);
+  lv_obj_set_size(list_networks, LCD_H_RES - 40, LCD_V_RES - 130);
+  lv_obj_align(list_networks, LV_ALIGN_TOP_MID, 0, 80);
+  lv_obj_set_style_bg_color(list_networks, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(list_networks, 0, LV_PART_MAIN);
+
+  // Populate network list
+  for (int i = 0; i < g_networkCount; i++) {
+    // Build label: SSID + signal strength
+    char label[48];
+    int rssi = g_rssiList[i];
+    const char *sig = (rssi >= -60) ? " (Strong)" : (rssi >= -75) ? " (Good)" : " (Weak)";
+    snprintf(label, sizeof(label), "%s%s", g_ssidList[i], sig);
+
+    lv_obj_t *btn = lv_list_add_btn(list_networks, LV_SYMBOL_WIFI, label);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x1A1A2E), LV_PART_MAIN);
+    lv_obj_set_style_text_color(btn, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(btn, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_height(btn, 52);
+    // Pass pointer to the static ssid buffer
+    lv_obj_add_event_cb(btn, cb_network_selected, LV_EVENT_CLICKED, (void *)g_ssidList[i]);
+  }
+
+  if (g_networkCount == 0) {
+    lv_obj_t *none = lv_label_create(scr_wifi_scan);
+    lv_obj_set_style_text_font(none, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(none, lv_color_hex(0x9090B8), LV_PART_MAIN);
+    lv_obj_align(none, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(none, "No networks found");
+  }
+
+  // Rescan button
+  lv_obj_t *btnRescan = lv_btn_create(scr_wifi_scan);
+  lv_obj_set_size(btnRescan, 160, 44);
+  lv_obj_align(btnRescan, LV_ALIGN_BOTTOM_MID, 0, -10);
+  lv_obj_set_style_bg_color(btnRescan, lv_color_hex(0x374151), LV_PART_MAIN);
+  lv_obj_add_event_cb(btnRescan, cb_rescan, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *lblRescan = lv_label_create(btnRescan);
+  lv_label_set_text(lblRescan, LV_SYMBOL_REFRESH "  Rescan");
+  lv_obj_set_style_text_font(lblRescan, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_center(lblRescan);
+}
+
+void showWifiScanScreen() {
+  // Scan networks (blocking, brief)
+  lv_timer_handler();
+  Serial.println("[WiFi] Scanning...");
+  int n = WiFi.scanNetworks();
+  g_networkCount = 0;
+  if (n > 0) {
+    // Sort by RSSI descending (simple bubble sort on small list)
+    // First collect into arrays
+    int total = (n > MAX_NETWORKS) ? MAX_NETWORKS : n;
+    for (int i = 0; i < total; i++) {
+      strncpy(g_ssidList[i], WiFi.SSID(i).c_str(), 32);
+      g_ssidList[i][32] = '\0';
+      g_rssiList[i] = WiFi.RSSI(i);
+    }
+    // Bubble sort descending by RSSI
+    for (int i = 0; i < total - 1; i++) {
+      for (int j = 0; j < total - i - 1; j++) {
+        if (g_rssiList[j] < g_rssiList[j + 1]) {
+          int tmpR = g_rssiList[j]; g_rssiList[j] = g_rssiList[j+1]; g_rssiList[j+1] = tmpR;
+          char tmpS[33]; memcpy(tmpS, g_ssidList[j], 33);
+          memcpy(g_ssidList[j], g_ssidList[j+1], 33);
+          memcpy(g_ssidList[j+1], tmpS, 33);
+        }
+      }
+    }
+    // Deduplicate SSIDs (keep strongest)
+    for (int i = 0; i < total; i++) {
+      if (g_ssidList[i][0] == '\0') continue; // hidden/already removed
+      bool dup = false;
+      for (int k = 0; k < g_networkCount; k++) {
+        if (strcmp(g_ssidList[i], g_ssidList[k]) == 0) { dup = true; break; }
+      }
+      if (!dup) {
+        strncpy(g_ssidList[g_networkCount], g_ssidList[i], 32);
+        g_rssiList[g_networkCount] = g_rssiList[i];
+        g_networkCount++;
+      }
+    }
+  }
+  WiFi.scanDelete();
+  Serial.printf("[WiFi] Found %d unique networks\n", g_networkCount);
+
+  buildWifiScanScreen();
+  lv_disp_load_scr(scr_wifi_scan);
+}
+
+// ─── WiFi password screen ──────────────────────────────────────────────────────
+static void cb_wifi_connect(lv_event_t *e) {
+  const char *pass = lv_textarea_get_text(ta_password);
+  if (!pass) pass = "";
+
+  char statusBuf[64];
+  snprintf(statusBuf, sizeof(statusBuf), "Connecting to %s...", g_selectedSsid);
+  lv_label_set_text(lbl_wifi_status, statusBuf);
+  lv_timer_handler();
+
+  Serial.printf("[WiFi] Connecting to %s\n", g_selectedSsid);
+  WiFi.begin(g_selectedSsid, pass);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    lv_timer_handler();
+    attempts++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    // Save credentials for future boots
+    saveWifiCredentials(g_selectedSsid, pass);
+    lv_label_set_text(lbl_wifi_status, "Connected! Starting up...");
+    lv_timer_handler();
+    delay(500);
+    doPostWifiConnect();
+  } else {
+    WiFi.disconnect();
+    lv_label_set_text(lbl_wifi_status, "Failed — check password and try again");
+    Serial.println("[WiFi] Connection failed");
+  }
+}
+
+static void cb_wifi_back(lv_event_t *e) {
+  showWifiScanScreen();
+}
+
+void buildWifiPassScreen() {
+  if (scr_wifi_pass) {
+    lv_obj_del(scr_wifi_pass);
+    scr_wifi_pass = nullptr;
+  }
+
+  scr_wifi_pass = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr_wifi_pass, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
+  lv_obj_clear_flag(scr_wifi_pass, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Title showing selected SSID
+  lbl_ssid_title = lv_label_create(scr_wifi_pass);
+  lv_obj_set_style_text_font(lbl_ssid_title, &lv_font_montserrat_24, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ssid_title, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
+  lv_obj_align(lbl_ssid_title, LV_ALIGN_TOP_MID, 0, 14);
+  char titleBuf[48];
+  snprintf(titleBuf, sizeof(titleBuf), "Password for: %s", g_selectedSsid);
+  lv_label_set_text(lbl_ssid_title, titleBuf);
+
+  // Password text area
+  ta_password = lv_textarea_create(scr_wifi_pass);
+  lv_textarea_set_password_mode(ta_password, true);
+  lv_textarea_set_one_line(ta_password, true);
+  lv_textarea_set_placeholder_text(ta_password, "Enter password");
+  lv_obj_set_width(ta_password, LCD_H_RES - 40);
+  lv_obj_align(ta_password, LV_ALIGN_TOP_MID, 0, 56);
+  lv_obj_set_style_text_font(ta_password, &lv_font_montserrat_20, LV_PART_MAIN);
+
+  // Status label
+  lbl_wifi_status = lv_label_create(scr_wifi_pass);
+  lv_obj_set_style_text_font(lbl_wifi_status, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_wifi_status, lv_color_hex(0x9090B8), LV_PART_MAIN);
+  lv_obj_set_width(lbl_wifi_status, LCD_H_RES - 40);
+  lv_label_set_long_mode(lbl_wifi_status, LV_LABEL_LONG_WRAP);
+  lv_obj_align(lbl_wifi_status, LV_ALIGN_TOP_MID, 0, 100);
+  lv_label_set_text(lbl_wifi_status, "");
+
+  // Connect button
+  lv_obj_t *btnConnect = lv_btn_create(scr_wifi_pass);
+  lv_obj_set_size(btnConnect, 200, 52);
+  lv_obj_align(btnConnect, LV_ALIGN_TOP_RIGHT, -20, 52);
+  lv_obj_set_style_bg_color(btnConnect, lv_color_hex(0x7B74FF), LV_PART_MAIN);
+  lv_obj_add_event_cb(btnConnect, cb_wifi_connect, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *lblConnect = lv_label_create(btnConnect);
+  lv_label_set_text(lblConnect, "Connect");
+  lv_obj_set_style_text_font(lblConnect, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_center(lblConnect);
+
+  // Back button
+  lv_obj_t *btnBack = lv_btn_create(scr_wifi_pass);
+  lv_obj_set_size(btnBack, 120, 52);
+  lv_obj_align(btnBack, LV_ALIGN_TOP_LEFT, 20, 52);
+  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x374151), LV_PART_MAIN);
+  lv_obj_add_event_cb(btnBack, cb_wifi_back, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *lblBack = lv_label_create(btnBack);
+  lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
+  lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_center(lblBack);
+
+  // On-screen keyboard linked to password field
+  kb_password = lv_keyboard_create(scr_wifi_pass);
+  lv_keyboard_set_textarea(kb_password, ta_password);
+  lv_obj_set_size(kb_password, LCD_H_RES, 220);
+  lv_obj_align(kb_password, LV_ALIGN_BOTTOM_MID, 0, 0);
+}
+
+void showWifiPassScreen(const char *ssid) {
+  strncpy(g_selectedSsid, ssid, 32);
+  g_selectedSsid[32] = '\0';
+  buildWifiPassScreen();
+  lv_disp_load_scr(scr_wifi_pass);
 }
 
 // ─── Clock face ────────────────────────────────────────────────────────────────
@@ -609,9 +919,9 @@ void showAlarmScreen(int alarmIdx) {
     int m = g_alarms[alarmIdx].minute;
     bool pm = h >= 12;
     int h12 = h % 12; if (h12 == 0) h12 = 12;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
-    lv_label_set_text(lbl_alm_time, buf);
+    char tbuf[16];
+    snprintf(tbuf, sizeof(tbuf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
+    lv_label_set_text(lbl_alm_time, tbuf);
   }
   lv_disp_load_scr(scr_alarm);
 }
@@ -776,56 +1086,61 @@ void setup() {
   delay(100);
   gfx.fillScreen(TFT_BLACK);
 
-  // Build all screens
+  // Build all screens up front
   buildClockScreen();
   buildPairingScreen();
   buildAlarmScreen();
   buildCheckinScreen();
 
-  // Show clock screen with "Connecting..." while WiFi starts
-  lv_label_set_text(lbl_time, "...");
-  lv_label_set_text(lbl_date, "Connecting to WiFi");
-  showClockScreen();
-  lv_timer_handler();
+  // ── WiFi connection ──────────────────────────────────────────────────────────
+  WiFi.mode(WIFI_STA);
 
-  // WiFiManager — auto-connects or opens captive portal
-  WiFiManager wm;
-  wm.setConfigPortalTimeout(120);
-  if (!wm.autoConnect("Jack-Clock")) {
-    Serial.println("[WiFi] Portal timeout, rebooting");
-    ESP.restart();
-  }
-  Serial.printf("[WiFi] Connected: %s\n", WiFi.localIP().toString().c_str());
+  // Try saved credentials first
+  String savedSsid, savedPass;
+  bool hasSaved = loadWifiCredentials(savedSsid, savedPass);
 
-  // NTP sync
-  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER);
-  Serial.println("[NTP] Syncing...");
-  time_t now = 0;
-  for (int i = 0; i < 20 && now < 1000000000; i++) { delay(500); now = time(nullptr); }
-  Serial.printf("[NTP] Time: %ld\n", now);
-
-  // Load NVS API key
-  loadApiKey();
-
-  if (g_apiKey.isEmpty()) {
-    // No key — show pairing screen
-    showPairingScreen();
-  } else {
-    // Fetch schedule and show clock
-    fetchSchedule();
+  if (hasSaved) {
+    // Show "Connecting..." on clock screen while we try saved credentials
+    lv_label_set_text(lbl_time, "...");
+    lv_label_set_text(lbl_date, "Connecting to WiFi...");
     showClockScreen();
+    lv_timer_handler();
+
+    Serial.printf("[WiFi] Trying saved SSID: %s\n", savedSsid.c_str());
+    WiFi.begin(savedSsid.c_str(), savedPass.c_str());
+
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+      delay(500);
+      lv_timer_handler();
+      attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      doPostWifiConnect();
+      return; // setup done
+    }
+
+    // Saved credentials failed — fall through to scan screen
+    WiFi.disconnect();
+    Serial.println("[WiFi] Saved credentials failed, showing scan screen");
   }
 
-  g_lastPoll      = millis();
-  g_lastHeartbeat = millis();
-  g_lastClockUpd  = millis();
-
-  Serial.println("[setup] done");
+  // No saved credentials (or they failed) — show on-panel WiFi setup
+  showWifiScanScreen();
+  // The rest of setup (NTP, pairing, clock) happens inside cb_wifi_connect
+  // after the user successfully connects.
 }
 
 // ─── Loop ──────────────────────────────────────────────────────────────────────
 void loop() {
   lv_timer_handler();
+
+  // Only run app logic once WiFi is connected
+  if (WiFi.status() != WL_CONNECTED) {
+    delay(1);
+    return;
+  }
 
   unsigned long now = millis();
 
