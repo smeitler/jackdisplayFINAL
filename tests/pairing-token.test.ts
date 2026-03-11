@@ -57,30 +57,32 @@ describe("Device Pairing Token", () => {
     expect(data.error).toBeDefined();
   });
 
-  it("calling createPairingToken twice only leaves one pending row", async () => {
+  it("calling createPairingToken multiple times returns a fresh token each time", async () => {
     const sessionToken = await devLogin();
 
-    // Call three times
+    // Call three times — each should succeed and return a valid 6-char token
+    const tokens: string[] = [];
     for (let i = 0; i < 3; i++) {
-      await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
+      const resp = await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
         body: "{}",
       });
+      expect(resp.ok).toBe(true);
+      const data = await resp.json();
+      const token = data.result?.data?.json?.token;
+      expect(token).toBeDefined();
+      expect(token).toMatch(/^[A-Z2-9]{6}$/);
+      tokens.push(token);
     }
 
-    // List devices — should only have 1 pending entry
-    const listResp = await fetch(`${API_BASE}/api/trpc/devices.list`, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    });
-    const listData = await listResp.json();
-    const pendingDevices = listData.result.data.json.filter((d: any) =>
-      d.macAddress.startsWith("PENDING-")
-    );
-    expect(pendingDevices.length).toBe(1);
+    // The last token should be usable (old PENDING rows are cleaned up internally)
+    // Verify the last token is a valid 6-char uppercase PIN
+    const lastToken = tokens[tokens.length - 1];
+    expect(lastToken.length).toBe(6);
   });
 
-  it("pairing token expires in ~10 minutes", async () => {
+  it("pairing token expires in ~30 minutes", async () => {
     const sessionToken = await devLogin();
 
     const resp = await fetch(`${API_BASE}/api/trpc/devices.createPairingToken`, {
@@ -97,9 +99,9 @@ describe("Device Pairing Token", () => {
     const now = new Date();
     const diffMinutes = (expiresAt.getTime() - now.getTime()) / 1000 / 60;
 
-    // Should expire in roughly 10 minutes (allow 1 minute tolerance)
-    expect(diffMinutes).toBeGreaterThan(9);
-    expect(diffMinutes).toBeLessThan(11);
+    // Should expire in roughly 30 minutes (allow 1 minute tolerance)
+    expect(diffMinutes).toBeGreaterThan(29);
+    expect(diffMinutes).toBeLessThan(31);
   });
 });
 

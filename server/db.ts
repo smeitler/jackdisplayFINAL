@@ -894,7 +894,7 @@ export async function createDevicePairingToken(userId: number): Promise<{ token:
   await db.delete(devices)
     .where(and(eq(devices.userId, userId), like(devices.macAddress, "PENDING-%")));
   const token = generatePairingToken();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
   // Store token temporarily in a placeholder device row (macAddress unknown until device registers)
   await db.insert(devices).values({
     userId,
