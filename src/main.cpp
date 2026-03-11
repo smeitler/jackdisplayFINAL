@@ -1093,9 +1093,12 @@ void setup() {
   buildCheckinScreen();
 
   // ── WiFi connection ──────────────────────────────────────────────────────────
+  // Disconnect any auto-reconnect from previous sessions so we control the flow
+  WiFi.disconnect(true);  // clears stored WiFiManager/SDK credentials too
   WiFi.mode(WIFI_STA);
+  delay(100);
 
-  // Try saved credentials first
+  // Try our own saved credentials first (saved by this firmware)
   String savedSsid, savedPass;
   bool hasSaved = loadWifiCredentials(savedSsid, savedPass);
 
@@ -1126,10 +1129,10 @@ void setup() {
     Serial.println("[WiFi] Saved credentials failed, showing scan screen");
   }
 
-  // No saved credentials (or they failed) — show on-panel WiFi setup
-  showWifiScanScreen();
+  // No saved credentials (or they failed) — always show on-panel WiFi setup
   // The rest of setup (NTP, pairing, clock) happens inside cb_wifi_connect
   // after the user successfully connects.
+  showWifiScanScreen();
 }
 
 // ─── Loop ──────────────────────────────────────────────────────────────────────
