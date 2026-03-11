@@ -570,3 +570,7 @@
 
 - [x] Fix: delete post button in team feed not working — replaced Alert.alert with action sheet modal
 - [x] Audit all critical buttons for dead onPress handlers before App Store submission
+
+## Deployment Fix (Mar 11 2026)
+
+- [x] Fix deployment failure: dist/index.js not found — changed build format from esm/index.mjs to cjs/index.js
