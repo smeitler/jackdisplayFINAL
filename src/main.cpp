@@ -29,7 +29,14 @@
 #include <Wire.h>
 #include <stdbool.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
+// Jason2866/IDF53 platform uses NetworkClientSecure instead of WiFiClientSecure
+#if __has_include(<NetworkClientSecure.h>)
+  #include <NetworkClientSecure.h>
+  #define SecureClient NetworkClientSecure
+#else
+  #include <WiFiClientSecure.h>
+  #define SecureClient WiFiClientSecure
+#endif
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -238,7 +245,7 @@ bool loadWifiCredentials(String &ssid, String &pass) {
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
 String httpGet(const String &path) {
   if (WiFi.status() != WL_CONNECTED) return "";
-  WiFiClientSecure client;
+  SecureClient client;
   client.setInsecure(); // Skip cert verification — device has no root CA store
   HTTPClient http;
   http.begin(client, String(API_BASE_URL) + path);
@@ -252,7 +259,7 @@ String httpGet(const String &path) {
 }
 String httpPost(const String &path, const String &payload, bool withAuth = true) {
   if (WiFi.status() != WL_CONNECTED) return "";
-  WiFiClientSecure client;
+  SecureClient client;
   client.setInsecure(); // Skip cert verification — device has no root CA store
   HTTPClient http;
   http.begin(client, String(API_BASE_URL) + path);
