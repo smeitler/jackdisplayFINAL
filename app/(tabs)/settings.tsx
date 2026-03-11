@@ -874,6 +874,19 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Pressable
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/settings/blocked-users');
+              }}
+              style={({ pressed }) => [
+                styles.manageHabitsBtn,
+                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Text style={[styles.manageHabitsBtnText, { color: colors.foreground }]}>Blocked Users</Text>
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            </Pressable>
+            <Pressable
               onPress={async () => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 // Clear all local user data so the next account starts fresh

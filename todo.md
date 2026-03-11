@@ -574,3 +574,7 @@
 ## Deployment Fix (Mar 11 2026)
 
 - [x] Fix deployment failure: added type:module to package.json and reverted build to ESM format (dist/index.mjs)
+
+## Blocked Users Management (Mar 11 2026)
+
+- [x] Add Blocked Users screen in Settings
