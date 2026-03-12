@@ -513,13 +513,18 @@ bool registerDevice(const char *token) {
   return true;
 }
 
-// ─── Schedule parse (shared by fetch and cache load) ───────────────────────────────────
+// ─── Schedule parse (shared by fetch and cache load) ──────────────────────────────────────────────
 void parseScheduleJson(const String &resp) {
   // Use DynamicJsonDocument so 16 habits + alarms always fit
   DynamicJsonDocument doc(8192);
   DeserializationError err = deserializeJson(doc, resp);
   if (err) {
     Serial.printf("[schedule] JSON parse error: %s\n", err.c_str());
+    return;
+  }
+  // If the server returned an error object (e.g. {"error":"..."}) don't wipe state
+  if (doc.containsKey("error") && !doc.containsKey("alarms")) {
+    Serial.printf("[schedule] server error: %s\n", doc["error"].as<const char*>());
     return;
   }
 
