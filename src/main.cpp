@@ -738,49 +738,66 @@ void showWifiPassScreen(const char *ssid) {
 // ─── Clock face ────────────────────────────────────────────────────────────────
 void buildClockScreen() {
   scr_clock = lv_obj_create(nullptr);
-  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
+  // ── Background: deep navy ────────────────────────────────────────────────────
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x080818), LV_PART_MAIN);
   lv_obj_clear_flag(scr_clock, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Time label — large, centred
-  lbl_time = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, -40, -30);
-  lv_label_set_text(lbl_time, "00:00");
-
-  // AM/PM label
-  lbl_ampm = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_20, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x9090B8), LV_PART_MAIN);
-  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 160, -20);
-  lv_label_set_text(lbl_ampm, "AM");
-
-  // Date label
-  lbl_date = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_20, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x9090B8), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_CENTER, 0, 30);
-  lv_label_set_text(lbl_date, "Monday, Jan 1");
-
-  // WiFi status
+  // ── WiFi indicator (top-right, subtle) ───────────────────────────────────────
   lbl_wifi = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_wifi, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x9090B8), LV_PART_MAIN);
-  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -16, 12);
+  lv_obj_set_style_text_font(lbl_wifi, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x44445A), LV_PART_MAIN);
+  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -20, 14);
   lv_label_set_text(lbl_wifi, "WiFi");
 
-  // Next alarm label — large and prominent
-  // "ALARM" header
+  // ── Date label (upper area, spaced caps) ─────────────────────────────────────
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x5A5A7A), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 38);
+  lv_label_set_text(lbl_date, "Monday, Jan 1");
+
+  // ── Time display (centre of top half) ────────────────────────────────────────
+  // Container to hold time + AM/PM together, centred at y=185
+  lv_obj_t *time_cont = lv_obj_create(scr_clock);
+  lv_obj_remove_style_all(time_cont);
+  lv_obj_set_size(time_cont, 600, 90);
+  lv_obj_align(time_cont, LV_ALIGN_TOP_MID, 0, 110);
+  lv_obj_set_style_bg_opa(time_cont, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_clear_flag(time_cont, LV_OBJ_FLAG_SCROLLABLE);
+
+  lbl_time = lv_label_create(time_cont);
+  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xF0F0FF), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_LEFT_MID, 60, 0);
+  lv_label_set_text(lbl_time, "00:00");
+
+  lbl_ampm = lv_label_create(time_cont);
+  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_22, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x6060A0), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_RIGHT_MID, -60, 12);
+  lv_label_set_text(lbl_ampm, "AM");
+
+  // ── Thin separator line ───────────────────────────────────────────────────────
+  lv_obj_t *sep = lv_obj_create(scr_clock);
+  lv_obj_remove_style_all(sep);
+  lv_obj_set_size(sep, 680, 1);
+  lv_obj_align(sep, LV_ALIGN_TOP_MID, 0, 255);
+  lv_obj_set_style_bg_color(sep, lv_color_hex(0x2A2A4A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, LV_PART_MAIN);
+
+  // ── Alarm zone (bottom half) ──────────────────────────────────────────────────
+  // "NEXT ALARM" caption
   lv_obj_t *lbl_alarm_hdr = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm_hdr, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_alarm_hdr, lv_color_hex(0x7B74FF), LV_PART_MAIN);
-  lv_obj_align(lbl_alarm_hdr, LV_ALIGN_BOTTOM_MID, 0, -80);
+  lv_obj_set_style_text_font(lbl_alarm_hdr, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_alarm_hdr, lv_color_hex(0x4A4A7A), LV_PART_MAIN);
+  lv_obj_align(lbl_alarm_hdr, LV_ALIGN_TOP_MID, 0, 278);
   lv_label_set_text(lbl_alarm_hdr, "NEXT ALARM");
 
+  // Alarm time — large, bright purple-white
   lbl_alarm = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_alarm, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_alarm, lv_color_hex(0x7B74FF), LV_PART_MAIN);
-  lv_obj_align(lbl_alarm, LV_ALIGN_BOTTOM_MID, 0, -20);
+  lv_obj_set_style_text_color(lbl_alarm, lv_color_hex(0x9B8FFF), LV_PART_MAIN);
+  lv_obj_align(lbl_alarm, LV_ALIGN_TOP_MID, 0, 310);
   lv_label_set_text(lbl_alarm, "No alarm");
 }
 
