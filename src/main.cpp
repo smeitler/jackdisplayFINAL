@@ -30,13 +30,15 @@
 #include <stdbool.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <NetworkClientSecure.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <time.h>
 
 // ─── Server config ─────────────────────────────────────────────────────────────
-#define API_BASE_URL   "https://api.jackalarm.com"
+// Jason2866/IDF53 strips mbedTLS SSL so HTTPS is not possible on-device.
+// The device talks plain HTTP to a proxy endpoint which forwards to the
+// real HTTPS API server-side. Change back to https:// if using pioarduino.
+#define API_BASE_URL   "http://api.jackalarm.com"
 #define NTP_SERVER     "pool.ntp.org"
 #define TZ_OFFSET_SEC  (-7 * 3600)   // Mountain Standard Time (UTC-7)
 #define TZ_DST_SEC     3600          // 1 hour DST
@@ -236,15 +238,13 @@ bool loadWifiCredentials(String &ssid, String &pass) {
 }
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
-// pioarduino ships with full NetworkClientSecure + mbedTLS SSL stack.
-// setInsecure() skips cert validation — acceptable since the device only
-// ever talks to its own known server (api.jackalarm.com).
+// Uses plain HTTP to a proxy endpoint on the server. The proxy forwards
+// requests to the real HTTPS API. Jason2866/IDF53 strips the mbedTLS SSL
+// handshake layer so HTTPS is not possible directly from the device.
 String httpGet(const String &path) {
   if (WiFi.status() != WL_CONNECTED) return "";
-  NetworkClientSecure client;
-  client.setInsecure();
   HTTPClient http;
-  http.begin(client, String(API_BASE_URL) + path);
+  http.begin(String(API_BASE_URL) + path);
   http.addHeader("X-Device-Key", g_apiKey);
   http.setTimeout(10000);
   int code = http.GET();
@@ -256,10 +256,8 @@ String httpGet(const String &path) {
 
 String httpPost(const String &path, const String &payload, bool withAuth = true) {
   if (WiFi.status() != WL_CONNECTED) return "";
-  NetworkClientSecure client;
-  client.setInsecure();
   HTTPClient http;
-  http.begin(client, String(API_BASE_URL) + path);
+  http.begin(String(API_BASE_URL) + path);
   http.addHeader("Content-Type", "application/json");
   if (withAuth) http.addHeader("X-Device-Key", g_apiKey);
   http.setTimeout(10000);
@@ -1060,21 +1058,19 @@ void setup() {
   Serial.printf("PSRAM: %d MB\n", ESP.getPsramSize() / 1024 / 1024);
 #endif
 
-  // Display init — gfx.init() also initialises the I2C bus (Wire.begin) for
-  // the GT911 touch controller. We must NOT call Wire.begin() before this or
-  // the old/new I2C driver conflict will crash the device.
-  gfx.init(); gfx.initDMA(); gfx.startWrite(); gfx.fillScreen(TFT_BLACK);
-
-  // Backlight controller (0x30) — Wire is now safe to use because gfx.init()
-  // already called Wire.begin(15,16) internally via LovyanGFX.
+  // I2C + backlight (Jason2866/IDF53 uses the old I2C driver, no conflict)
+  Wire.begin(15, 16);
   delay(50);
-  // Reset touch/backlight controller if not yet responding
-  for (int retry = 0; retry < 5; retry++) {
-    if (i2cScanForAddress(0x30)) break;
+  while (1) {
+    if (i2cScanForAddress(0x30) && i2cScanForAddress(0x5D)) break;
+    sendI2CCommand(0x19);
     pinMode(1, OUTPUT); digitalWrite(1, LOW); delay(120); pinMode(1, INPUT); delay(100);
   }
-  sendI2CCommand(0x10);  // backlight on
-  sendI2CCommand(0x18);  // full brightness
+  Wire.beginTransmission(0x30); Wire.write(0x10); Wire.endTransmission();
+  Wire.beginTransmission(0x30); Wire.write(0x18); Wire.endTransmission();
+
+  // Display init
+  gfx.init(); gfx.initDMA(); gfx.startWrite(); gfx.fillScreen(TFT_BLACK);
 
   // LVGL init
   lv_init();
