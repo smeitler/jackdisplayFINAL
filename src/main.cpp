@@ -210,6 +210,9 @@ void saveTheme(int theme);
 void setBrightness(int pct);
 void saveBrightness(int pct);
 int  loadBrightness();
+void buzzerOn();
+void buzzerOff();
+void showCelebrationScreen();
 static void showMorePanel();
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
 void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
@@ -418,6 +421,29 @@ void setBrightness(int pct) {
   Wire.write(val);
   Wire.endTransmission();
   Serial.printf("[BL] brightness %d%% -> I2C 0x%02X\n", pct, val);
+}
+
+// ─── Buzzer control ──────────────────────────────────────────────────────────
+// Buzzer is controlled by the same STC8H1K28 MCU at I2C 0x30.
+// 0x15 = buzzer ON, 0x16 = buzzer OFF
+static bool g_buzzerOn = false;
+
+void buzzerOn() {
+  if (g_buzzerOn) return;
+  g_buzzerOn = true;
+  Wire.beginTransmission(0x30);
+  Wire.write(0x15);
+  Wire.endTransmission();
+  Serial.println("[BUZ] ON");
+}
+
+void buzzerOff() {
+  if (!g_buzzerOn) return;
+  g_buzzerOn = false;
+  Wire.beginTransmission(0x30);
+  Wire.write(0x16);
+  Wire.endTransmission();
+  Serial.println("[BUZ] OFF");
 }
 
 void saveBrightness(int pct) {
@@ -1438,21 +1464,25 @@ static void cb_ci_tick(lv_timer_t *timer) {
     if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
   }
   if (g_ciTick == 0) {
-    ciAdvance(0);  // 0 = none / timed out
+    // Time's up — re-fire buzzer and reset bar (do NOT advance; user must answer)
+    buzzerOn();
+    g_ciTick = HABIT_TIMER_TICKS;
+    if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
   }
 }
 
 // Advance to next habit or finish
 static void ciAdvance(int rating) {
-  // Stop timer
+  // Stop timer and silence buzzer
   if (g_ciTimer) { lv_timer_del(g_ciTimer); g_ciTimer = nullptr; }
+  buzzerOff();
 
   // Save rating for current habit (0=none, 1=red, 2=yellow, 3=green)
   if (g_ciHabitIdx < MAX_HABITS) g_ratings[g_ciHabitIdx] = rating;
 
   g_ciHabitIdx++;
   if (g_ciHabitIdx >= g_habitCount) {
-    // All habits rated — submit and return to clock
+    // All habits rated — submit, celebrate, then return to clock
     time_t now = time(nullptr);
     sendEvent("alarm_dismissed",
               g_firedAlarmIdx >= 0 ? g_alarms[g_firedAlarmIdx].id.c_str() : "",
@@ -1461,7 +1491,7 @@ static void ciAdvance(int rating) {
     g_alarmFired    = false;
     g_inCheckin     = false;
     g_firedAlarmIdx = -1;
-    showClockScreen();
+    showCelebrationScreen();
     return;
   }
   // Show next habit
@@ -1473,8 +1503,9 @@ static void cb_ci_red    (lv_event_t *e) { if (lv_event_get_code(e)==LV_EVENT_CL
 static void cb_ci_yellow (lv_event_t *e) { if (lv_event_get_code(e)==LV_EVENT_CLICKED) ciAdvance(2); }
 static void cb_ci_green  (lv_event_t *e) { if (lv_event_get_code(e)==LV_EVENT_CLICKED) ciAdvance(3); }
 
-// Snooze: go back to clock, alarm will re-fire next minute check
+// Snooze: silence buzzer, go back to clock, alarm will re-fire next minute check
 static void cb_snooze(lv_event_t *e) {
+  buzzerOff();
   g_snoozeCount++;
   sendEvent("snooze", g_alarms[g_firedAlarmIdx].id.c_str(), g_alarmFiredAt, 0, g_snoozeCount);
   g_alarmFired = false;
@@ -1482,45 +1513,61 @@ static void cb_snooze(lv_event_t *e) {
 }
 
 void buildAlarmScreen() {
-  // ── Page 1: alarm ring ──────────────────────────────────────────────────────
+  // Alarm screen is rebuilt each time it fires so it picks up the current theme.
+  if (scr_alarm) { lv_obj_del(scr_alarm); scr_alarm = nullptr; }
+
+  // ── Pick theme palette ──
+  uint32_t bgCol, timeCol, subCol, snoozeCol, snoozeTextCol;
+  switch (g_theme) {
+    case THEME_LED:
+      bgCol = 0x000000; timeCol = 0x00FF55; subCol = 0x005522; snoozeCol = 0x001100; snoozeTextCol = 0x007733; break;
+    case THEME_WARM:
+      bgCol = 0x000000; timeCol = 0xFF6600; subCol = 0x331100; snoozeCol = 0x1A0800; snoozeTextCol = 0x663300; break;
+    case THEME_RED:
+      bgCol = 0x000000; timeCol = 0xFF0000; subCol = 0x330000; snoozeCol = 0x1A0000; snoozeTextCol = 0x880000; break;
+    default: // THEME_MINIMAL
+      bgCol = 0x000000; timeCol = 0xFFFFFF; subCol = 0x444466; snoozeCol = 0x1A1A2E; snoozeTextCol = 0x9090B8; break;
+  }
+
   scr_alarm = lv_obj_create(nullptr);
-  lv_obj_set_style_bg_color(scr_alarm, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(scr_alarm, lv_color_hex(bgCol), LV_PART_MAIN);
   lv_obj_clear_flag(scr_alarm, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Time display — large, centred
+  // Time display — large, centred, in theme colour
   lbl_alm_time = lv_label_create(scr_alarm);
-  lv_obj_set_style_text_font(lbl_alm_time, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_alm_time, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_alm_time, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_alm_time, lv_color_hex(timeCol), LV_PART_MAIN);
   lv_obj_align(lbl_alm_time, LV_ALIGN_CENTER, 0, -60);
-  lv_label_set_text(lbl_alm_time, "00:00 AM");
+  lv_label_set_text(lbl_alm_time, "--:--");
 
   lv_obj_t *sub = lv_label_create(scr_alarm);
   lv_obj_set_style_text_font(sub, &lv_font_montserrat_20, LV_PART_MAIN);
-  lv_obj_set_style_text_color(sub, lv_color_hex(0x666688), LV_PART_MAIN);
-  lv_obj_align(sub, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_color(sub, lv_color_hex(subCol), LV_PART_MAIN);
+  lv_obj_align(sub, LV_ALIGN_CENTER, 0, 60);
   lv_label_set_text(sub, "Good morning");
 
-  // SNOOZE — left, muted
+  // SNOOZE — left, muted in theme colour
   lv_obj_t *btnSnooze = lv_btn_create(scr_alarm);
   lv_obj_set_size(btnSnooze, 220, 72);
-  lv_obj_align(btnSnooze, LV_ALIGN_CENTER, -130, 100);
-  lv_obj_set_style_bg_color(btnSnooze, lv_color_hex(0x2A2A3A), LV_PART_MAIN);
+  lv_obj_align(btnSnooze, LV_ALIGN_CENTER, -130, 140);
+  lv_obj_set_style_bg_color(btnSnooze, lv_color_hex(snoozeCol), LV_PART_MAIN);
   lv_obj_set_style_radius(btnSnooze, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnSnooze, cb_snooze, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblSnooze = lv_label_create(btnSnooze);
   lv_label_set_text(lblSnooze, "Snooze 9 min");
   lv_obj_set_style_text_font(lblSnooze, &lv_font_montserrat_18, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblSnooze, lv_color_hex(0x9090B8), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSnooze, lv_color_hex(snoozeTextCol), LV_PART_MAIN);
   lv_obj_center(lblSnooze);
 
-  // WAKE UP — right, bright
+  // WAKE UP — right, always bright green (action colour)
   lv_obj_t *btnWake = lv_btn_create(scr_alarm);
   lv_obj_set_size(btnWake, 220, 72);
-  lv_obj_align(btnWake, LV_ALIGN_CENTER, 130, 100);
+  lv_obj_align(btnWake, LV_ALIGN_CENTER, 130, 140);
   lv_obj_set_style_bg_color(btnWake, lv_color_hex(0x22C55E), LV_PART_MAIN);
   lv_obj_set_style_radius(btnWake, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnWake, [](lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+      buzzerOff();
       g_alarmFired  = true;
       g_inCheckin   = true;
       g_ciHabitIdx  = 0;
@@ -1537,6 +1584,8 @@ void buildAlarmScreen() {
 
 void showAlarmScreen(int alarmIdx) {
   g_alarmFiredAt = time(nullptr);
+  // Rebuild alarm screen with current theme
+  buildAlarmScreen();
   if (alarmIdx >= 0 && alarmIdx < g_alarmCount) {
     int h = g_alarms[alarmIdx].hour;
     int m = g_alarms[alarmIdx].minute;
@@ -1546,6 +1595,7 @@ void showAlarmScreen(int alarmIdx) {
     snprintf(tbuf, sizeof(tbuf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
     lv_label_set_text(lbl_alm_time, tbuf);
   }
+  buzzerOn();
   lv_disp_load_scr(scr_alarm);
 }
 
@@ -1636,7 +1686,46 @@ void showCheckinScreen() {
   lv_disp_load_scr(scr_checkin);
 }
 
-// ─── Setup ─────────────────────────────────────────────────────────────────────
+// ─── Celebration screen ───────────────────────────────────────────────────────────────────────────────────
+void showCelebrationScreen() {
+  // Build a full-screen green celebration overlay
+  lv_obj_t *scr_cel = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr_cel, lv_color_hex(0x0A2A0A), LV_PART_MAIN);
+  lv_obj_clear_flag(scr_cel, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *lbl_big = lv_label_create(scr_cel);
+  lv_obj_set_style_text_font(lbl_big, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_big, lv_color_hex(0x22C55E), LV_PART_MAIN);
+  lv_obj_align(lbl_big, LV_ALIGN_CENTER, 0, -40);
+  lv_label_set_text(lbl_big, "Great job!");
+
+  lv_obj_t *lbl_sub = lv_label_create(scr_cel);
+  lv_obj_set_style_text_font(lbl_sub, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_sub, lv_color_hex(0x448844), LV_PART_MAIN);
+  lv_obj_align(lbl_sub, LV_ALIGN_CENTER, 0, 20);
+  lv_label_set_text(lbl_sub, "All habits complete");
+
+  lv_disp_load_scr(scr_cel);
+
+  // Play a short ascending victory melody via buzzer pulses
+  // Each pulse: ON for 80ms, OFF for 40ms — 3 rising beeps
+  for (int i = 0; i < 3; i++) {
+    Wire.beginTransmission(0x30); Wire.write(0x15); Wire.endTransmission();
+    delay(80 + i * 40);
+    Wire.beginTransmission(0x30); Wire.write(0x16); Wire.endTransmission();
+    delay(40);
+  }
+  g_buzzerOn = false;
+
+  // Auto-return to clock after 2 seconds
+  lv_timer_t *t = lv_timer_create([](lv_timer_t *tmr) {
+    lv_timer_del(tmr);
+    showClockScreen();
+  }, 2000, nullptr);
+  lv_timer_set_repeat_count(t, 1);
+}
+
+// ─── Setup ───────────────────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
 
