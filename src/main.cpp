@@ -994,15 +994,15 @@ static void showThemePicker();
 // Helper: build the two alarm labels stacked at bottom-left
 static void buildAlarmLabels(lv_color_t col) {
   lbl_alarm1 = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm1, &montserrat_light_36, LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_alarm1, &lv_font_montserrat_20, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_alarm1, col, LV_PART_MAIN);
-  lv_obj_align(lbl_alarm1, LV_ALIGN_BOTTOM_LEFT, 20, -52);
+  lv_obj_align(lbl_alarm1, LV_ALIGN_BOTTOM_LEFT, 20, -36);
   lv_label_set_text(lbl_alarm1, "");
 
   lbl_alarm2 = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm2, &montserrat_light_36, LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_alarm2, &lv_font_montserrat_20, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_alarm2, col, LV_PART_MAIN);
-  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_LEFT, 20, -14);  // second alarm below first
+  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_LEFT, 20, -12);
   lv_label_set_text(lbl_alarm2, "");
   lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1056,8 +1056,8 @@ static void buildThemeMinimal() {
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "AM");
 
-  buildAlarmLabels(lv_color_hex(0x333355));
-  buildMoreButton(lv_color_hex(0x444466));
+  buildAlarmLabels(lv_color_hex(0x8888BB));
+  buildMoreButton(lv_color_hex(0x8888BB));
 }
 
 // ── THEME 1: LED ──────────────────────────────────────────────────────────────
@@ -1083,8 +1083,8 @@ static void buildThemeLED() {
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "AM");
 
-  buildAlarmLabels(lv_color_hex(0x007755));
-  buildMoreButton(lv_color_hex(0x008833));
+  buildAlarmLabels(lv_color_hex(0x00CC77));
+  buildMoreButton(lv_color_hex(0x00CC77));
 }
 
 // ── THEME 2: WARM ─────────────────────────────────────────────────────────────
@@ -1110,8 +1110,8 @@ static void buildThemeWarm() {
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "PM");
 
-  buildAlarmLabels(lv_color_hex(0x663300));
-  buildMoreButton(lv_color_hex(0x663300));
+  buildAlarmLabels(lv_color_hex(0xCC6600));
+  buildMoreButton(lv_color_hex(0xCC6600));
 }
 
 // ── THEME 3: RED ──────────────────────────────────────────────────────────────
@@ -1138,8 +1138,8 @@ static void buildThemeRed() {
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "AM");
 
-  buildAlarmLabels(lv_color_hex(0x880000));
-  buildMoreButton(lv_color_hex(0x880000));
+  buildAlarmLabels(lv_color_hex(0xCC2222));
+  buildMoreButton(lv_color_hex(0xCC2222));
 }
 
 // ── More panel (full-screen overlay: brightness + theme picker) ───────────────
