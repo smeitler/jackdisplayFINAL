@@ -94,6 +94,7 @@ struct AlarmEntry {
   int    daysOfWeek[7];
   int    daysCount;
   bool   enabled;
+  String meditationId;  // post-alarm routine: "meditation"|"breathwork"|"visualization"|"priming"|"journaling"|"" 
 };
 
 struct HabitEntry {
@@ -213,6 +214,7 @@ int  loadBrightness();
 void buzzerOn();
 void buzzerOff();
 void showCelebrationScreen();
+void showMorningRoutineScreen(const String &meditationId);
 static void showMorePanel();
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
 void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
@@ -527,10 +529,11 @@ void parseScheduleJson(const String &resp) {
   for (JsonObject a : alarms) {
     if (g_alarmCount >= MAX_ALARMS) break;
     AlarmEntry &e = g_alarms[g_alarmCount];
-    e.id      = a["id"].as<String>();
-    e.hour    = a["hour"]   | 9;
-    e.minute  = a["minute"] | 0;
-    e.enabled = a["enabled"] | true;
+    e.id          = a["id"].as<String>();
+    e.hour        = a["hour"]   | 9;
+    e.minute      = a["minute"] | 0;
+    e.enabled     = a["enabled"] | true;
+    e.meditationId = a["meditationId"].isNull() ? "" : a["meditationId"].as<String>();
     e.daysCount = 0;
     JsonArray days = a["daysOfWeek"].as<JsonArray>();
     for (int d : days) {
@@ -1731,7 +1734,91 @@ void showCheckinScreen() {
   lv_disp_load_scr(scr_checkin);
 }
 
-// ─── Celebration screen ───────────────────────────────────────────────────────────────────────────────────
+// ─── Morning routine screen ───────────────────────────────────────────────────
+// Shown after celebration if the fired alarm has a meditationId set.
+// For audio routines (meditation/breathwork/visualization) we display the card
+// and a Start button; the user taps Start to begin (audio plays on the phone app
+// side — the panel just shows the name/description as a visual cue).
+// A Skip button always lets them dismiss immediately.
+
+static const struct {
+  const char *id;
+  const char *label;
+  const char *description;
+  bool        hasAudio;
+} ROUTINE_META[] = {
+  { "meditation",    "Guided Meditation",  "Mindful awareness — 5 min",           true  },
+  { "breathwork",    "Breathwork",         "Box breathing 4-4-4-4",               true  },
+  { "visualization", "Visualizations",    "See your goals achieved",             true  },
+  { "priming",       "Priming",           "Gratitude · Goals · Visualize",       false },
+  { "journaling",    "Journaling",        "Morning pages — free write",          false },
+};
+static const int ROUTINE_META_COUNT = 5;
+
+void showMorningRoutineScreen(const String &meditationId) {
+  // Find meta
+  const char *label = nullptr;
+  const char *desc  = nullptr;
+  for (int i = 0; i < ROUTINE_META_COUNT; i++) {
+    if (meditationId == ROUTINE_META[i].id) {
+      label = ROUTINE_META[i].label;
+      desc  = ROUTINE_META[i].description;
+      break;
+    }
+  }
+  if (!label) { showClockScreen(); return; }  // unknown id — skip
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x050D1A), LV_PART_MAIN);
+  lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Card
+  lv_obj_t *card = lv_obj_create(scr);
+  lv_obj_set_size(card, 560, 260);
+  lv_obj_align(card, LV_ALIGN_CENTER, 0, -40);
+  lv_obj_set_style_bg_color(card, lv_color_hex(0x0F1E36), LV_PART_MAIN);
+  lv_obj_set_style_border_color(card, lv_color_hex(0x2563EB), LV_PART_MAIN);
+  lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
+  lv_obj_set_style_radius(card, 20, LV_PART_MAIN);
+  lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *lbl_title = lv_label_create(card);
+  lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 24);
+  lv_label_set_text(lbl_title, label);
+
+  lv_obj_t *lbl_desc = lv_label_create(card);
+  lv_obj_set_style_text_font(lbl_desc, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_desc, lv_color_hex(0x94A3B8), LV_PART_MAIN);
+  lv_obj_align(lbl_desc, LV_ALIGN_TOP_MID, 0, 80);
+  lv_label_set_text(lbl_desc, desc);
+
+  lv_obj_t *lbl_hint = lv_label_create(card);
+  lv_obj_set_style_text_font(lbl_hint, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x4B6A8A), LV_PART_MAIN);
+  lv_obj_align(lbl_hint, LV_ALIGN_TOP_MID, 0, 130);
+  lv_label_set_text(lbl_hint, "Open the Jack app to start audio");
+
+  // Skip button
+  lv_obj_t *btnSkip = lv_btn_create(scr);
+  lv_obj_set_size(btnSkip, 200, 60);
+  lv_obj_align(btnSkip, LV_ALIGN_BOTTOM_MID, 0, -24);
+  lv_obj_set_style_bg_color(btnSkip, lv_color_hex(0x1E293B), LV_PART_MAIN);
+  lv_obj_set_style_radius(btnSkip, 12, LV_PART_MAIN);
+  lv_obj_add_event_cb(btnSkip, [](lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) showClockScreen();
+  }, LV_EVENT_ALL, nullptr);
+  lv_obj_t *lblSkip = lv_label_create(btnSkip);
+  lv_label_set_text(lblSkip, "Done");
+  lv_obj_set_style_text_font(lblSkip, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSkip, lv_color_hex(0xCBD5E1), LV_PART_MAIN);
+  lv_obj_center(lblSkip);
+
+  lv_disp_load_scr(scr);
+}
+
+// ─── Celebration screen ───────────────────────────────────────────────────────
 void showCelebrationScreen() {
   // Build a full-screen green celebration overlay
   lv_obj_t *scr_cel = lv_obj_create(nullptr);
@@ -1750,23 +1837,52 @@ void showCelebrationScreen() {
   lv_obj_align(lbl_sub, LV_ALIGN_CENTER, 0, 20);
   lv_label_set_text(lbl_sub, "All habits complete");
 
+  // Load screen FIRST so it appears instantly with no delay
   lv_disp_load_scr(scr_cel);
+  lv_task_handler();  // force one LVGL render pass so the screen is visible immediately
 
-  // Play a short ascending victory melody via buzzer pulses
-  // Each pulse: ON for 80ms, OFF for 40ms — 3 rising beeps
+  // Submit check-in AFTER screen is visible (non-blocking to UI)
+  submitCheckin();
+
+  // Non-blocking victory melody: schedule 3 buzzer pulses via LVGL timers
+  // Pulse 0: on at t=0ms, off at t=100ms
+  // Pulse 1: on at t=180ms, off at t=300ms
+  // Pulse 2: on at t=400ms, off at t=540ms
+  struct BuzzerPulse { uint32_t onMs; uint32_t offMs; };
+  static const BuzzerPulse pulses[3] = {{0,100},{180,300},{400,540}};
   for (int i = 0; i < 3; i++) {
-    Wire.beginTransmission(0x30); Wire.write(0x15); Wire.endTransmission();
-    delay(80 + i * 40);
-    Wire.beginTransmission(0x30); Wire.write(0x16); Wire.endTransmission();
-    delay(40);
+    uint32_t onMs  = pulses[i].onMs;
+    uint32_t offMs = pulses[i].offMs;
+    lv_timer_t *ton = lv_timer_create([](lv_timer_t *t) {
+      Wire.beginTransmission(0x30); Wire.write(0x15); Wire.endTransmission();
+      lv_timer_del(t);
+    }, onMs + 1, nullptr);
+    lv_timer_set_repeat_count(ton, 1);
+    lv_timer_t *toff = lv_timer_create([](lv_timer_t *t) {
+      Wire.beginTransmission(0x30); Wire.write(0x16); Wire.endTransmission();
+      lv_timer_del(t);
+    }, offMs + 1, nullptr);
+    lv_timer_set_repeat_count(toff, 1);
   }
   g_buzzerOn = false;
 
-  // Auto-return to clock after 2 seconds
+  // Capture meditationId from the fired alarm before state is cleared
+  String meditId = (g_firedAlarmIdx >= 0) ? g_alarms[g_firedAlarmIdx].meditationId : "";
+
+  // After 2s: go to morning routine screen (if set) or clock
+  // Use a heap-allocated String so the lambda can capture it safely
+  String *pMeditId = new String(meditId);
   lv_timer_t *t = lv_timer_create([](lv_timer_t *tmr) {
+    String *pm = (String *)tmr->user_data;
+    String mid = *pm;
+    delete pm;
     lv_timer_del(tmr);
-    showClockScreen();
-  }, 2000, nullptr);
+    if (mid.length() > 0) {
+      showMorningRoutineScreen(mid);
+    } else {
+      showClockScreen();
+    }
+  }, 2000, pMeditId);
   lv_timer_set_repeat_count(t, 1);
 }
 
