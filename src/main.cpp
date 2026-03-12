@@ -1260,6 +1260,51 @@ static void showMorePanel() {
     }, LV_EVENT_ALL, themeId);
   }
 
+  // ── Sync Now button ──
+  lv_obj_t *lblSync = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblSync, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSync, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblSync, LV_ALIGN_TOP_LEFT, 40, 268);
+  lv_label_set_text(lblSync, "SYNC");
+
+  // Status label (shows OK / WiFi needed after sync)
+  lv_obj_t *lblSyncStatus = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblSyncStatus, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSyncStatus, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_align(lblSyncStatus, LV_ALIGN_TOP_RIGHT, -40, 268);
+  lv_label_set_text(lblSyncStatus, "");
+
+  lv_obj_t *btnSync = lv_btn_create(panel);
+  lv_obj_set_size(btnSync, 720, 52);
+  lv_obj_align(btnSync, LV_ALIGN_TOP_MID, 0, 290);
+  lv_obj_set_style_bg_color(btnSync, lv_color_hex(0x0A1A2A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnSync, lv_color_hex(0x1A4A7A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnSync, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnSync, 10, LV_PART_MAIN);
+  lv_obj_add_event_cb(btnSync, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_obj_t *statusLbl = (lv_obj_t *)lv_event_get_user_data(e);
+    bool wifiOk = (WiFi.status() == WL_CONNECTED);
+    if (!wifiOk) {
+      lv_label_set_text(statusLbl, "No WiFi");
+      lv_obj_set_style_text_color(statusLbl, lv_color_hex(0xFF4444), LV_PART_MAIN);
+      return;
+    }
+    lv_label_set_text(statusLbl, "Syncing...");
+    lv_obj_set_style_text_color(statusLbl, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_timer_handler();  // flush UI before blocking HTTP
+    fetchSchedule();
+    sendHeartbeat();
+    updateAlarmLabels();
+    lv_label_set_text(statusLbl, LV_SYMBOL_OK "  Done");
+    lv_obj_set_style_text_color(statusLbl, lv_color_hex(0x22C55E), LV_PART_MAIN);
+  }, LV_EVENT_ALL, lblSyncStatus);
+  lv_obj_t *lblSyncBtn = lv_label_create(btnSync);
+  lv_obj_set_style_text_font(lblSyncBtn, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSyncBtn, lv_color_hex(0x4499DD), LV_PART_MAIN);
+  lv_label_set_text(lblSyncBtn, LV_SYMBOL_REFRESH "  Sync Alarm & Habits Now");
+  lv_obj_center(lblSyncBtn);
+
   // ── Close / Back button ──
   lv_obj_t *btnBack = lv_btn_create(panel);
   lv_obj_set_size(btnBack, 160, 44);
