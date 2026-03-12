@@ -49,6 +49,7 @@
 #define NVS_KEY_WIFI_SSID   "wifiSsid"
 #define NVS_KEY_WIFI_PASS   "wifiPass"
 #define NVS_KEY_SCHEDULE    "schedule"   // cached JSON from last successful fetch
+#define NVS_KEY_THEME       "theme"      // selected clock face theme (0/1/2)
 
 // ─── Timing ────────────────────────────────────────────────────────────────────
 #define POLL_INTERVAL_MS   (5UL * 60UL * 1000UL)   // 5 minutes
@@ -122,12 +123,24 @@ lv_obj_t *kb_password      = nullptr;
 lv_obj_t *lbl_wifi_status  = nullptr;
 
 // Clock face
-lv_obj_t *scr_clock   = nullptr;
-lv_obj_t *lbl_time    = nullptr;
-lv_obj_t *lbl_ampm    = nullptr;
-lv_obj_t *lbl_date    = nullptr;
-lv_obj_t *lbl_wifi    = nullptr;
-lv_obj_t *lbl_alarm   = nullptr;
+lv_obj_t *scr_clock    = nullptr;
+lv_obj_t *lbl_time     = nullptr;
+lv_obj_t *lbl_ampm     = nullptr;
+lv_obj_t *lbl_date     = nullptr;
+lv_obj_t *lbl_wifi     = nullptr;
+lv_obj_t *lbl_alarm1   = nullptr;   // bottom-left alarm
+lv_obj_t *lbl_alarm2   = nullptr;   // bottom-right alarm (2nd alarm if present)
+
+// Theme
+#define THEME_MINIMAL  0
+#define THEME_LED      1
+#define THEME_WARM     2
+#define THEME_COUNT    3
+int g_theme = THEME_MINIMAL;   // default
+
+// Long-press detection for theme cycling
+static unsigned long g_pressStart = 0;
+static bool          g_pressing   = false;
 
 // Pairing screen
 lv_obj_t *scr_pair    = nullptr;
@@ -167,6 +180,9 @@ String nextAlarmString();
 bool alarmShouldFire(int idx, struct tm *t);
 void doPostWifiConnect();
 void parseScheduleJson(const String &json);
+void updateAlarmLabels();
+int  loadTheme();
+void saveTheme(int theme);
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -251,6 +267,19 @@ String loadScheduleCache() {
   String s = prefs.getString(NVS_KEY_SCHEDULE, "");
   prefs.end();
   return s;
+}
+
+void saveTheme(int t) {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putInt(NVS_KEY_THEME, t);
+  prefs.end();
+}
+
+int loadTheme() {
+  prefs.begin(NVS_NAMESPACE, true);
+  int t = prefs.getInt(NVS_KEY_THEME, THEME_MINIMAL);
+  prefs.end();
+  return t;
 }
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -350,8 +379,8 @@ void parseScheduleJson(const String &resp) {
 
   Serial.printf("[schedule] %d alarms, %d habits\n", g_alarmCount, g_habitCount);
 
-  // Refresh alarm label on clock face
-  if (lbl_alarm) lv_label_set_text(lbl_alarm, nextAlarmString().c_str());
+  // Refresh alarm labels on clock face
+  updateAlarmLabels();
 }
 
 // ─── Schedule fetch ──────────────────────────────────────────────────────────────
@@ -451,20 +480,54 @@ bool alarmShouldFire(int idx, struct tm *t) {
   return false;
 }
 
-String nextAlarmString() {
-  if (g_alarmCount == 0) return "No alarm set";
-  for (int i = 0; i < g_alarmCount; i++) {
-    if (g_alarms[i].enabled) {
-      int h = g_alarms[i].hour;
-      int m = g_alarms[i].minute;
-      bool pm = h >= 12;
-      int h12 = h % 12; if (h12 == 0) h12 = 12;
-      char tbuf[16];
-      snprintf(tbuf, sizeof(tbuf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
-      return String(tbuf);
+// Format a single alarm entry as "7:30 AM"
+String alarmString(int idx) {
+  if (idx < 0 || idx >= g_alarmCount) return "";
+  int h = g_alarms[idx].hour;
+  int m = g_alarms[idx].minute;
+  bool pm = h >= 12;
+  int h12 = h % 12; if (h12 == 0) h12 = 12;
+  char tbuf[16];
+  snprintf(tbuf, sizeof(tbuf), "%d:%02d %s", h12, m, pm ? "PM" : "AM");
+  return String(tbuf);
+}
+
+// Update both bottom alarm labels on the clock face
+void updateAlarmLabels() {
+  if (!lbl_alarm1) return;
+
+  // Find up to 2 enabled alarms
+  int found[2] = { -1, -1 };
+  int fc = 0;
+  for (int i = 0; i < g_alarmCount && fc < 2; i++) {
+    if (g_alarms[i].enabled) found[fc++] = i;
+  }
+
+  // Alarm 1 — bottom-left
+  if (found[0] >= 0) {
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%s  %s", LV_SYMBOL_BELL, alarmString(found[0]).c_str());
+    lv_label_set_text(lbl_alarm1, buf);
+  } else {
+    lv_label_set_text(lbl_alarm1, "");
+  }
+
+  // Alarm 2 — bottom-right (only if a second alarm exists)
+  if (lbl_alarm2) {
+    if (found[1] >= 0) {
+      char buf[24];
+      snprintf(buf, sizeof(buf), "%s  %s", LV_SYMBOL_BELL, alarmString(found[1]).c_str());
+      lv_label_set_text(lbl_alarm2, buf);
+      lv_obj_clear_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
     }
   }
-  return "No alarm set";
+}
+
+// Legacy helper kept for compatibility
+String nextAlarmString() {
+  return (g_alarmCount > 0 && g_alarms[0].enabled) ? alarmString(0) : "No alarm";
 }
 
 // ─── Post-WiFi-connect actions (NTP + pairing/clock) ──────────────────────────
@@ -736,69 +799,166 @@ void showWifiPassScreen(const char *ssid) {
 }
 
 // ─── Clock face ────────────────────────────────────────────────────────────────
-void buildClockScreen() {
-  scr_clock = lv_obj_create(nullptr);
-  // ── Background: deep navy ────────────────────────────────────────────────────
-  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x080818), LV_PART_MAIN);
-  lv_obj_clear_flag(scr_clock, LV_OBJ_FLAG_SCROLLABLE);
+// Helper: create the two bottom alarm labels (shared by all themes)
+static void buildAlarmLabels(lv_color_t col, const lv_font_t *font) {
+  lbl_alarm1 = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_alarm1, font, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_alarm1, col, LV_PART_MAIN);
+  lv_obj_align(lbl_alarm1, LV_ALIGN_BOTTOM_LEFT, 24, -18);
+  lv_label_set_text(lbl_alarm1, "");
 
-  // ── WiFi indicator (top-right, subtle) ───────────────────────────────────────
+  lbl_alarm2 = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_alarm2, font, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_alarm2, col, LV_PART_MAIN);
+  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_RIGHT, -24, -18);
+  lv_label_set_text(lbl_alarm2, "");
+  lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);  // hidden until 2nd alarm exists
+}
+
+// Helper: create the WiFi dot indicator (top-right, all themes)
+static void buildWifiDot() {
   lbl_wifi = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_wifi, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x44445A), LV_PART_MAIN);
-  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -20, 14);
-  lv_label_set_text(lbl_wifi, "WiFi");
+  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x33334A), LV_PART_MAIN);
+  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -16, 12);
+  lv_label_set_text(lbl_wifi, LV_SYMBOL_WIFI);
+}
 
-  // ── Date label (upper area, spaced caps) ─────────────────────────────────────
+// ── THEME 0: MINIMAL ─────────────────────────────────────────────────────────
+// Deep black, ultra-clean white time, thin date, alarms at bottom corners.
+static void buildThemeMinimal() {
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x050510), LV_PART_MAIN);
+
+  buildWifiDot();
+
+  // Date — very muted, small, centred top
   lbl_date = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_18, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x5A5A7A), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 38);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x3A3A5A), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 32);
   lv_label_set_text(lbl_date, "Monday, Jan 1");
 
-  // ── Time display (centre of top half) ────────────────────────────────────────
-  // Container to hold time + AM/PM together, centred at y=185
-  lv_obj_t *time_cont = lv_obj_create(scr_clock);
-  lv_obj_remove_style_all(time_cont);
-  lv_obj_set_size(time_cont, 600, 90);
-  lv_obj_align(time_cont, LV_ALIGN_TOP_MID, 0, 110);
-  lv_obj_set_style_bg_opa(time_cont, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_clear_flag(time_cont, LV_OBJ_FLAG_SCROLLABLE);
-
-  lbl_time = lv_label_create(time_cont);
+  // Time — massive, centred, near-white
+  lbl_time = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xF0F0FF), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_LEFT_MID, 60, 0);
-  lv_label_set_text(lbl_time, "00:00");
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xF8F8FF), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, -30, -20);
+  lv_label_set_text(lbl_time, "9:00");
 
-  lbl_ampm = lv_label_create(time_cont);
-  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x6060A0), LV_PART_MAIN);
-  lv_obj_align(lbl_ampm, LV_ALIGN_RIGHT_MID, -60, 12);
+  // AM/PM — small, to the right of time, muted
+  lbl_ampm = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x4A4A7A), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 130, 0);
   lv_label_set_text(lbl_ampm, "AM");
 
-  // ── Thin separator line ───────────────────────────────────────────────────────
-  lv_obj_t *sep = lv_obj_create(scr_clock);
-  lv_obj_remove_style_all(sep);
-  lv_obj_set_size(sep, 680, 1);
-  lv_obj_align(sep, LV_ALIGN_TOP_MID, 0, 255);
-  lv_obj_set_style_bg_color(sep, lv_color_hex(0x2A2A4A), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, LV_PART_MAIN);
+  // Alarms — 14pt muted blue-white at bottom corners
+  buildAlarmLabels(lv_color_hex(0x4A4A7A), &lv_font_montserrat_14);
+}
 
-  // ── Alarm zone (bottom half) ──────────────────────────────────────────────────
-  // "NEXT ALARM" caption
-  lv_obj_t *lbl_alarm_hdr = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm_hdr, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_alarm_hdr, lv_color_hex(0x4A4A7A), LV_PART_MAIN);
-  lv_obj_align(lbl_alarm_hdr, LV_ALIGN_TOP_MID, 0, 278);
-  lv_label_set_text(lbl_alarm_hdr, "NEXT ALARM");
+// ── THEME 1: LED ──────────────────────────────────────────────────────────────
+// Black bg, bright green large time, cyan alarm indicators.
+static void buildThemeLED() {
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
 
-  // Alarm time — large, bright purple-white
-  lbl_alarm = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_alarm, lv_color_hex(0x9B8FFF), LV_PART_MAIN);
-  lv_obj_align(lbl_alarm, LV_ALIGN_TOP_MID, 0, 310);
-  lv_label_set_text(lbl_alarm, "No alarm");
+  buildWifiDot();
+  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x003300), LV_PART_MAIN);
+
+  // AM/PM — top-left, small green
+  lbl_ampm = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x00AA44), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_TOP_LEFT, 20, 16);
+  lv_label_set_text(lbl_ampm, "AM");
+
+  // Date — hidden on LED theme (clean look)
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x003300), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 16);
+  lv_label_set_text(lbl_date, "");
+
+  // Time — huge, bright green, centred
+  lbl_time = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0x00FF66), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -10);
+  lv_label_set_text(lbl_time, "10:42");
+
+  // Alarms — cyan at bottom corners
+  buildAlarmLabels(lv_color_hex(0x00CCCC), &lv_font_montserrat_16);
+}
+
+// ── THEME 2: WARM ─────────────────────────────────────────────────────────────
+// Very dark warm bg, amber/red time, cozy bedside feel.
+static void buildThemeWarm() {
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x0A0500), LV_PART_MAIN);
+
+  buildWifiDot();
+  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x2A1500), LV_PART_MAIN);
+
+  // Date — warm amber, small, centred top
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x5A3010), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 30);
+  lv_label_set_text(lbl_date, "THURSDAY  \xE2\x80\xA2  MARCH 12");
+
+  // Time — warm red-amber, centred
+  lbl_time = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFF6600), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
+  lv_label_set_text(lbl_time, "9:10");
+
+  // AM/PM — below time, smaller warm amber
+  lbl_ampm = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x7A3A00), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 0, 36);
+  lv_label_set_text(lbl_ampm, "PM");
+
+  // Alarms — warm amber at bottom corners
+  buildAlarmLabels(lv_color_hex(0x7A3A00), &lv_font_montserrat_14);
+}
+
+void buildClockScreen() {
+  // Destroy previous screen if switching themes
+  if (scr_clock) {
+    lv_obj_del(scr_clock);
+    scr_clock = nullptr;
+    lbl_time = lbl_ampm = lbl_date = lbl_wifi = lbl_alarm1 = lbl_alarm2 = nullptr;
+  }
+
+  scr_clock = lv_obj_create(nullptr);
+  lv_obj_clear_flag(scr_clock, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Build the selected theme
+  switch (g_theme) {
+    case THEME_LED:   buildThemeLED();   break;
+    case THEME_WARM:  buildThemeWarm();  break;
+    default:          buildThemeMinimal(); break;
+  }
+
+  // Long-press anywhere on clock face cycles to next theme
+  lv_obj_add_event_cb(scr_clock, [](lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) {
+      g_pressStart = millis();
+      g_pressing   = true;
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+      if (g_pressing && (millis() - g_pressStart) >= 1000) {
+        // Long press — cycle theme
+        g_theme = (g_theme + 1) % THEME_COUNT;
+        saveTheme(g_theme);
+        buildClockScreen();
+        lv_disp_load_scr(scr_clock);
+        updateClockLabel();
+        updateAlarmLabels();
+      }
+      g_pressing = false;
+    }
+  }, LV_EVENT_ALL, nullptr);
 }
 
 void updateClockLabel() {
@@ -813,15 +973,30 @@ void updateClockLabel() {
   lv_label_set_text(lbl_time, timeBuf);
   lv_label_set_text(lbl_ampm, t.tm_hour < 12 ? "AM" : "PM");
 
-  // Date
+  // Date — format depends on theme
   const char *days[]   = { "Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday" };
   const char *months[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
-  char dateBuf[32];
-  snprintf(dateBuf, sizeof(dateBuf), "%s, %s %d", days[t.tm_wday], months[t.tm_mon], t.tm_mday);
+  const char *MONTHS[] = { "JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC" };
+  const char *DAYS[]   = { "SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY" };
+  char dateBuf[40];
+  if (g_theme == THEME_WARM) {
+    snprintf(dateBuf, sizeof(dateBuf), "%s  \xE2\x80\xA2  %s %d", DAYS[t.tm_wday], MONTHS[t.tm_mon], t.tm_mday);
+  } else if (g_theme == THEME_LED) {
+    dateBuf[0] = '\0';  // LED theme shows no date
+  } else {
+    snprintf(dateBuf, sizeof(dateBuf), "%s, %s %d", days[t.tm_wday], months[t.tm_mon], t.tm_mday);
+  }
   lv_label_set_text(lbl_date, dateBuf);
 
-  // WiFi
-  lv_label_set_text(lbl_wifi, WiFi.status() == WL_CONNECTED ? "WiFi" : "No WiFi");
+  // WiFi indicator — change color: bright when connected, dim when not
+  bool wifiOk = (WiFi.status() == WL_CONNECTED);
+  if (g_theme == THEME_LED) {
+    lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0x00FF66) : lv_color_hex(0x003300), LV_PART_MAIN);
+  } else if (g_theme == THEME_WARM) {
+    lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0xFF6600) : lv_color_hex(0x2A1500), LV_PART_MAIN);
+  } else {
+    lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0x5A5A9A) : lv_color_hex(0x22223A), LV_PART_MAIN);
+  }
 
   // Check if any alarm should fire
   if (!g_alarmFired && !g_inCheckin) {
@@ -1158,6 +1333,9 @@ void setup() {
 
   delay(100);
   gfx.fillScreen(TFT_BLACK);
+
+  // Load saved theme before building the clock screen
+  g_theme = loadTheme();
 
   // Build all screens up front
   buildClockScreen();
