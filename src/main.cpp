@@ -694,8 +694,11 @@ void updateAlarmLabels() {
     String s = alarmString(found[0]);
     if (!g_alarms[found[0]].enabled) s += " (off)";
     lv_label_set_text(lbl_alarm1, s.c_str());
+    Serial.printf("[alarm label] set to: %s\n", s.c_str());
   } else {
-    lv_label_set_text(lbl_alarm1, "");
+    // Show placeholder so we can confirm the label position renders correctly
+    lv_label_set_text(lbl_alarm1, "No alarm");
+    Serial.println("[alarm label] no alarms — showing placeholder");
   }
 
   // Alarm 2 — only if a second alarm exists
@@ -1418,6 +1421,7 @@ void updateClockLabel() {
 void showClockScreen() {
   lv_disp_load_scr(scr_clock);
   updateClockLabel();
+  updateAlarmLabels();  // always refresh alarm text when showing clock
 }
 
 // ─── Pairing screen ────────────────────────────────────────────────────────────
@@ -2055,6 +2059,7 @@ void loop() {
     g_lastClockUpd = now;
     if (!g_alarmFired && !g_inCheckin && lv_disp_get_scr_act(nullptr) == scr_clock) {
       updateClockLabel();
+      updateAlarmLabels();
     }
   }
 
