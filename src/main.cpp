@@ -681,16 +681,19 @@ String alarmString(int idx) {
 void updateAlarmLabels() {
   if (!lbl_alarm1) return;
 
-  // Find up to 2 enabled alarms
+  // Show up to 2 alarms — all alarms shown, enabled ones bright, disabled ones with (off) suffix
+  // This ensures the label is never blank just because enabled=false
   int found[2] = { -1, -1 };
   int fc = 0;
   for (int i = 0; i < g_alarmCount && fc < 2; i++) {
-    if (g_alarms[i].enabled) found[fc++] = i;
+    found[fc++] = i;  // show all, not just enabled
   }
 
-  // Alarm 1 — bottom-left (plain text, no symbol to avoid placeholder box)
+  // Alarm 1 — bottom-left
   if (found[0] >= 0) {
-    lv_label_set_text(lbl_alarm1, alarmString(found[0]).c_str());
+    String s = alarmString(found[0]);
+    if (!g_alarms[found[0]].enabled) s += " (off)";
+    lv_label_set_text(lbl_alarm1, s.c_str());
   } else {
     lv_label_set_text(lbl_alarm1, "");
   }
@@ -698,7 +701,9 @@ void updateAlarmLabels() {
   // Alarm 2 — only if a second alarm exists
   if (lbl_alarm2) {
     if (found[1] >= 0) {
-      lv_label_set_text(lbl_alarm2, alarmString(found[1]).c_str());
+      String s = alarmString(found[1]);
+      if (!g_alarms[found[1]].enabled) s += " (off)";
+      lv_label_set_text(lbl_alarm2, s.c_str());
       lv_obj_clear_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
@@ -1812,7 +1817,12 @@ void showMorningRoutineScreen(const String &meditationId) {
   lv_obj_set_style_bg_color(btnSkip, lv_color_hex(0x1E293B), LV_PART_MAIN);
   lv_obj_set_style_radius(btnSkip, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnSkip, [](lv_event_t *e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) showClockScreen();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+      g_alarmFired  = false;
+      g_inCheckin   = false;
+      g_firedAlarmIdx = -1;
+      showClockScreen();
+    }
   }, LV_EVENT_ALL, nullptr);
   lv_obj_t *lblSkip = lv_label_create(btnSkip);
   lv_label_set_text(lblSkip, "Done");
