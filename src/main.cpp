@@ -961,8 +961,7 @@ void showWifiPassScreen(const char *ssid) {
 // Forward declaration for the More/theme picker screen
 static void showThemePicker();
 
-// Helper: build the two bottom-corner alarm labels (shared by all themes)
-// Positioned above the More button (y offset -52 from bottom)
+// Helper: build the two alarm labels stacked at bottom-left
 static void buildAlarmLabels(lv_color_t col) {
   lbl_alarm1 = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_alarm1, &montserrat_light_36, LV_PART_MAIN);
@@ -973,7 +972,7 @@ static void buildAlarmLabels(lv_color_t col) {
   lbl_alarm2 = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_alarm2, &montserrat_light_36, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_alarm2, col, LV_PART_MAIN);
-  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_RIGHT, -20, -52);
+  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_LEFT, 20, -14);  // second alarm below first
   lv_label_set_text(lbl_alarm2, "");
   lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
 }
@@ -987,11 +986,11 @@ static void buildWifiDot(lv_color_t col_on, lv_color_t col_off) {
   lv_label_set_text(lbl_wifi, LV_SYMBOL_WIFI);
 }
 
-// Helper: build the "More" button at the very bottom centre
+// Helper: build the "More" button at the bottom-right
 static void buildMoreButton(lv_color_t col) {
   lv_obj_t *btn = lv_btn_create(scr_clock);
   lv_obj_set_size(btn, 120, 36);
-  lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_obj_align(btn, LV_ALIGN_BOTTOM_RIGHT, -16, -8);
   lv_obj_set_style_bg_color(btn, lv_color_hex(0x000000), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btn, col, LV_PART_MAIN);
