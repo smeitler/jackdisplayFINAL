@@ -1414,9 +1414,66 @@ void showPairingScreen() {
   lv_disp_load_scr(scr_pair);
 }
 
-// ─── Alarm popup ───────────────────────────────────────────────────────────────
+// ─── Alarm + Habit Checklist ───────────────────────────────────────────────────
 static time_t g_alarmFiredAt = 0;
 
+// ─── Per-habit timed check-in state ─────────────────────────────────────────────────────
+#define HABIT_TIMER_TICKS  100   // 100 ticks × 100ms = 10 s per habit
+static int   g_ciHabitIdx  = 0;  // which habit we're currently rating
+static int   g_ciTick      = 0;  // countdown tick (counts down from HABIT_TIMER_TICKS)
+static lv_timer_t *g_ciTimer = nullptr;
+
+// LVGL widgets on the check-in screen (rebuilt each call to showCheckinScreen)
+static lv_obj_t *lbl_ci_progress = nullptr;
+static lv_obj_t *lbl_ci_habit    = nullptr;
+static lv_obj_t *bar_ci_timer    = nullptr;
+
+// Forward-declare the advance function
+static void ciAdvance(int rating);
+
+// LVGL timer tick: called every 100ms
+static void cb_ci_tick(lv_timer_t *timer) {
+  if (g_ciTick > 0) {
+    g_ciTick--;
+    if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
+  }
+  if (g_ciTick == 0) {
+    ciAdvance(0);  // 0 = none / timed out
+  }
+}
+
+// Advance to next habit or finish
+static void ciAdvance(int rating) {
+  // Stop timer
+  if (g_ciTimer) { lv_timer_del(g_ciTimer); g_ciTimer = nullptr; }
+
+  // Save rating for current habit (0=none, 1=red, 2=yellow, 3=green)
+  if (g_ciHabitIdx < MAX_HABITS) g_ratings[g_ciHabitIdx] = rating;
+
+  g_ciHabitIdx++;
+  if (g_ciHabitIdx >= g_habitCount) {
+    // All habits rated — submit and return to clock
+    time_t now = time(nullptr);
+    sendEvent("alarm_dismissed",
+              g_firedAlarmIdx >= 0 ? g_alarms[g_firedAlarmIdx].id.c_str() : "",
+              g_alarmFiredAt, now, g_snoozeCount);
+    submitCheckin();
+    g_alarmFired    = false;
+    g_inCheckin     = false;
+    g_firedAlarmIdx = -1;
+    showClockScreen();
+    return;
+  }
+  // Show next habit
+  showCheckinScreen();
+}
+
+// Rating button callbacks
+static void cb_ci_red    (lv_event_t *e) { if (lv_event_get_code(e)==LV_EVENT_CLICKED) ciAdvance(1); }
+static void cb_ci_yellow (lv_event_t *e) { if (lv_event_get_code(e)==LV_EVENT_CLICKED) ciAdvance(2); }
+static void cb_ci_green  (lv_event_t *e) { if (lv_event_get_code(e)==LV_EVENT_CLICKED) ciAdvance(3); }
+
+// Snooze: go back to clock, alarm will re-fire next minute check
 static void cb_snooze(lv_event_t *e) {
   g_snoozeCount++;
   sendEvent("snooze", g_alarms[g_firedAlarmIdx].id.c_str(), g_alarmFiredAt, 0, g_snoozeCount);
@@ -1424,58 +1481,58 @@ static void cb_snooze(lv_event_t *e) {
   showClockScreen();
 }
 
-static void cb_dismiss(lv_event_t *e) {
-  g_alarmFired = true; // keep true so alarm doesn't re-fire this minute
-  g_inCheckin  = true;
-  // Reset ratings
-  for (int i = 0; i < MAX_HABITS; i++) g_ratings[i] = 0;
-  showCheckinScreen();
-}
-
 void buildAlarmScreen() {
+  // ── Page 1: alarm ring ──────────────────────────────────────────────────────
   scr_alarm = lv_obj_create(nullptr);
-  lv_obj_set_style_bg_color(scr_alarm, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(scr_alarm, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_clear_flag(scr_alarm, LV_OBJ_FLAG_SCROLLABLE);
 
-  lv_obj_t *icon = lv_label_create(scr_alarm);
-  lv_obj_set_style_text_font(icon, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(icon, lv_color_hex(0x7B74FF), LV_PART_MAIN);
-  lv_obj_align(icon, LV_ALIGN_CENTER, 0, -120);
-  lv_label_set_text(icon, LV_SYMBOL_BELL);
-
+  // Time display — large, centred
   lbl_alm_time = lv_label_create(scr_alarm);
   lv_obj_set_style_text_font(lbl_alm_time, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_alm_time, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
-  lv_obj_align(lbl_alm_time, LV_ALIGN_CENTER, 0, -50);
+  lv_obj_set_style_text_color(lbl_alm_time, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_align(lbl_alm_time, LV_ALIGN_CENTER, 0, -60);
   lv_label_set_text(lbl_alm_time, "00:00 AM");
 
   lv_obj_t *sub = lv_label_create(scr_alarm);
   lv_obj_set_style_text_font(sub, &lv_font_montserrat_20, LV_PART_MAIN);
-  lv_obj_set_style_text_color(sub, lv_color_hex(0x9090B8), LV_PART_MAIN);
-  lv_obj_align(sub, LV_ALIGN_CENTER, 0, 10);
-  lv_label_set_text(sub, "Good morning — time to rise");
+  lv_obj_set_style_text_color(sub, lv_color_hex(0x666688), LV_PART_MAIN);
+  lv_obj_align(sub, LV_ALIGN_CENTER, 0, 0);
+  lv_label_set_text(sub, "Good morning");
 
-  // Snooze button
+  // SNOOZE — left, muted
   lv_obj_t *btnSnooze = lv_btn_create(scr_alarm);
   lv_obj_set_size(btnSnooze, 220, 72);
-  lv_obj_align(btnSnooze, LV_ALIGN_CENTER, -130, 90);
-  lv_obj_set_style_bg_color(btnSnooze, lv_color_hex(0x374151), LV_PART_MAIN);
+  lv_obj_align(btnSnooze, LV_ALIGN_CENTER, -130, 100);
+  lv_obj_set_style_bg_color(btnSnooze, lv_color_hex(0x2A2A3A), LV_PART_MAIN);
+  lv_obj_set_style_radius(btnSnooze, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnSnooze, cb_snooze, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblSnooze = lv_label_create(btnSnooze);
-  lv_label_set_text(lblSnooze, "SNOOZE  9 min");
-  lv_obj_set_style_text_font(lblSnooze, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_label_set_text(lblSnooze, "Snooze 9 min");
+  lv_obj_set_style_text_font(lblSnooze, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSnooze, lv_color_hex(0x9090B8), LV_PART_MAIN);
   lv_obj_center(lblSnooze);
 
-  // Dismiss button
-  lv_obj_t *btnDismiss = lv_btn_create(scr_alarm);
-  lv_obj_set_size(btnDismiss, 220, 72);
-  lv_obj_align(btnDismiss, LV_ALIGN_CENTER, 130, 90);
-  lv_obj_set_style_bg_color(btnDismiss, lv_color_hex(0x7B74FF), LV_PART_MAIN);
-  lv_obj_add_event_cb(btnDismiss, cb_dismiss, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *lblDismiss = lv_label_create(btnDismiss);
-  lv_label_set_text(lblDismiss, "DISMISS & CHECK IN");
-  lv_obj_set_style_text_font(lblDismiss, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_center(lblDismiss);
+  // WAKE UP — right, bright
+  lv_obj_t *btnWake = lv_btn_create(scr_alarm);
+  lv_obj_set_size(btnWake, 220, 72);
+  lv_obj_align(btnWake, LV_ALIGN_CENTER, 130, 100);
+  lv_obj_set_style_bg_color(btnWake, lv_color_hex(0x22C55E), LV_PART_MAIN);
+  lv_obj_set_style_radius(btnWake, 12, LV_PART_MAIN);
+  lv_obj_add_event_cb(btnWake, [](lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+      g_alarmFired  = true;
+      g_inCheckin   = true;
+      g_ciHabitIdx  = 0;
+      memset(g_ratings, 0, sizeof(g_ratings));
+      showCheckinScreen();
+    }
+  }, LV_EVENT_ALL, nullptr);
+  lv_obj_t *lblWake = lv_label_create(btnWake);
+  lv_label_set_text(lblWake, "Wake Up");
+  lv_obj_set_style_text_font(lblWake, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblWake, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_center(lblWake);
 }
 
 void showAlarmScreen(int alarmIdx) {
@@ -1493,113 +1550,88 @@ void showAlarmScreen(int alarmIdx) {
 }
 
 // ─── Check-in screen ───────────────────────────────────────────────────────────
-static lv_obj_t *g_ratingBtns[MAX_HABITS][3]; // [habit][0=red,1=yellow,2=green]
-
-static void cb_rate(lv_event_t *e) {
-  uint32_t data = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
-  int habitIdx  = (data >> 4) & 0xF;
-  int rating    = (data & 0xF);  // 1=red,2=yellow,3=green
-  g_ratings[habitIdx] = rating;
-
-  // Update button styles
-  static const uint32_t colors[] = { 0, 0xEF4444, 0xF59E0B, 0x22C55E };
-  static const uint32_t dimmed[] = { 0, 0x4A1010, 0x4A3010, 0x103010 };
-  for (int r = 1; r <= 3; r++) {
-    lv_obj_t *btn = g_ratingBtns[habitIdx][r - 1];
-    if (btn) {
-      lv_obj_set_style_bg_color(btn,
-        lv_color_hex(g_ratings[habitIdx] == r ? colors[r] : dimmed[r]),
-        LV_PART_MAIN);
-    }
-  }
-}
-
-static void cb_done(lv_event_t *e) {
-  time_t now = time(nullptr);
-  sendEvent("alarm_dismissed",
-            g_firedAlarmIdx >= 0 ? g_alarms[g_firedAlarmIdx].id.c_str() : "",
-            g_alarmFiredAt, now, g_snoozeCount);
-  submitCheckin();
-  g_alarmFired = false;
-  g_inCheckin  = false;
-  g_firedAlarmIdx = -1;
-  showClockScreen();
-}
-
+// buildCheckinScreen: creates the static skeleton (reused across all habits)
 void buildCheckinScreen() {
   scr_checkin = lv_obj_create(nullptr);
-  lv_obj_set_style_bg_color(scr_checkin, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(scr_checkin, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_clear_flag(scr_checkin, LV_OBJ_FLAG_SCROLLABLE);
 
-  lv_obj_t *title = lv_label_create(scr_checkin);
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_28, LV_PART_MAIN);
-  lv_obj_set_style_text_color(title, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 12);
-  lv_label_set_text(title, "Yesterday's Check-in");
+  // Progress label  e.g. "Habit 1 of 5"
+  lbl_ci_progress = lv_label_create(scr_checkin);
+  lv_obj_set_style_text_font(lbl_ci_progress, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ci_progress, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_align(lbl_ci_progress, LV_ALIGN_TOP_MID, 0, 14);
+  lv_label_set_text(lbl_ci_progress, "Habit 1 of 1");
 
-  // Scrollable habit container
-  cont_habits = lv_obj_create(scr_checkin);
-  lv_obj_set_size(cont_habits, LCD_H_RES - 20, LCD_V_RES - 100);
-  lv_obj_align(cont_habits, LV_ALIGN_TOP_MID, 0, 50);
-  lv_obj_set_style_bg_color(cont_habits, lv_color_hex(0x0D0D1A), LV_PART_MAIN);
-  lv_obj_set_style_border_width(cont_habits, 0, LV_PART_MAIN);
-  lv_obj_set_flex_flow(cont_habits, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(cont_habits, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_row(cont_habits, 6, LV_PART_MAIN);
+  // Countdown bar (full width, thin strip at top)
+  bar_ci_timer = lv_bar_create(scr_checkin);
+  lv_obj_set_size(bar_ci_timer, LCD_H_RES - 40, 8);
+  lv_obj_align(bar_ci_timer, LV_ALIGN_TOP_MID, 0, 44);
+  lv_bar_set_range(bar_ci_timer, 0, HABIT_TIMER_TICKS);
+  lv_bar_set_value(bar_ci_timer, HABIT_TIMER_TICKS, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(bar_ci_timer, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(bar_ci_timer, lv_color_hex(0x5A5AFF), LV_PART_INDICATOR);
+  lv_obj_set_style_radius(bar_ci_timer, 4, LV_PART_MAIN);
+  lv_obj_set_style_radius(bar_ci_timer, 4, LV_PART_INDICATOR);
 
-  // Done button
-  lv_obj_t *btnDone = lv_btn_create(scr_checkin);
-  lv_obj_set_size(btnDone, 200, 52);
-  lv_obj_align(btnDone, LV_ALIGN_BOTTOM_MID, 0, -8);
-  lv_obj_set_style_bg_color(btnDone, lv_color_hex(0x7B74FF), LV_PART_MAIN);
-  lv_obj_add_event_cb(btnDone, cb_done, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *lblDone = lv_label_create(btnDone);
-  lv_label_set_text(lblDone, "Done");
-  lv_obj_set_style_text_font(lblDone, &lv_font_montserrat_20, LV_PART_MAIN);
-  lv_obj_center(lblDone);
+  // Habit name label — large, centred
+  lbl_ci_habit = lv_label_create(scr_checkin);
+  lv_obj_set_style_text_font(lbl_ci_habit, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ci_habit, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_width(lbl_ci_habit, LCD_H_RES - 60);
+  lv_label_set_long_mode(lbl_ci_habit, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(lbl_ci_habit, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+  lv_obj_align(lbl_ci_habit, LV_ALIGN_CENTER, 0, -40);
+  lv_label_set_text(lbl_ci_habit, "");
+
+  // Three rating buttons: RED | YELLOW | GREEN
+  static const struct { const char *label; uint32_t col; lv_event_cb_t cb; } btns[3] = {
+    { "MISS",  0xEF4444, cb_ci_red    },
+    { "OKAY",  0xF59E0B, cb_ci_yellow },
+    { "WIN",   0x22C55E, cb_ci_green  },
+  };
+  int btnW = (LCD_H_RES - 60) / 3;  // ~246px each on 800px wide
+  for (int b = 0; b < 3; b++) {
+    lv_obj_t *btn = lv_btn_create(scr_checkin);
+    lv_obj_set_size(btn, btnW - 8, 80);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, (b - 1) * btnW, -20);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(btns[b].col), LV_PART_MAIN);
+    lv_obj_set_style_radius(btn, 14, LV_PART_MAIN);
+    lv_obj_add_event_cb(btn, btns[b].cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, btns[b].label);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_center(lbl);
+  }
 }
 
+// showCheckinScreen: updates labels for current habit and restarts the timer
 void showCheckinScreen() {
-  // Clear and rebuild habit rows
-  lv_obj_clean(cont_habits);
-  memset(g_ratingBtns, 0, sizeof(g_ratingBtns));
+  // Kill any running timer first
+  if (g_ciTimer) { lv_timer_del(g_ciTimer); g_ciTimer = nullptr; }
 
-  int count = g_habitCount > MAX_HABITS ? MAX_HABITS : g_habitCount;
-  for (int i = 0; i < count; i++) {
-    lv_obj_t *row = lv_obj_create(cont_habits);
-    lv_obj_set_size(row, LCD_H_RES - 40, 52);
-    lv_obj_set_style_bg_color(row, lv_color_hex(0x1A1A2E), LV_PART_MAIN);
-    lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(row, 8, LV_PART_MAIN);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+  int idx   = g_ciHabitIdx;
+  int total = g_habitCount;
 
-    // Habit name
-    lv_obj_t *lbl = lv_label_create(row);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(0xEEEEFF), LV_PART_MAIN);
-    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 10, 0);
-    lv_obj_set_width(lbl, 400);
-    lv_label_set_long_mode(lbl, LV_LABEL_LONG_DOT);
-    lv_label_set_text(lbl, g_habits[i].name.c_str());
-
-    // Rating buttons: Red, Yellow, Green
-    static const char *rLabels[] = { "MISS", "OKAY", "WIN" };
-    static const uint32_t rDimmed[] = { 0x4A1010, 0x4A3010, 0x103010 };
-    for (int r = 1; r <= 3; r++) {
-      lv_obj_t *btn = lv_btn_create(row);
-      lv_obj_set_size(btn, 80, 36);
-      lv_obj_align(btn, LV_ALIGN_RIGHT_MID, -10 - (3 - r) * 90, 0);
-      lv_obj_set_style_bg_color(btn, lv_color_hex(rDimmed[r - 1]), LV_PART_MAIN);
-      lv_obj_set_style_radius(btn, 6, LV_PART_MAIN);
-      uint32_t ud = ((uint32_t)i << 4) | (uint32_t)r;
-      lv_obj_add_event_cb(btn, cb_rate, LV_EVENT_CLICKED, (void *)(uintptr_t)ud);
-      lv_obj_t *bl = lv_label_create(btn);
-      lv_label_set_text(bl, rLabels[r - 1]);
-      lv_obj_set_style_text_font(bl, &lv_font_montserrat_14, LV_PART_MAIN);
-      lv_obj_center(bl);
-      g_ratingBtns[i][r - 1] = btn;
-    }
+  // Update progress label
+  if (lbl_ci_progress) {
+    char pbuf[24];
+    snprintf(pbuf, sizeof(pbuf), "Habit %d of %d", idx + 1, total);
+    lv_label_set_text(lbl_ci_progress, pbuf);
   }
+
+  // Update habit name
+  if (lbl_ci_habit && idx < total) {
+    lv_label_set_text(lbl_ci_habit, g_habits[idx].name.c_str());
+  }
+
+  // Reset and start countdown bar
+  g_ciTick = HABIT_TIMER_TICKS;
+  if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
+
+  // Start LVGL timer (100ms period)
+  g_ciTimer = lv_timer_create(cb_ci_tick, 100, nullptr);
 
   lv_disp_load_scr(scr_checkin);
 }
