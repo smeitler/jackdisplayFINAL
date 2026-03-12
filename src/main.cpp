@@ -1060,19 +1060,21 @@ void setup() {
   Serial.printf("PSRAM: %d MB\n", ESP.getPsramSize() / 1024 / 1024);
 #endif
 
-  // I2C + backlight
-  Wire.begin(15, 16);
+  // Display init — gfx.init() also initialises the I2C bus (Wire.begin) for
+  // the GT911 touch controller. We must NOT call Wire.begin() before this or
+  // the old/new I2C driver conflict will crash the device.
+  gfx.init(); gfx.initDMA(); gfx.startWrite(); gfx.fillScreen(TFT_BLACK);
+
+  // Backlight controller (0x30) — Wire is now safe to use because gfx.init()
+  // already called Wire.begin(15,16) internally via LovyanGFX.
   delay(50);
-  while (1) {
-    if (i2cScanForAddress(0x30) && i2cScanForAddress(0x5D)) break;
-    sendI2CCommand(0x19);
+  // Reset touch/backlight controller if not yet responding
+  for (int retry = 0; retry < 5; retry++) {
+    if (i2cScanForAddress(0x30)) break;
     pinMode(1, OUTPUT); digitalWrite(1, LOW); delay(120); pinMode(1, INPUT); delay(100);
   }
-  Wire.beginTransmission(0x30); Wire.write(0x10); Wire.endTransmission();
-  Wire.write(0x18); Wire.endTransmission();
-
-  // Display init
-  gfx.init(); gfx.initDMA(); gfx.startWrite(); gfx.fillScreen(TFT_BLACK);
+  sendI2CCommand(0x10);  // backlight on
+  sendI2CCommand(0x18);  // full brightness
 
   // LVGL init
   lv_init();
