@@ -578,3 +578,4 @@
 ## Blocked Users Management (Mar 11 2026)
 
 - [x] Add Blocked Users screen in Settings
+- [x] Replace alarm time picker with iOS-style drum-roll wheel picker (hour/minute/AM-PM columns)

@@ -1,4 +1,5 @@
 import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator, TextInput, Share, Alert } from "react-native";
+import { WheelTimePicker } from "@/components/wheel-time-picker";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useRef } from "react";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
@@ -201,9 +202,6 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
   );
 }
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-
 const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
   { id: 'classic',  label: 'Classic',  emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
   { id: 'buzzer',   label: 'Buzzer',   emoji: '📢', source: require('@/assets/audio/alarm_buzzer.wav') },
@@ -365,12 +363,6 @@ export default function SettingsScreen() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  function formatHour(h: number): string {
-    const period = h >= 12 ? 'PM' : 'AM';
-    const display = h % 12 === 0 ? 12 : h % 12;
-    return `${display} ${period}`;
-  }
-
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -400,69 +392,13 @@ export default function SettingsScreen() {
 
           {enabled && (
             <>
-              {/* Time display */}
-              <View style={[styles.timeDisplay, { borderTopColor: colors.border }]}>
-                <Text style={[styles.timeDisplayText, { color: colors.foreground }]}>
-                  {formatAlarmTime(hour, minute)}
-                </Text>
-              </View>
-
-              {/* Hour picker */}
-              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
-                <Text style={[styles.pickerLabel, { color: colors.muted }]}>Hour</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.pickerRow}
-                >
-                  {HOURS.map((h) => (
-                    <Pressable
-                      key={h}
-                      onPress={() => setHour(h)}
-                      style={({ pressed }) => [
-                        styles.pickerItem,
-                        hour === h && { backgroundColor: colors.primary },
-                        { opacity: pressed ? 0.7 : 1 },
-                      ]}
-                    >
-                      <Text style={[
-                        styles.pickerItemText,
-                        { color: hour === h ? '#fff' : colors.foreground },
-                      ]}>
-                        {formatHour(h)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Minute picker */}
-              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
-                <Text style={[styles.pickerLabel, { color: colors.muted }]}>Minute</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.pickerRow}
-                >
-                  {MINUTES.map((m) => (
-                    <Pressable
-                      key={m}
-                      onPress={() => setMinute(m)}
-                      style={({ pressed }) => [
-                        styles.pickerItem,
-                        minute === m && { backgroundColor: colors.primary },
-                        { opacity: pressed ? 0.7 : 1 },
-                      ]}
-                    >
-                      <Text style={[
-                        styles.pickerItemText,
-                        { color: minute === m ? '#fff' : colors.foreground },
-                      ]}>
-                        :{m.toString().padStart(2, '0')}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+              {/* Wheel time picker */}
+              <View style={[styles.wheelPickerSection, { borderTopColor: colors.border }]}>
+                <WheelTimePicker
+                  hour={hour}
+                  minute={minute}
+                  onChange={(h, m) => { setHour(h); setMinute(m); }}
+                />
               </View>
 
               {/* Day picker */}
@@ -1058,6 +994,7 @@ const styles = StyleSheet.create({
   timeDisplay: { alignItems: 'center', paddingVertical: 16, borderTopWidth: 1 },
   timeDisplayText: { fontSize: 42, fontWeight: '700', letterSpacing: -1 },
   pickerSection: { paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: 1 },
+  wheelPickerSection: { paddingVertical: 16, paddingHorizontal: 16, borderTopWidth: 1, alignItems: 'center' },
   pickerLabel: { fontSize: 12, fontWeight: '600', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   pickerRow: { gap: 8, paddingRight: 8 },
   pickerItem: {
