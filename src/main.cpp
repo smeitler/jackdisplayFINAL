@@ -55,7 +55,21 @@ LV_FONT_DECLARE(montserrat_light_36);   // 36pt thin for AM/PM, date, alarms
 #define NVS_KEY_SCHEDULE    "schedule"   // cached JSON from last successful fetch
 #define NVS_KEY_THEME       "theme"      // selected clock face theme (0/1/2)
 
-// ─── Timing ────────────────────────────────────────────────────────────────────
+/// ─── PCF8563 RTC ──────────────────────────────────────────────────────────────────
+// PCF8563 real-time clock at I2C 0x51 (backed by CR1220 coin cell)
+// Register map (BCD-encoded):
+//   0x00 = control/status 1
+//   0x01 = control/status 2
+//   0x02 = seconds   (bit7 = VL flag, bits 6-0 = BCD seconds)
+//   0x03 = minutes   (bits 6-0 = BCD minutes)
+//   0x04 = hours     (bits 5-0 = BCD hours, 24h)
+//   0x05 = days      (bits 5-0 = BCD day-of-month)
+//   0x06 = weekdays  (bits 2-0 = weekday 0=Sun)
+//   0x07 = months    (bit7 = century, bits 4-0 = BCD month)
+//   0x08 = years     (bits 7-0 = BCD year 00-99, offset from 2000)
+#define PCF8563_ADDR  0x51
+
+// ─── Timing ──────────────────────────────────────────────────────────────────
 #define POLL_INTERVAL_MS   (5UL * 60UL * 1000UL)   // 5 minutes
 #define CLOCK_UPDATE_MS    1000                      // 1 second
 
@@ -197,6 +211,9 @@ void setBrightness(int pct);
 void saveBrightness(int pct);
 int  loadBrightness();
 static void showMorePanel();
+bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
+void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
+void rtcApplyToSystem();      // read RTC and set ESP32 system clock
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -229,7 +246,93 @@ void sendI2CCommand(uint8_t command) {
   Wire.endTransmission();
 }
 
-// ─── NVS helpers ───────────────────────────────────────────────────────────────
+// ─── PCF8563 RTC helpers ──────────────────────────────────────────────────────────────────
+static uint8_t bcd2dec(uint8_t b) { return (b >> 4) * 10 + (b & 0x0F); }
+static uint8_t dec2bcd(uint8_t d) { return ((d / 10) << 4) | (d % 10); }
+
+// Read PCF8563 and populate a struct tm in LOCAL time.
+// Returns true if the VL (Voltage Low) flag is NOT set (time is valid).
+bool rtcRead(struct tm *t) {
+  Wire.beginTransmission(PCF8563_ADDR);
+  Wire.write(0x02);  // start at seconds register
+  if (Wire.endTransmission(false) != 0) {
+    Serial.println("[RTC] read: I2C error");
+    return false;
+  }
+  Wire.requestFrom((uint8_t)PCF8563_ADDR, (uint8_t)7);
+  if (Wire.available() < 7) {
+    Serial.println("[RTC] read: short response");
+    return false;
+  }
+  uint8_t sec_raw = Wire.read();  // reg 0x02
+  uint8_t min_raw = Wire.read();  // reg 0x03
+  uint8_t hr_raw  = Wire.read();  // reg 0x04
+  uint8_t day_raw = Wire.read();  // reg 0x05
+  uint8_t wday    = Wire.read();  // reg 0x06
+  uint8_t mon_raw = Wire.read();  // reg 0x07
+  uint8_t yr_raw  = Wire.read();  // reg 0x08
+
+  bool vl = (sec_raw & 0x80) != 0;  // voltage-low flag = time unreliable
+  memset(t, 0, sizeof(struct tm));
+  t->tm_sec  = bcd2dec(sec_raw & 0x7F);
+  t->tm_min  = bcd2dec(min_raw & 0x7F);
+  t->tm_hour = bcd2dec(hr_raw  & 0x3F);
+  t->tm_mday = bcd2dec(day_raw & 0x3F);
+  t->tm_wday = wday & 0x07;
+  t->tm_mon  = bcd2dec(mon_raw & 0x1F) - 1;  // tm_mon is 0-based
+  t->tm_year = bcd2dec(yr_raw) + 100;         // years since 1900; PCF stores 00-99 = 2000-2099
+  t->tm_isdst = -1;
+  mktime(t);  // normalise and fill tm_yday etc.
+
+  Serial.printf("[RTC] read: %04d-%02d-%02d %02d:%02d:%02d VL=%d\n",
+    t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+    t->tm_hour, t->tm_min, t->tm_sec, vl);
+  return !vl;
+}
+
+// Write a struct tm (LOCAL time) to the PCF8563.
+void rtcWrite(const struct tm *t) {
+  Wire.beginTransmission(PCF8563_ADDR);
+  Wire.write(0x02);                          // start at seconds register
+  Wire.write(dec2bcd(t->tm_sec)  & 0x7F);   // clear VL flag
+  Wire.write(dec2bcd(t->tm_min)  & 0x7F);
+  Wire.write(dec2bcd(t->tm_hour) & 0x3F);
+  Wire.write(dec2bcd(t->tm_mday) & 0x3F);
+  Wire.write(t->tm_wday & 0x07);
+  Wire.write(dec2bcd(t->tm_mon + 1) & 0x1F); // tm_mon is 0-based
+  Wire.write(dec2bcd(t->tm_year - 100));      // store 00-99
+  uint8_t err = Wire.endTransmission();
+  if (err != 0) Serial.printf("[RTC] write error: %d\n", err);
+  else Serial.printf("[RTC] wrote: %04d-%02d-%02d %02d:%02d:%02d\n",
+    t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+    t->tm_hour, t->tm_min, t->tm_sec);
+}
+
+// Read the PCF8563 and set the ESP32 system clock from it.
+// Uses the TZ_OFFSET_SEC / TZ_DST_SEC already configured by configTime().
+// If the RTC has never been set (VL flag), the system clock is left at epoch.
+void rtcApplyToSystem() {
+  struct tm t;
+  if (!rtcRead(&t)) {
+    Serial.println("[RTC] VL flag set — time not reliable, skipping system clock set");
+    return;
+  }
+  // Convert local tm -> UTC time_t, then set system clock
+  // mktime() treats the tm as LOCAL time (respecting the TZ set by configTime)
+  // but configTime hasn't been called yet at boot, so we apply the offset manually.
+  time_t local_epoch = mktime(&t);
+  // Subtract the fixed UTC offset to get UTC epoch
+  // (TZ_DST_SEC is added when DST is active; we use TZ_OFFSET_SEC + TZ_DST_SEC = MDT = -6h)
+  // For simplicity, apply the combined offset that configTime would use:
+  time_t utc_epoch = local_epoch - TZ_OFFSET_SEC - TZ_DST_SEC;
+  struct timeval tv = { .tv_sec = utc_epoch, .tv_usec = 0 };
+  settimeofday(&tv, nullptr);
+  // Also call configTime so localtime_r() applies the correct TZ going forward
+  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER);
+  Serial.printf("[RTC] system clock set to UTC epoch %ld\n", (long)utc_epoch);
+}
+
+// ─── NVS helpers ──────────────────────────────────────────────────────────────────
 void loadApiKey() {
   prefs.begin(NVS_NAMESPACE, true);
   g_apiKey = prefs.getString(NVS_KEY_APIKEY, "");
@@ -297,12 +400,20 @@ int loadTheme() {
 }
 
 // ─── Brightness control ───────────────────────────────────────────────────────
-// Backlight controller at I2C 0x30: value 0 = max brightness, 245 = off.
-// We expose 0-100% to the user and map inverted.
+// Backlight controller is an STC8H1K28 MCU at I2C 0x30.
+// It accepts 6 discrete levels: 0x05 = off, 0x06..0x0F = dim..bright, 0x10 = max.
+// We expose 0-100% to the user and map to one of these 6 steps.
 void setBrightness(int pct) {
-  pct = constrain(pct, 10, 100);  // never go fully off
+  pct = constrain(pct, 0, 100);
   g_brightness = pct;
-  uint8_t val = (uint8_t)((100 - pct) * 245 / 100);
+  // Map 0-100% to 6 levels: 0%=0x05(off), 1-20%=0x06, 21-40%=0x08, 41-60%=0x0A, 61-80%=0x0C, 81-100%=0x10
+  uint8_t val;
+  if      (pct == 0)   val = 0x05;  // off
+  else if (pct <= 20)  val = 0x06;  // very dim
+  else if (pct <= 40)  val = 0x08;  // dim
+  else if (pct <= 60)  val = 0x0A;  // medium
+  else if (pct <= 80)  val = 0x0C;  // bright
+  else                 val = 0x10;  // max
   Wire.beginTransmission(0x30);
   Wire.write(val);
   Wire.endTransmission();
@@ -583,6 +694,13 @@ void doPostWifiConnect() {
   time_t now = 0;
   for (int i = 0; i < 20 && now < 1000000000; i++) { delay(500); now = time(nullptr); }
   Serial.printf("[NTP] Time: %ld\n", now);
+
+  // Write NTP-synced time to the PCF8563 RTC so it survives power loss
+  if (now > 1000000000) {
+    struct tm t;
+    localtime_r(&now, &t);
+    rtcWrite(&t);
+  }
 
   // Load NVS API key
   loadApiKey();
@@ -1048,15 +1166,27 @@ static void showMorePanel() {
   lv_obj_set_style_text_font(lblBrVal, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblBrVal, lv_color_hex(0x888888), LV_PART_MAIN);
   lv_obj_align(lblBrVal, LV_ALIGN_TOP_RIGHT, -40, 58);
-  char brBuf[8]; snprintf(brBuf, sizeof(brBuf), "%d%%", g_brightness);
-  lv_label_set_text(lblBrVal, brBuf);
+  // (label text set below after computing curStep)
 
-  // Brightness slider
+  // Brightness slider — 6 discrete steps matching the STC8H1K28 backlight levels
+  // Step 1=very dim(0x06), 2=dim(0x08), 3=medium(0x0A), 4=bright(0x0C), 5=max(0x10)
+  // We map step -> pct: 1->10, 2->30, 3->50, 4->70, 5->100
+  static const int BL_STEPS = 5;
+  static const int BL_PCTS[5] = { 10, 30, 50, 70, 100 };
+  static const char *BL_LABELS[5] = { "Very Dim", "Dim", "Medium", "Bright", "Max" };
+  // Find current step from g_brightness
+  int curStep = 4; // default max
+  for (int i = 0; i < BL_STEPS; i++) {
+    if (g_brightness <= BL_PCTS[i]) { curStep = i; break; }
+  }
+  // Update the value label to show the step name
+  lv_label_set_text(lblBrVal, BL_LABELS[curStep]);
+
   lv_obj_t *slider = lv_slider_create(panel);
   lv_obj_set_size(slider, 720, 36);
   lv_obj_align(slider, LV_ALIGN_TOP_MID, 0, 84);
-  lv_slider_set_range(slider, 10, 100);
-  lv_slider_set_value(slider, g_brightness, LV_ANIM_OFF);
+  lv_slider_set_range(slider, 0, BL_STEPS - 1);  // 0..4
+  lv_slider_set_value(slider, curStep, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(slider, lv_color_hex(0x222222), LV_PART_MAIN);
   lv_obj_set_style_bg_color(slider, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
   lv_obj_set_style_bg_color(slider, lv_color_hex(0xFFFFFF), LV_PART_KNOB);
@@ -1065,18 +1195,20 @@ static void showMorePanel() {
   lv_obj_set_style_radius(slider, 8, LV_PART_KNOB);
   lv_obj_set_style_pad_all(slider, 6, LV_PART_KNOB);
 
-  // Store pointer to value label so callback can update it
+  // Callback: map slider step -> pct -> setBrightness
   lv_obj_add_event_cb(slider, [](lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_VALUE_CHANGED || code == LV_EVENT_RELEASED) {
+      static const int pcts[5]  = { 10, 30, 50, 70, 100 };
+      static const char *lbls[5] = { "Very Dim", "Dim", "Medium", "Bright", "Max" };
       lv_obj_t *sl = lv_event_get_target(e);
-      int val = lv_slider_get_value(sl);
-      setBrightness(val);
-      // Update the value label (stored as user_data)
+      int step = lv_slider_get_value(sl);
+      step = (step < 0) ? 0 : (step > 4) ? 4 : step;
+      int pct = pcts[step];
+      setBrightness(pct);
       lv_obj_t *valLbl = (lv_obj_t *)lv_event_get_user_data(e);
-      char buf[8]; snprintf(buf, sizeof(buf), "%d%%", val);
-      lv_label_set_text(valLbl, buf);
-      if (code == LV_EVENT_RELEASED) saveBrightness(val);
+      lv_label_set_text(valLbl, lbls[step]);
+      if (code == LV_EVENT_RELEASED) saveBrightness(pct);
     }
   }, LV_EVENT_ALL, lblBrVal);
 
@@ -1548,6 +1680,12 @@ void setup() {
   g_brightness = loadBrightness();
   setBrightness(g_brightness);  // Apply saved brightness
 
+  // Read PCF8563 RTC and set system clock immediately (before WiFi)
+  // This ensures the clock shows correct time even if WiFi is unavailable.
+  // configTime() is called here so localtime_r() uses the correct timezone.
+  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER);
+  rtcApplyToSystem();
+
   // Build all screens up front
   buildClockScreen();
   buildPairingScreen();
@@ -1573,6 +1711,17 @@ void setup() {
   String savedSsid, savedPass;
   bool hasSaved = loadWifiCredentials(savedSsid, savedPass);
 
+  // If no WiFi credentials at all but already paired, go straight to clock (offline)
+  if (!hasSaved) {
+    loadApiKey();
+    if (!g_apiKey.isEmpty()) {
+      Serial.println("[boot] no WiFi creds but paired — offline clock mode");
+      showClockScreen();
+      g_lastClockUpd = millis();
+      return;
+    }
+  }
+
   if (hasSaved) {
     // Show "Connecting..." on clock screen while we try saved credentials
     lv_label_set_text(lbl_time, "...");
@@ -1597,10 +1746,21 @@ void setup() {
 
     // Saved credentials failed — fall through to scan screen
     WiFi.disconnect();
-    Serial.println("[WiFi] Saved credentials failed, showing scan screen");
+    Serial.println("[WiFi] Saved credentials failed");
+
+    // If already paired, go straight to clock (offline mode)
+    loadApiKey();
+    if (!g_apiKey.isEmpty()) {
+      Serial.println("[boot] offline mode — showing clock from RTC");
+      showClockScreen();
+      g_lastClockUpd = millis();
+      return;
+    }
+    // Not paired yet — must connect to WiFi to pair
+    Serial.println("[boot] not paired, showing scan screen");
   }
 
-  // No saved credentials (or they failed) — always show on-panel WiFi setup
+  // No saved credentials (or they failed and not paired) — show WiFi setup
   // The rest of setup (NTP, pairing, clock) happens inside cb_wifi_connect
   // after the user successfully connects.
   showWifiScanScreen();
@@ -1610,15 +1770,13 @@ void setup() {
 void loop() {
   lv_timer_handler();
 
-  // Only run app logic once WiFi is connected
-  if (WiFi.status() != WL_CONNECTED) {
-    delay(1);
-    return;
-  }
+  bool wifiOk = (WiFi.status() == WL_CONNECTED);
+  bool paired = !g_apiKey.isEmpty();
 
+  // Clock updates and alarm checks run whenever we're on the clock screen,
+  // regardless of WiFi — the RTC keeps time even offline.
   unsigned long now = millis();
 
-  // Update clock every second (only on clock screen)
   if (now - g_lastClockUpd >= CLOCK_UPDATE_MS) {
     g_lastClockUpd = now;
     if (!g_alarmFired && !g_inCheckin && lv_disp_get_scr_act(nullptr) == scr_clock) {
@@ -1626,14 +1784,20 @@ void loop() {
     }
   }
 
+  // Network-dependent tasks only when WiFi is up
+  if (!wifiOk) {
+    delay(1);
+    return;
+  }
+
   // Poll schedule every 5 min
-  if (!g_apiKey.isEmpty() && now - g_lastPoll >= POLL_INTERVAL_MS) {
+  if (paired && now - g_lastPoll >= POLL_INTERVAL_MS) {
     g_lastPoll = now;
     fetchSchedule();
   }
 
   // Heartbeat every 5 min
-  if (!g_apiKey.isEmpty() && now - g_lastHeartbeat >= POLL_INTERVAL_MS) {
+  if (paired && now - g_lastHeartbeat >= POLL_INTERVAL_MS) {
     g_lastHeartbeat = now;
     sendHeartbeat();
   }
