@@ -44,10 +44,11 @@
 #define TZ_DST_SEC     3600          // 1 hour DST
 
 // ─── NVS keys ──────────────────────────────────────────────────────────────────
-#define NVS_NAMESPACE     "jack"
-#define NVS_KEY_APIKEY    "apiKey"
-#define NVS_KEY_WIFI_SSID "wifiSsid"
-#define NVS_KEY_WIFI_PASS "wifiPass"
+#define NVS_NAMESPACE       "jack"
+#define NVS_KEY_APIKEY      "apiKey"
+#define NVS_KEY_WIFI_SSID   "wifiSsid"
+#define NVS_KEY_WIFI_PASS   "wifiPass"
+#define NVS_KEY_SCHEDULE    "schedule"   // cached JSON from last successful fetch
 
 // ─── Timing ────────────────────────────────────────────────────────────────────
 #define POLL_INTERVAL_MS   (5UL * 60UL * 1000UL)   // 5 minutes
@@ -165,6 +166,7 @@ bool registerDevice(const char *token);
 String nextAlarmString();
 bool alarmShouldFire(int idx, struct tm *t);
 void doPostWifiConnect();
+void parseScheduleJson(const String &json);
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -237,6 +239,20 @@ bool loadWifiCredentials(String &ssid, String &pass) {
   return !ssid.isEmpty();
 }
 
+void saveScheduleCache(const String &json) {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putString(NVS_KEY_SCHEDULE, json);
+  prefs.end();
+  Serial.println("[NVS] schedule cached");
+}
+
+String loadScheduleCache() {
+  prefs.begin(NVS_NAMESPACE, true);
+  String s = prefs.getString(NVS_KEY_SCHEDULE, "");
+  prefs.end();
+  return s;
+}
+
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
 // Uses plain HTTP to a proxy endpoint on the server. The proxy forwards
 // requests to the real HTTPS API. Jason2866/IDF53 strips the mbedTLS SSL
@@ -289,13 +305,15 @@ bool registerDevice(const char *token) {
   return true;
 }
 
-// ─── Schedule fetch ────────────────────────────────────────────────────────────
-void fetchSchedule() {
-  String resp = httpGet("/api/device/schedule");
-  if (resp.isEmpty()) return;
-
-  StaticJsonDocument<2048> doc;
-  if (deserializeJson(doc, resp)) { Serial.println("[schedule] parse error"); return; }
+// ─── Schedule parse (shared by fetch and cache load) ───────────────────────────────────
+void parseScheduleJson(const String &resp) {
+  // Use DynamicJsonDocument so 16 habits + alarms always fit
+  DynamicJsonDocument doc(8192);
+  DeserializationError err = deserializeJson(doc, resp);
+  if (err) {
+    Serial.printf("[schedule] JSON parse error: %s\n", err.c_str());
+    return;
+  }
 
   // Parse alarms
   g_alarmCount = 0;
@@ -312,6 +330,10 @@ void fetchSchedule() {
     for (int d : days) {
       if (e.daysCount < 7) e.daysOfWeek[e.daysCount++] = d;
     }
+    // Debug: print alarm details
+    Serial.printf("[alarm] %02d:%02d enabled=%d days=", e.hour, e.minute, e.enabled);
+    for (int i = 0; i < e.daysCount; i++) Serial.printf("%d ", e.daysOfWeek[i]);
+    Serial.println();
     g_alarmCount++;
   }
 
@@ -330,6 +352,23 @@ void fetchSchedule() {
 
   // Refresh alarm label on clock face
   if (lbl_alarm) lv_label_set_text(lbl_alarm, nextAlarmString().c_str());
+}
+
+// ─── Schedule fetch ──────────────────────────────────────────────────────────────
+void fetchSchedule() {
+  String resp = httpGet("/api/device/schedule");
+  if (resp.isEmpty()) {
+    // Offline — try to use the cached schedule from last successful fetch
+    String cached = loadScheduleCache();
+    if (!cached.isEmpty()) {
+      Serial.println("[schedule] offline, using cached schedule");
+      parseScheduleJson(cached);
+    }
+    return;
+  }
+  // Save to NVS so we can use it offline on next boot
+  saveScheduleCache(resp);
+  parseScheduleJson(resp);
 }
 
 // ─── Heartbeat ─────────────────────────────────────────────────────────────────
@@ -730,12 +769,19 @@ void buildClockScreen() {
   lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -16, 12);
   lv_label_set_text(lbl_wifi, "WiFi");
 
-  // Next alarm label
+  // Next alarm label — large and prominent
+  // "ALARM" header
+  lv_obj_t *lbl_alarm_hdr = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_alarm_hdr, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_alarm_hdr, lv_color_hex(0x7B74FF), LV_PART_MAIN);
+  lv_obj_align(lbl_alarm_hdr, LV_ALIGN_BOTTOM_MID, 0, -80);
+  lv_label_set_text(lbl_alarm_hdr, "NEXT ALARM");
+
   lbl_alarm = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_alarm, &lv_font_montserrat_48, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_alarm, lv_color_hex(0x7B74FF), LV_PART_MAIN);
   lv_obj_align(lbl_alarm, LV_ALIGN_BOTTOM_MID, 0, -20);
-  lv_label_set_text(lbl_alarm, "No alarm set");
+  lv_label_set_text(lbl_alarm, "No alarm");
 }
 
 void updateClockLabel() {
@@ -1101,6 +1147,15 @@ void setup() {
   buildPairingScreen();
   buildAlarmScreen();
   buildCheckinScreen();
+
+  // Load cached schedule so alarm shows immediately even before WiFi connects
+  {
+    String cached = loadScheduleCache();
+    if (!cached.isEmpty()) {
+      Serial.println("[boot] loading cached schedule");
+      parseScheduleJson(cached);
+    }
+  }
 
   // ── WiFi connection ──────────────────────────────────────────────────────────
   // Disconnect any auto-reconnect from previous sessions so we control the flow
