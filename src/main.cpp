@@ -36,9 +36,9 @@
 
 // ─── Server config ─────────────────────────────────────────────────────────────
 // Jason2866/IDF53 strips mbedTLS SSL so HTTPS is not possible on-device.
-// The device talks plain HTTP to a proxy endpoint which forwards to the
-// real HTTPS API server-side. Change back to https:// if using pioarduino.
-#define API_BASE_URL   "http://api.jackalarm.com"
+// Requests go via a Cloudflare Worker proxy over plain HTTP.
+// The Worker forwards them to https://api.jackalarm.com server-side.
+#define API_BASE_URL   "http://jack-device-proxy.steve-137.workers.dev"
 #define NTP_SERVER     "pool.ntp.org"
 #define TZ_OFFSET_SEC  (-7 * 3600)   // Mountain Standard Time (UTC-7)
 #define TZ_DST_SEC     3600          // 1 hour DST
