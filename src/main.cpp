@@ -654,21 +654,17 @@ void updateAlarmLabels() {
     if (g_alarms[i].enabled) found[fc++] = i;
   }
 
-  // Alarm 1 — bottom-left
+  // Alarm 1 — bottom-left (plain text, no symbol to avoid placeholder box)
   if (found[0] >= 0) {
-    char buf[24];
-    snprintf(buf, sizeof(buf), "%s  %s", LV_SYMBOL_BELL, alarmString(found[0]).c_str());
-    lv_label_set_text(lbl_alarm1, buf);
+    lv_label_set_text(lbl_alarm1, alarmString(found[0]).c_str());
   } else {
     lv_label_set_text(lbl_alarm1, "");
   }
 
-  // Alarm 2 — bottom-right (only if a second alarm exists)
+  // Alarm 2 — only if a second alarm exists
   if (lbl_alarm2) {
     if (found[1] >= 0) {
-      char buf[24];
-      snprintf(buf, sizeof(buf), "%s  %s", LV_SYMBOL_BELL, alarmString(found[1]).c_str());
-      lv_label_set_text(lbl_alarm2, buf);
+      lv_label_set_text(lbl_alarm2, alarmString(found[1]).c_str());
       lv_obj_clear_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
