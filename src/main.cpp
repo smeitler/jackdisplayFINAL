@@ -34,6 +34,10 @@
 #include <Preferences.h>
 #include <time.h>
 
+// ─── Custom fonts ────────────────────────────────────────────────────────────────
+LV_FONT_DECLARE(montserrat_light_120);  // 120pt thin digits for clock time
+LV_FONT_DECLARE(montserrat_light_36);   // 36pt thin for AM/PM, date, alarms
+
 // ─── Server config ─────────────────────────────────────────────────────────────
 // Jason2866/IDF53 strips mbedTLS SSL so HTTPS is not possible on-device.
 // Requests go via a Cloudflare Worker proxy over plain HTTP.
@@ -135,8 +139,14 @@ lv_obj_t *lbl_alarm2   = nullptr;   // bottom-right alarm (2nd alarm if present)
 #define THEME_MINIMAL  0
 #define THEME_LED      1
 #define THEME_WARM     2
-#define THEME_COUNT    3
+#define THEME_RED      3
+#define THEME_COUNT    4
 int g_theme = THEME_MINIMAL;   // default
+
+// Brightness (0=max, 245=off on this backlight controller)
+// We store as 0-100% and map to 0-245 inverted
+#define NVS_KEY_BRIGHTNESS  "brightness"
+int g_brightness = 100;  // 100% = full brightness
 
 // Long-press detection for theme cycling
 static unsigned long g_pressStart = 0;
@@ -183,6 +193,10 @@ void parseScheduleJson(const String &json);
 void updateAlarmLabels();
 int  loadTheme();
 void saveTheme(int theme);
+void setBrightness(int pct);
+void saveBrightness(int pct);
+int  loadBrightness();
+static void showMorePanel();
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -280,6 +294,32 @@ int loadTheme() {
   int t = prefs.getInt(NVS_KEY_THEME, THEME_MINIMAL);
   prefs.end();
   return t;
+}
+
+// ─── Brightness control ───────────────────────────────────────────────────────
+// Backlight controller at I2C 0x30: value 0 = max brightness, 245 = off.
+// We expose 0-100% to the user and map inverted.
+void setBrightness(int pct) {
+  pct = constrain(pct, 10, 100);  // never go fully off
+  g_brightness = pct;
+  uint8_t val = (uint8_t)((100 - pct) * 245 / 100);
+  Wire.beginTransmission(0x30);
+  Wire.write(val);
+  Wire.endTransmission();
+  Serial.printf("[BL] brightness %d%% -> I2C 0x%02X\n", pct, val);
+}
+
+void saveBrightness(int pct) {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putInt(NVS_KEY_BRIGHTNESS, pct);
+  prefs.end();
+}
+
+int loadBrightness() {
+  prefs.begin(NVS_NAMESPACE, true);
+  int b = prefs.getInt(NVS_KEY_BRIGHTNESS, 100);
+  prefs.end();
+  return b;
 }
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -799,131 +839,318 @@ void showWifiPassScreen(const char *ssid) {
 }
 
 // ─── Clock face ────────────────────────────────────────────────────────────────
-// Helper: create the two bottom alarm labels (shared by all themes)
-static void buildAlarmLabels(lv_color_t col, const lv_font_t *font) {
+
+// Forward declaration for the More/theme picker screen
+static void showThemePicker();
+
+// Helper: build the two bottom-corner alarm labels (shared by all themes)
+// Positioned above the More button (y offset -52 from bottom)
+static void buildAlarmLabels(lv_color_t col) {
   lbl_alarm1 = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm1, font, LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_alarm1, &montserrat_light_36, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_alarm1, col, LV_PART_MAIN);
-  lv_obj_align(lbl_alarm1, LV_ALIGN_BOTTOM_LEFT, 24, -18);
+  lv_obj_align(lbl_alarm1, LV_ALIGN_BOTTOM_LEFT, 20, -52);
   lv_label_set_text(lbl_alarm1, "");
 
   lbl_alarm2 = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_alarm2, font, LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_alarm2, &montserrat_light_36, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_alarm2, col, LV_PART_MAIN);
-  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_RIGHT, -24, -18);
+  lv_obj_align(lbl_alarm2, LV_ALIGN_BOTTOM_RIGHT, -20, -52);
   lv_label_set_text(lbl_alarm2, "");
-  lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);  // hidden until 2nd alarm exists
+  lv_obj_add_flag(lbl_alarm2, LV_OBJ_FLAG_HIDDEN);
 }
 
-// Helper: create the WiFi dot indicator (top-right, all themes)
-static void buildWifiDot() {
+// Helper: build the WiFi symbol (top-right, tiny)
+static void buildWifiDot(lv_color_t col_on, lv_color_t col_off) {
   lbl_wifi = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_wifi, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x33334A), LV_PART_MAIN);
-  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -16, 12);
+  lv_obj_set_style_text_font(lbl_wifi, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_wifi, col_off, LV_PART_MAIN);
+  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -16, 10);
   lv_label_set_text(lbl_wifi, LV_SYMBOL_WIFI);
 }
 
+// Helper: build the "More" button at the very bottom centre
+static void buildMoreButton(lv_color_t col) {
+  lv_obj_t *btn = lv_btn_create(scr_clock);
+  lv_obj_set_size(btn, 120, 36);
+  lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_obj_set_style_bg_color(btn, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_border_color(btn, col, LV_PART_MAIN);
+  lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btn, 18, LV_PART_MAIN);
+  lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) showMorePanel();
+  }, LV_EVENT_ALL, nullptr);
+  lv_obj_t *lbl = lv_label_create(btn);
+  lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl, col, LV_PART_MAIN);
+  lv_label_set_text(lbl, "More");
+  lv_obj_center(lbl);
+}
+
 // ── THEME 0: MINIMAL ─────────────────────────────────────────────────────────
-// Deep black, ultra-clean white time, thin date, alarms at bottom corners.
+// Pitch black, huge white thin time, muted date top, alarms bottom-left/right.
 static void buildThemeMinimal() {
-  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x050510), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
 
-  buildWifiDot();
+  buildWifiDot(lv_color_hex(0x555580), lv_color_hex(0x222230));
 
-  // Date — very muted, small, centred top
+  // Date — very muted, small, top-centre
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x3A3A5A), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 32);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x333344), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
   lv_label_set_text(lbl_date, "Monday, Jan 1");
 
-  // Time — massive, centred, near-white
+  // Time — 120pt thin, centred, slightly above mid
   lbl_time = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xF8F8FF), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, -30, -20);
+  lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, -20, -20);
   lv_label_set_text(lbl_time, "9:00");
 
-  // AM/PM — small, to the right of time, muted
+  // AM/PM — 36pt thin, aligned to right of time
   lbl_ampm = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x4A4A7A), LV_PART_MAIN);
-  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 130, 0);
+  lv_obj_set_style_text_font(lbl_ampm, &montserrat_light_36, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x444466), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 200, 30);
   lv_label_set_text(lbl_ampm, "AM");
 
-  // Alarms — 14pt muted blue-white at bottom corners
-  buildAlarmLabels(lv_color_hex(0x4A4A7A), &lv_font_montserrat_14);
+  buildAlarmLabels(lv_color_hex(0x333355));
+  buildMoreButton(lv_color_hex(0x333355));
 }
 
 // ── THEME 1: LED ──────────────────────────────────────────────────────────────
-// Black bg, bright green large time, cyan alarm indicators.
+// Pitch black, bright green 120pt time, AM/PM top-left, cyan alarms.
 static void buildThemeLED() {
   lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
 
-  buildWifiDot();
-  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x003300), LV_PART_MAIN);
+  buildWifiDot(lv_color_hex(0x00CC44), lv_color_hex(0x002200));
 
-  // AM/PM — top-left, small green
+  // AM/PM — top-left, 36pt green
   lbl_ampm = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x00AA44), LV_PART_MAIN);
-  lv_obj_align(lbl_ampm, LV_ALIGN_TOP_LEFT, 20, 16);
+  lv_obj_set_style_text_font(lbl_ampm, &montserrat_light_36, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x008833), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_TOP_LEFT, 20, 14);
   lv_label_set_text(lbl_ampm, "AM");
 
-  // Date — hidden on LED theme (clean look)
+  // Date — hidden (clean LED look)
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x003300), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 16);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x001100), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
   lv_label_set_text(lbl_date, "");
 
-  // Time — huge, bright green, centred
+  // Time — 120pt bright green, centred
   lbl_time = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0x00FF66), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -10);
+  lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0x00FF55), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
   lv_label_set_text(lbl_time, "10:42");
 
-  // Alarms — cyan at bottom corners
-  buildAlarmLabels(lv_color_hex(0x00CCCC), &lv_font_montserrat_16);
+  buildAlarmLabels(lv_color_hex(0x007755));
+  buildMoreButton(lv_color_hex(0x007755));
 }
 
 // ── THEME 2: WARM ─────────────────────────────────────────────────────────────
-// Very dark warm bg, amber/red time, cozy bedside feel.
+// Pitch black, warm amber 120pt time, date top, alarms bottom corners.
 static void buildThemeWarm() {
-  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x0A0500), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
 
-  buildWifiDot();
-  lv_obj_set_style_text_color(lbl_wifi, lv_color_hex(0x2A1500), LV_PART_MAIN);
+  buildWifiDot(lv_color_hex(0xCC5500), lv_color_hex(0x1A0800));
 
-  // Date — warm amber, small, centred top
+  // Date — warm amber, small, top-centre
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x5A3010), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 30);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x442200), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
   lv_label_set_text(lbl_date, "THURSDAY  \xE2\x80\xA2  MARCH 12");
 
-  // Time — warm red-amber, centred
+  // Time — 120pt amber, centred
   lbl_time = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_time, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFF6600), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, -20, -20);
   lv_label_set_text(lbl_time, "9:10");
 
-  // AM/PM — below time, smaller warm amber
+  // AM/PM — 36pt warm amber, right of time
   lbl_ampm = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_ampm, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x7A3A00), LV_PART_MAIN);
-  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 0, 36);
+  lv_obj_set_style_text_font(lbl_ampm, &montserrat_light_36, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x663300), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 200, 30);
   lv_label_set_text(lbl_ampm, "PM");
 
-  // Alarms — warm amber at bottom corners
-  buildAlarmLabels(lv_color_hex(0x7A3A00), &lv_font_montserrat_14);
+  buildAlarmLabels(lv_color_hex(0x663300));
+  buildMoreButton(lv_color_hex(0x663300));
+}
+
+// ── THEME 3: RED ──────────────────────────────────────────────────────────────
+// Pitch black, vivid red 120pt time, date top, alarms bottom corners.
+static void buildThemeRed() {
+  lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
+
+  buildWifiDot(lv_color_hex(0xCC0000), lv_color_hex(0x220000));
+
+  // Date — dark red, small, top-centre
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x440000), LV_PART_MAIN);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
+  lv_label_set_text(lbl_date, "Monday, Jan 1");
+
+  // Time — 120pt vivid red, centred, slightly above mid
+  lbl_time = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFF1111), LV_PART_MAIN);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, -20, -20);
+  lv_label_set_text(lbl_time, "9:00");
+
+  // AM/PM — 36pt dim red, right of time
+  lbl_ampm = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_ampm, &montserrat_light_36, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x660000), LV_PART_MAIN);
+  lv_obj_align(lbl_ampm, LV_ALIGN_CENTER, 200, 30);
+  lv_label_set_text(lbl_ampm, "AM");
+
+  buildAlarmLabels(lv_color_hex(0x660000));
+  buildMoreButton(lv_color_hex(0x660000));
+}
+
+// ── More panel (full-screen overlay: brightness + theme picker) ───────────────
+static void showMorePanel() {
+  // Full-screen dark overlay
+  lv_obj_t *panel = lv_obj_create(lv_scr_act());
+  lv_obj_set_size(panel, 800, 480);
+  lv_obj_set_pos(panel, 0, 0);
+  lv_obj_set_style_bg_color(panel, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+
+  // ── Title ──
+  lv_obj_t *title = lv_label_create(panel);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(title, lv_color_hex(0x555555), LV_PART_MAIN);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+  lv_label_set_text(title, "SETTINGS");
+
+  // ── Brightness section ──
+  lv_obj_t *lblBr = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblBr, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblBr, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblBr, LV_ALIGN_TOP_LEFT, 40, 58);
+  lv_label_set_text(lblBr, "BRIGHTNESS");
+
+  // Brightness value label
+  lv_obj_t *lblBrVal = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblBrVal, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblBrVal, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_align(lblBrVal, LV_ALIGN_TOP_RIGHT, -40, 58);
+  char brBuf[8]; snprintf(brBuf, sizeof(brBuf), "%d%%", g_brightness);
+  lv_label_set_text(lblBrVal, brBuf);
+
+  // Brightness slider
+  lv_obj_t *slider = lv_slider_create(panel);
+  lv_obj_set_size(slider, 720, 36);
+  lv_obj_align(slider, LV_ALIGN_TOP_MID, 0, 84);
+  lv_slider_set_range(slider, 10, 100);
+  lv_slider_set_value(slider, g_brightness, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(slider, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(slider, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(slider, lv_color_hex(0xFFFFFF), LV_PART_KNOB);
+  lv_obj_set_style_radius(slider, 4, LV_PART_MAIN);
+  lv_obj_set_style_radius(slider, 4, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(slider, 8, LV_PART_KNOB);
+  lv_obj_set_style_pad_all(slider, 6, LV_PART_KNOB);
+
+  // Store pointer to value label so callback can update it
+  lv_obj_add_event_cb(slider, [](lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_VALUE_CHANGED || code == LV_EVENT_RELEASED) {
+      lv_obj_t *sl = lv_event_get_target(e);
+      int val = lv_slider_get_value(sl);
+      setBrightness(val);
+      // Update the value label (stored as user_data)
+      lv_obj_t *valLbl = (lv_obj_t *)lv_event_get_user_data(e);
+      char buf[8]; snprintf(buf, sizeof(buf), "%d%%", val);
+      lv_label_set_text(valLbl, buf);
+      if (code == LV_EVENT_RELEASED) saveBrightness(val);
+    }
+  }, LV_EVENT_ALL, lblBrVal);
+
+  // ── Theme section ──
+  lv_obj_t *lblTh = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblTh, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblTh, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblTh, LV_ALIGN_TOP_LEFT, 40, 148);
+  lv_label_set_text(lblTh, "THEME");
+
+  struct { const char *name; int id; uint32_t col; } themes[] = {
+    { "Minimal", THEME_MINIMAL, 0xFFFFFF },
+    { "LED",     THEME_LED,     0x00FF55 },
+    { "Warm",    THEME_WARM,    0xFF6600 },
+    { "Red",     THEME_RED,     0xFF1111 },
+  };
+  // 4 theme buttons in a row
+  int btnW = 160, btnH = 56, gap = 16;
+  int totalW = 4 * btnW + 3 * gap;
+  int startX = (800 - totalW) / 2;
+  for (int i = 0; i < 4; i++) {
+    lv_obj_t *btn = lv_btn_create(panel);
+    lv_obj_set_size(btn, btnW, btnH);
+    lv_obj_set_pos(btn, startX + i * (btnW + gap), 178);
+    bool active = (g_theme == themes[i].id);
+    lv_obj_set_style_bg_color(btn,
+      active ? lv_color_hex(0x222222) : lv_color_hex(0x141414), LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn,
+      active ? lv_color_hex(themes[i].col) : lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_border_width(btn, active ? 2 : 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(btn, 10, LV_PART_MAIN);
+
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lbl,
+      lv_color_hex(active ? themes[i].col : 0x555555), LV_PART_MAIN);
+    lv_label_set_text(lbl, themes[i].name);
+    lv_obj_center(lbl);
+
+    int *themeId = new int(themes[i].id);
+    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+      if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+      int id = *(int *)lv_event_get_user_data(e);
+      g_theme = id;
+      saveTheme(id);
+      buildClockScreen();
+      lv_disp_load_scr(scr_clock);
+      updateClockLabel();
+      updateAlarmLabels();
+    }, LV_EVENT_ALL, themeId);
+  }
+
+  // ── Close / Back button ──
+  lv_obj_t *btnBack = lv_btn_create(panel);
+  lv_obj_set_size(btnBack, 160, 44);
+  lv_obj_align(btnBack, LV_ALIGN_BOTTOM_MID, 0, -20);
+  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnBack, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnBack, 22, LV_PART_MAIN);
+  lv_obj_add_event_cb(btnBack, [](lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+      lv_obj_del(lv_obj_get_parent(lv_event_get_target(e)));
+    }
+  }, LV_EVENT_ALL, nullptr);
+  lv_obj_t *lblBack = lv_label_create(btnBack);
+  lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblBack, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
+  lv_obj_center(lblBack);
 }
 
 void buildClockScreen() {
-  // Destroy previous screen if switching themes
+  // Destroy previous screen if rebuilding
   if (scr_clock) {
     lv_obj_del(scr_clock);
     scr_clock = nullptr;
@@ -933,32 +1160,12 @@ void buildClockScreen() {
   scr_clock = lv_obj_create(nullptr);
   lv_obj_clear_flag(scr_clock, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Build the selected theme
   switch (g_theme) {
     case THEME_LED:   buildThemeLED();   break;
     case THEME_WARM:  buildThemeWarm();  break;
+    case THEME_RED:   buildThemeRed();   break;
     default:          buildThemeMinimal(); break;
   }
-
-  // Long-press anywhere on clock face cycles to next theme
-  lv_obj_add_event_cb(scr_clock, [](lv_event_t *e) {
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_PRESSED) {
-      g_pressStart = millis();
-      g_pressing   = true;
-    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-      if (g_pressing && (millis() - g_pressStart) >= 1000) {
-        // Long press — cycle theme
-        g_theme = (g_theme + 1) % THEME_COUNT;
-        saveTheme(g_theme);
-        buildClockScreen();
-        lv_disp_load_scr(scr_clock);
-        updateClockLabel();
-        updateAlarmLabels();
-      }
-      g_pressing = false;
-    }
-  }, LV_EVENT_ALL, nullptr);
 }
 
 void updateClockLabel() {
@@ -994,6 +1201,8 @@ void updateClockLabel() {
     lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0x00FF66) : lv_color_hex(0x003300), LV_PART_MAIN);
   } else if (g_theme == THEME_WARM) {
     lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0xFF6600) : lv_color_hex(0x2A1500), LV_PART_MAIN);
+  } else if (g_theme == THEME_RED) {
+    lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0xFF2222) : lv_color_hex(0x330000), LV_PART_MAIN);
   } else {
     lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0x5A5A9A) : lv_color_hex(0x22223A), LV_PART_MAIN);
   }
@@ -1334,8 +1543,10 @@ void setup() {
   delay(100);
   gfx.fillScreen(TFT_BLACK);
 
-  // Load saved theme before building the clock screen
+  // Load saved theme and brightness before building the clock screen
   g_theme = loadTheme();
+  g_brightness = loadBrightness();
+  setBrightness(g_brightness);  // Apply saved brightness
 
   // Build all screens up front
   buildClockScreen();
