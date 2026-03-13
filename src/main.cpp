@@ -1675,17 +1675,11 @@ static void buildThemeMinimal() {
   lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0x555580), lv_color_hex(0x222230));
 
-  lbl_date = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x333344), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
-  lv_label_set_text(lbl_date, "Monday, Jan 1");
-
-  // Time — 150pt, centred
+  // Time — 120pt, centred slightly above mid so date fits below
   lbl_time = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
   lv_label_set_text(lbl_time, "9:00");
 
   // AM/PM — anchored to the right edge of the time label
@@ -1694,6 +1688,13 @@ static void buildThemeMinimal() {
   lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x444466), LV_PART_MAIN);
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "AM");
+
+  // Date — anchored below the time label
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x888899), LV_PART_MAIN);
+  lv_obj_align_to(lbl_date, lbl_time, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+  lv_label_set_text(lbl_date, "Monday, Jan 1");
 
   buildAlarmLabels(lv_color_hex(0x8888BB));
   buildMoreButton(lv_color_hex(0x8888BB));
@@ -1706,16 +1707,10 @@ static void buildThemeLED() {
   lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0x00CC44), lv_color_hex(0x002200));
 
-  lbl_date = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x001100), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
-  lv_label_set_text(lbl_date, "");
-
   lbl_time = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_time, lv_color_hex(0x00FF55), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
   lv_label_set_text(lbl_time, "10:42");
 
   lbl_ampm = lv_label_create(scr_clock);
@@ -1723,6 +1718,13 @@ static void buildThemeLED() {
   lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x008833), LV_PART_MAIN);
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "AM");
+
+  // LED theme: date hidden (empty string)
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x004422), LV_PART_MAIN);
+  lv_obj_align_to(lbl_date, lbl_time, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+  lv_label_set_text(lbl_date, "");
 
   buildAlarmLabels(lv_color_hex(0x00CC77));
   buildMoreButton(lv_color_hex(0x00CC77));
@@ -1735,16 +1737,10 @@ static void buildThemeWarm() {
   lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0xCC5500), lv_color_hex(0x1A0800));
 
-  lbl_date = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x442200), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
-  lv_label_set_text(lbl_date, "THURSDAY  \xE2\x80\xA2  MARCH 12");
-
   lbl_time = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFF6600), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
   lv_label_set_text(lbl_time, "9:10");
 
   lbl_ampm = lv_label_create(scr_clock);
@@ -1752,6 +1748,13 @@ static void buildThemeWarm() {
   lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x663300), LV_PART_MAIN);
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "PM");
+
+  // Date — below time, warm amber
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x885522), LV_PART_MAIN);
+  lv_obj_align_to(lbl_date, lbl_time, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+  lv_label_set_text(lbl_date, "THURSDAY  \xE2\x80\xA2  MARCH 12");
 
   buildAlarmLabels(lv_color_hex(0xCC6600));
   buildMoreButton(lv_color_hex(0xCC6600));
@@ -1764,17 +1767,11 @@ static void buildThemeRed() {
   lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0xFF0000), lv_color_hex(0x330000));
 
-  lbl_date = lv_label_create(scr_clock);
-  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x550000), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
-  lv_label_set_text(lbl_date, "Monday, Jan 1");
-
-  // Time — true red
+  // Time — true red, slightly above centre
   lbl_time = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_time, &montserrat_light_120, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_time, lv_color_hex(0xFF0000), LV_PART_MAIN);
-  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(lbl_time, LV_ALIGN_CENTER, 0, -20);
   lv_label_set_text(lbl_time, "9:00");
 
   lbl_ampm = lv_label_create(scr_clock);
@@ -1782,6 +1779,13 @@ static void buildThemeRed() {
   lv_obj_set_style_text_color(lbl_ampm, lv_color_hex(0x880000), LV_PART_MAIN);
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
   lv_label_set_text(lbl_ampm, "AM");
+
+  // Date — below time, dim red
+  lbl_date = lv_label_create(scr_clock);
+  lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x882222), LV_PART_MAIN);
+  lv_obj_align_to(lbl_date, lbl_time, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+  lv_label_set_text(lbl_date, "Monday, Jan 1");
 
   buildAlarmLabels(lv_color_hex(0xCC2222));
   buildMoreButton(lv_color_hex(0xCC2222));
@@ -2238,10 +2242,11 @@ static void buildSimpleScreen(const char *title, lv_color_t accentCol) {
   lv_obj_center(lblBack);
   lv_obj_add_event_cb(btnBack, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    // Delete this screen and go back to clock
+    // Load clock screen first, then async-delete this screen so we don't
+    // destroy an object from within its own event callback (use-after-free).
     lv_obj_t *s = lv_disp_get_scr_act(nullptr);
     showClockScreen();
-    lv_obj_del(s);
+    lv_obj_del_async(s);
   }, LV_EVENT_ALL, nullptr);
   lv_disp_load_scr(scr);
 }
@@ -2309,8 +2314,9 @@ void updateClockLabel() {
     lv_obj_set_style_text_color(lbl_wifi, wifiOk ? lv_color_hex(0x5A5A9A) : lv_color_hex(0x333355), LV_PART_MAIN);
   }
 
-  // Re-anchor AM/PM to right of time (text width changes each minute)
+  // Re-anchor AM/PM and date relative to time (text width changes each minute)
   lv_obj_align_to(lbl_ampm, lbl_time, LV_ALIGN_OUT_RIGHT_BOTTOM, 8, 0);
+  lv_obj_align_to(lbl_date, lbl_time, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 
   // Check if any alarm should fire
   if (!g_alarmFired && !g_inCheckin) {
