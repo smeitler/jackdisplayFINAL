@@ -35,7 +35,7 @@ import {
 } from '@/lib/voice-settings';
 import { loadHabits } from '@/lib/storage';
 
-type VoiceEntry = { voice_id: string; name: string; category: string };
+type VoiceEntry = { voice_id: string; name: string; category: string; preview_url?: string };
 
 export function VoicePickerSection() {
   const colors = useColors();
@@ -113,64 +113,42 @@ export function VoicePickerSection() {
     await setHabitReadAloud(val);
   }
 
-  // ── Preview a voice ────────────────────────────────────────────────────────
+  // ── Preview a voice using the built-in ElevenLabs preview_url (CDN MP3) ────
   async function handlePreview(voice: VoiceEntry) {
     if (previewLoading) return;
+    const previewUrl = voice.preview_url;
+    if (!previewUrl) {
+      Alert.alert('No preview', 'This voice does not have a preview available.');
+      return;
+    }
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPreviewLoading(voice.voice_id);
     try {
-      const elevenKey = apiKeyQuery.data?.apiKey;
-      if (!elevenKey) {
-        Alert.alert('Not ready', 'Voice API key not loaded yet. Please wait a moment.');
-        return;
-      }
       stopPreview();
       await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-
-      const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice.voice_id}`;
-      const body = JSON.stringify({
-        text: 'Good morning! Ready to crush your habits today.',
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      });
 
       let audioUri: string;
 
       if (Platform.OS === 'web') {
-        // Web: fetch → blob → object URL
-        const ttsResp = await fetch(ttsUrl, {
-          method: 'POST',
-          headers: {
-            'xi-api-key': elevenKey,
-            'Content-Type': 'application/json',
-            Accept: 'audio/mpeg',
-          },
-          body,
-        });
-        if (!ttsResp.ok) throw new Error(`TTS error ${ttsResp.status}`);
-        const blob = await ttsResp.blob();
-        audioUri = URL.createObjectURL(blob);
+        // Web: play directly from URL
+        audioUri = previewUrl;
       } else {
-        // Native: POST to ElevenLabs → base64 → write to temp file → play
-        const tempPath = `${FileSystem.cacheDirectory}preview_${voice.voice_id}.mp3`;
-        const ttsResp = await fetch(ttsUrl, {
-          method: 'POST',
-          headers: {
-            'xi-api-key': elevenKey,
-            'Content-Type': 'application/json',
-            Accept: 'audio/mpeg',
-          },
-          body,
-        });
-        if (!ttsResp.ok) throw new Error(`TTS error ${ttsResp.status}`);
-        const arrayBuffer = await ttsResp.arrayBuffer();
-        const uint8 = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-        const base64 = btoa(binary);
-        await FileSystem.writeAsStringAsync(tempPath, base64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        // Native: download CDN MP3 to cache, play from local file
+        const tempPath = `${FileSystem.cacheDirectory}voice_preview_${voice.voice_id}.mp3`;
+        // Check if already cached
+        const info = await FileSystem.getInfoAsync(tempPath);
+        if (!info.exists) {
+          const dlResp = await fetch(previewUrl);
+          if (!dlResp.ok) throw new Error(`Download error ${dlResp.status}`);
+          const arrayBuffer = await dlResp.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuffer);
+          let binary = '';
+          for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+          const base64 = btoa(binary);
+          await FileSystem.writeAsStringAsync(tempPath, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        }
         audioUri = tempPath;
       }
 
@@ -178,7 +156,7 @@ export function VoicePickerSection() {
       const player = createAudioPlayer({ uri: audioUri } as any);
       previewPlayerRef.current = player;
       player.play();
-      previewTimerRef.current = setTimeout(() => stopPreview(), 15000);
+      previewTimerRef.current = setTimeout(() => stopPreview(), 20000);
     } catch (err) {
       console.error('[VoicePickerSection] preview error:', err);
       Alert.alert('Preview failed', 'Could not load voice preview. Check your connection.');

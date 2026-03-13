@@ -606,6 +606,7 @@
 
 ## Voice Picker Fixes (Mar 13 2026)
 
-- [ ] Fix voice preview not playing audio in the More tab voice picker
-- [ ] Fix voice list to only show user's saved professional voices (correct filtering)
-- [ ] Remove duplicate voice picker from Panel Settings screen
+- [x] Fix voice preview not playing audio in the More tab voice picker
+- [x] Fix voice list to only show user's saved professional voices (correct filtering)
+- [x] Remove duplicate voice picker from Panel Settings screen
+- [ ] Fix voice preview to use ElevenLabs built-in preview_url (instant CDN MP3, no live TTS call)

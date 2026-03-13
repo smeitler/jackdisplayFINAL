@@ -560,9 +560,9 @@ export const appRouter = router({
           headers: { "xi-api-key": apiKey },
         });
         if (!resp.ok) throw new Error(`ElevenLabs voices API error: ${resp.status}`);
-        const data = await resp.json() as { voices: { voice_id: string; name: string; category: string }[] };
+        const data = await resp.json() as { voices: { voice_id: string; name: string; category: string; preview_url?: string }[] };
         return data.voices
-          .map((v) => ({ voice_id: v.voice_id, name: v.name, category: v.category ?? "premade" }))
+          .map((v) => ({ voice_id: v.voice_id, name: v.name, category: v.category ?? "premade", preview_url: v.preview_url ?? "" }))
           .sort((a, b) => {
             const rank = (c: string) => c === "cloned" ? 0 : c === "professional" ? 1 : 2;
             return rank(a.category) - rank(b.category) || a.name.localeCompare(b.name);
