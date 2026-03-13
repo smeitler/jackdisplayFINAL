@@ -2,52 +2,16 @@
  * WheelTimePicker
  *
  * Compact iOS-style drum-roll: Hour | Minute | AM/PM
- * 3 visible rows: 1 above (faded+slanted), selected (large+bold), 1 below (faded+slanted)
+ * 3 visible rows: above (faded+slanted) | selected (large+bold) | below (faded+slanted)
  *
- * HOW CENTERING WORKS:
- * Content layout inside ScrollView:
- *   [padding row]  ← y=0
- *   [item 0]       ← y=ITEM_HEIGHT   → centered when scrolled to y=0? NO.
+ * Platform strategy:
+ * - iOS/Android: snapToInterval + decelerationRate="fast" handles native snapping.
+ *   useLayoutEffect enforces initial scroll position (RN ignores contentOffset on mount).
+ * - Web: snapToInterval is ignored by browsers. We listen to the native DOM "wheel"
+ *   event via a ref, debounce it, and call scrollTo() to snap programmatically.
  *
- * Wait — with a top padding row, item[i] sits at content-y = (i+1)*ITEM_HEIGHT.
- * For item[i] to appear in the CENTER row of the 3-row window, the ScrollView's
- * contentOffset.y must equal i * ITEM_HEIGHT (the window top = one row above center).
- *
- * So: contentOffset.y = selectedIndex * ITEM_HEIGHT  ✓  (this is already correct)
- * And: the item that is visually centered = the item whose top edge is at
- *      contentOffset.y + ITEM_HEIGHT = (selectedIndex + 1) * ITEM_HEIGHT
- *      = item[selectedIndex]  ✓
- *
- * The bug in the previous version: liveSelectedIndex was computed as
- *   round(contentOffset.y / ITEM_HEIGHT)
- * but that gives the item whose TOP is at the TOP of the window (row 0),
- * which is the item ABOVE the selected one. We need the item in row 1 (center):
- *   liveSelectedIndex = round(contentOffset.y / ITEM_HEIGHT)
- * is actually correct IF we interpret it as "which item's top aligns with window top"
- * and the padding row means item[0] top = ITEM_HEIGHT, so:
- *   item index at window top = round(y / ITEM_HEIGHT) - 1  ... but that's the ABOVE item.
- *
- * SIMPLEST FIX: Remove the padding rows entirely.
- * Use contentInset={{ top: ITEM_HEIGHT, bottom: ITEM_HEIGHT }} instead.
- * With contentInset, item[0] starts at the very top of content (y=0),
- * and the inset pushes the visible window down by ITEM_HEIGHT,
- * so item[0] appears in the CENTER row when contentOffset.y = -ITEM_HEIGHT (the inset default).
- * Then: contentOffset.y = (selectedIndex - 1) * ITEM_HEIGHT ... still messy.
- *
- * CLEANEST FIX: Keep padding rows, fix the math.
- * With padding row at top:
- *   - item[i] top edge in content = (i + 1) * ITEM_HEIGHT
- *   - item[i] is in CENTER row when: content top of window = i * ITEM_HEIGHT
- *     (window shows rows at y, y+ITEM_HEIGHT, y+2*ITEM_HEIGHT;
- *      center row = y+ITEM_HEIGHT; item[i] center row when (i+1)*ITEM_HEIGHT = y+ITEM_HEIGHT → y = i*ITEM_HEIGHT) ✓
- *   - So contentOffset.y = selectedIndex * ITEM_HEIGHT is CORRECT for centering ✓
- *   - liveSelectedIndex from scroll: y = liveIdx * ITEM_HEIGHT → liveIdx = round(y / ITEM_HEIGHT) ✓
- *   - dist = i - liveIdx: when liveIdx=0, item[0] is centered, dist=0 for item[0] ✓
- *
- * So the math IS correct. The visual bug (item appears at top not center) means
- * the ScrollView is not respecting contentOffset on mount. This is a known React Native
- * bug: contentOffset prop is ignored on first render on Android.
- * FIX: Use a ref + scrollTo in useLayoutEffect after mount.
+ * Center-line: two thin horizontal lines (top + bottom border of the selection band)
+ * make the target row visually obvious on all platforms.
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -65,7 +29,7 @@ import { useColors } from '@/hooks/use-colors';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ITEM_HEIGHT   = 48;
-const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 visible rows: above + center + below
+const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 visible rows
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,14 +50,13 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const isDragging = useRef(false);
+  const webDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveIdx, setLiveIdx] = useState(selectedIndex);
 
-  // On mount AND whenever selectedIndex changes: force scroll to correct position.
-  // useLayoutEffect fires before paint, avoiding the flash of wrong position.
+  // Force scroll to correct position after mount and on external change
   useLayoutEffect(() => {
     if (!isDragging.current) {
       setLiveIdx(selectedIndex);
-      // Small delay ensures the ScrollView has laid out before we scroll
       const t = setTimeout(() => {
         scrollRef.current?.scrollTo({
           y: selectedIndex * ITEM_HEIGHT,
@@ -103,6 +66,37 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
       return () => clearTimeout(t);
     }
   }, [selectedIndex]);
+
+  // Web: attach a native DOM wheel listener to snap on scroll
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    // Access the underlying DOM node via the ref's internal _nativeTag or getNode
+    // In React Native Web, ScrollView ref exposes a scrollTo method and the
+    // underlying div is accessible via (ref as any).current?._listRef?._scrollRef
+    // or simply via the scrollRef directly as it wraps a div.
+    const node = (scrollRef.current as any)?._nativeRef?.current
+      ?? (scrollRef.current as any)?.getScrollableNode?.()
+      ?? (scrollRef.current as any)?._scrollRef?.current;
+
+    if (!node) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      isDragging.current = true;
+      if (webDebounceRef.current) clearTimeout(webDebounceRef.current);
+      webDebounceRef.current = setTimeout(() => {
+        isDragging.current = false;
+        const currentY = node.scrollTop;
+        const idx = clamp(Math.round(currentY / ITEM_HEIGHT), 0, items.length - 1);
+        node.scrollTo({ top: idx * ITEM_HEIGHT, behavior: 'smooth' });
+        setLiveIdx(idx);
+        onSelect(idx);
+      }, 120);
+    };
+
+    node.addEventListener('wheel', handleWheel, { passive: false });
+    return () => node.removeEventListener('wheel', handleWheel);
+  }, [items.length, onSelect]);
 
   const handleScrollBegin = useCallback(() => {
     isDragging.current = true;
@@ -122,7 +116,6 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
       isDragging.current = false;
       const y = e.nativeEvent.contentOffset.y;
       const idx = clamp(Math.round(y / ITEM_HEIGHT), 0, items.length - 1);
-      // Snap to exact grid
       scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
       setLiveIdx(idx);
       onSelect(idx);
@@ -142,10 +135,9 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
         onScroll={handleScroll}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
-        // contentOffset is set here as a hint; useLayoutEffect enforces it
         contentOffset={{ x: 0, y: selectedIndex * ITEM_HEIGHT }}
       >
-        {/* Top padding row: pushes item[0] into center when y=0 */}
+        {/* Top padding: lets item[0] sit in center row */}
         <View style={styles.item} />
 
         {items.map((label, i) => {
@@ -177,7 +169,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
           );
         })}
 
-        {/* Bottom padding row */}
+        {/* Bottom padding */}
         <View style={styles.item} />
       </ScrollView>
     </View>
@@ -233,7 +225,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Highlight band at center row (row 1 of 3, i.e. ITEM_HEIGHT from top) */}
+      {/* Selection band with visible top/bottom border lines */}
       <View
         pointerEvents="none"
         style={[
@@ -294,8 +286,11 @@ const styles = StyleSheet.create({
   selectionBand: {
     position: 'absolute',
     height: ITEM_HEIGHT,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    borderTopWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
     zIndex: 0,
   },
 });
