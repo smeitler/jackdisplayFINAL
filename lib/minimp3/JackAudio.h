@@ -38,6 +38,7 @@
 
 #include <SD_MMC.h>
 #include <driver/i2s_std.h>
+#include <driver/i2s_pdm.h>
 #include <driver/i2s_common.h>
 
 class JackAudio {

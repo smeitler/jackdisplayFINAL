@@ -310,6 +310,14 @@ void  flushPendingCommands();
 void  queueCommand(const char *type, int i1, int i2, bool b);
 void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
 void rtcApplyToSystem();      // read RTC and set ESP32 system clock
+String httpGet(const String &path);  // forward decl — defined after WiFi helpers
+// Check-in state (used in sendVoiceToServer before the static block at line ~2255)
+#define HABIT_TIMER_TICKS  100
+static int  g_ciHabitIdx    = 0;
+static int  g_ciTick        = 0;
+static int  g_ciRereadCount = 0;
+static bool g_ciListening   = false;
+static void ciAdvance(int rating);  // defined at line ~2305
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -786,37 +794,36 @@ void startListening() {
   }
   g_micBufLen = 0;
 
-  // Configure I2S for PDM RX
-  i2s_config_t cfg = {};
-  cfg.mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
-  cfg.sample_rate          = 16000;
-  cfg.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
-  cfg.channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT;
-  cfg.communication_format = I2S_COMM_FORMAT_STAND_PCM_SHORT;
-  cfg.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
-  cfg.dma_buf_count        = 8;
-  cfg.dma_buf_len          = 512;
-  cfg.use_apll             = false;
+  // Configure I2S PDM RX using IDF5 new-style API
+  // PDM mic: WS/CLK on GPIO 2, DATA on GPIO 20, using I2S port 1
+  i2s_chan_handle_t rx_handle = nullptr;
+  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
+  chan_cfg.auto_clear = true;
+  i2s_new_channel(&chan_cfg, nullptr, &rx_handle);
 
-  i2s_pin_config_t pins = {};
-  pins.ws_io_num   = MIC_WS_PIN;   // GPIO 2
-  pins.data_in_num = MIC_SD_PIN;   // GPIO 20
-  pins.bck_io_num  = I2S_PIN_NO_CHANGE;
-  pins.data_out_num = I2S_PIN_NO_CHANGE;
+  i2s_pdm_rx_config_t pdm_cfg = {
+    .clk_cfg  = I2S_PDM_RX_CLK_DEFAULT_CONFIG(16000),
+    .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+    .gpio_cfg = {
+      .clk  = (gpio_num_t)MIC_WS_PIN,   // GPIO 2
+      .din  = (gpio_num_t)MIC_SD_PIN,   // GPIO 20
+      .invert_flags = { .clk_inv = false }
+    }
+  };
+  i2s_channel_init_pdm_rx_mode(rx_handle, &pdm_cfg);
+  i2s_channel_enable(rx_handle);
 
-  i2s_driver_install(I2S_NUM_1, &cfg, 0, NULL);
-  i2s_set_pin(I2S_NUM_1, &pins);
-
-  // Read samples
+  // Read 3 seconds of samples
   size_t bytesRead = 0;
   unsigned long start = millis();
   while (millis() - start < 3000 && g_micBufLen < RECORD_BYTES) {
     size_t toRead = min((size_t)1024, RECORD_BYTES - g_micBufLen);
-    i2s_read(I2S_NUM_1, g_micBuf + g_micBufLen, toRead, &bytesRead, 100);
+    i2s_channel_read(rx_handle, g_micBuf + g_micBufLen, toRead, &bytesRead, pdMS_TO_TICKS(100));
     g_micBufLen += bytesRead;
   }
 
-  i2s_driver_uninstall(I2S_NUM_1);
+  i2s_channel_disable(rx_handle);
+  i2s_del_channel(rx_handle);
   g_listening = false;
   Serial.printf("[voice] recorded %d bytes\n", (int)g_micBufLen);
 
@@ -2251,20 +2258,14 @@ void showPairingScreen() {
 // g_alarmFiredAt and g_firedAlarmIdx are declared in the globals section above
 
 // ─── Per-habit timed check-in state ──────────────────────────────────────────
-#define HABIT_TIMER_TICKS  100   // 100 ticks × 100ms = 10 s per habit
-static int   g_ciHabitIdx  = 0;  // which habit we're currently rating
-static int   g_ciTick      = 0;  // countdown tick (counts down from HABIT_TIMER_TICKS)
-static int   g_ciRereadCount = 0; // how many times we've re-read this habit
-static bool  g_ciListening  = false; // true while waiting for voice response
+// HABIT_TIMER_TICKS, g_ciHabitIdx, g_ciTick, g_ciRereadCount, g_ciListening,
+// and ciAdvance forward declaration are all in the forward declarations section above.
 static lv_timer_t *g_ciTimer = nullptr;
 
 // LVGL widgets on the check-in screen (rebuilt each call to showCheckinScreen)
 static lv_obj_t *lbl_ci_progress = nullptr;
 static lv_obj_t *lbl_ci_habit    = nullptr;
 static lv_obj_t *bar_ci_timer    = nullptr;
-
-// Forward-declare the advance function
-static void ciAdvance(int rating);
 
 // LVGL timer tick: called every 100ms
 static void cb_ci_tick(lv_timer_t *timer) {
