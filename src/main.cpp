@@ -34,6 +34,28 @@
 #include <Preferences.h>
 #include <time.h>
 
+// ─── Audio / SD card ──────────────────────────────────────────────────────────
+// The CrowPanel shares GPIO 4/5/6 between SD-SPI and I2S audio.
+// We use the SD card for storing pre-generated ElevenLabs MP3s.
+// Audio playback uses the ESP32-audioI2S library over I2S (internal DAC on GPIO 25/26
+// is not available on S3; we use the board's built-in I2S amp on GPIO 4/5/6).
+#include <SD.h>
+#include <AudioFileSourceSD.h>
+#include <AudioGeneratorMP3.h>
+#include <AudioOutputI2S.h>
+
+// CrowPanel Advance 5" pin definitions (from Elecrow schematic)
+#define SD_MOSI_PIN   6
+#define SD_MISO_PIN   4
+#define SD_SCK_PIN    5
+#define SD_CS_PIN     19   // Note: schematic says "not connected" but GPIO19 works as CS
+#define I2S_DOUT_PIN  4
+#define I2S_BCLK_PIN  5
+#define I2S_LRC_PIN   6
+
+// NVS key for the "read habits aloud" toggle
+#define NVS_KEY_AUDIO  "audioEnabled"
+
 // ─── Custom fonts ────────────────────────────────────────────────────────────────
 LV_FONT_DECLARE(montserrat_light_120);  // 120pt thin digits for clock time
 LV_FONT_DECLARE(montserrat_light_36);   // 36pt thin for AM/PM, date, alarms
@@ -182,7 +204,21 @@ lv_obj_t *lbl_alm_time = nullptr;
 lv_obj_t *scr_checkin = nullptr;
 lv_obj_t *cont_habits = nullptr;
 
-// ─── Forward declarations ───────────────────────────────────────────────────────
+// ─── Audio state ─────────────────────────────────────────────────────────────
+bool              g_audioEnabled  = false;  // "Read Habits Aloud" toggle
+bool              g_sdMounted     = false;   // SD card successfully initialized
+AudioGeneratorMP3 *g_mp3          = nullptr;
+AudioFileSourceSD *g_audioFile    = nullptr;
+AudioOutputI2S    *g_audioOut     = nullptr;
+
+// Habit audio filenames cached from last manifest fetch
+// Key = habit name (lowercase, sanitized), Value = SD path like "/habits/exercise.mp3"
+struct AudioEntry { char name[64]; char path[96]; };
+#define MAX_AUDIO_FILES 32
+AudioEntry g_audioFiles[MAX_AUDIO_FILES];
+int        g_audioFileCount = 0;
+
+// ─── Forward declarations ───────────────────────────────────────────────────────────────────
 void buildWifiScanScreen();
 void buildWifiPassScreen();
 void buildClockScreen();
@@ -218,6 +254,14 @@ void showMorningRoutineScreen(const String &meditationId);
 static void showMorePanel();
 void showAlarmSetScreen();
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
+// Audio
+bool  initSD();
+void  syncAudioFiles();
+void  playHabitAudio(const char *habitName);
+void  stopAudio();
+void  loopAudio();
+bool  loadAudioEnabled();
+void  saveAudioEnabled(bool enabled);
 void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
 void rtcApplyToSystem();      // read RTC and set ESP32 system clock
 
@@ -447,6 +491,210 @@ void buzzerOff() {
   Wire.write(0x16);
   Wire.endTransmission();
   Serial.println("[BUZ] OFF");
+}
+
+// ─── Audio functions ───────────────────────────────────────────────────────────────────
+
+bool loadAudioEnabled() {
+  prefs.begin(NVS_NAMESPACE, true);
+  bool v = prefs.getBool(NVS_KEY_AUDIO, false);
+  prefs.end();
+  return v;
+}
+
+void saveAudioEnabled(bool enabled) {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putBool(NVS_KEY_AUDIO, enabled);
+  prefs.end();
+}
+
+bool initSD() {
+  // The CrowPanel uses SPI bus shared with I2S. We initialise the SD card
+  // on the HSPI bus using the board's defined pins.
+  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
+  if (!SD.begin(SD_CS_PIN)) {
+    Serial.println("[SD] Card mount failed — no SD card or wrong pins");
+    return false;
+  }
+  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+  Serial.printf("[SD] Card size: %llu MB\n", cardSize);
+  // Ensure /habits directory exists
+  if (!SD.exists("/habits")) {
+    SD.mkdir("/habits");
+  }
+  return true;
+}
+
+// Download a file from a URL and save it to the SD card.
+// Returns true on success.
+static bool downloadToSD(const String &url, const String &sdPath) {
+  HTTPClient http;
+  http.begin(url);
+  http.setTimeout(30000);
+  int code = http.GET();
+  if (code != 200) {
+    Serial.printf("[audio] download failed %d: %s\n", code, sdPath.c_str());
+    http.end();
+    return false;
+  }
+  // Stream to SD
+  File f = SD.open(sdPath.c_str(), FILE_WRITE);
+  if (!f) {
+    Serial.printf("[audio] cannot open SD path: %s\n", sdPath.c_str());
+    http.end();
+    return false;
+  }
+  WiFiClient *stream = http.getStreamPtr();
+  uint8_t buf[512];
+  int total = 0;
+  while (http.connected() && (http.getSize() < 0 || total < http.getSize())) {
+    size_t avail = stream->available();
+    if (avail) {
+      int read = stream->readBytes(buf, min(avail, sizeof(buf)));
+      f.write(buf, read);
+      total += read;
+    } else {
+      delay(1);
+    }
+    if (!http.connected() && stream->available() == 0) break;
+  }
+  f.close();
+  http.end();
+  Serial.printf("[audio] downloaded %d bytes -> %s\n", total, sdPath.c_str());
+  return total > 0;
+}
+
+// Sanitize a habit name to a filename-safe string (matches server logic)
+static String sanitizeForFilename(const String &name) {
+  String out = name;
+  out.toLowerCase();
+  String result = "";
+  bool lastWasDash = false;
+  for (int i = 0; i < (int)out.length() && i < 60; i++) {
+    char c = out[i];
+    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+      result += c;
+      lastWasDash = false;
+    } else if (!lastWasDash && result.length() > 0) {
+      result += '-';
+      lastWasDash = true;
+    }
+  }
+  // Strip trailing dash
+  while (result.endsWith("-")) result = result.substring(0, result.length() - 1);
+  return result;
+}
+
+// Fetch the audio manifest from the server and download any missing MP3s.
+// Called once after WiFi connects and after each schedule sync.
+void syncAudioFiles() {
+  if (!g_sdMounted) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (g_apiKey.isEmpty()) return;
+
+  Serial.println("[audio] fetching manifest...");
+  String body = httpGet("/api/device/audio-manifest");
+  if (body.isEmpty()) {
+    Serial.println("[audio] manifest fetch failed");
+    return;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    Serial.println("[audio] manifest parse failed");
+    return;
+  }
+
+  g_audioFileCount = 0;
+  JsonArray files = doc["files"].as<JsonArray>();
+  for (JsonObject f : files) {
+    const char *filename = f["filename"] | "";
+    const char *url      = f["url"]      | "";
+    const char *text     = f["text"]     | "";
+    if (!filename || !url || strlen(filename) == 0) continue;
+
+    String sdPath = String("/") + filename;
+    // Ensure parent directory exists
+    String dir = sdPath.substring(0, sdPath.lastIndexOf('/'));
+    if (!SD.exists(dir.c_str())) SD.mkdir(dir.c_str());
+
+    // Download if not already on SD
+    if (!SD.exists(sdPath.c_str())) {
+      Serial.printf("[audio] downloading: %s\n", sdPath.c_str());
+      downloadToSD(String(url), sdPath);
+    } else {
+      Serial.printf("[audio] already have: %s\n", sdPath.c_str());
+    }
+
+    // Cache the mapping: habit name -> SD path
+    if (g_audioFileCount < MAX_AUDIO_FILES) {
+      strncpy(g_audioFiles[g_audioFileCount].name, text, 63);
+      strncpy(g_audioFiles[g_audioFileCount].path, sdPath.c_str(), 95);
+      g_audioFileCount++;
+    }
+  }
+  Serial.printf("[audio] manifest done, %d files\n", g_audioFileCount);
+}
+
+// Stop any currently playing audio and release resources.
+void stopAudio() {
+  if (g_mp3) { g_mp3->stop(); delete g_mp3; g_mp3 = nullptr; }
+  if (g_audioFile) { g_audioFile->close(); delete g_audioFile; g_audioFile = nullptr; }
+  if (g_audioOut) { g_audioOut->stop(); delete g_audioOut; g_audioOut = nullptr; }
+}
+
+// Play the MP3 for a given habit name (looks up in g_audioFiles cache).
+// Does nothing if audio is disabled, SD not mounted, or file not found.
+void playHabitAudio(const char *habitName) {
+  if (!g_audioEnabled || !g_sdMounted) return;
+
+  // Find the SD path for this habit
+  String target = sanitizeForFilename(String(habitName));
+  const char *sdPath = nullptr;
+  for (int i = 0; i < g_audioFileCount; i++) {
+    if (sanitizeForFilename(String(g_audioFiles[i].name)) == target) {
+      sdPath = g_audioFiles[i].path;
+      break;
+    }
+  }
+  if (!sdPath) {
+    // Fallback: try the expected path directly
+    String fallback = "/habits/" + target + ".mp3";
+    if (SD.exists(fallback.c_str())) {
+      static char fb[96];
+      strncpy(fb, fallback.c_str(), 95);
+      sdPath = fb;
+    } else {
+      Serial.printf("[audio] no file for habit: %s\n", habitName);
+      return;
+    }
+  }
+
+  stopAudio();
+
+  g_audioOut  = new AudioOutputI2S();
+  g_audioOut->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  g_audioOut->SetGain(0.8f);  // 80% volume
+
+  g_audioFile = new AudioFileSourceSD(sdPath);
+  g_mp3       = new AudioGeneratorMP3();
+
+  if (!g_mp3->begin(g_audioFile, g_audioOut)) {
+    Serial.printf("[audio] failed to start MP3: %s\n", sdPath);
+    stopAudio();
+    return;
+  }
+  Serial.printf("[audio] playing: %s\n", sdPath);
+}
+
+// Call this every loop() iteration to keep the MP3 decoder fed.
+void loopAudio() {
+  if (g_mp3 && g_mp3->isRunning()) {
+    if (!g_mp3->loop()) {
+      // Playback finished
+      stopAudio();
+    }
+  }
 }
 
 void saveBrightness(int pct) {
@@ -748,6 +996,7 @@ void doPostWifiConnect() {
     showPairingScreen();
   } else {
     fetchSchedule();
+    syncAudioFiles();  // Download any new/missing habit audio files to SD card
     showClockScreen();
   }
 
@@ -1161,7 +1410,8 @@ static void showMorePanel() {
   lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(panel, LV_DIR_VER);
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(panel);
@@ -1339,6 +1589,7 @@ static void showMorePanel() {
     lv_timer_handler();  // flush UI before blocking HTTP
     fetchSchedule();
     sendHeartbeat();
+    syncAudioFiles();  // Download any new habit audio files
     updateAlarmLabels();
     lv_label_set_text(statusLbl, LV_SYMBOL_OK "  Done");
     lv_obj_set_style_text_color(statusLbl, lv_color_hex(0x22C55E), LV_PART_MAIN);
@@ -1349,16 +1600,52 @@ static void showMorePanel() {
   lv_label_set_text(lblSyncBtn, LV_SYMBOL_REFRESH "  Sync Now");
   lv_obj_center(lblSyncBtn);
 
+  // ── Read Habits Aloud toggle ──
+  lv_obj_t *lblAudioSec = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblAudioSec, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblAudioSec, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblAudioSec, LV_ALIGN_TOP_LEFT, 40, 360);
+  lv_label_set_text(lblAudioSec, "AUDIO");
+
+  // Audio toggle row
+  lv_obj_t *rowAudio = lv_obj_create(panel);
+  lv_obj_set_size(rowAudio, 720, 52);
+  lv_obj_align(rowAudio, LV_ALIGN_TOP_MID, 0, 382);
+  lv_obj_set_style_bg_color(rowAudio, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(rowAudio, lv_color_hex(0x2A2A5A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(rowAudio, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(rowAudio, 10, LV_PART_MAIN);
+  lv_obj_clear_flag(rowAudio, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *lblAudioToggle = lv_label_create(rowAudio);
+  lv_obj_set_style_text_font(lblAudioToggle, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblAudioToggle, lv_color_hex(0xAAAACC), LV_PART_MAIN);
+  lv_obj_align(lblAudioToggle, LV_ALIGN_LEFT_MID, 16, 0);
+  lv_label_set_text(lblAudioToggle, LV_SYMBOL_AUDIO "  Read Habits Aloud");
+
+  lv_obj_t *sw = lv_switch_create(rowAudio);
+  lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -16, 0);
+  lv_obj_set_style_bg_color(sw, lv_color_hex(0x222244), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sw, lv_color_hex(0x5555FF), LV_PART_INDICATOR);
+  if (g_audioEnabled) lv_obj_add_state(sw, LV_STATE_CHECKED);
+  lv_obj_add_event_cb(sw, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    lv_obj_t *s = lv_event_get_target(e);
+    g_audioEnabled = lv_obj_has_state(s, LV_STATE_CHECKED);
+    saveAudioEnabled(g_audioEnabled);
+    Serial.printf("[audio] toggle -> %d\n", g_audioEnabled);
+  }, LV_EVENT_ALL, nullptr);
+
   // ── Change WiFi button ──
   lv_obj_t *lblWifi = lv_label_create(panel);
   lv_obj_set_style_text_font(lblWifi, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblWifi, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 360);
+  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 452);
   lv_label_set_text(lblWifi, "NETWORK");
 
   lv_obj_t *btnWifi = lv_btn_create(panel);
   lv_obj_set_size(btnWifi, 720, 52);
-  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 382);
+  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 474);
   lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
   lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
@@ -1791,6 +2078,8 @@ void showCheckinScreen() {
   // Update habit name
   if (lbl_ci_habit && idx < total) {
     lv_label_set_text(lbl_ci_habit, g_habits[idx].name.c_str());
+    // Play the ElevenLabs-generated audio for this habit (if enabled and SD has the file)
+    playHabitAudio(g_habits[idx].name.c_str());
   }
 
   // Reset and start countdown bar
@@ -2248,6 +2537,11 @@ void setup() {
   g_brightness = loadBrightness();
   setBrightness(g_brightness);  // Apply saved brightness
 
+  // Initialize SD card and load audio preferences
+  g_audioEnabled = loadAudioEnabled();
+  g_sdMounted = initSD();
+  Serial.printf("[audio] SD=%s audioEnabled=%d\n", g_sdMounted ? "OK" : "FAIL", g_audioEnabled);
+
   // Read PCF8563 RTC and set system clock immediately (before WiFi)
   // This ensures the clock shows correct time even if WiFi is unavailable.
   // configTime() is called here so localtime_r() uses the correct timezone.
@@ -2337,6 +2631,7 @@ void setup() {
 // ─── Loop ──────────────────────────────────────────────────────────────────────
 void loop() {
   lv_timer_handler();
+  loopAudio();  // keep MP3 decoder fed
 
   bool wifiOk = (WiFi.status() == WL_CONNECTED);
   bool paired = !g_apiKey.isEmpty();
