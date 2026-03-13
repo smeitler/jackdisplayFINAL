@@ -4,15 +4,20 @@
  * Compact iOS-style drum-roll: Hour | Minute | AM/PM
  * 3 visible rows: above (faded+slanted) | selected (large+bold) | below (faded+slanted)
  *
- * Platform strategy:
- * - iOS/Android: snapToInterval + decelerationRate="fast" handles native snapping.
- *   useLayoutEffect enforces initial scroll position (RN ignores contentOffset on mount).
- * - Web: inject CSS scroll-snap-type onto the ScrollView's underlying div so the
- *   browser handles snapping natively without blocking scroll events.
- *   After scroll settles, read scrollTop and emit the value.
+ * KEY DESIGN DECISION:
+ * Each WheelColumn owns its own scroll state internally.
+ * - selectedIndex is only used on MOUNT to set the initial scroll position.
+ * - After mount, the column tracks its own liveIdx from scroll events.
+ * - We NEVER call scrollTo() in response to selectedIndex changes after mount,
+ *   because that fights the user's drag and snaps back to the original value.
+ * - onSelect is called when the scroll settles, which updates the parent state.
+ *   The parent state change re-renders but does NOT trigger a scrollTo.
+ *
+ * Web: CSS scroll-snap-type injected onto the underlying div for native browser snapping.
+ * Mobile: snapToInterval + decelerationRate="fast" for native iOS/Android snapping.
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -39,79 +44,54 @@ function clamp(v: number, lo: number, hi: number) {
 
 interface ColumnProps {
   items: string[];
-  selectedIndex: number;
+  initialIndex: number;           // only used on mount
   onSelect: (index: number) => void;
   width: number;
 }
 
-function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
+function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
-  const isDragging = useRef(false);
   const webScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [liveIdx, setLiveIdx] = useState(selectedIndex);
+  const hasMounted = useRef(false);
+  const [liveIdx, setLiveIdx] = useState(initialIndex);
 
-  // Force scroll to correct position after mount and on external change
-  useLayoutEffect(() => {
-    if (!isDragging.current) {
-      setLiveIdx(selectedIndex);
-      const t = setTimeout(() => {
-        scrollRef.current?.scrollTo({
-          y: selectedIndex * ITEM_HEIGHT,
-          animated: false,
-        });
-      }, 0);
-      return () => clearTimeout(t);
-    }
-  }, [selectedIndex]);
+  // MOUNT ONLY: scroll to initial position
+  useEffect(() => {
+    if (hasMounted.current) return;
+    hasMounted.current = true;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: initialIndex * ITEM_HEIGHT,
+        animated: false,
+      });
+    }, 0);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty deps = mount only
 
-  // Web: inject CSS scroll-snap onto the underlying div, and listen for scrollend
+  // Web: inject CSS scroll-snap and listen for scroll settle
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    // Give RN Web a tick to render the DOM node
     const setup = setTimeout(() => {
-      // RN Web ScrollView renders as a div; access it via the internal ref
       const node: HTMLElement | null =
         (scrollRef.current as any)?._nativeRef?.current ??
         (scrollRef.current as any)?.getScrollableNode?.() ??
         null;
-
       if (!node) return;
 
-      // Apply CSS scroll snap — this lets the browser snap natively without blocking scroll
       node.style.overflowY = 'scroll';
       node.style.scrollSnapType = 'y mandatory';
-      // Apply snap-align to each child item div
-      const applySnapToChildren = () => {
-        Array.from(node.children).forEach((child) => {
-          (child as HTMLElement).style.scrollSnapAlign = 'center';
-        });
-      };
-      applySnapToChildren();
 
-      // Set initial scroll position
-      node.scrollTop = selectedIndex * ITEM_HEIGHT;
-
-      // After scroll settles, emit the value
-      const handleScrollEnd = () => {
-        if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
-        webScrollTimer.current = setTimeout(() => {
-          const idx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
-          // Snap to exact position
-          node.scrollTo({ top: idx * ITEM_HEIGHT, behavior: 'smooth' });
-          setLiveIdx(idx);
-          onSelect(idx);
-        }, 100);
-      };
+      // Set initial scroll position on web too
+      node.scrollTop = initialIndex * ITEM_HEIGHT;
 
       const handleScroll = () => {
-        isDragging.current = true;
         const idx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
         setLiveIdx(idx);
         if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
         webScrollTimer.current = setTimeout(() => {
-          isDragging.current = false;
           const finalIdx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
           node.scrollTo({ top: finalIdx * ITEM_HEIGHT, behavior: 'smooth' });
           setLiveIdx(finalIdx);
@@ -128,13 +108,9 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
 
     return () => clearTimeout(setup);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length, onSelect]);
+  }, []); // mount only — onSelect is stable via useCallback in parent
 
-  // Mobile scroll handlers
-  const handleScrollBegin = useCallback(() => {
-    isDragging.current = true;
-  }, []);
-
+  // Mobile: track live position during drag
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = e.nativeEvent.contentOffset.y;
@@ -144,9 +120,9 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
     [items.length],
   );
 
+  // Mobile: snap and emit on scroll end
   const handleScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      isDragging.current = false;
       const y = e.nativeEvent.contentOffset.y;
       const idx = clamp(Math.round(y / ITEM_HEIGHT), 0, items.length - 1);
       scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
@@ -164,11 +140,10 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
         snapToInterval={Platform.OS !== 'web' ? ITEM_HEIGHT : undefined}
         decelerationRate="fast"
         scrollEventThrottle={16}
-        onScrollBeginDrag={handleScrollBegin}
         onScroll={handleScroll}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
-        contentOffset={{ x: 0, y: selectedIndex * ITEM_HEIGHT }}
+        contentOffset={{ x: 0, y: initialIndex * ITEM_HEIGHT }}
       >
         {/* Top padding: lets item[0] sit in center row */}
         <View style={styles.item} />
@@ -227,15 +202,15 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
   const isPM   = hour >= 12;
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
 
-  const [hourIdx,   setHourIdx]   = useState(hour12 - 1);
-  const [minuteIdx, setMinuteIdx] = useState(minute);
-  const [periodIdx, setPeriodIdx] = useState(isPM ? 1 : 0);
+  // These are only used as initialIndex — columns own their state after mount
+  const initialHourIdx   = hour12 - 1;
+  const initialMinuteIdx = minute;
+  const initialPeriodIdx = isPM ? 1 : 0;
 
-  useEffect(() => {
-    setHourIdx((hour % 12 === 0 ? 12 : hour % 12) - 1);
-    setMinuteIdx(minute);
-    setPeriodIdx(hour >= 12 ? 1 : 0);
-  }, [hour, minute]);
+  // Parent tracks current values to pass to emit
+  const hourIdxRef   = useRef(initialHourIdx);
+  const minuteIdxRef = useRef(initialMinuteIdx);
+  const periodIdxRef = useRef(initialPeriodIdx);
 
   const emit = useCallback(
     (hIdx: number, mIdx: number, pIdx: number) => {
@@ -247,9 +222,20 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
     [onChange],
   );
 
-  const onHourSelect   = useCallback((idx: number) => { setHourIdx(idx);   emit(idx, minuteIdx, periodIdx); }, [minuteIdx, periodIdx, emit]);
-  const onMinuteSelect = useCallback((idx: number) => { setMinuteIdx(idx); emit(hourIdx, idx, periodIdx); },  [hourIdx, periodIdx, emit]);
-  const onPeriodSelect = useCallback((idx: number) => { setPeriodIdx(idx); emit(hourIdx, minuteIdx, idx); },  [hourIdx, minuteIdx, emit]);
+  const onHourSelect = useCallback((idx: number) => {
+    hourIdxRef.current = idx;
+    emit(idx, minuteIdxRef.current, periodIdxRef.current);
+  }, [emit]);
+
+  const onMinuteSelect = useCallback((idx: number) => {
+    minuteIdxRef.current = idx;
+    emit(hourIdxRef.current, idx, periodIdxRef.current);
+  }, [emit]);
+
+  const onPeriodSelect = useCallback((idx: number) => {
+    periodIdxRef.current = idx;
+    emit(hourIdxRef.current, minuteIdxRef.current, idx);
+  }, [emit]);
 
   const hourW   = 68;
   const minuteW = 68;
@@ -274,9 +260,9 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
       />
 
       <View style={styles.columns}>
-        <WheelColumn items={HOURS_12} selectedIndex={hourIdx}   onSelect={onHourSelect}   width={hourW} />
-        <WheelColumn items={MINUTES}  selectedIndex={minuteIdx} onSelect={onMinuteSelect} width={minuteW} />
-        <WheelColumn items={PERIODS}  selectedIndex={periodIdx} onSelect={onPeriodSelect} width={periodW} />
+        <WheelColumn items={HOURS_12} initialIndex={initialHourIdx}   onSelect={onHourSelect}   width={hourW} />
+        <WheelColumn items={MINUTES}  initialIndex={initialMinuteIdx} onSelect={onMinuteSelect} width={minuteW} />
+        <WheelColumn items={PERIODS}  initialIndex={initialPeriodIdx} onSelect={onPeriodSelect} width={periodW} />
       </View>
     </View>
   );
