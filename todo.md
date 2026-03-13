@@ -624,3 +624,14 @@
 ## Time Picker UX (Mar 13 2026)
 
 - [x] Compact wheel picker: 3 rows only (1 above, selected, 1 below), adjacent numbers slanted + faded
+
+## Morning Practice Feature (Mar 13 2026)
+
+- [x] Server-side script generator for Priming, Meditation, Breathwork, Visualization (personalized with name/goals/habits/gratitudes)
+- [x] ElevenLabs TTS endpoint: generates audio chunks with pauses for each practice type
+- [x] PracticePlayer screen: sequential chunk playback with background music, progress bar, pause/resume
+- [x] Breathwork animation: expanding/contracting circle synced to Wim Hof / box breathing phases
+- [x] MorningPracticeSection in More tab: pick practice type, length (5/10/20 min), breathwork style, enable post-alarm
+- [x] Post-alarm auto-launch: after habit check-in, generates personalized practice and shows Begin card
+- [x] Personalization: pulls name, goals, habits, yesterday's gratitudes into the script
+- [x] Script regenerates when user data changes

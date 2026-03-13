@@ -15,6 +15,11 @@ import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { trpc } from "@/lib/trpc";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
+import {
+  loadHabits,
+  loadGratitudeEntries,
+  yesterdayString as yesterdayStr,
+} from '@/lib/storage';
 
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
@@ -73,6 +78,10 @@ export default function CheckInScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [shareToTeam, setShareToTeam] = useState(true);
   const [shared, setShared] = useState(false);
+  const [practiceReady, setPracticeReady] = useState(false);
+  const [practiceGenerating, setPracticeGenerating] = useState(false);
+  const [practiceResult, setPracticeResult] = useState<{ chunkUrls: string[]; pausesBetweenChunks: number[]; totalDurationMinutes: number } | null>(null);
+  const generatePracticeMutation = trpc.morningPractice.generate.useMutation();
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -300,6 +309,47 @@ export default function CheckInScreen() {
     if (countdownRef.current) clearTimeout(countdownRef.current);
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
+
+    // Auto-generate morning practice if enabled
+    const practiceType = alarm?.morningPracticeType;
+    if (fromAlarm && !isPreview && practiceType && practiceType !== 'none' && alarm?.morningPracticeEnabled) {
+      setPracticeGenerating(true);
+      try {
+        const allHabits = await loadHabits();
+        const activeHabitNames = allHabits.filter(h => h.isActive).map(h => h.name).slice(0, 8);
+        const goalList = categories.map(c => c.label);
+        const gratitudeEntries = await loadGratitudeEntries();
+        const yd = yesterdayStr();
+        const ydEntry = gratitudeEntries.find(e => e.date === yd);
+        const gratitudes = ydEntry?.items ?? [];
+        const voiceKey = alarm?.elevenLabsVoice ?? 'rachel';
+        const VOICE_IDS: Record<string, string> = {
+          rachel: '21m00Tcm4TlvDq8ikWAM',
+          aria:   '9BWtsMINqrJLrRacOk9x',
+          adam:   'pNInz6obpgDQGcFmaJgB',
+          josh:   'TxGEqnHWrfWFTfGW9XjX',
+          bella:  'EXAVITQu4vr4xnSDxMaL',
+        };
+        const voiceId = VOICE_IDS[voiceKey] ?? VOICE_IDS.rachel;
+        const result = await generatePracticeMutation.mutateAsync({
+          type: practiceType as 'priming' | 'meditation' | 'breathwork' | 'visualization',
+          voiceId,
+          lengthMinutes: alarm?.morningPracticeLength,
+          breathworkStyle: alarm?.morningBreathworkStyle,
+          name: 'Friend',
+          goals: goalList,
+          rewards: [],
+          habits: activeHabitNames,
+          gratitudes,
+        });
+        setPracticeResult(result);
+        setPracticeReady(true);
+      } catch {
+        // fail silently — practice is optional
+      } finally {
+        setPracticeGenerating(false);
+      }
+    }
   }
 
   async function handleSnooze() {
@@ -464,6 +514,48 @@ export default function CheckInScreen() {
                   <Text style={styles.shareTeamBtnText}>{createPost.isPending ? 'Sharing...' : 'Share'}</Text>
                 </Pressable>
               </View>
+            </View>
+          )}
+
+          {/* Morning Practice auto-launch card */}
+          {(practiceReady || practiceGenerating) && (
+            <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>
+                🌅  Morning Practice Ready
+              </Text>
+              <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>
+                {practiceGenerating
+                  ? 'Generating your personalized session...'
+                  : 'Your session has been prepared with your voice.'}
+              </Text>
+              {!practiceGenerating && practiceResult && (
+                <View style={styles.sessionBtns}>
+                  <Pressable
+                    style={({ pressed }) => [styles.sessionSkipBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                    onPress={() => setPracticeReady(false)}
+                  >
+                    <Text style={[styles.sessionSkipText, { color: colors.muted }]}>✕  Skip</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.sessionStartBtn, { backgroundColor: '#7C3AED', opacity: pressed ? 0.85 : 1 }]}
+                    onPress={() => {
+                      stopAfterAlarm();
+                      router.push({
+                        pathname: '/practice-player',
+                        params: {
+                          type: alarm?.morningPracticeType ?? 'meditation',
+                          chunkUrls: JSON.stringify(practiceResult.chunkUrls),
+                          pausesBetweenChunks: JSON.stringify(practiceResult.pausesBetweenChunks),
+                          totalDurationMinutes: String(practiceResult.totalDurationMinutes),
+                          breathworkStyle: alarm?.morningBreathworkStyle ?? 'box',
+                        },
+                      } as never);
+                    }}
+                  >
+                    <Text style={styles.sessionStartText}>▶  Begin</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           )}
 

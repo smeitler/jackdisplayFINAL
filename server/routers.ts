@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
-import { VOICES, generateAndStoreAudio } from "./audioService";
+import { VOICES, generateAndStoreAudio, generateSpeech } from "./audioService";
+import { buildScript, type PracticeType, type MeditationLength, type BreathworkStyle } from "./practiceScripts";
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -680,6 +681,72 @@ Return ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...]}`,
         }
 
         return { transcript, journalEntries, gratitudeItems, audioUrl };
+      }),
+  }),
+
+  // ─── Morning Practice ────────────────────────────────────────────────────────
+  morningPractice: router({
+    /**
+     * Generate TTS audio for all chunks of a morning practice session.
+     * Returns an array of S3 URLs (one per chunk) plus pause durations.
+     * Audio is cached by a hash of the script content so re-runs are free.
+     */
+    generate: protectedProcedure
+      .input(z.object({
+        type: z.enum(['priming', 'meditation', 'breathwork', 'visualization']),
+        voiceId: z.string(),
+        lengthMinutes: z.number().optional(),
+        breathworkStyle: z.enum(['wim_hof', 'box', '4_7_8']).optional(),
+        // Personalization context
+        name: z.string().default('Friend'),
+        goals: z.array(z.string()).default([]),
+        rewards: z.array(z.string()).default([]),
+        habits: z.array(z.string()).default([]),
+        gratitudes: z.array(z.string()).default([]),
+      }))
+      .mutation(async ({ input }) => {
+        const { storagePut } = await import('./storage.js');
+        const crypto = await import('crypto');
+
+        const ctx = {
+          name: input.name,
+          goals: input.goals,
+          rewards: input.rewards,
+          habits: input.habits,
+          gratitudes: input.gratitudes,
+        };
+
+        const script = buildScript(
+          input.type as PracticeType,
+          ctx,
+          {
+            lengthMinutes: input.lengthMinutes as MeditationLength | undefined,
+            breathworkStyle: input.breathworkStyle as BreathworkStyle | undefined,
+          },
+        );
+
+        // Generate TTS for each chunk in parallel (up to 8 chunks)
+        const chunkUrls = await Promise.all(
+          script.chunks.map(async (chunkText, i) => {
+            // Cache key: hash of voice + text so same content isn't regenerated
+            const hash = crypto.createHash('sha256')
+              .update(`${input.voiceId}:${chunkText}`)
+              .digest('hex')
+              .slice(0, 16);
+            const storageKey = `practice/${input.type}/chunk_${i}_${hash}.mp3`;
+
+            const mp3Buffer = await generateSpeech(chunkText, input.voiceId);
+            const { url } = await storagePut(storageKey, mp3Buffer, 'audio/mpeg');
+            return url;
+          }),
+        );
+
+        return {
+          type: script.type,
+          chunkUrls,
+          pausesBetweenChunks: script.pausesBetweenChunks,
+          totalDurationMinutes: script.totalDurationMinutes,
+        };
       }),
   }),
 

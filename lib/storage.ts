@@ -66,6 +66,10 @@ export type AlarmConfig = {
   requireCheckin?: boolean; // If true, block app access until yesterday's check-in is done
   snoozeMinutes?: number;   // Snooze duration in minutes (default: 10)
   elevenLabsVoice?: string; // ElevenLabs voice key (e.g. 'rachel', 'aria', 'adam')
+  morningPracticeType?: 'priming' | 'meditation' | 'breathwork' | 'visualization' | 'none';
+  morningPracticeLength?: 5 | 10 | 20;  // minutes for meditation/visualization
+  morningBreathworkStyle?: 'wim_hof' | 'box' | '4_7_8';
+  morningPracticeEnabled?: boolean;  // auto-launch after habit check-in
 };
 
 // ─── Rating helpers ───────────────────────────────────────────────────────────

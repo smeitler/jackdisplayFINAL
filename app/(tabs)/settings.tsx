@@ -20,6 +20,7 @@ import { trpc } from "@/lib/trpc";
 import * as WebBrowser from "expo-web-browser";
 import { VoicePickerSection } from "@/components/voice-picker-section";
 import { VoiceJournalSection } from "@/components/voice-journal-section";
+import { MorningPracticeSection } from "@/components/morning-practice-section";
 
 
 // ─── Jack Alarm Device Pairing Section ─────────────────────────────────────
@@ -942,6 +943,9 @@ export default function SettingsScreen() {
 
         {/* Voice Journal */}
         <VoiceJournalSection />
+
+        {/* Morning Practice */}
+        <MorningPracticeSection />
 
         {/* Jack Alarm Device Pairing */}
         {isAuthenticated && (
