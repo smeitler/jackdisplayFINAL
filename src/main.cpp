@@ -37,11 +37,11 @@
 // ─── Audio / SD card ──────────────────────────────────────────────────────────
 // CrowPanel Advance 5" uses SD_MMC (1-bit SDIO) for the SD card — the CS pin
 // is NOT connected to any GPIO (SD_CS = 0 per Elecrow schematic).
-// Audio playback uses schreibfaul1/ESP32-audioI2S (same library Elecrow uses
-// in their official Desktop Assistant example).
+// Audio playback uses JackAudio (minimp3 + ESP-IDF I2S std driver) — a
+// self-contained module with zero external library dependencies.
 // I2S pins: BCLK=5, LRC=6, DOUT=4 (confirmed from official Elecrow source).
 #include <SD_MMC.h>
-#include <Audio.h>
+#include "../lib/minimp3/JackAudio.h"
 
 // CrowPanel Advance 5" I2S pin definitions (from Elecrow official source)
 #define I2S_DOUT_PIN  4
@@ -211,7 +211,7 @@ lv_obj_t *cont_habits = nullptr;
 // ─── Audio state ──────────────────────────────────────────────────────────
 bool  g_audioEnabled  = false;  // "Read Habits Aloud" toggle
 bool  g_sdMounted     = false;  // SD card successfully initialized
-Audio g_audio;                  // ESP32-audioI2S instance (schreibfaul1 library)
+JackAudio g_audio;              // minimp3 + ESP-IDF I2S (no external library deps)
 
 // Habit audio filenames cached from last manifest fetch
 // Key = habit name (lowercase, sanitized), Value = SD path like "/habits/exercise.mp3"
@@ -682,7 +682,7 @@ void syncAudioFiles() {
 
 // Stop any currently playing audio.
 void stopAudio() {
-  g_audio.stopSong();
+  g_audio.stop();
 }
 
 // Play the MP3 for a given habit name (looks up in g_audioFiles cache).
@@ -713,15 +713,14 @@ void playHabitAudio(const char *habitName) {
   }
 
   stopAudio();
-  g_audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
   g_audio.setVolume(18);  // 0..21, ~85% volume
-  g_audio.connecttoFS(SD_MMC, sdPath);
+  g_audio.play(sdPath);
   Serial.printf("[audio] playing: %s\n", sdPath);
 }
 
 // Call this every loop() iteration to keep the MP3 decoder fed.
 void loopAudio() {
-  g_audio.loop();
+  g_audio.loop();  // JackAudio::loop() decodes one MP3 frame per call
 }
 
 // ─── Voice system ─────────────────────────────────────────────────────────────
@@ -750,9 +749,8 @@ void playSystemAudio(const char *key) {
     return;
   }
   stopAudio();
-  g_audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
   g_audio.setVolume(20);  // slightly louder for voice confirmations
-  g_audio.connecttoFS(SD_MMC, path);
+  g_audio.play(path);
   Serial.printf("[voice] playing system audio: %s\n", path);
 }
 
@@ -909,7 +907,7 @@ void sendVoiceToServer(uint8_t *buf, size_t len) {
 // Called every loop() to check for voice activity (simple energy detection).
 // When energy exceeds threshold, triggers startListening() for full recording.
 void loopVoice() {
-  if (!g_voiceEnabled || g_listening || (g_audioEnabled && g_audio.isRunning())) return;
+  if (!g_voiceEnabled || g_listening || (g_audioEnabled && g_audio.isPlaying())) return;
   // TODO: integrate ESP-SR wake word engine here.
   // For now this is a placeholder — the voice system is activated by a
   // dedicated "Listen" button on the clock face (long-press on the screen).
@@ -2980,6 +2978,7 @@ void setup() {
   // Initialize SD card and load audio preferences
   g_audioEnabled = loadAudioEnabled();
   g_sdMounted = initSD();
+  g_audio.begin(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);  // init JackAudio I2S
   Serial.printf("[audio] SD=%s audioEnabled=%d\n", g_sdMounted ? "OK" : "FAIL", g_audioEnabled);
 
   // Load voice and Low EMF settings from NVS
