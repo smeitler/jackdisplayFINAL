@@ -121,6 +121,7 @@ struct AlarmEntry {
   int    daysCount;
   bool   enabled;
   String meditationId;  // post-alarm routine: "meditation"|"breathwork"|"visualization"|"priming"|"journaling"|"" 
+  time_t nextFire;      // unix timestamp of next scheduled fire (0 = not scheduled)
 };
 
 struct HabitEntry {
@@ -133,14 +134,15 @@ struct HabitEntry {
 #define MAX_HABITS  16
 AlarmEntry g_alarms[MAX_ALARMS];
 int        g_alarmCount = 0;
+time_t     g_alarmFiredAt  = 0;   // unix timestamp when current alarm fired
+int        g_firedAlarmIdx = 0;   // index into g_alarms of the currently firing alarm
 HabitEntry g_habits[MAX_HABITS];
 int        g_habitCount = 0;
 
 // Ratings for check-in: 0=unrated, 1=red, 2=yellow, 3=green
 int g_ratings[MAX_HABITS];
 
-// Which alarm fired
-int  g_firedAlarmIdx = -1;
+// Which alarm fired (index into g_alarms, -1 = none)
 bool g_alarmFired    = false;
 bool g_inCheckin     = false;
 int  g_snoozeCount   = 0;
@@ -2245,10 +2247,10 @@ void showPairingScreen() {
   lv_disp_load_scr(scr_pair);
 }
 
-// ─── Alarm + Habit Checklist ───────────────────────────────────────────────────
-static time_t g_alarmFiredAt = 0;
+// ─── Alarm + Habit Checklist ──────────────────────────────────────────────────
+// g_alarmFiredAt and g_firedAlarmIdx are declared in the globals section above
 
-// ─── Per-habit timed check-in state ─────────────────────────────────────────────────────
+// ─── Per-habit timed check-in state ──────────────────────────────────────────
 #define HABIT_TIMER_TICKS  100   // 100 ticks × 100ms = 10 s per habit
 static int   g_ciHabitIdx  = 0;  // which habit we're currently rating
 static int   g_ciTick      = 0;  // countdown tick (counts down from HABIT_TIMER_TICKS)

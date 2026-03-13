@@ -30,6 +30,12 @@
 #define MINIMP3_NO_SIMD
 #include "minimp3.h"
 
+// minimp3_ex.h defines MINIMP3_MIN_DATA_SIZE but we don't need the extended API.
+// Define it ourselves: minimum bytes needed before attempting to decode a frame.
+#ifndef MINIMP3_MIN_DATA_SIZE
+#define MINIMP3_MIN_DATA_SIZE 4
+#endif
+
 #include <SD_MMC.h>
 #include <driver/i2s_std.h>
 #include <driver/i2s_common.h>
