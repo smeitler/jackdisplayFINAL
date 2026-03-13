@@ -65,6 +65,7 @@ export type AlarmConfig = {
   meditationId?: string;  // ID of the post-alarm meditation (default: none)
   requireCheckin?: boolean; // If true, block app access until yesterday's check-in is done
   snoozeMinutes?: number;   // Snooze duration in minutes (default: 10)
+  elevenLabsVoice?: string; // ElevenLabs voice key (e.g. 'rachel', 'aria', 'adam')
 };
 
 // ─── Rating helpers ───────────────────────────────────────────────────────────

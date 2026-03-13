@@ -579,3 +579,4 @@
 
 - [x] Add Blocked Users screen in Settings
 - [x] Replace alarm time picker with iOS-style drum-roll wheel picker (hour/minute/AM-PM columns)
+- [x] Add ElevenLabs voice picker in alarm settings with preview button per voice

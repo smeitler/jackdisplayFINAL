@@ -289,6 +289,12 @@ export default function SettingsScreen() {
   const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
   const [snoozeMinutes, setSnoozeMinutes] = useState(alarm.snoozeMinutes ?? 10);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceKey, setVoiceKey] = useState(alarm.elevenLabsVoice ?? 'rachel');
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState<string | null>(null);
+
+  const voicesQuery = trpc.voice.listVoices.useQuery();
+  const voicePreviewMutation = trpc.voice.preview.useMutation();
 
   // Imperative player ref — created fresh each time, released when done
   const previewPlayerRef = useRef<AudioPlayer | null>(null);
@@ -345,6 +351,7 @@ export default function SettingsScreen() {
     setMeditationId(alarm.meditationId);
     setRequireCheckin(alarm.requireCheckin ?? false);
     setSnoozeMinutes(alarm.snoozeMinutes ?? 10);
+    setVoiceKey(alarm.elevenLabsVoice ?? 'rachel');
   }, [alarm]);
 
   function toggleDay(day: number) {
@@ -357,7 +364,7 @@ export default function SettingsScreen() {
   async function handleSave() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin, snoozeMinutes });
+    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin, snoozeMinutes, elevenLabsVoice: voiceKey });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -429,6 +436,84 @@ export default function SettingsScreen() {
                   })}
                 </View>
               </View>
+
+              {/* ElevenLabs Voice Picker — collapsible dropdown */}
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setVoiceOpen(v => !v);
+                }}
+                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <IconSymbol name="waveform" size={16} color={colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Wake-Up Voice</Text>
+                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
+                    {voicesQuery.data?.find(v => v.id === voiceKey)?.name ?? 'Rachel'}
+                  </Text>
+                </View>
+                <IconSymbol name={voiceOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+              </Pressable>
+              {voiceOpen && (
+                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
+                  {(voicesQuery.data ?? []).map((voice) => {
+                    const isSelected = voiceKey === voice.id;
+                    const isPreviewing = voicePreviewLoading === voice.id;
+                    return (
+                      <Pressable
+                        key={voice.id}
+                        onPress={() => {
+                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setVoiceKey(voice.id);
+                        }}
+                        style={({ pressed }) => [
+                          styles.dropdownItem,
+                          isSelected && { backgroundColor: colors.primary + '18' },
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text style={styles.soundEmoji}>🎙️</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
+                            {voice.name}
+                          </Text>
+                          <Text style={[{ fontSize: 12, color: colors.muted }]}>{voice.description}</Text>
+                        </View>
+                        <Pressable
+                          onPress={async () => {
+                            if (isPreviewing) return;
+                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setVoicePreviewLoading(voice.id);
+                            try {
+                              const result = await voicePreviewMutation.mutateAsync({ voiceKey: voice.id });
+                              if (result.url) {
+                                stopPreview();
+                                setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const player = createAudioPlayer({ uri: result.url } as any);
+                                previewPlayerRef.current = player;
+                                player.play();
+                                previewTimerRef.current = setTimeout(() => stopPreview(), 8000);
+                              }
+                            } catch {
+                              // ignore preview errors
+                            } finally {
+                              setVoicePreviewLoading(null);
+                            }
+                          }}
+                          style={({ pressed }) => [styles.previewBtn, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+                        >
+                          {isPreviewing
+                            ? <ActivityIndicator size="small" color={colors.primary} />
+                            : <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>Preview</Text>
+                          }
+                        </Pressable>
+                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} style={{ marginLeft: 6 }} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
 
               {/* Alarm Sound Picker — collapsible dropdown */}
               <Pressable
@@ -1056,4 +1141,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, borderRadius: 0,
   },
   dropdownItemText: { fontSize: 15, fontWeight: '500' },
+  previewBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, minWidth: 64, alignItems: 'center', justifyContent: 'center' },
 });

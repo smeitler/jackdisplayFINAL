@@ -1,0 +1,1 @@
+ALTER TABLE `alarmConfigs` ADD `elevenLabsVoice` varchar(32) DEFAULT 'rachel';

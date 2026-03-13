@@ -105,6 +105,7 @@ export const alarmConfigs = mysqlTable("alarmConfigs", {
   minute: int("minute").notNull().default(0),
   days: varchar("days", { length: 20 }).notNull().default("1,2,3,4,5,6,0"),
   enabled: boolean("enabled").notNull().default(true),
+  elevenLabsVoice: varchar("elevenLabsVoice", { length: 32 }).default("rachel"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

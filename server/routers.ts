@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
+import { VOICES, DEFAULT_VOICE, generateSpeech, generateAndStoreAudio, type VoiceId } from "./audioService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -515,6 +516,45 @@ export const appRouter = router({
     blockedIds: protectedProcedure.query(({ ctx }) =>
       db.getBlockedUserIds(ctx.user.id)
     ),
+  }),
+
+  // ─── Voice / TTS ──────────────────────────────────────────────────────────────────
+  voice: router({
+    /** Return the list of available ElevenLabs voices the user can choose from. */
+    listVoices: protectedProcedure.query(() => {
+      return Object.entries(VOICES).map(([key, id]) => ({
+        id: key as VoiceId,
+        voiceId: id,
+        name: key.charAt(0).toUpperCase() + key.slice(1),
+        description: {
+          rachel:  "Warm, clear female — great for habits & affirmations",
+          aria:    "Bright, energetic female",
+          adam:    "Deep, calm male",
+          josh:    "Conversational male",
+          bella:   "Soft, soothing female",
+        }[key] ?? "",
+      }));
+    }),
+
+    /** Generate a short TTS preview clip and return a signed URL. */
+    preview: protectedProcedure
+      .input(z.object({
+        voiceKey: z.string(),
+        text: z.string().max(200).default("Good morning! Time to rise and shine."),
+      }))
+      .mutation(async ({ input }) => {
+        const voiceId = VOICES[input.voiceKey as VoiceId] ?? VOICES[DEFAULT_VOICE];
+        const url = await generateAndStoreAudio(input.text, "alarm", voiceId);
+        return { url };
+      }),
+
+    /** Save the user's preferred voice key (stored in the alarm config). */
+    setPreference: protectedProcedure
+      .input(z.object({ voiceKey: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertAlarm({ userId: ctx.user.id, hour: 9, minute: 0, days: "1,2,3,4,5,6,0", enabled: true, elevenLabsVoice: input.voiceKey });
+        return { success: true };
+      }),
   }),
 
   // ─── Community: Referrals ─────────────────────────────────────────────────────────
