@@ -35,20 +35,15 @@
 #include <time.h>
 
 // ─── Audio / SD card ──────────────────────────────────────────────────────────
-// The CrowPanel shares GPIO 4/5/6 between SD-SPI and I2S audio.
-// We use the SD card for storing pre-generated ElevenLabs MP3s.
-// Audio playback uses the ESP32-audioI2S library over I2S (internal DAC on GPIO 25/26
-// is not available on S3; we use the board's built-in I2S amp on GPIO 4/5/6).
-#include <SD.h>
-#include <AudioFileSourceSD.h>
-#include <AudioGeneratorMP3.h>
-#include <AudioOutputI2S.h>
+// CrowPanel Advance 5" uses SD_MMC (1-bit SDIO) for the SD card — the CS pin
+// is NOT connected to any GPIO (SD_CS = 0 per Elecrow schematic).
+// Audio playback uses schreibfaul1/ESP32-audioI2S (same library Elecrow uses
+// in their official Desktop Assistant example).
+// I2S pins: BCLK=5, LRC=6, DOUT=4 (confirmed from official Elecrow source).
+#include <SD_MMC.h>
+#include <Audio.h>
 
-// CrowPanel Advance 5" pin definitions (from Elecrow schematic)
-#define SD_MOSI_PIN   6
-#define SD_MISO_PIN   4
-#define SD_SCK_PIN    5
-#define SD_CS_PIN     19   // Note: schematic says "not connected" but GPIO19 works as CS
+// CrowPanel Advance 5" I2S pin definitions (from Elecrow official source)
 #define I2S_DOUT_PIN  4
 #define I2S_BCLK_PIN  5
 #define I2S_LRC_PIN   6
@@ -213,12 +208,10 @@ lv_obj_t *lbl_alm_time = nullptr;
 lv_obj_t *scr_checkin = nullptr;
 lv_obj_t *cont_habits = nullptr;
 
-// ─── Audio state ─────────────────────────────────────────────────────────────
-bool              g_audioEnabled  = false;  // "Read Habits Aloud" toggle
-bool              g_sdMounted     = false;   // SD card successfully initialized
-AudioGeneratorMP3 *g_mp3          = nullptr;
-AudioFileSourceSD *g_audioFile    = nullptr;
-AudioOutputI2S    *g_audioOut     = nullptr;
+// ─── Audio state ──────────────────────────────────────────────────────────
+bool  g_audioEnabled  = false;  // "Read Habits Aloud" toggle
+bool  g_sdMounted     = false;  // SD card successfully initialized
+Audio g_audio;                  // ESP32-audioI2S instance (schreibfaul1 library)
 
 // Habit audio filenames cached from last manifest fetch
 // Key = habit name (lowercase, sanitized), Value = SD path like "/habits/exercise.mp3"
@@ -560,19 +553,19 @@ void saveAudioEnabled(bool enabled) {
 }
 
 bool initSD() {
-  // The CrowPanel uses SPI bus shared with I2S. We initialise the SD card
-  // on the HSPI bus using the board's defined pins.
-  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-  if (!SD.begin(SD_CS_PIN)) {
-    Serial.println("[SD] Card mount failed — no SD card or wrong pins");
+  // CrowPanel Advance 5" uses 1-bit SDIO mode via SD_MMC.
+  // The CS pin is not connected (SD_CS = 0 per Elecrow schematic),
+  // so standard SPI SD.begin() will never work on this board.
+  // SD_MMC.begin("/sdcard", true) = 1-bit mode (required for this board).
+  if (!SD_MMC.begin("/sdcard", true)) {
+    Serial.println("[SD] SD_MMC mount failed — check card is inserted");
     return false;
   }
-  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+  uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
   Serial.printf("[SD] Card size: %llu MB\n", cardSize);
-  // Ensure /habits directory exists
-  if (!SD.exists("/habits")) {
-    SD.mkdir("/habits");
-  }
+  // Ensure /habits and /system directories exist
+  if (!SD_MMC.exists("/habits"))  SD_MMC.mkdir("/habits");
+  if (!SD_MMC.exists("/system"))  SD_MMC.mkdir("/system");
   return true;
 }
 
@@ -588,8 +581,8 @@ static bool downloadToSD(const String &url, const String &sdPath) {
     http.end();
     return false;
   }
-  // Stream to SD
-  File f = SD.open(sdPath.c_str(), FILE_WRITE);
+  // Stream to SD_MMC
+  File f = SD_MMC.open(sdPath.c_str(), FILE_WRITE);
   if (!f) {
     Serial.printf("[audio] cannot open SD path: %s\n", sdPath.c_str());
     http.end();
@@ -667,10 +660,10 @@ void syncAudioFiles() {
     String sdPath = String("/") + filename;
     // Ensure parent directory exists
     String dir = sdPath.substring(0, sdPath.lastIndexOf('/'));
-    if (!SD.exists(dir.c_str())) SD.mkdir(dir.c_str());
+    if (!SD_MMC.exists(dir.c_str())) SD_MMC.mkdir(dir.c_str());
 
     // Download if not already on SD
-    if (!SD.exists(sdPath.c_str())) {
+    if (!SD_MMC.exists(sdPath.c_str())) {
       Serial.printf("[audio] downloading: %s\n", sdPath.c_str());
       downloadToSD(String(url), sdPath);
     } else {
@@ -687,11 +680,9 @@ void syncAudioFiles() {
   Serial.printf("[audio] manifest done, %d files\n", g_audioFileCount);
 }
 
-// Stop any currently playing audio and release resources.
+// Stop any currently playing audio.
 void stopAudio() {
-  if (g_mp3) { g_mp3->stop(); delete g_mp3; g_mp3 = nullptr; }
-  if (g_audioFile) { g_audioFile->close(); delete g_audioFile; g_audioFile = nullptr; }
-  if (g_audioOut) { g_audioOut->stop(); delete g_audioOut; g_audioOut = nullptr; }
+  g_audio.stopSong();
 }
 
 // Play the MP3 for a given habit name (looks up in g_audioFiles cache).
@@ -711,7 +702,7 @@ void playHabitAudio(const char *habitName) {
   if (!sdPath) {
     // Fallback: try the expected path directly
     String fallback = "/habits/" + target + ".mp3";
-    if (SD.exists(fallback.c_str())) {
+    if (SD_MMC.exists(fallback.c_str())) {
       static char fb[96];
       strncpy(fb, fallback.c_str(), 95);
       sdPath = fb;
@@ -722,30 +713,15 @@ void playHabitAudio(const char *habitName) {
   }
 
   stopAudio();
-
-  g_audioOut  = new AudioOutputI2S();
-  g_audioOut->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
-  g_audioOut->SetGain(0.8f);  // 80% volume
-
-  g_audioFile = new AudioFileSourceSD(sdPath);
-  g_mp3       = new AudioGeneratorMP3();
-
-  if (!g_mp3->begin(g_audioFile, g_audioOut)) {
-    Serial.printf("[audio] failed to start MP3: %s\n", sdPath);
-    stopAudio();
-    return;
-  }
+  g_audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  g_audio.setVolume(18);  // 0..21, ~85% volume
+  g_audio.connecttoFS(SD_MMC, sdPath);
   Serial.printf("[audio] playing: %s\n", sdPath);
 }
 
 // Call this every loop() iteration to keep the MP3 decoder fed.
 void loopAudio() {
-  if (g_mp3 && g_mp3->isRunning()) {
-    if (!g_mp3->loop()) {
-      // Playback finished
-      stopAudio();
-    }
-  }
+  g_audio.loop();
 }
 
 // ─── Voice system ─────────────────────────────────────────────────────────────
@@ -769,20 +745,15 @@ void playSystemAudio(const char *key) {
   if (!g_sdMounted) return;
   char path[96];
   snprintf(path, sizeof(path), "/system/%s.mp3", key);
-  if (!SD.exists(path)) {
+  if (!SD_MMC.exists(path)) {
     Serial.printf("[voice] system audio not found: %s\n", path);
     return;
   }
   stopAudio();
-  g_audioOut = new AudioOutputI2S();
-  g_audioOut->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
-  g_audioOut->SetGain(0.9f);
-  g_audioFile = new AudioFileSourceSD(path);
-  g_mp3       = new AudioGeneratorMP3();
-  if (!g_mp3->begin(g_audioFile, g_audioOut)) {
-    Serial.printf("[voice] failed to play system audio: %s\n", path);
-    stopAudio();
-  }
+  g_audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  g_audio.setVolume(20);  // slightly louder for voice confirmations
+  g_audio.connecttoFS(SD_MMC, path);
+  Serial.printf("[voice] playing system audio: %s\n", path);
 }
 
 // Initialize the PDM microphone using the ESP32-S3 I2S peripheral.
@@ -938,7 +909,7 @@ void sendVoiceToServer(uint8_t *buf, size_t len) {
 // Called every loop() to check for voice activity (simple energy detection).
 // When energy exceeds threshold, triggers startListening() for full recording.
 void loopVoice() {
-  if (!g_voiceEnabled || g_listening || g_audioEnabled && g_mp3 && g_mp3->isRunning()) return;
+  if (!g_voiceEnabled || g_listening || (g_audioEnabled && g_audio.isRunning())) return;
   // TODO: integrate ESP-SR wake word engine here.
   // For now this is a placeholder — the voice system is activated by a
   // dedicated "Listen" button on the clock face (long-press on the screen).
