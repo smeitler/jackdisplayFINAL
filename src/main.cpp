@@ -343,6 +343,10 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
   if (gfx.getStartCount() > 0) gfx.endWrite();
   gfx.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1,
                    (lgfx::rgb565_t *)&color_p->full);
+  // FIX: wait for DMA transfer to complete before releasing the buffer back to LVGL.
+  // Without this, LVGL starts drawing the next dirty region into the same buffer
+  // that the DMA is still actively reading -> pixel corruption / glitch bars.
+  gfx.waitDMA();
   lv_disp_flush_ready(disp);
 }
 
@@ -1674,9 +1678,13 @@ static void buildMoreButton(lv_color_t col) {
       if (g_voiceEnabled && !g_listening) {
         Serial.println("[voice] long-press detected, starting listen");
         playSystemAudio("wake_ack");
-        // Small delay so the ack plays before mic init
-        vTaskDelay(pdMS_TO_TICKS(600));
-        startListening();
+        // FIX: run the 600ms delay + startListening in a background task so
+        // the main LVGL task is never suspended (no vTaskDelay on main task).
+        xTaskCreate([](void *) {
+          vTaskDelay(pdMS_TO_TICKS(600));
+          startListening();
+          vTaskDelete(nullptr);
+        }, "voice_ack", 4096, nullptr, 1, nullptr);
       }
     }
   }, LV_EVENT_ALL, nullptr);
@@ -2527,15 +2535,20 @@ void showRecordingScreen(const char *category, const char *folder) {
 
   // Start I2S recording
   if (!recStart(folder)) {
-    // SD not available — show error and go back
+    // SD not available — show error and schedule return to clock after 1.5s.
+    // FIX: use lv_timer_create instead of delay(1500) so the display keeps
+    // rendering the error message during the wait (no frozen frame).
     lv_label_set_text(lblStatus, "SD card not found!");
     lv_obj_set_style_text_color(lblStatus, lv_color_hex(0xFF4444), LV_PART_MAIN);
-    lv_timer_handler();
-    delay(1500);
-    lv_obj_t *scr = g_recScreen;
-    g_recScreen = nullptr;
-    showClockScreen();
-    lv_obj_del_async(scr);
+    lv_disp_load_scr(g_recScreen);  // show error screen first
+    lv_timer_t *tRet = lv_timer_create([](lv_timer_t *t) {
+      lv_timer_del(t);
+      lv_obj_t *scr = g_recScreen;
+      g_recScreen = nullptr;
+      showClockScreen();
+      if (scr) lv_obj_del_async(scr);
+    }, 1500, nullptr);
+    lv_timer_set_repeat_count(tRet, 1);
     return;
   }
 
@@ -2837,9 +2850,14 @@ static void cb_ci_tick(lv_timer_t *timer) {
     // Time's up — re-read the habit name and reset the bar
     // Never auto-skip: keep prompting until the user physically responds
     g_ciRereadCount++;
+    // FIX: use one-shot LVGL timers instead of vTaskDelay so LVGL is never
+    // suspended mid-render (same pattern as showCelebrationScreen).
     buzzerOn();
-    vTaskDelay(pdMS_TO_TICKS(300));
-    buzzerOff();
+    lv_timer_t *toff = lv_timer_create([](lv_timer_t *t) {
+      buzzerOff();
+      lv_timer_del(t);
+    }, 300, nullptr);
+    lv_timer_set_repeat_count(toff, 1);
     // Re-play the habit audio
     if (g_ciHabitIdx < g_habitCount) {
       playHabitAudio(g_habits[g_ciHabitIdx].name.c_str());
@@ -2968,8 +2986,12 @@ void buildAlarmScreen() {
       if (g_voiceEnabled && !g_listening) {
         Serial.println("[voice] alarm long-press, starting listen");
         playSystemAudio("wake_ack");
-        vTaskDelay(pdMS_TO_TICKS(600));
-        startListening();
+        // FIX: background task so main LVGL task is never suspended.
+        xTaskCreate([](void *) {
+          vTaskDelay(pdMS_TO_TICKS(600));
+          startListening();
+          vTaskDelete(nullptr);
+        }, "alm_voice", 4096, nullptr, 1, nullptr);
       }
     }
   }, LV_EVENT_ALL, nullptr);
@@ -3214,7 +3236,7 @@ void showCelebrationScreen() {
 
   // Load screen FIRST so it appears instantly with no delay
   lv_disp_load_scr(scr_cel);
-  lv_task_handler();  // force one LVGL render pass so the screen is visible immediately
+  lv_timer_handler();  // FIX: was lv_task_handler() (LVGL 7 API) — correct LVGL 8 call is lv_timer_handler()
 
   // Submit check-in AFTER screen is visible (non-blocking to UI)
   submitCheckin();
