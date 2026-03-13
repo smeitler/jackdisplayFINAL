@@ -4,17 +4,18 @@
  * Compact iOS-style drum-roll: Hour | Minute | AM/PM
  * 3 visible rows: above (faded+slanted) | selected (large+bold) | below (faded+slanted)
  *
- * KEY DESIGN DECISION:
- * Each WheelColumn owns its own scroll state internally.
- * - selectedIndex is only used on MOUNT to set the initial scroll position.
- * - After mount, the column tracks its own liveIdx from scroll events.
- * - We NEVER call scrollTo() in response to selectedIndex changes after mount,
- *   because that fights the user's drag and snaps back to the original value.
- * - onSelect is called when the scroll settles, which updates the parent state.
- *   The parent state change re-renders but does NOT trigger a scrollTo.
+ * CRITICAL FIX:
+ * Previous versions used a dummy <View> padding row at the top of the scroll list.
+ * On web, CSS scroll-snap treated that dummy row as a valid snap target at y=0,
+ * so after every scroll the browser snapped back to the padding row (showing item[0]).
  *
- * Web: CSS scroll-snap-type injected onto the underlying div for native browser snapping.
- * Mobile: snapToInterval + decelerationRate="fast" for native iOS/Android snapping.
+ * Fix: use contentContainerStyle paddingTop/paddingBottom instead of dummy Views.
+ * This means item[0] is at y=0 in the content, but the viewport is offset by ITEM_HEIGHT
+ * so item[0] appears in the center row. Snap math: item[i] centers at y = i * ITEM_HEIGHT.
+ *
+ * Platform strategy:
+ * - iOS/Android: snapToInterval + decelerationRate="fast" + contentInset
+ * - Web: CSS scroll-snap-type injected onto the underlying div
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -44,7 +45,7 @@ function clamp(v: number, lo: number, hi: number) {
 
 interface ColumnProps {
   items: string[];
-  initialIndex: number;           // only used on mount
+  initialIndex: number;
   onSelect: (index: number) => void;
   width: number;
 }
@@ -57,6 +58,7 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
   const [liveIdx, setLiveIdx] = useState(initialIndex);
 
   // MOUNT ONLY: scroll to initial position
+  // item[i] is at y = i * ITEM_HEIGHT (no padding row offset needed)
   useEffect(() => {
     if (hasMounted.current) return;
     hasMounted.current = true;
@@ -68,7 +70,7 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
     }, 0);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // empty deps = mount only
+  }, []);
 
   // Web: inject CSS scroll-snap and listen for scroll settle
   useEffect(() => {
@@ -81,10 +83,20 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
         null;
       if (!node) return;
 
+      // Apply scroll snap to the container
       node.style.overflowY = 'scroll';
       node.style.scrollSnapType = 'y mandatory';
 
-      // Set initial scroll position on web too
+      // Apply snap-align to REAL item children only (skip padding)
+      // Since we use contentContainerStyle padding, all children are real items
+      const applySnap = () => {
+        Array.from(node.children).forEach((child) => {
+          (child as HTMLElement).style.scrollSnapAlign = 'center';
+        });
+      };
+      applySnap();
+
+      // Set initial scroll position
       node.scrollTop = initialIndex * ITEM_HEIGHT;
 
       const handleScroll = () => {
@@ -93,6 +105,7 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
         if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
         webScrollTimer.current = setTimeout(() => {
           const finalIdx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
+          // Snap to exact grid position
           node.scrollTo({ top: finalIdx * ITEM_HEIGHT, behavior: 'smooth' });
           setLiveIdx(finalIdx);
           onSelect(finalIdx);
@@ -108,7 +121,7 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
 
     return () => clearTimeout(setup);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mount only — onSelect is stable via useCallback in parent
+  }, []);
 
   // Mobile: track live position during drag
   const handleScroll = useCallback(
@@ -144,10 +157,12 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
         contentOffset={{ x: 0, y: initialIndex * ITEM_HEIGHT }}
+        // Use padding instead of dummy Views — avoids creating snap targets at y=0
+        contentContainerStyle={{
+          paddingTop: ITEM_HEIGHT,
+          paddingBottom: ITEM_HEIGHT,
+        }}
       >
-        {/* Top padding: lets item[0] sit in center row */}
-        <View style={styles.item} />
-
         {items.map((label, i) => {
           const dist = i - liveIdx;
           const isSelected = dist === 0;
@@ -176,9 +191,6 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
             </View>
           );
         })}
-
-        {/* Bottom padding */}
-        <View style={styles.item} />
       </ScrollView>
     </View>
   );
@@ -202,12 +214,11 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
   const isPM   = hour >= 12;
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
 
-  // These are only used as initialIndex — columns own their state after mount
   const initialHourIdx   = hour12 - 1;
   const initialMinuteIdx = minute;
   const initialPeriodIdx = isPM ? 1 : 0;
 
-  // Parent tracks current values to pass to emit
+  // Use refs so parent state updates don't re-render columns and fight scroll
   const hourIdxRef   = useRef(initialHourIdx);
   const minuteIdxRef = useRef(initialMinuteIdx);
   const periodIdxRef = useRef(initialPeriodIdx);
@@ -244,7 +255,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Selection band with visible top/bottom border lines */}
+      {/* Selection band — top/bottom border lines mark the center row */}
       <View
         pointerEvents="none"
         style={[
