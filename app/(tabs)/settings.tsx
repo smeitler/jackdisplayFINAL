@@ -18,6 +18,7 @@ import { clearLocalData } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 
 import * as WebBrowser from "expo-web-browser";
+import { VoicePickerSection } from "@/components/voice-picker-section";
 
 
 // ─── Jack Alarm Device Pairing Section ─────────────────────────────────────
@@ -295,13 +296,7 @@ export default function SettingsScreen() {
   const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
   const [snoozeMinutes, setSnoozeMinutes] = useState(alarm.snoozeMinutes ?? 10);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [voiceOpen, setVoiceOpen] = useState(false);
-  // voiceKey stores the raw ElevenLabs voice_id
-  const [voiceKey, setVoiceKey] = useState(alarm.elevenLabsVoice ?? '21m00Tcm4TlvDq8ikWAM');
-  const [voicePreviewLoading, setVoicePreviewLoading] = useState<string | null>(null);
 
-  const voicesQuery = trpc.voice.listVoices.useQuery();
-  const apiKeyQuery = trpc.voice.getApiKey.useQuery();
 
   // Imperative player ref — created fresh each time, released when done
   const previewPlayerRef = useRef<AudioPlayer | null>(null);
@@ -358,7 +353,6 @@ export default function SettingsScreen() {
     setMeditationId(alarm.meditationId);
     setRequireCheckin(alarm.requireCheckin ?? false);
     setSnoozeMinutes(alarm.snoozeMinutes ?? 10);
-    setVoiceKey(alarm.elevenLabsVoice ?? '21m00Tcm4TlvDq8ikWAM');
   }, [alarm]);
 
   function toggleDay(day: number) {
@@ -371,7 +365,7 @@ export default function SettingsScreen() {
   async function handleSave() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin, snoozeMinutes, elevenLabsVoice: voiceKey });
+    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin, snoozeMinutes });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -443,107 +437,6 @@ export default function SettingsScreen() {
                   })}
                 </View>
               </View>
-
-              {/* ElevenLabs Voice Picker — collapsible dropdown */}
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setVoiceOpen(v => !v);
-                }}
-                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <IconSymbol name="waveform" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Wake-Up Voice</Text>
-                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
-                    {voicesQuery.data?.find(v => v.voice_id === voiceKey)?.name ?? 'Rachel'}
-                  </Text>
-                </View>
-                <IconSymbol name={voiceOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-              </Pressable>
-              {voiceOpen && (
-                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
-                  {(voicesQuery.data ?? []).map((voice) => {
-                    const isSelected = voiceKey === voice.voice_id;
-                    const isPreviewing = voicePreviewLoading === voice.voice_id;
-                    return (
-                      <Pressable
-                        key={voice.voice_id}
-                        onPress={() => {
-                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setVoiceKey(voice.voice_id);
-                        }}
-                        style={({ pressed }) => [
-                          styles.dropdownItem,
-                          isSelected && { backgroundColor: colors.primary + '18' },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={styles.soundEmoji}>🎙️</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
-                            {voice.name}
-                          </Text>
-                          {voice.category !== 'premade' && (
-                            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                              {voice.category}
-                            </Text>
-                          )}
-                        </View>
-                        <Pressable
-                          onPress={async () => {
-                            if (isPreviewing) return;
-                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setVoicePreviewLoading(voice.voice_id);
-                            try {
-                              const elevenKey = apiKeyQuery.data?.apiKey;
-                              if (!elevenKey) return;
-                              // Call ElevenLabs TTS streaming directly on-device — no S3 upload, near-instant
-                              stopPreview();
-                              await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-                              const ttsResp = await fetch(
-                                `https://api.elevenlabs.io/v1/text-to-speech/${voice.voice_id}/stream`,
-                                {
-                                  method: 'POST',
-                                  headers: {
-                                    'xi-api-key': elevenKey,
-                                    'Content-Type': 'application/json',
-                                    'Accept': 'audio/mpeg',
-                                  },
-                                  body: JSON.stringify({
-                                    text: 'Good morning! Time to rise and shine.',
-                                    model_id: 'eleven_multilingual_v2',
-                                    voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-                                  }),
-                                }
-                              );
-                              if (!ttsResp.ok) throw new Error(`TTS error ${ttsResp.status}`);
-                              const blob = await ttsResp.blob();
-                              const url = URL.createObjectURL(blob);
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              const player = createAudioPlayer({ uri: url } as any);
-                              previewPlayerRef.current = player;
-                              player.play();
-                              previewTimerRef.current = setTimeout(() => stopPreview(), 10000);
-                            } catch {
-                              // ignore preview errors
-                            } finally {
-                              setVoicePreviewLoading(null);
-                            }
-                          }}
-                          style={({ pressed }) => [styles.previewBtn, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
-                        >
-                          {isPreviewing
-                            ? <ActivityIndicator size="small" color={colors.primary} />
-                            : <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>Preview</Text>
-                          }
-                        </Pressable>
-                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} style={{ marginLeft: 6 }} />}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              )}
 
               {/* Alarm Sound Picker — collapsible dropdown */}
               <Pressable
@@ -1042,6 +935,9 @@ export default function SettingsScreen() {
             )}
           </View>
         )}
+
+        {/* Global Voice Picker */}
+        <VoicePickerSection />
 
         {/* Jack Alarm Device Pairing */}
         {isAuthenticated && (

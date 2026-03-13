@@ -591,3 +591,15 @@
 - [x] Build Post-Habit Session Player card (appears after check-in when meditationId is set)
 - [x] Filter voice picker to only show voices from the "Jack App Voices" ElevenLabs collection
 - [x] Rename "CrowPanel" to "Jack Alarm" in More/Settings tab; enforce single-device connection UI
+
+## Voice System & Vision Tab (Mar 13 2026)
+
+- [x] Move voice picker to global app setting (accessible from More tab, not inside alarm section)
+- [x] Filter voice picker to only show voices from the user's Jack custom ElevenLabs collection
+- [ ] Build habit pre-recording engine: call ElevenLabs per habit on voice selection, cache MP3s locally
+- [ ] Re-record habit audio automatically when habit name changes
+- [ ] Play pre-recorded habit audio offline when habits appear on screen (with toggle to enable/disable)
+- [ ] Build personalized guided session scripts: Priming (Tony Robbins style), Guided Meditation, Breathwork — each with user name substitution
+- [ ] Generate guided session audio via ElevenLabs TTS with selected voice
+- [ ] Build voice journaling: mic recording screen, speech-to-text transcript saved as journal entry
+- [x] Build Vision tab with three-way toggle: Vision Board / Journaling / Gratitudes

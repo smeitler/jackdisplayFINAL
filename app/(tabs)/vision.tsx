@@ -1,7 +1,7 @@
 import {
   View, Text, ScrollView, Pressable, Image, StyleSheet,
   Alert, Dimensions, Modal, Platform, FlatList, TextInput,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, TouchableOpacity,
 } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -16,6 +16,9 @@ import { CategoryIcon } from "@/components/category-icon";
 import {
   loadVisionBoard, saveVisionBoard, VisionBoard,
   loadVisionMotivations, saveVisionMotivations, VisionMotivations,
+  loadJournalEntries, saveJournalEntries, addJournalEntry, deleteJournalEntry, JournalEntry,
+  loadGratitudeEntries, addGratitudeEntry, deleteGratitudeEntry, GratitudeEntry,
+  toDateString, formatDisplayDate,
 } from "@/lib/storage";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -376,9 +379,20 @@ export default function VisionBoardScreen() {
   const maxWidth = useContentMaxWidth();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
+  const [visionTab, setVisionTab] = useState<'board' | 'journal' | 'gratitude'>('board');
   const [board, setBoard] = useState<VisionBoard>({});
   const [motivations, setMotivations] = useState<VisionMotivations>({});
   const [detailCatId, setDetailCatId] = useState<string | null>(null);
+
+  // Journal state
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [journalText, setJournalText] = useState('');
+  const [journalSaving, setJournalSaving] = useState(false);
+
+  // Gratitude state
+  const [gratitudeEntries, setGratitudeEntries] = useState<GratitudeEntry[]>([]);
+  const [gratitudeItems, setGratitudeItems] = useState(['', '', '']);
+  const [gratitudeSaving, setGratitudeSaving] = useState(false);
 
   useEffect(() => {
     // Load board and strip any stale ph:// or non-file:// URIs saved by older app versions.
@@ -415,6 +429,8 @@ export default function VisionBoardScreen() {
       }
     });
     loadVisionMotivations().then(setMotivations);
+    loadJournalEntries().then(setJournalEntries);
+    loadGratitudeEntries().then(setGratitudeEntries);
   }, [isDemoMode]);
 
   async function updateBoard(newBoard: VisionBoard) {
@@ -425,6 +441,47 @@ export default function VisionBoardScreen() {
   async function updateMotivations(newMot: VisionMotivations) {
     setMotivations(newMot);
     await saveVisionMotivations(newMot);
+  }
+
+  async function handleSaveJournal() {
+    if (!journalText.trim()) return;
+    setJournalSaving(true);
+    const entry: JournalEntry = {
+      id: Date.now().toString(),
+      date: toDateString(),
+      text: journalText.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    await addJournalEntry(entry);
+    setJournalEntries(prev => [entry, ...prev]);
+    setJournalText('');
+    setJournalSaving(false);
+  }
+
+  async function handleDeleteJournal(id: string) {
+    await deleteJournalEntry(id);
+    setJournalEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  async function handleSaveGratitude() {
+    const filled = gratitudeItems.filter(i => i.trim());
+    if (filled.length === 0) return;
+    setGratitudeSaving(true);
+    const entry: GratitudeEntry = {
+      id: Date.now().toString(),
+      date: toDateString(),
+      items: filled,
+      createdAt: new Date().toISOString(),
+    };
+    await addGratitudeEntry(entry);
+    setGratitudeEntries(prev => [entry, ...prev]);
+    setGratitudeItems(['', '', '']);
+    setGratitudeSaving(false);
+  }
+
+  async function handleDeleteGratitude(id: string) {
+    await deleteGratitudeEntry(id);
+    setGratitudeEntries(prev => prev.filter(e => e.id !== id));
   }
 
   const pickImage = useCallback(async (catId: string) => {
@@ -476,8 +533,27 @@ export default function VisionBoardScreen() {
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
-        <Text style={[styles.pageTitle, { color: colors.foreground }]}>Vision Board</Text>
-        <Text style={[styles.pageSubtitle, { color: colors.muted }]}>
+
+        {/* Three-way toggle */}
+        <View style={tabStyles.toggleRow}>
+          {(['board', 'journal', 'gratitude'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setVisionTab(tab)}
+              style={[tabStyles.toggleBtn, visionTab === tab && { backgroundColor: colors.primary }]}
+              activeOpacity={0.75}
+            >
+              <Text style={[tabStyles.toggleBtnText, { color: visionTab === tab ? '#fff' : colors.muted }]}>
+                {tab === 'board' ? 'Vision Board' : tab === 'journal' ? 'Journal' : 'Gratitude'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── Vision Board ── */}
+        {visionTab === 'board' && (
+          <>
+        <Text style={[styles.pageSubtitle, { color: colors.muted, marginTop: 8 }]}>
           Tap a goal to add photos and reasons. Swipe photos to browse.
         </Text>
 
@@ -582,6 +658,100 @@ export default function VisionBoardScreen() {
             </View>
           );
         })}
+
+        <View style={{ height: 40 }} />
+          </>
+        )}
+
+        {/* ── Journal ── */}
+        {visionTab === 'journal' && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={[styles.pageSubtitle, { color: colors.muted }]}>Write your thoughts for today.</Text>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <TextInput
+                value={journalText}
+                onChangeText={setJournalText}
+                placeholder="What's on your mind?"
+                placeholderTextColor={colors.muted}
+                multiline
+                style={[tabStyles.journalInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+                returnKeyType="default"
+              />
+              <TouchableOpacity
+                onPress={handleSaveJournal}
+                disabled={journalSaving || !journalText.trim()}
+                style={[tabStyles.saveBtn, { backgroundColor: colors.primary, opacity: (!journalText.trim() || journalSaving) ? 0.5 : 1 }]}
+                activeOpacity={0.8}
+              >
+                <Text style={tabStyles.saveBtnText}>{journalSaving ? 'Saving…' : 'Save Entry'}</Text>
+              </TouchableOpacity>
+            </KeyboardAvoidingView>
+            <FlatList
+              data={journalEntries}
+              keyExtractor={e => e.id}
+              scrollEnabled={false}
+              style={{ marginTop: 16 }}
+              renderItem={({ item }) => (
+                <View style={[tabStyles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={tabStyles.entryHeader}>
+                    <Text style={[tabStyles.entryDate, { color: colors.muted }]}>{formatDisplayDate(item.date)}</Text>
+                    <TouchableOpacity onPress={() => handleDeleteJournal(item.id)} activeOpacity={0.7}>
+                      <IconSymbol name="xmark.circle.fill" size={18} color={colors.muted} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[tabStyles.entryText, { color: colors.foreground }]}>{item.text}</Text>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={[tabStyles.emptyHint, { color: colors.muted }]}>No journal entries yet. Write your first one above.</Text>}
+            />
+          </View>
+        )}
+
+        {/* ── Gratitude ── */}
+        {visionTab === 'gratitude' && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={[styles.pageSubtitle, { color: colors.muted }]}>What are you grateful for today?</Text>
+            {gratitudeItems.map((item, idx) => (
+              <TextInput
+                key={idx}
+                value={item}
+                onChangeText={val => setGratitudeItems(prev => prev.map((v, i) => i === idx ? val : v))}
+                placeholder={`Gratitude ${idx + 1}…`}
+                placeholderTextColor={colors.muted}
+                style={[tabStyles.gratitudeInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+                returnKeyType={idx < gratitudeItems.length - 1 ? 'next' : 'done'}
+              />
+            ))}
+            <TouchableOpacity
+              onPress={handleSaveGratitude}
+              disabled={gratitudeSaving || gratitudeItems.every(i => !i.trim())}
+              style={[tabStyles.saveBtn, { backgroundColor: colors.primary, opacity: (gratitudeItems.every(i => !i.trim()) || gratitudeSaving) ? 0.5 : 1 }]}
+              activeOpacity={0.8}
+            >
+              <Text style={tabStyles.saveBtnText}>{gratitudeSaving ? 'Saving…' : 'Save Gratitudes'}</Text>
+            </TouchableOpacity>
+            <FlatList
+              data={gratitudeEntries}
+              keyExtractor={e => e.id}
+              scrollEnabled={false}
+              style={{ marginTop: 16 }}
+              renderItem={({ item }) => (
+                <View style={[tabStyles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={tabStyles.entryHeader}>
+                    <Text style={[tabStyles.entryDate, { color: colors.muted }]}>{formatDisplayDate(item.date)}</Text>
+                    <TouchableOpacity onPress={() => handleDeleteGratitude(item.id)} activeOpacity={0.7}>
+                      <IconSymbol name="xmark.circle.fill" size={18} color={colors.muted} />
+                    </TouchableOpacity>
+                  </View>
+                  {item.items.map((g, i) => (
+                    <Text key={i} style={[tabStyles.entryText, { color: colors.foreground }]}>🙏 {g}</Text>
+                  ))}
+                </View>
+              )}
+              ListEmptyComponent={<Text style={[tabStyles.emptyHint, { color: colors.muted }]}>No gratitude entries yet. Add your first above.</Text>}
+            />
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
         </View>
@@ -716,5 +886,81 @@ const detailStyles = StyleSheet.create({
   thumbDelete: {
     position: "absolute", top: -6, right: -6,
     backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12,
+  },
+});
+
+const tabStyles = StyleSheet.create({
+  toggleRow: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+    gap: 4,
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+  },
+  toggleBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  journalInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 10,
+  },
+  gratitudeInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  saveBtn: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  entryCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  entryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  entryDate: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  entryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 2,
+  },
+  emptyHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 24,
+    marginBottom: 12,
   },
 });

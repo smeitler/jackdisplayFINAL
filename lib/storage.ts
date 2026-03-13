@@ -520,3 +520,66 @@ export function formatDisplayDate(dateStr: string): string {
   if (dateStr === yesterday) return 'Yesterday';
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
+
+// ─── Journal Entries ──────────────────────────────────────────────────────────
+const JOURNAL_ENTRIES_KEY = 'daycheck:journal_entries';
+
+export interface JournalEntry {
+  id: string;
+  date: string;       // YYYY-MM-DD
+  text: string;
+  audioUri?: string;  // local file:// path to voice recording (if any)
+  createdAt: string;  // ISO
+}
+
+export async function loadJournalEntries(): Promise<JournalEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(JOURNAL_ENTRIES_KEY);
+    return raw ? (JSON.parse(raw) as JournalEntry[]) : [];
+  } catch { return []; }
+}
+
+export async function saveJournalEntries(entries: JournalEntry[]): Promise<void> {
+  await AsyncStorage.setItem(JOURNAL_ENTRIES_KEY, JSON.stringify(entries));
+}
+
+export async function addJournalEntry(entry: JournalEntry): Promise<void> {
+  const entries = await loadJournalEntries();
+  await saveJournalEntries([entry, ...entries]);
+}
+
+export async function deleteJournalEntry(id: string): Promise<void> {
+  const entries = await loadJournalEntries();
+  await saveJournalEntries(entries.filter(e => e.id !== id));
+}
+
+// ─── Gratitude Entries ────────────────────────────────────────────────────────
+const GRATITUDE_ENTRIES_KEY = 'daycheck:gratitude_entries';
+
+export interface GratitudeEntry {
+  id: string;
+  date: string;       // YYYY-MM-DD
+  items: string[];    // 3-5 gratitude items
+  createdAt: string;  // ISO
+}
+
+export async function loadGratitudeEntries(): Promise<GratitudeEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(GRATITUDE_ENTRIES_KEY);
+    return raw ? (JSON.parse(raw) as GratitudeEntry[]) : [];
+  } catch { return []; }
+}
+
+export async function saveGratitudeEntries(entries: GratitudeEntry[]): Promise<void> {
+  await AsyncStorage.setItem(GRATITUDE_ENTRIES_KEY, JSON.stringify(entries));
+}
+
+export async function addGratitudeEntry(entry: GratitudeEntry): Promise<void> {
+  const entries = await loadGratitudeEntries();
+  await saveGratitudeEntries([entry, ...entries]);
+}
+
+export async function deleteGratitudeEntry(id: string): Promise<void> {
+  const entries = await loadGratitudeEntries();
+  await saveGratitudeEntries(entries.filter(e => e.id !== id));
+}
