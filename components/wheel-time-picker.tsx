@@ -51,10 +51,13 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const isDragging = useRef(false);
+  // Track live scroll offset so we can style items during drag, not just after snap
+  const [liveIndex, setLiveIndex] = useState(selectedIndex);
 
   // Scroll to selected index whenever it changes externally
   useEffect(() => {
     if (!isDragging.current) {
+      setLiveIndex(selectedIndex);
       scrollRef.current?.scrollTo({
         y: selectedIndex * ITEM_HEIGHT,
         animated: false,
@@ -66,11 +69,21 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
     isDragging.current = true;
   }, []);
 
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const raw = e.nativeEvent.contentOffset.y;
+      const idx = clamp(snapIndex(raw), 0, items.length - 1);
+      setLiveIndex(idx);
+    },
+    [items.length],
+  );
+
   const handleScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       isDragging.current = false;
       const raw = e.nativeEvent.contentOffset.y;
       const idx = clamp(snapIndex(raw), 0, items.length - 1);
+      setLiveIndex(idx);
       scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
       onSelect(idx);
     },
@@ -89,6 +102,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
         decelerationRate="fast"
         scrollEventThrottle={16}
         onScrollBeginDrag={handleScrollBegin}
+        onScroll={handleScroll}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
         contentOffset={{ x: 0, y: selectedIndex * ITEM_HEIGHT }}
@@ -99,11 +113,10 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
         ))}
 
         {items.map((label, i) => {
-          const dist = i - selectedIndex; // -1, 0, +1 (only ±1 visible)
+          const dist = i - liveIndex; // distance from currently-centered item
           const isSelected = dist === 0;
           const isAdjacent = Math.abs(dist) === 1;
 
-          // Adjacent items: smaller, faded, slightly italic (skew via transform)
           const textStyle = isSelected
             ? [styles.itemText, styles.itemTextSelected, { color: colors.foreground }]
             : isAdjacent
@@ -112,7 +125,6 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
                 styles.itemTextAdjacent,
                 {
                   color: colors.muted,
-                  // Slant toward center: top item tilts down, bottom item tilts up
                   transform: [
                     { perspective: 300 },
                     { rotateX: dist < 0 ? '-28deg' : '28deg' },
@@ -120,7 +132,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
                   ],
                 },
               ]
-            : [styles.itemText, { color: 'transparent' }]; // invisible (outside ±1)
+            : [styles.itemText, { color: 'transparent' as const }];
 
           return (
             <View key={i} style={styles.item}>
