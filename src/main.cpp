@@ -2993,8 +2993,15 @@ void showAlarmScreen(int alarmIdx) {
 }
 
 // ─── Check-in screen ───────────────────────────────────────────────────────────
-// buildCheckinScreen: creates the static skeleton (reused across all habits)
+// buildCheckinScreen: creates the check-in screen fresh each time it is called.
+// Always deletes the previous scr_checkin first to avoid leaking LVGL objects.
 void buildCheckinScreen() {
+  // Delete previous screen and null out all widget pointers
+  if (scr_checkin) { lv_obj_del(scr_checkin); scr_checkin = nullptr; }
+  lbl_ci_progress = nullptr;
+  lbl_ci_habit    = nullptr;
+  bar_ci_timer    = nullptr;
+
   scr_checkin = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(scr_checkin, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_clear_flag(scr_checkin, LV_OBJ_FLAG_SCROLLABLE);
@@ -3040,7 +3047,7 @@ void buildCheckinScreen() {
     lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, (b - 1) * btnW, -20);
     lv_obj_set_style_bg_color(btn, lv_color_hex(btns[b].col), LV_PART_MAIN);
     lv_obj_set_style_radius(btn, 14, LV_PART_MAIN);
-    lv_obj_add_event_cb(btn, btns[b].cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(btn, btns[b].cb, LV_EVENT_ALL, nullptr);
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, btns[b].label);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, LV_PART_MAIN);
@@ -3049,10 +3056,14 @@ void buildCheckinScreen() {
   }
 }
 
-// showCheckinScreen: updates labels for current habit and restarts the timer
+// showCheckinScreen: rebuilds the screen fresh for the current habit index,
+// then loads it. Rebuilding each time ensures widgets are always valid.
 void showCheckinScreen() {
   // Kill any running timer first
   if (g_ciTimer) { lv_timer_del(g_ciTimer); g_ciTimer = nullptr; }
+
+  // Always rebuild the screen so widgets are fresh and correctly sized
+  buildCheckinScreen();
 
   int idx   = g_ciHabitIdx;
   int total = g_habitCount;
