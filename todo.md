@@ -603,3 +603,9 @@
 - [ ] Generate guided session audio via ElevenLabs TTS with selected voice
 - [ ] Build voice journaling: mic recording screen, speech-to-text transcript saved as journal entry
 - [x] Build Vision tab with three-way toggle: Vision Board / Journaling / Gratitudes
+
+## Voice Picker Fixes (Mar 13 2026)
+
+- [ ] Fix voice preview not playing audio in the More tab voice picker
+- [ ] Fix voice list to only show user's saved professional voices (correct filtering)
+- [ ] Remove duplicate voice picker from Panel Settings screen

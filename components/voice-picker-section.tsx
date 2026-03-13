@@ -19,8 +19,8 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { createAudioPlayer } from 'expo-audio';
-import { setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColors } from '@/hooks/use-colors';
@@ -120,33 +120,65 @@ export function VoicePickerSection() {
     setPreviewLoading(voice.voice_id);
     try {
       const elevenKey = apiKeyQuery.data?.apiKey;
-      if (!elevenKey) return;
+      if (!elevenKey) {
+        Alert.alert('Not ready', 'Voice API key not loaded yet. Please wait a moment.');
+        return;
+      }
       stopPreview();
       await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-      const ttsResp = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voice.voice_id}/stream`,
-        {
+
+      const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice.voice_id}`;
+      const body = JSON.stringify({
+        text: 'Good morning! Ready to crush your habits today.',
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      });
+
+      let audioUri: string;
+
+      if (Platform.OS === 'web') {
+        // Web: fetch → blob → object URL
+        const ttsResp = await fetch(ttsUrl, {
           method: 'POST',
           headers: {
             'xi-api-key': elevenKey,
             'Content-Type': 'application/json',
             Accept: 'audio/mpeg',
           },
-          body: JSON.stringify({
-            text: 'Morning workout. Read 20 pages. Meditate.',
-            model_id: 'eleven_multilingual_v2',
-            voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-          }),
-        }
-      );
-      if (!ttsResp.ok) throw new Error(`TTS error ${ttsResp.status}`);
-      const blob = await ttsResp.blob();
-      const url = URL.createObjectURL(blob);
+          body,
+        });
+        if (!ttsResp.ok) throw new Error(`TTS error ${ttsResp.status}`);
+        const blob = await ttsResp.blob();
+        audioUri = URL.createObjectURL(blob);
+      } else {
+        // Native: POST to ElevenLabs → base64 → write to temp file → play
+        const tempPath = `${FileSystem.cacheDirectory}preview_${voice.voice_id}.mp3`;
+        const ttsResp = await fetch(ttsUrl, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': elevenKey,
+            'Content-Type': 'application/json',
+            Accept: 'audio/mpeg',
+          },
+          body,
+        });
+        if (!ttsResp.ok) throw new Error(`TTS error ${ttsResp.status}`);
+        const arrayBuffer = await ttsResp.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+        const base64 = btoa(binary);
+        await FileSystem.writeAsStringAsync(tempPath, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        audioUri = tempPath;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const player = createAudioPlayer({ uri: url } as any);
+      const player = createAudioPlayer({ uri: audioUri } as any);
       previewPlayerRef.current = player;
       player.play();
-      previewTimerRef.current = setTimeout(() => stopPreview(), 12000);
+      previewTimerRef.current = setTimeout(() => stopPreview(), 15000);
     } catch (err) {
       console.error('[VoicePickerSection] preview error:', err);
       Alert.alert('Preview failed', 'Could not load voice preview. Check your connection.');

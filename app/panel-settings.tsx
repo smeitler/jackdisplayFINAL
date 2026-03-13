@@ -115,59 +115,6 @@ function HourPicker({
   );
 }
 
-// ─── Voice Picker ─────────────────────────────────────────────────────────────
-
-const VOICES = [
-  { id: "rachel", name: "Rachel", desc: "Warm, clear, professional female" },
-  { id: "aria",   name: "Aria",   desc: "Bright, energetic female" },
-  { id: "adam",   name: "Adam",   desc: "Deep, calm male" },
-  { id: "josh",   name: "Josh",   desc: "Friendly, natural male" },
-  { id: "bella",  name: "Bella",  desc: "Soft, soothing female" },
-];
-
-function VoicePicker({
-  value,
-  onChange,
-  colors,
-}: {
-  value: string;
-  onChange: (id: string) => void;
-  colors: ReturnType<typeof useColors>;
-}) {
-  return (
-    <View style={{ gap: 6 }}>
-      {VOICES.map((v) => {
-        const selected = v.id === value;
-        return (
-          <Pressable
-            key={v.id}
-            onPress={() => {
-              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onChange(v.id);
-            }}
-            style={({ pressed }) => [
-              styles.voiceRow,
-              {
-                backgroundColor: selected ? colors.primary + "18" : colors.surface,
-                borderColor: selected ? colors.primary : colors.border,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.voiceName, { color: colors.foreground }]}>{v.name}</Text>
-              <Text style={[styles.voiceDesc, { color: colors.muted }]}>{v.desc}</Text>
-            </View>
-            {selected && (
-              <IconSymbol name="checkmark.circle.fill" size={20} color={colors.primary} />
-            )}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 // ─── Section Card ─────────────────────────────────────────────────────────────
 
 function SectionCard({
@@ -240,8 +187,6 @@ export default function PanelSettingsScreen() {
 
   // Local state mirrors server state
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [voiceId, setVoiceId] = useState("rachel");
   const [lowEmfMode, setLowEmfMode] = useState(false);
   const [wifiOffHour, setWifiOffHour] = useState(22);
   const [wifiOnHour, setWifiOnHour] = useState(6);
@@ -251,8 +196,6 @@ export default function PanelSettingsScreen() {
     if (!settingsQuery.data) return;
     const s = settingsQuery.data;
     setAudioEnabled(s.audioEnabled);
-    setVoiceEnabled(s.voiceEnabled);
-    setVoiceId(s.voiceId);
     setLowEmfMode(s.lowEmfMode);
     setWifiOffHour(s.wifiOffHour);
     setWifiOnHour(s.wifiOnHour);
@@ -276,17 +219,6 @@ export default function PanelSettingsScreen() {
   function handleAudioEnabled(v: boolean) {
     setAudioEnabled(v);
     save({ audioEnabled: v });
-  }
-
-  function handleVoiceEnabled(v: boolean) {
-    setVoiceEnabled(v);
-    save({ voiceEnabled: v });
-  }
-
-  function handleVoiceId(id: string) {
-    setVoiceId(id);
-    save({ voiceId: id });
-    toast("Voice updating — sync your panel when ready.");
   }
 
   function handleLowEmfMode(v: boolean) {
@@ -357,32 +289,10 @@ export default function PanelSettingsScreen() {
           <Text style={[styles.sectionDesc, { color: colors.muted }]}>
             Panel plays a short audio cue for each habit when you rate it. Disable to rate habits silently.
           </Text>
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <ToggleRow
-            label="Voice Commands"
-            value={voiceEnabled}
-            onValueChange={handleVoiceEnabled}
-            colors={colors}
-          />
-          <Text style={[styles.sectionDesc, { color: colors.muted }]}>
-            Responds to spoken "green", "yellow", "red", "yes", "no", "done", "skip". Also enables long-press on the clock face to trigger voice commands.
-          </Text>
+
         </SectionCard>
 
-        {/* Section 2: Voice */}
-        <SectionCard
-          title="Voice"
-          icon="waveform"
-          iconColor="#8B5CF6"
-          colors={colors}
-        >
-          <VoicePicker value={voiceId} onChange={handleVoiceId} colors={colors} />
-          <Text style={[styles.sectionDesc, { color: colors.muted, marginTop: 10 }]}>
-            When you change the voice, the panel regenerates all audio files in the background (~10–20 sec). Sync your panel when ready.
-          </Text>
-        </SectionCard>
-
-        {/* Section 3: Low EMF Mode */}
+        {/* Section 2: Low EMF Mode */}
         <SectionCard
           title="Low EMF Mode"
           icon="wifi"
@@ -519,22 +429,6 @@ const styles = StyleSheet.create({
   divider: {
     height: 0.5,
     marginVertical: 6,
-  },
-  voiceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  voiceName: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  voiceDesc: {
-    fontSize: 12,
-    marginTop: 1,
   },
   hourPickerRow: {
     gap: 6,
