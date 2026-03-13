@@ -3,12 +3,16 @@
  *
  * Compact iOS-style drum-roll time picker: Hour | Minute | AM/PM
  *
- * - 3 visible rows: 1 above, selected (large/bold), 1 below
- * - Adjacent rows: smaller, faded, slanted inward
- * - Infinite-loop: values repeated REPEATS times; starts in middle repetition
- * - Centering: explicit padding View items (not contentContainerStyle) so
- *   the first real item always sits in the center row on iOS and Android
- * - AM/PM: 2 clean options, no looping needed (just 2 rows + padding)
+ * Centering strategy:
+ * - Top + bottom spacer Views (1 row each) so item 0 can sit in center
+ * - contentOffset = selectedLoopedIndex * ITEM_HEIGHT  → item lands in center row
+ * - snapToInterval handles snapping during fast flicks
+ * - onMomentumScrollEnd fires the final snap + value emit
+ * - Slow-drag fallback: if no momentum event fires within 120ms of drag end,
+ *   we manually snap to the nearest grid position
+ *
+ * All three columns (hour, minute, AM/PM) use the SAME component and
+ * SAME spacer logic so they always align on the same row.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,8 +30,8 @@ import { useColors } from '@/hooks/use-colors';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ITEM_HEIGHT   = 48;
-const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 rows visible: above + center + below
-const REPEATS       = 21;                // repeat count for looped columns (odd = symmetric)
+const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 visible rows
+const REPEATS       = 21;                // odd → symmetric; ~10 loops each direction
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,76 +39,118 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function snapIndex(offset: number): number {
+function nearestIndex(offset: number): number {
   return Math.round(offset / ITEM_HEIGHT);
 }
 
-// ─── WheelColumn (looped) ─────────────────────────────────────────────────────
-// Used for Hours and Minutes — repeats values REPEATS times for infinite feel
+// ─── WheelColumn ─────────────────────────────────────────────────────────────
 
-interface LoopedColumnProps {
+interface ColumnProps {
   items: string[];
-  selectedIndex: number;
+  selectedIndex: number;   // index within original items
   onSelect: (index: number) => void;
   width: number;
+  loop?: boolean;          // true = repeat REPEATS times; false = no repeat (AM/PM)
 }
 
-function LoopedColumn({ items, selectedIndex, onSelect, width }: LoopedColumnProps) {
+function WheelColumn({ items, selectedIndex, onSelect, width, loop = true }: ColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
-  const isDragging = useRef(false);
 
-  // Build looped array: items repeated REPEATS times
-  const looped = useMemo(() => {
+  // Build display list
+  const { displayItems, startOffset } = useMemo(() => {
+    if (!loop) {
+      return { displayItems: items, startOffset: 0 };
+    }
     const arr: string[] = [];
     for (let r = 0; r < REPEATS; r++) arr.push(...items);
-    return arr;
+    return {
+      displayItems: arr,
+      startOffset: Math.floor(REPEATS / 2) * items.length,
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.join('|')]);
+  }, [items.join('|'), loop]);
 
-  const midStart = useMemo(
-    () => Math.floor(REPEATS / 2) * items.length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items.length],
-  );
+  // The looped index that corresponds to the selected value
+  const initialLoopedIdx = startOffset + selectedIndex;
 
-  // Current looped index (tracks live scroll position for styling)
-  const [liveLoopedIdx, setLiveLoopedIdx] = useState(() => midStart + selectedIndex);
+  // Live looped index — updated on every scroll tick for styling
+  const [liveIdx, setLiveIdx] = useState(initialLoopedIdx);
 
-  // When external selectedIndex changes (e.g. prop update), re-center
+  // Refs to manage snap timing
+  const isDragging        = useRef(false);
+  const snapTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRawOffsetRef  = useRef(initialLoopedIdx * ITEM_HEIGHT);
+
+  // Sync when external selectedIndex changes (e.g. initial load)
   useEffect(() => {
     if (!isDragging.current) {
-      const li = midStart + selectedIndex;
-      setLiveLoopedIdx(li);
+      const li = startOffset + selectedIndex;
+      setLiveIdx(li);
       scrollRef.current?.scrollTo({ y: li * ITEM_HEIGHT, animated: false });
+      lastRawOffsetRef.current = li * ITEM_HEIGHT;
     }
-  }, [selectedIndex, midStart]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex]);
+
+  function doSnap(rawOffset: number) {
+    const li = clamp(nearestIndex(rawOffset), 0, displayItems.length - 1);
+    const snappedY = li * ITEM_HEIGHT;
+    scrollRef.current?.scrollTo({ y: snappedY, animated: true });
+    setLiveIdx(li);
+    onSelect(li % items.length);
+  }
 
   const handleScrollBegin = useCallback(() => {
     isDragging.current = true;
+    if (snapTimerRef.current) {
+      clearTimeout(snapTimerRef.current);
+      snapTimerRef.current = null;
+    }
   }, []);
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const raw = e.nativeEvent.contentOffset.y;
-      const li = clamp(snapIndex(raw), 0, looped.length - 1);
-      setLiveLoopedIdx(li);
+      lastRawOffsetRef.current = raw;
+      const li = clamp(nearestIndex(raw), 0, displayItems.length - 1);
+      setLiveIdx(li);
     },
-    [looped.length],
+    [displayItems.length],
   );
 
-  const handleScrollEnd = useCallback(
+  // Called when a fast flick finishes decelerating
+  const handleMomentumEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       isDragging.current = false;
-      const raw = e.nativeEvent.contentOffset.y;
-      const li = clamp(snapIndex(raw), 0, looped.length - 1);
-      // Force snap to exact grid position
-      scrollRef.current?.scrollTo({ y: li * ITEM_HEIGHT, animated: true });
-      setLiveLoopedIdx(li);
-      onSelect(li % items.length);
+      if (snapTimerRef.current) {
+        clearTimeout(snapTimerRef.current);
+        snapTimerRef.current = null;
+      }
+      doSnap(e.nativeEvent.contentOffset.y);
     },
-    [looped.length, items.length, onSelect],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [displayItems.length, items.length, onSelect],
   );
+
+  // Called when the user lifts their finger (may or may not be followed by momentum)
+  const handleDragEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const raw = e.nativeEvent.contentOffset.y;
+      lastRawOffsetRef.current = raw;
+      // Give momentum 150ms to start; if it doesn't, snap manually
+      snapTimerRef.current = setTimeout(() => {
+        isDragging.current = false;
+        doSnap(lastRawOffsetRef.current);
+      }, 150);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [displayItems.length, items.length, onSelect],
+  );
+
+  useEffect(() => () => {
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+  }, []);
 
   return (
     <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
@@ -116,15 +162,15 @@ function LoopedColumn({ items, selectedIndex, onSelect, width }: LoopedColumnPro
         scrollEventThrottle={16}
         onScrollBeginDrag={handleScrollBegin}
         onScroll={handleScroll}
-        onMomentumScrollEnd={handleScrollEnd}
-        onScrollEndDrag={handleScrollEnd}
-        contentOffset={{ x: 0, y: liveLoopedIdx * ITEM_HEIGHT }}
+        onScrollEndDrag={handleDragEnd}
+        onMomentumScrollEnd={handleMomentumEnd}
+        contentOffset={{ x: 0, y: initialLoopedIdx * ITEM_HEIGHT }}
       >
-        {/* Top spacer: 1 row so first item can sit in center */}
-        <View style={styles.item} />
+        {/* Top spacer: pushes item 0 into the center row */}
+        <View style={styles.spacer} />
 
-        {looped.map((label, i) => {
-          const dist = i - liveLoopedIdx;
+        {displayItems.map((label, i) => {
+          const dist = i - liveIdx;
           const isSelected = dist === 0;
           const isAdjacent = Math.abs(dist) === 1;
 
@@ -152,94 +198,8 @@ function LoopedColumn({ items, selectedIndex, onSelect, width }: LoopedColumnPro
           );
         })}
 
-        {/* Bottom spacer: 1 row so last item can sit in center */}
-        <View style={styles.item} />
-      </ScrollView>
-    </View>
-  );
-}
-
-// ─── PeriodColumn (AM / PM only, no looping) ─────────────────────────────────
-
-interface PeriodColumnProps {
-  selectedIndex: number; // 0 = AM, 1 = PM
-  onSelect: (index: number) => void;
-  width: number;
-}
-
-function PeriodColumn({ selectedIndex, onSelect, width }: PeriodColumnProps) {
-  const colors = useColors();
-  const scrollRef = useRef<ScrollView>(null);
-  const isDragging = useRef(false);
-
-  useEffect(() => {
-    if (!isDragging.current) {
-      scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_HEIGHT, animated: false });
-    }
-  }, [selectedIndex]);
-
-  const handleScrollBegin = useCallback(() => { isDragging.current = true; }, []);
-
-  const handleScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      isDragging.current = false;
-      const raw = e.nativeEvent.contentOffset.y;
-      const idx = clamp(snapIndex(raw), 0, 1);
-      scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
-      onSelect(idx);
-    },
-    [onSelect],
-  );
-
-  const PERIODS = ['AM', 'PM'];
-
-  return (
-    <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_HEIGHT}
-        decelerationRate="fast"
-        scrollEventThrottle={16}
-        onScrollBeginDrag={handleScrollBegin}
-        onMomentumScrollEnd={handleScrollEnd}
-        onScrollEndDrag={handleScrollEnd}
-        contentOffset={{ x: 0, y: selectedIndex * ITEM_HEIGHT }}
-      >
-        {/* Top spacer */}
-        <View style={styles.item} />
-
-        {PERIODS.map((label, i) => {
-          const dist = i - selectedIndex;
-          const isSelected = dist === 0;
-          const isAdjacent = Math.abs(dist) === 1;
-
-          const textStyle = isSelected
-            ? [styles.itemText, styles.itemTextSelected, { color: colors.foreground }]
-            : isAdjacent
-            ? [
-                styles.itemText,
-                styles.itemTextAdjacent,
-                {
-                  color: colors.muted,
-                  transform: [
-                    { perspective: 300 },
-                    { rotateX: (dist < 0 ? '-28deg' : '28deg') as string },
-                    { scaleY: 0.82 as number },
-                  ],
-                },
-              ]
-            : [styles.itemText, { color: 'transparent' as const }];
-
-          return (
-            <View key={i} style={styles.item}>
-              <Text style={textStyle}>{label}</Text>
-            </View>
-          );
-        })}
-
-        {/* Bottom spacer */}
-        <View style={styles.item} />
+        {/* Bottom spacer: lets last item reach the center row */}
+        <View style={styles.spacer} />
       </ScrollView>
     </View>
   );
@@ -256,6 +216,7 @@ interface WheelTimePickerProps {
 
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));
 const MINUTES  = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+const PERIODS  = ['AM', 'PM'];
 
 export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps) {
   const colors = useColors();
@@ -296,7 +257,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Selection highlight band — sits at the center row */}
+      {/* Selection highlight band — always at the center row (row 1 of 3) */}
       <View
         pointerEvents="none"
         style={[
@@ -304,20 +265,17 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           {
             backgroundColor: colors.surface,
             borderColor: colors.border,
-            // Center row = row index 1 in a 3-row window (0-indexed)
-            // The top spacer View is row 0, so center content starts at ITEM_HEIGHT
-            top: ITEM_HEIGHT,
+            top: ITEM_HEIGHT,   // 1 row down = center of 3-row window
             width: totalW + 32,
             left: -16,
           },
         ]}
       />
 
-      {/* Columns */}
       <View style={styles.columns}>
-        <LoopedColumn items={HOURS_12} selectedIndex={hourIdx}   onSelect={onHourSelect}   width={hourW} />
-        <LoopedColumn items={MINUTES}  selectedIndex={minuteIdx} onSelect={onMinuteSelect} width={minuteW} />
-        <PeriodColumn                  selectedIndex={periodIdx} onSelect={onPeriodSelect} width={periodW} />
+        <WheelColumn items={HOURS_12} selectedIndex={hourIdx}   onSelect={onHourSelect}   width={hourW}   loop />
+        <WheelColumn items={MINUTES}  selectedIndex={minuteIdx} onSelect={onMinuteSelect} width={minuteW} loop />
+        <WheelColumn items={PERIODS}  selectedIndex={periodIdx} onSelect={onPeriodSelect} width={periodW} loop={false} />
       </View>
     </View>
   );
@@ -335,6 +293,9 @@ const styles = StyleSheet.create({
   columns: {
     flexDirection: 'row',
     height: PICKER_HEIGHT,
+  },
+  spacer: {
+    height: ITEM_HEIGHT,  // exactly one row — same as items
   },
   item: {
     height: ITEM_HEIGHT,
