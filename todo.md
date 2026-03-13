@@ -610,3 +610,13 @@
 - [x] Fix voice list to only show user's saved professional voices (correct filtering)
 - [x] Remove duplicate voice picker from Panel Settings screen
 - [ ] Fix voice preview to use ElevenLabs built-in preview_url (instant CDN MP3, no live TTS call)
+
+## Voice Journal (Mar 13 2026)
+
+- [x] Fix voice preview to use ElevenLabs built-in preview_url (instant CDN MP3, no live TTS call)
+- [x] Add server-side voiceJournal.transcribeAndCategorize endpoint (upload audio → Whisper → LLM categorize)
+- [x] Build VoiceJournalSection component in More tab (record button, elapsed timer, processing states)
+- [x] Auto-save AI-extracted journal entries to Journal tab storage on recording stop
+- [x] Auto-save AI-extracted gratitude items to Gratitude tab storage on recording stop
+- [x] Show recordings library in More tab with playback, date, duration, and entry count badges
+- [x] Delete recording from library (removes local file + metadata)

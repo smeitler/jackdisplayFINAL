@@ -606,6 +606,83 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Voice Journal ─────────────────────────────────────────────────────────────────
+  voiceJournal: router({
+    /**
+     * Accepts a base64-encoded audio blob, uploads to S3, transcribes via Whisper,
+     * then uses the LLM to extract:
+     *   - journalEntries: array of reflective/general thoughts
+     *   - gratitudeItems: array of things the user is grateful for
+     * Returns both arrays plus the raw transcript.
+     */
+    transcribeAndCategorize: protectedProcedure
+      .input(z.object({
+        audioBase64: z.string(),          // base64-encoded audio data
+        mimeType: z.string().default('audio/m4a'), // e.g. audio/m4a, audio/webm
+        date: z.string().optional(),      // YYYY-MM-DD, defaults to today
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+        const { transcribeAudio } = await import('./_core/voiceTranscription.js');
+        const { storagePut } = await import('./storage.js');
+
+        // 1. Upload audio to S3 so Whisper can access it via URL
+        const ext = input.mimeType.split('/')[1]?.split(';')[0] ?? 'm4a';
+        const fileKey = `voice-journal/${ctx.user.id}/${Date.now()}.${ext}`;
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+        const { url: audioUrl } = await storagePut(fileKey, audioBuffer, input.mimeType);
+
+        // 2. Transcribe with Whisper
+        const transcription = await transcribeAudio({
+          audioUrl,
+          language: 'en',
+          prompt: 'Personal journal entry, gratitude, reflections, daily thoughts',
+        });
+        if ('error' in transcription) {
+          throw new Error(`Transcription failed: ${transcription.error}`);
+        }
+        const transcript = transcription.text?.trim() ?? '';
+        if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], audioUrl };
+
+        // 3. AI categorization — extract journal thoughts vs gratitude items
+        const llmResp = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a personal journal assistant. Given a voice journal transcript, extract:
+1. "journalEntries": an array of reflective thoughts, observations, plans, or general statements (each a concise sentence or short paragraph, preserving the user's voice)
+2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)
+
+Rules:
+- A sentence expressing gratitude ("I'm grateful for...", "I appreciate...", "thankful for...") → gratitudeItems
+- Everything else → journalEntries
+- Keep the user's natural language; don't rewrite or summarize
+- If nothing fits a category, return an empty array for it
+Return ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...]}`,
+            },
+            {
+              role: 'user',
+              content: `Transcript:\n${transcript}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        });
+
+        let journalEntries: string[] = [];
+        let gratitudeItems: string[] = [];
+        try {
+          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+          journalEntries = Array.isArray(parsed.journalEntries) ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
+          gratitudeItems = Array.isArray(parsed.gratitudeItems) ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
+        } catch {
+          // If parsing fails, put everything in journal
+          journalEntries = [transcript];
+        }
+
+        return { transcript, journalEntries, gratitudeItems, audioUrl };
+      }),
+  }),
+
   // ─── Community: Referrals ─────────────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>
