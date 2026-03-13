@@ -3,15 +3,15 @@
  *
  * Compact iOS-style drum-roll time picker: Hour | Minute | AM/PM
  *
- * Features:
- * - 3 visible rows (1 above, selected, 1 below) — compact height
- * - Adjacent rows are smaller, faded, and slanted inward
- * - Infinite-loop illusion: each column repeats its values REPEATS times
- *   so the user can scroll freely in either direction without hitting an end
- * - Correct snap alignment: always lands centered on a value
+ * - 3 visible rows: 1 above, selected (large/bold), 1 below
+ * - Adjacent rows: smaller, faded, slanted inward
+ * - Infinite-loop: values repeated REPEATS times; starts in middle repetition
+ * - Centering: explicit padding View items (not contentContainerStyle) so
+ *   the first real item always sits in the center row on iOS and Android
+ * - AM/PM: 2 clean options, no looping needed (just 2 rows + padding)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -26,9 +26,8 @@ import { useColors } from '@/hooks/use-colors';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ITEM_HEIGHT   = 48;
-const VISIBLE_ITEMS = 3;   // 1 above + selected + 1 below
-const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;  // 144px
-const REPEATS       = 21;  // repeat the list this many times (odd so middle = center)
+const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 rows visible: above + center + below
+const REPEATS       = 21;                // repeat count for looped columns (odd = symmetric)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,59 +39,46 @@ function snapIndex(offset: number): number {
   return Math.round(offset / ITEM_HEIGHT);
 }
 
-/**
- * Build an expanded list by repeating `items` REPEATS times.
- * Returns the list and the starting index for the "middle" repetition.
- */
-function buildLoopedItems(items: string[]): { looped: string[]; midOffset: number } {
-  const looped: string[] = [];
-  for (let r = 0; r < REPEATS; r++) {
-    for (const item of items) looped.push(item);
-  }
-  // Middle repetition starts at index: Math.floor(REPEATS / 2) * items.length
-  const midOffset = Math.floor(REPEATS / 2) * items.length;
-  return { looped, midOffset };
-}
+// ─── WheelColumn (looped) ─────────────────────────────────────────────────────
+// Used for Hours and Minutes — repeats values REPEATS times for infinite feel
 
-// ─── Single column ────────────────────────────────────────────────────────────
-
-interface ColumnProps {
-  items: string[];       // original (non-looped) items
-  selectedIndex: number; // index within original items
+interface LoopedColumnProps {
+  items: string[];
+  selectedIndex: number;
   onSelect: (index: number) => void;
   width: number;
 }
 
-function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
+function LoopedColumn({ items, selectedIndex, onSelect, width }: LoopedColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const isDragging = useRef(false);
-  const lastEmittedRef = useRef(selectedIndex);
 
-  // Build looped list once per items array reference
-  const { looped, midOffset } = React.useMemo(
-    () => buildLoopedItems(items),
+  // Build looped array: items repeated REPEATS times
+  const looped = useMemo(() => {
+    const arr: string[] = [];
+    for (let r = 0; r < REPEATS; r++) arr.push(...items);
+    return arr;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.join('|')]);
+
+  const midStart = useMemo(
+    () => Math.floor(REPEATS / 2) * items.length,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items.join(',')],
+    [items.length],
   );
 
-  // The absolute index in the looped list that corresponds to the selected value
-  // We always start in the middle repetition
-  const toLoopedIndex = useCallback(
-    (valIdx: number) => midOffset + valIdx,
-    [midOffset],
-  );
+  // Current looped index (tracks live scroll position for styling)
+  const [liveLoopedIdx, setLiveLoopedIdx] = useState(() => midStart + selectedIndex);
 
-  const [loopedIndex, setLoopedIndex] = useState(() => toLoopedIndex(selectedIndex));
-
-  // Sync when external selectedIndex changes
+  // When external selectedIndex changes (e.g. prop update), re-center
   useEffect(() => {
     if (!isDragging.current) {
-      const li = toLoopedIndex(selectedIndex);
-      setLoopedIndex(li);
+      const li = midStart + selectedIndex;
+      setLiveLoopedIdx(li);
       scrollRef.current?.scrollTo({ y: li * ITEM_HEIGHT, animated: false });
     }
-  }, [selectedIndex, toLoopedIndex]);
+  }, [selectedIndex, midStart]);
 
   const handleScrollBegin = useCallback(() => {
     isDragging.current = true;
@@ -102,7 +88,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const raw = e.nativeEvent.contentOffset.y;
       const li = clamp(snapIndex(raw), 0, looped.length - 1);
-      setLoopedIndex(li);
+      setLiveLoopedIdx(li);
     },
     [looped.length],
   );
@@ -112,15 +98,10 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
       isDragging.current = false;
       const raw = e.nativeEvent.contentOffset.y;
       const li = clamp(snapIndex(raw), 0, looped.length - 1);
-      // Snap to exact position
+      // Force snap to exact grid position
       scrollRef.current?.scrollTo({ y: li * ITEM_HEIGHT, animated: true });
-      setLoopedIndex(li);
-      // Map back to original index
-      const valIdx = li % items.length;
-      if (valIdx !== lastEmittedRef.current) {
-        lastEmittedRef.current = valIdx;
-        onSelect(valIdx);
-      }
+      setLiveLoopedIdx(li);
+      onSelect(li % items.length);
     },
     [looped.length, items.length, onSelect],
   );
@@ -137,15 +118,13 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
         onScroll={handleScroll}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
-        // Start scrolled so the selected value sits in the center row
-        // Center row = row index 1 (0-based), so offset = loopedIndex * ITEM_HEIGHT
-        // No extra padding needed — the center row IS the middle of the 3-row window
-        contentOffset={{ x: 0, y: loopedIndex * ITEM_HEIGHT }}
-        // Remove default contentContainerStyle padding
-        contentContainerStyle={{ paddingVertical: ITEM_HEIGHT }}
+        contentOffset={{ x: 0, y: liveLoopedIdx * ITEM_HEIGHT }}
       >
+        {/* Top spacer: 1 row so first item can sit in center */}
+        <View style={styles.item} />
+
         {looped.map((label, i) => {
-          const dist = i - loopedIndex;
+          const dist = i - liveLoopedIdx;
           const isSelected = dist === 0;
           const isAdjacent = Math.abs(dist) === 1;
 
@@ -159,7 +138,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
                   color: colors.muted,
                   transform: [
                     { perspective: 300 },
-                    { rotateX: dist < 0 ? '-28deg' : '28deg' },
+                    { rotateX: (dist < 0 ? '-28deg' : '28deg') as string },
                     { scaleY: 0.82 as number },
                   ],
                 },
@@ -172,6 +151,95 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
             </View>
           );
         })}
+
+        {/* Bottom spacer: 1 row so last item can sit in center */}
+        <View style={styles.item} />
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─── PeriodColumn (AM / PM only, no looping) ─────────────────────────────────
+
+interface PeriodColumnProps {
+  selectedIndex: number; // 0 = AM, 1 = PM
+  onSelect: (index: number) => void;
+  width: number;
+}
+
+function PeriodColumn({ selectedIndex, onSelect, width }: PeriodColumnProps) {
+  const colors = useColors();
+  const scrollRef = useRef<ScrollView>(null);
+  const isDragging = useRef(false);
+
+  useEffect(() => {
+    if (!isDragging.current) {
+      scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_HEIGHT, animated: false });
+    }
+  }, [selectedIndex]);
+
+  const handleScrollBegin = useCallback(() => { isDragging.current = true; }, []);
+
+  const handleScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      isDragging.current = false;
+      const raw = e.nativeEvent.contentOffset.y;
+      const idx = clamp(snapIndex(raw), 0, 1);
+      scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
+      onSelect(idx);
+    },
+    [onSelect],
+  );
+
+  const PERIODS = ['AM', 'PM'];
+
+  return (
+    <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_HEIGHT}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        onScrollBeginDrag={handleScrollBegin}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        contentOffset={{ x: 0, y: selectedIndex * ITEM_HEIGHT }}
+      >
+        {/* Top spacer */}
+        <View style={styles.item} />
+
+        {PERIODS.map((label, i) => {
+          const dist = i - selectedIndex;
+          const isSelected = dist === 0;
+          const isAdjacent = Math.abs(dist) === 1;
+
+          const textStyle = isSelected
+            ? [styles.itemText, styles.itemTextSelected, { color: colors.foreground }]
+            : isAdjacent
+            ? [
+                styles.itemText,
+                styles.itemTextAdjacent,
+                {
+                  color: colors.muted,
+                  transform: [
+                    { perspective: 300 },
+                    { rotateX: (dist < 0 ? '-28deg' : '28deg') as string },
+                    { scaleY: 0.82 as number },
+                  ],
+                },
+              ]
+            : [styles.itemText, { color: 'transparent' as const }];
+
+          return (
+            <View key={i} style={styles.item}>
+              <Text style={textStyle}>{label}</Text>
+            </View>
+          );
+        })}
+
+        {/* Bottom spacer */}
+        <View style={styles.item} />
       </ScrollView>
     </View>
   );
@@ -188,7 +256,6 @@ interface WheelTimePickerProps {
 
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));
 const MINUTES  = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
-const PERIODS  = ['AM', 'PM'];
 
 export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps) {
   const colors = useColors();
@@ -229,7 +296,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Selection highlight band */}
+      {/* Selection highlight band — sits at the center row */}
       <View
         pointerEvents="none"
         style={[
@@ -237,9 +304,8 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           {
             backgroundColor: colors.surface,
             borderColor: colors.border,
-            // Center row = row 1 (0-indexed) in a 3-row window
-            // With paddingVertical: ITEM_HEIGHT on the ScrollView content,
-            // the center row sits at y = ITEM_HEIGHT (one row down from top)
+            // Center row = row index 1 in a 3-row window (0-indexed)
+            // The top spacer View is row 0, so center content starts at ITEM_HEIGHT
             top: ITEM_HEIGHT,
             width: totalW + 32,
             left: -16,
@@ -249,9 +315,9 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
       {/* Columns */}
       <View style={styles.columns}>
-        <WheelColumn items={HOURS_12} selectedIndex={hourIdx}   onSelect={onHourSelect}   width={hourW} />
-        <WheelColumn items={MINUTES}  selectedIndex={minuteIdx} onSelect={onMinuteSelect} width={minuteW} />
-        <WheelColumn items={PERIODS}  selectedIndex={periodIdx} onSelect={onPeriodSelect} width={periodW} />
+        <LoopedColumn items={HOURS_12} selectedIndex={hourIdx}   onSelect={onHourSelect}   width={hourW} />
+        <LoopedColumn items={MINUTES}  selectedIndex={minuteIdx} onSelect={onMinuteSelect} width={minuteW} />
+        <PeriodColumn                  selectedIndex={periodIdx} onSelect={onPeriodSelect} width={periodW} />
       </View>
     </View>
   );
