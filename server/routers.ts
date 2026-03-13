@@ -486,6 +486,25 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.deleteDevice(input.deviceId, ctx.user.id)
       ),
+
+    /** Get panel settings for the user's device. Returns defaults if no device paired yet. */
+    getSettings: protectedProcedure.query(({ ctx }) =>
+      db.getDeviceSettings(ctx.user.id)
+    ),
+
+    /** Update one or more panel settings for the user's device. */
+    updateSettings: protectedProcedure
+      .input(z.object({
+        voiceId: z.string().max(64).optional(),
+        audioEnabled: z.boolean().optional(),
+        voiceEnabled: z.boolean().optional(),
+        lowEmfMode: z.boolean().optional(),
+        wifiOffHour: z.number().int().min(0).max(23).optional(),
+        wifiOnHour: z.number().int().min(0).max(23).optional(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.updateDeviceSettings(ctx.user.id, input)
+      ),
   }),
 
   // ─── Moderation (Apple Guideline 1.2) ─────────────────────────────────────────

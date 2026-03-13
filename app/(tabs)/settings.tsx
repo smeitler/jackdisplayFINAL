@@ -1042,6 +1042,28 @@ export default function SettingsScreen() {
           <DevicePairingSection colors={colors} />
         )}
 
+        {/* Panel Settings */}
+        {isAuthenticated && (
+          <Pressable
+            onPress={() => router.push('/panel-settings' as never)}
+            style={({ pressed }) => [{
+              flexDirection: 'row', alignItems: 'center', gap: 12,
+              backgroundColor: colors.surface,
+              borderRadius: 16, borderWidth: 1, borderColor: colors.border,
+              padding: 16, marginBottom: 12, opacity: pressed ? 0.8 : 1,
+            }]}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22' }}>
+              <IconSymbol name="gearshape.fill" size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>Panel Settings</Text>
+              <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Audio, voice, Low EMF mode</Text>
+            </View>
+            <IconSymbol name="chevron.right" size={18} color={colors.muted} />
+          </Pressable>
+        )}
+
         {/* Info */}
         <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <IconSymbol name="info.circle" size={18} color={colors.muted} />

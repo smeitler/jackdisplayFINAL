@@ -42,6 +42,21 @@ const AFTER_ALARM_META: Record<string, { label: string; emoji: string; descripti
   journaling:    { label: 'Journaling',        emoji: '📓', description: 'Morning pages, free write' },
 };
 
+// Duration in seconds for each session type
+const AFTER_ALARM_DURATIONS: Record<string, number> = {
+  meditation:    5 * 60,
+  breathwork:    4 * 60,
+  visualization: 5 * 60,
+  priming:       10 * 60,
+  journaling:    10 * 60,
+};
+
+function formatMMSS(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 const COUNTDOWN_SECONDS = 15;
 
 export default function CheckInScreen() {
@@ -131,6 +146,9 @@ export default function CheckInScreen() {
 
   // After-alarm audio state
   const [afterAlarmPlaying, setAfterAlarmPlaying] = useState(false);
+  const [afterAlarmStarted, setAfterAlarmStarted] = useState(false);
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const afterAlarmPlayerRef = useRef<AudioPlayer | null>(null);
 
   const { data: myTeams } = trpc.teams.list.useQuery();
@@ -189,7 +207,38 @@ export default function CheckInScreen() {
       try { afterAlarmPlayerRef.current.remove(); } catch { /* ignore */ }
       afterAlarmPlayerRef.current = null;
     }
+    if (sessionTimerRef.current) { clearInterval(sessionTimerRef.current); sessionTimerRef.current = null; }
     setAfterAlarmPlaying(false);
+    setAfterAlarmStarted(false);
+    setSessionElapsed(0);
+  }
+
+  function startAfterAlarmSession(meditationId: string) {
+    const source = AFTER_ALARM_SOURCES[meditationId];
+    setAfterAlarmStarted(true);
+    setSessionElapsed(0);
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    sessionTimerRef.current = setInterval(() => {
+      setSessionElapsed((prev) => {
+        const next = prev + 1;
+        const total = AFTER_ALARM_DURATIONS[meditationId] ?? 300;
+        if (next >= total) {
+          if (sessionTimerRef.current) { clearInterval(sessionTimerRef.current); sessionTimerRef.current = null; }
+        }
+        return next;
+      });
+    }, 1000);
+    if (!source) return; // no audio for priming/journaling
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const player = createAudioPlayer(source as any);
+      afterAlarmPlayerRef.current = player;
+      player.play();
+      setAfterAlarmPlaying(true);
+    } catch (e) {
+      console.warn('[AfterAlarm] Failed to start audio:', e);
+    }
   }
 
   function navigateDate(direction: -1 | 1) {
@@ -345,25 +394,56 @@ export default function CheckInScreen() {
             {redCount    > 0 && <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}><Text style={styles.successPillText}>{redCount} missed</Text></View>}
           </View>
 
-          {/* After-alarm meditation card */}
-          {showAfterAlarm && meditationMeta && (
-            <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>
-                {meditationMeta.emoji} {meditationMeta.label}
-              </Text>
-              <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>
-                {meditationMeta.description}
-              </Text>
-              {afterAlarmPlaying && (
-                <Pressable
-                  style={({ pressed }) => [styles.afterAlarmStopBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-                  onPress={stopAfterAlarm}
-                >
-                  <Text style={[styles.afterAlarmStopText, { color: colors.muted }]}>Stop</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
+          {/* After-alarm session player card */}
+          {showAfterAlarm && meditationMeta && (() => {
+            const totalSecs = AFTER_ALARM_DURATIONS[meditationId!] ?? 300;
+            const progress = Math.min(sessionElapsed / totalSecs, 1);
+            const elapsed = formatMMSS(sessionElapsed);
+            const totalLabel = formatMMSS(totalSecs);
+            return (
+              <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>
+                  {meditationMeta.emoji}  {meditationMeta.label}
+                </Text>
+                <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>
+                  {meditationMeta.description}
+                </Text>
+                {afterAlarmStarted ? (
+                  <>
+                    {/* Progress bar */}
+                    <View style={[styles.sessionProgressTrack, { backgroundColor: colors.border }]}>
+                      <View style={[styles.sessionProgressFill, { backgroundColor: colors.primary, width: `${Math.round(progress * 100)}%` as `${number}%` }]} />
+                    </View>
+                    <Text style={[styles.sessionTime, { color: colors.muted }]}>
+                      {elapsed} / {totalLabel}
+                    </Text>
+                    {/* Stop button */}
+                    <Pressable
+                      style={({ pressed }) => [styles.afterAlarmStopBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                      onPress={stopAfterAlarm}
+                    >
+                      <Text style={[styles.afterAlarmStopText, { color: colors.muted }]}>Stop</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <View style={styles.sessionBtns}>
+                    <Pressable
+                      style={({ pressed }) => [styles.sessionSkipBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                      onPress={stopAfterAlarm}
+                    >
+                      <Text style={[styles.sessionSkipText, { color: colors.muted }]}>✕  Skip</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.sessionStartBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+                      onPress={() => startAfterAlarmSession(meditationId!)}
+                    >
+                      <Text style={styles.sessionStartText}>▶  Start</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
 
           {hasTeams && !shared && (
             <View style={[styles.shareTeamBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -820,6 +900,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 8, marginTop: 4,
   },
   afterAlarmStopText: { fontSize: 14, fontWeight: '600' },
+  sessionProgressTrack: { width: '100%', height: 6, borderRadius: 3, marginTop: 10, overflow: 'hidden' },
+  sessionProgressFill: { height: 6, borderRadius: 3 },
+  sessionTime: { fontSize: 12, marginTop: 4 },
+  sessionBtns: { flexDirection: 'row', gap: 10, marginTop: 10, width: '100%' },
+  sessionSkipBtn: { flex: 1, borderRadius: 12, borderWidth: 1, paddingVertical: 12, alignItems: 'center' },
+  sessionSkipText: { fontSize: 14, fontWeight: '600' },
+  sessionStartBtn: { flex: 2, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  sessionStartText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   shareTeamBox: { borderRadius: 16, borderWidth: 1, padding: 16, width: '100%', gap: 8, marginTop: 12 },
   shareTeamTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center' },

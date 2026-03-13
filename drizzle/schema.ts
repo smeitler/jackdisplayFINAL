@@ -5,6 +5,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  tinyint,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
@@ -299,6 +300,13 @@ export const devices = mysqlTable("devices", {
   lastSeenAt: timestamp("lastSeenAt"),
   scheduleVersion: int("scheduleVersion").notNull().default(1),
   lastScheduleVersionSeen: int("lastScheduleVersionSeen").notNull().default(0),
+  // Panel settings
+  voiceId: varchar("voiceId", { length: 32 }).notNull().default("rachel"),
+  audioEnabled: tinyint("audioEnabled").notNull().default(1),
+  voiceEnabled: tinyint("voiceEnabled").notNull().default(0),
+  lowEmfMode: tinyint("lowEmfMode").notNull().default(0),
+  wifiOffHour: int("wifiOffHour").notNull().default(22),
+  wifiOnHour: int("wifiOnHour").notNull().default(6),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

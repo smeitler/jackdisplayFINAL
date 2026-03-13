@@ -1210,3 +1210,63 @@ export async function getBlockedUserIds(blockerId: number): Promise<number[]> {
     .where(eq(blockedUsers.blockerId, blockerId));
   return rows.map((r) => r.blockedId);
 }
+
+// ─── Device Settings ──────────────────────────────────────────────────────────
+
+export interface DeviceSettings {
+  voiceId: string;
+  audioEnabled: boolean;
+  voiceEnabled: boolean;
+  lowEmfMode: boolean;
+  wifiOffHour: number;
+  wifiOnHour: number;
+}
+
+const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
+  voiceId: "rachel",
+  audioEnabled: true,
+  voiceEnabled: false,
+  lowEmfMode: false,
+  wifiOffHour: 22,
+  wifiOnHour: 6,
+};
+
+/** Get panel settings for the first device owned by userId. Returns defaults if no device. */
+export async function getDeviceSettings(userId: number): Promise<DeviceSettings> {
+  const db = await getDb();
+  if (!db) return DEFAULT_DEVICE_SETTINGS;
+  const rows = await db.select().from(devices).where(eq(devices.userId, userId)).limit(1);
+  if (!rows.length) return DEFAULT_DEVICE_SETTINGS;
+  const d = rows[0];
+  return {
+    voiceId: d.voiceId ?? "rachel",
+    audioEnabled: d.audioEnabled === 1,
+    voiceEnabled: d.voiceEnabled === 1,
+    lowEmfMode: d.lowEmfMode === 1,
+    wifiOffHour: d.wifiOffHour ?? 22,
+    wifiOnHour: d.wifiOnHour ?? 6,
+  };
+}
+
+/** Update panel settings for all devices owned by userId. */
+export async function updateDeviceSettings(
+  userId: number,
+  settings: Partial<DeviceSettings>
+): Promise<{ ok: boolean }> {
+  const db = await getDb();
+  if (!db) return { ok: false };
+  const userDevices = await db.select({ id: devices.id }).from(devices).where(eq(devices.userId, userId));
+  if (!userDevices.length) return { ok: true };
+  const updateData: Record<string, unknown> = {};
+  if (settings.voiceId !== undefined) updateData.voiceId = settings.voiceId;
+  if (settings.audioEnabled !== undefined) updateData.audioEnabled = settings.audioEnabled ? 1 : 0;
+  if (settings.voiceEnabled !== undefined) updateData.voiceEnabled = settings.voiceEnabled ? 1 : 0;
+  if (settings.lowEmfMode !== undefined) updateData.lowEmfMode = settings.lowEmfMode ? 1 : 0;
+  if (settings.wifiOffHour !== undefined) updateData.wifiOffHour = settings.wifiOffHour;
+  if (settings.wifiOnHour !== undefined) updateData.wifiOnHour = settings.wifiOnHour;
+  if (!Object.keys(updateData).length) return { ok: true };
+  for (const dev of userDevices) {
+    await db.update(devices).set(updateData).where(eq(devices.id, dev.id));
+  }
+  return { ok: true };
+}

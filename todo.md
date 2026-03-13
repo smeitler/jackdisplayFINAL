@@ -582,3 +582,11 @@
 - [x] Add ElevenLabs voice picker in alarm settings with preview button per voice
 - [x] Fetch user's saved ElevenLabs voices dynamically from the API (not hardcoded list)
 - [x] Make voice preview play fast on-device by calling ElevenLabs TTS directly from the app
+- [x] Filter voice picker to only show voices from the "Jack App Voices" ElevenLabs collection
+
+## Panel Settings & Session Player (Mar 13 2026)
+
+- [x] Build Panel Settings screen (4 sections: Audio, Voice, Low EMF Mode, About)
+- [x] Wire Panel Settings into More/Settings tab (only show if device paired)
+- [x] Build Post-Habit Session Player card (appears after check-in when meditationId is set)
+- [x] Filter voice picker to only show voices from the "Jack App Voices" ElevenLabs collection

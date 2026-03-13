@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `devices` ADD `voiceId` varchar(32) DEFAULT 'rachel' NOT NULL;\nALTER TABLE `devices` ADD `audioEnabled` tinyint DEFAULT 1 NOT NULL;\nALTER TABLE `devices` ADD `voiceEnabled` tinyint DEFAULT 0 NOT NULL;\nALTER TABLE `devices` ADD `lowEmfMode` tinyint DEFAULT 0 NOT NULL;\nALTER TABLE `devices` ADD `wifiOffHour` int DEFAULT 22 NOT NULL;\nALTER TABLE `devices` ADD `wifiOnHour` int DEFAULT 6 NOT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 27R9X8y6NNhYUV4.71850b5399e5 --database bFcyWdAL5JXed3bpyDvBEf --execute ALTER TABLE `devices` ADD `voiceId` varchar(32) DEFAULT 'rachel' NOT NULL;\nALTER TABLE `devices` ADD `audioEnabled` tinyint DEFAULT 1 NOT NULL;\nALTER TABLE `devices` ADD `voiceEnabled` tinyint DEFAULT 0 NOT NULL;\nALTER TABLE `devices` ADD `lowEmfMode` tinyint DEFAULT 0 NOT NULL;\nALTER TABLE `devices` ADD `wifiOffHour` int DEFAULT 22 NOT NULL;\nALTER TABLE `devices` ADD `wifiOnHour` int DEFAULT 6 NOT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 5746
+}
