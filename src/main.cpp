@@ -177,6 +177,8 @@ lv_obj_t *lbl_date     = nullptr;
 lv_obj_t *lbl_wifi     = nullptr;
 lv_obj_t *lbl_alarm1   = nullptr;   // bottom-left alarm
 lv_obj_t *lbl_alarm2   = nullptr;   // bottom-right alarm (2nd alarm if present)
+// Voice listening overlay (shown while mic is recording)
+lv_obj_t *overlay_listening = nullptr;
 
 // Theme
 #define THEME_MINIMAL  0
@@ -300,6 +302,8 @@ void  initMic();
 void  loopVoice();
 void  startListening();
 void  stopListening();
+void  showListeningOverlay();
+void  hideListeningOverlay();
 void  sendVoiceToServer(uint8_t *buf, size_t len);
 void  playSystemAudio(const char *key);
 // Low EMF / WiFi scheduler
@@ -774,12 +778,50 @@ void initMic() {
   // holding the peripheral open when not in use
 }
 
+// ─── Voice listening overlay ─────────────────────────────────────────────────
+// Shows a semi-transparent overlay on the active screen with a pulsing mic icon
+// and "Listening..." text so the user knows the device is recording.
+void showListeningOverlay() {
+  if (overlay_listening) return;  // already shown
+  lv_obj_t *scr = lv_disp_get_scr_act(nullptr);
+  overlay_listening = lv_obj_create(scr);
+  lv_obj_set_size(overlay_listening, 320, 160);
+  lv_obj_center(overlay_listening);
+  lv_obj_set_style_bg_color(overlay_listening, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(overlay_listening, LV_OPA_90, LV_PART_MAIN);
+  lv_obj_set_style_border_color(overlay_listening, lv_color_hex(0x4444AA), LV_PART_MAIN);
+  lv_obj_set_style_border_width(overlay_listening, 2, LV_PART_MAIN);
+  lv_obj_set_style_radius(overlay_listening, 20, LV_PART_MAIN);
+  lv_obj_clear_flag(overlay_listening, LV_OBJ_FLAG_SCROLLABLE);
+  // Mic icon (large)
+  lv_obj_t *lblMic = lv_label_create(overlay_listening);
+  lv_obj_set_style_text_font(lblMic, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblMic, lv_color_hex(0x6666FF), LV_PART_MAIN);
+  lv_obj_align(lblMic, LV_ALIGN_TOP_MID, 0, 18);
+  lv_label_set_text(lblMic, LV_SYMBOL_AUDIO);
+  // "Listening..." text
+  lv_obj_t *lblTxt = lv_label_create(overlay_listening);
+  lv_obj_set_style_text_font(lblTxt, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblTxt, lv_color_hex(0xAAAADD), LV_PART_MAIN);
+  lv_obj_align(lblTxt, LV_ALIGN_BOTTOM_MID, 0, -18);
+  lv_label_set_text(lblTxt, "Listening...");
+  lv_timer_handler();  // force immediate render
+}
+
+void hideListeningOverlay() {
+  if (!overlay_listening) return;
+  lv_obj_del(overlay_listening);
+  overlay_listening = nullptr;
+  lv_timer_handler();  // force immediate redraw
+}
+
 // Start recording a voice command (called after wake word detected).
 // Records ~3 seconds of 16kHz mono PCM into g_micBuf.
 void startListening() {
   if (g_listening) return;
   g_listening = true;
   Serial.println("[voice] listening...");
+  showListeningOverlay();  // show on-screen indicator immediately
 
   // Allocate 3 seconds at 16kHz 16-bit mono = 96KB
   const size_t RECORD_SAMPLES = 16000 * 3;
@@ -825,8 +867,8 @@ void startListening() {
   i2s_channel_disable(rx_handle);
   i2s_del_channel(rx_handle);
   g_listening = false;
+  hideListeningOverlay();  // remove on-screen indicator
   Serial.printf("[voice] recorded %d bytes\n", (int)g_micBufLen);
-
   // Send to server for transcription (requires WiFi)
   if (WiFi.status() == WL_CONNECTED && g_micBufLen > 0) {
     sendVoiceToServer(g_micBuf, g_micBufLen);
@@ -842,6 +884,7 @@ void startListening() {
 void stopListening() {
   g_listening = false;
   g_wakeDetected = false;
+  hideListeningOverlay();
 }
 
 // Send recorded audio to the backend STT endpoint.
@@ -1739,7 +1782,8 @@ static void buildThemeRed() {
 
 // ── More panel (full-screen overlay: brightness + theme picker) ───────────────
 static void showMorePanel() {
-  // Outer panel: full-screen viewport (800x480), clips content, NOT scrollable itself
+  // Outer panel: 800x480 viewport — clips overflow, does NOT scroll itself.
+  // Overflow clipping is handled by lv_obj_set_style_clip_corner + OVF_HIDDEN.
   lv_obj_t *panel = lv_obj_create(lv_scr_act());
   lv_obj_set_size(panel, 800, 480);
   lv_obj_set_pos(panel, 0, 0);
@@ -1748,22 +1792,22 @@ static void showMorePanel() {
   lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);  // viewport does NOT scroll
+  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);  // panel itself does NOT scroll
+  lv_obj_set_style_clip_corner(panel, true, LV_PART_MAIN);
 
-  // Inner scrollable content container: 800x760 (taller than the 480px viewport so
-  // the panel clips it and vertical scrolling actually works).
+  // Inner scrollable content container: 800x760 — taller than the 480px panel so
+  // the user can scroll down to see items below y=480.
   lv_obj_t *scroll = lv_obj_create(panel);
-  lv_obj_set_size(scroll, 800, 760);   // MUST be > 480 to enable scrolling
+  lv_obj_set_size(scroll, 800, 760);   // taller than viewport to enable scrolling
   lv_obj_set_pos(scroll, 0, 0);
   lv_obj_set_style_bg_color(scroll, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(scroll, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_width(scroll, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(scroll, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(scroll, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);  // scroll is driven by the panel
-  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);     // outer panel does the scrolling
-  lv_obj_set_scroll_dir(panel, LV_DIR_VER);
-  lv_obj_set_scroll_snap_y(panel, LV_SCROLL_SNAP_NONE);
+  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);   // THIS container scrolls
+  lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
+  lv_obj_set_scroll_snap_y(scroll, LV_SCROLL_SNAP_NONE);
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(scroll);
