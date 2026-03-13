@@ -1,29 +1,23 @@
 /**
- * WheelTimePicker
+ * WheelTimePicker — PanResponder-based drum roll picker
  *
- * Compact iOS-style drum-roll: Hour | Minute | AM/PM
- * 3 visible rows: above (faded+slanted) | selected (large+bold) | below (faded+slanted)
+ * Uses PanResponder + Animated.Value instead of ScrollView.
+ * This gives us 100% control over position and snapping on ALL platforms
+ * (iOS, Android, web) without any browser scroll-snap interference.
  *
- * CRITICAL FIX:
- * Previous versions used a dummy <View> padding row at the top of the scroll list.
- * On web, CSS scroll-snap treated that dummy row as a valid snap target at y=0,
- * so after every scroll the browser snapped back to the padding row (showing item[0]).
- *
- * Fix: use contentContainerStyle paddingTop/paddingBottom instead of dummy Views.
- * This means item[0] is at y=0 in the content, but the viewport is offset by ITEM_HEIGHT
- * so item[0] appears in the center row. Snap math: item[i] centers at y = i * ITEM_HEIGHT.
- *
- * Platform strategy:
- * - iOS/Android: snapToInterval + decelerationRate="fast" + contentInset
- * - Web: CSS scroll-snap-type injected onto the underlying div
+ * How it works:
+ * - A single Animated.Value `offsetY` tracks the vertical translation of the item list.
+ * - Dragging moves the list by the pan delta.
+ * - On release, we spring-snap to the nearest item's grid position.
+ * - The visible window is 3 rows tall; the center row is the selected item.
+ * - Items outside ±1 of selected are rendered transparent (still in DOM for layout).
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  Animated,
+  PanResponder,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -34,11 +28,25 @@ import { useColors } from '@/hooks/use-colors';
 
 const ITEM_HEIGHT   = 48;
 const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 visible rows
+const SNAP_TENSION  = 200;
+const SNAP_FRICTION = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// Convert offsetY (list translation) to selected index
+// offsetY = 0  → item[0] is in center row
+// offsetY = -ITEM_HEIGHT → item[1] is in center row
+// So: index = round(-offsetY / ITEM_HEIGHT)
+function offsetToIndex(offset: number, count: number) {
+  return clamp(Math.round(-offset / ITEM_HEIGHT), 0, count - 1);
+}
+
+function indexToOffset(index: number) {
+  return -index * ITEM_HEIGHT;
 }
 
 // ─── WheelColumn ─────────────────────────────────────────────────────────────
@@ -52,115 +60,89 @@ interface ColumnProps {
 
 function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
-  const scrollRef = useRef<ScrollView>(null);
-  const webScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasMounted = useRef(false);
-  const [liveIdx, setLiveIdx] = useState(initialIndex);
+  const count = items.length;
 
-  // MOUNT ONLY: scroll to initial position
-  // item[i] is at y = i * ITEM_HEIGHT (no padding row offset needed)
-  useEffect(() => {
-    if (hasMounted.current) return;
-    hasMounted.current = true;
-    const t = setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: initialIndex * ITEM_HEIGHT,
-        animated: false,
-      });
-    }, 0);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Animated offset: starts at position showing initialIndex in center
+  const offsetY = useRef(new Animated.Value(indexToOffset(initialIndex))).current;
+  // Track current index for styling (non-animated)
+  const currentIdx = useRef(initialIndex);
+  // Force re-render when index changes
+  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
 
-  // Web: inject CSS scroll-snap and listen for scroll settle
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
+  // Snap to nearest item with spring animation
+  const snapToNearest = useCallback((currentOffset: number) => {
+    const idx = offsetToIndex(currentOffset, count);
+    const targetOffset = indexToOffset(idx);
+    currentIdx.current = idx;
+    forceUpdate();
+    Animated.spring(offsetY, {
+      toValue: targetOffset,
+      tension: SNAP_TENSION,
+      friction: SNAP_FRICTION,
+      useNativeDriver: true,
+    }).start();
+    onSelect(idx);
+  }, [count, offsetY, onSelect]);
 
-    const setup = setTimeout(() => {
-      const node: HTMLElement | null =
-        (scrollRef.current as any)?._nativeRef?.current ??
-        (scrollRef.current as any)?.getScrollableNode?.() ??
-        null;
-      if (!node) return;
+  // PanResponder
+  const startOffset = useRef(indexToOffset(initialIndex));
 
-      // Apply scroll snap to the container
-      node.style.overflowY = 'scroll';
-      node.style.scrollSnapType = 'y mandatory';
-
-      // Apply snap-align to REAL item children only (skip padding)
-      // Since we use contentContainerStyle padding, all children are real items
-      const applySnap = () => {
-        Array.from(node.children).forEach((child) => {
-          (child as HTMLElement).style.scrollSnapAlign = 'center';
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 2,
+      onPanResponderGrant: () => {
+        // Capture current animated value
+        (offsetY as any).stopAnimation((val: number) => {
+          startOffset.current = val;
         });
-      };
-      applySnap();
+        // Also read synchronously for immediate response
+        startOffset.current = (offsetY as any)._value ?? startOffset.current;
+      },
+      onPanResponderMove: (_, gs) => {
+        const newOffset = startOffset.current + gs.dy;
+        // Clamp with rubber-band feel at edges
+        const minOffset = indexToOffset(count - 1);
+        const maxOffset = 0;
+        let clamped = newOffset;
+        if (newOffset > maxOffset) {
+          clamped = maxOffset + (newOffset - maxOffset) * 0.3;
+        } else if (newOffset < minOffset) {
+          clamped = minOffset + (newOffset - minOffset) * 0.3;
+        }
+        offsetY.setValue(clamped);
+        // Update live index for styling
+        const idx = offsetToIndex(clamped, count);
+        if (idx !== currentIdx.current) {
+          currentIdx.current = idx;
+          forceUpdate();
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        const currentOffset = startOffset.current + gs.dy;
+        // Add velocity-based momentum
+        const velocityBoost = gs.vy * 80;
+        const momentumOffset = currentOffset + velocityBoost;
+        snapToNearest(momentumOffset);
+      },
+      onPanResponderTerminate: (_, gs) => {
+        const currentOffset = startOffset.current + gs.dy;
+        snapToNearest(currentOffset);
+      },
+    })
+  ).current;
 
-      // Set initial scroll position
-      node.scrollTop = initialIndex * ITEM_HEIGHT;
-
-      const handleScroll = () => {
-        const idx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
-        setLiveIdx(idx);
-        if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
-        webScrollTimer.current = setTimeout(() => {
-          const finalIdx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
-          // Snap to exact grid position
-          node.scrollTo({ top: finalIdx * ITEM_HEIGHT, behavior: 'smooth' });
-          setLiveIdx(finalIdx);
-          onSelect(finalIdx);
-        }, 150);
-      };
-
-      node.addEventListener('scroll', handleScroll);
-      return () => {
-        node.removeEventListener('scroll', handleScroll);
-        if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
-      };
-    }, 50);
-
-    return () => clearTimeout(setup);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Mobile: track live position during drag
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = e.nativeEvent.contentOffset.y;
-      const idx = clamp(Math.round(y / ITEM_HEIGHT), 0, items.length - 1);
-      setLiveIdx(idx);
-    },
-    [items.length],
-  );
-
-  // Mobile: snap and emit on scroll end
-  const handleScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = e.nativeEvent.contentOffset.y;
-      const idx = clamp(Math.round(y / ITEM_HEIGHT), 0, items.length - 1);
-      scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
-      setLiveIdx(idx);
-      onSelect(idx);
-    },
-    [items.length, onSelect],
-  );
+  const liveIdx = currentIdx.current;
 
   return (
-    <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={Platform.OS !== 'web' ? ITEM_HEIGHT : undefined}
-        decelerationRate="fast"
-        scrollEventThrottle={16}
-        onScroll={handleScroll}
-        onMomentumScrollEnd={handleScrollEnd}
-        onScrollEndDrag={handleScrollEnd}
-        contentOffset={{ x: 0, y: initialIndex * ITEM_HEIGHT }}
-        // Use padding instead of dummy Views — avoids creating snap targets at y=0
-        contentContainerStyle={{
-          paddingTop: ITEM_HEIGHT,
-          paddingBottom: ITEM_HEIGHT,
+    <View
+      style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}
+      {...panResponder.panHandlers}
+    >
+      {/* The animated list — translateY moves it up/down */}
+      <Animated.View
+        style={{
+          transform: [{ translateY: Animated.add(offsetY, new Animated.Value(ITEM_HEIGHT)) }],
         }}
       >
         {items.map((label, i) => {
@@ -168,30 +150,60 @@ function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
           const isSelected = dist === 0;
           const isAdjacent = Math.abs(dist) === 1;
 
-          const textStyle = isSelected
-            ? [styles.itemText, styles.itemTextSelected, { color: colors.foreground }]
-            : isAdjacent
-            ? [
-                styles.itemText,
-                styles.itemTextAdjacent,
-                {
-                  color: colors.muted,
-                  transform: [
-                    { perspective: 300 },
-                    { rotateX: (dist < 0 ? '-28deg' : '28deg') as string },
-                    { scaleY: 0.82 as number },
-                  ],
-                },
-              ]
-            : [styles.itemText, { color: 'transparent' as const }];
+          let textColor: string;
+          let fontSize: number;
+          let fontWeight: '700' | '300' | '400';
+          let opacity: number;
+          let rotateX: string;
+          let scaleY: number;
+
+          if (isSelected) {
+            textColor = colors.foreground;
+            fontSize = 28;
+            fontWeight = '700';
+            opacity = 1;
+            rotateX = '0deg';
+            scaleY = 1;
+          } else if (isAdjacent) {
+            textColor = colors.muted;
+            fontSize = 17;
+            fontWeight = '300';
+            opacity = 0.45;
+            rotateX = dist < 0 ? '-28deg' : '28deg';
+            scaleY = 0.82;
+          } else {
+            textColor = 'transparent';
+            fontSize = 17;
+            fontWeight = '300';
+            opacity = 0;
+            rotateX = '0deg';
+            scaleY = 1;
+          }
 
           return (
             <View key={i} style={styles.item}>
-              <Text style={textStyle}>{label}</Text>
+              <Text
+                style={[
+                  styles.itemText,
+                  {
+                    color: textColor,
+                    fontSize,
+                    fontWeight,
+                    opacity,
+                    transform: [
+                      { perspective: 300 },
+                      { rotateX: rotateX as string },
+                      { scaleY },
+                    ],
+                  },
+                ]}
+              >
+                {label}
+              </Text>
             </View>
           );
         })}
-      </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -218,7 +230,6 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
   const initialMinuteIdx = minute;
   const initialPeriodIdx = isPM ? 1 : 0;
 
-  // Use refs so parent state updates don't re-render columns and fight scroll
   const hourIdxRef   = useRef(initialHourIdx);
   const minuteIdxRef = useRef(initialMinuteIdx);
   const periodIdxRef = useRef(initialPeriodIdx);
@@ -298,20 +309,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   itemText: {
-    fontSize: 20,
-    fontWeight: '400',
     letterSpacing: 0.2,
     ...(Platform.OS === 'ios' ? { fontFamily: 'System' } : {}),
-  },
-  itemTextSelected: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: 0,
-  },
-  itemTextAdjacent: {
-    fontSize: 17,
-    fontWeight: '300',
-    opacity: 0.45,
   },
   selectionBand: {
     position: 'absolute',
