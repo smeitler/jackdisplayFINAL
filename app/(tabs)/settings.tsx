@@ -20,7 +20,7 @@ import { trpc } from "@/lib/trpc";
 import * as WebBrowser from "expo-web-browser";
 
 
-// ─── CrowPanel Device Pairing Section ───────────────────────────────────────
+// ─── Jack Alarm Device Pairing Section ─────────────────────────────────────
 function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/hooks/use-colors').useColors> }) {
   const router = useRouter();
   const devicesQuery = trpc.devices.list.useQuery();
@@ -49,7 +49,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
     if (!pairingToken) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await Share.share({ message: pairingToken, title: 'CrowPanel Pairing Token' });
+      await Share.share({ message: pairingToken, title: 'Jack Alarm Pairing Token' });
     } catch { /* user cancelled share */ }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -58,14 +58,14 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
   function handleRemoveDevice(deviceId: number) {
     if (Platform.OS === 'web') {
       // Alert.alert callbacks are unreliable on web — use native confirm instead
-      if (window.confirm('Unlink this CrowPanel from your account? The display will stop receiving your alarms.')) {
+      if (window.confirm('Unlink this Jack Alarm from your account? The display will stop receiving your alarms.')) {
         removeDeviceMutation.mutate({ deviceId });
       }
       return;
     }
     Alert.alert(
       'Remove Device',
-      'Unlink this CrowPanel from your account? The display will stop receiving your alarms.',
+      'Unlink this Jack Alarm from your account? The display will stop receiving your alarms.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -87,8 +87,8 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
           <IconSymbol name="desktopcomputer" size={18} color={colors.primary} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.foreground }}>CrowPanel Display</Text>
-          <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Connect your physical alarm clock</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.foreground }}>Jack Alarm</Text>
+          <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Connect your Jack Alarm display</Text>
         </View>
         {devicesQuery.isLoading && <ActivityIndicator size="small" color={colors.muted} />}
       </View>
@@ -107,7 +107,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
             >
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: device.lastSeenAt && (Date.now() - new Date(device.lastSeenAt).getTime()) < 10 * 60 * 1000 ? '#22C55E' : colors.muted }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>CrowPanel 7"</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>Jack Alarm</Text>
                 <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>
                   {device.lastSeenAt ? `Last seen ${new Date(device.lastSeenAt).toLocaleString()}` : 'Never connected'}
                 </Text>
@@ -123,6 +123,14 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
         </View>
       )}
 
+      {/* Single-device note */}
+      {devices.length > 0 && !showPairingFlow && (
+        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 16, paddingVertical: 10 }}>
+          <Text style={{ fontSize: 12, color: colors.muted, textAlign: 'center' }}>
+            Only one Jack Alarm can be connected at a time. Remove the current device to pair a new one.
+          </Text>
+        </View>
+      )}
       {/* Pairing flow */}
       {showPairingFlow && pairingToken ? (
         <View style={{ borderTopWidth: 1, borderTopColor: colors.border, padding: 16, gap: 12 }}>
@@ -142,7 +150,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
             <IconSymbol name={copied ? 'checkmark.circle.fill' : 'doc.on.doc'} size={20} color={copied ? '#22C55E' : colors.muted} />
           </Pressable>
           <Text style={{ fontSize: 13, color: colors.muted, lineHeight: 18 }}>
-            Step 2 — On your CrowPanel, go to <Text style={{ fontWeight: '700', color: colors.foreground }}>Settings → Pair with App</Text> and enter this token.
+            Step 2 — On your Jack Alarm, go to <Text style={{ fontWeight: '700', color: colors.foreground }}>Settings → Pair with App</Text> and enter this token.
           </Text>
           {tokenExpiry && (
             <Text style={{ fontSize: 11, color: colors.muted }}>
@@ -159,7 +167,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
             <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Done — Close</Text>
           </Pressable>
         </View>
-      ) : (
+      ) : devices.length === 0 ? (
         <Pressable
           onPress={handleGenerateToken}
           disabled={createTokenMutation.isPending}
@@ -174,12 +182,10 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
             ? <ActivityIndicator size="small" color={colors.primary} />
             : <IconSymbol name="antenna.radiowaves.left.and.right" size={18} color={colors.primary} />
           }
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>
-            {devices.length > 0 ? 'Pair Another Display' : 'Pair CrowPanel Display'}
-          </Text>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Pair Jack Alarm</Text>
         </Pressable>
-      )}
-      {/* Preview CrowPanel display button */}
+      ) : null}
+      {/* Preview Jack Alarm display button */}
       <Pressable
         onPress={() => router.push('/crowpanel-preview' as never)}
         style={({ pressed }) => [{
@@ -1037,7 +1043,7 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* CrowPanel Device Pairing */}
+        {/* Jack Alarm Device Pairing */}
         {isAuthenticated && (
           <DevicePairingSection colors={colors} />
         )}

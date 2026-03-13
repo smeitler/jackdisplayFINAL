@@ -590,3 +590,4 @@
 - [x] Wire Panel Settings into More/Settings tab (only show if device paired)
 - [x] Build Post-Habit Session Player card (appears after check-in when meditationId is set)
 - [x] Filter voice picker to only show voices from the "Jack App Voices" ElevenLabs collection
+- [x] Rename "CrowPanel" to "Jack Alarm" in More/Settings tab; enforce single-device connection UI

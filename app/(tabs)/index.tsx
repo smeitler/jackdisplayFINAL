@@ -513,7 +513,7 @@ export default function HomeScreen() {
             <IconSymbol name="chevron.right" size={14} color={colors.muted} />
           </Pressable>
 
-          {/* ── CrowPanel Display Preview ── */}
+          {/* ── Jack Alarm Display Preview ── */}
           <Pressable
             onPress={() => router.push('/crowpanel-preview' as never)}
             style={({ pressed }) => [{
@@ -527,7 +527,7 @@ export default function HomeScreen() {
               <IconSymbol name="desktopcomputer" size={15} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>CrowPanel Display Preview</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>Jack Alarm Preview</Text>
               <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>Tap to preview the 800×480 alarm UI</Text>
             </View>
             <IconSymbol name="chevron.right" size={13} color={colors.muted} />

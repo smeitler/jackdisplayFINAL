@@ -1,6 +1,6 @@
 /**
  * Panel Settings Screen
- * Controls audio, voice, Low EMF mode, and shows device info for the CrowPanel display.
+ * Controls audio, voice, Low EMF mode, and shows device info for the Jack Alarm display.
  * 4 sections: Audio, Voice, Low EMF Mode, About
  */
 import { useEffect, useRef, useState } from "react";
