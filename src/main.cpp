@@ -24,6 +24,7 @@
 #include "LovyanGFX_Driver.h"
 
 #include <Arduino.h>
+#include <vector>
 #include <lvgl.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -228,6 +229,9 @@ int        g_audioFileCount = 0;
 bool   g_voiceEnabled  = false;  // "Hey Jack" wake word toggle
 bool   g_listening     = false;  // currently recording a command
 bool   g_wakeDetected  = false;  // wake word just fired (set by mic task)
+// Thread-safe flags: background tasks set these; main loop reads and acts on them
+volatile bool g_showListeningOverlay = false;  // main task should show overlay
+volatile bool g_hideListeningOverlay = false;  // main task should hide overlay
 uint8_t *g_micBuf      = nullptr; // raw PCM buffer for recording
 size_t  g_micBufLen    = 0;
 
@@ -847,11 +851,15 @@ void hideListeningOverlay() {
 
 // Start recording a voice command (called after wake word detected).
 // Records ~3 seconds of 16kHz mono PCM into g_micBuf.
+// IMPORTANT: this function is called from background tasks (xTaskCreate).
+// It must NEVER call LVGL functions directly — LVGL is not thread-safe.
+// Instead it sets g_showListeningOverlay / g_hideListeningOverlay flags
+// which the main loop checks and acts on from the LVGL task.
 void startListening() {
   if (g_listening) return;
   g_listening = true;
   Serial.println("[voice] listening...");
-  showListeningOverlay();  // show on-screen indicator immediately
+  g_showListeningOverlay = true;   // signal main task to show overlay
 
   // Allocate 3 seconds at 16kHz 16-bit mono = 96KB
   const size_t RECORD_SAMPLES = 16000 * 3;
@@ -861,6 +869,7 @@ void startListening() {
     if (!g_micBuf) {
       Serial.println("[voice] failed to alloc mic buffer");
       g_listening = false;
+      g_hideListeningOverlay = true;  // signal main task to hide overlay
       return;
     }
   }
@@ -897,7 +906,7 @@ void startListening() {
   i2s_channel_disable(rx_handle);
   i2s_del_channel(rx_handle);
   g_listening = false;
-  hideListeningOverlay();  // remove on-screen indicator
+  g_hideListeningOverlay = true;  // signal main task to hide overlay (thread-safe)
   Serial.printf("[voice] recorded %d bytes\n", (int)g_micBufLen);
   // Send to server for transcription (requires WiFi)
   if (WiFi.status() == WL_CONNECTED && g_micBufLen > 0) {
@@ -914,7 +923,7 @@ void startListening() {
 void stopListening() {
   g_listening = false;
   g_wakeDetected = false;
-  hideListeningOverlay();
+  g_hideListeningOverlay = true;  // signal main task to hide overlay (thread-safe)
 }
 
 // Send recorded audio to the backend STT endpoint.
@@ -1473,6 +1482,7 @@ void buildWifiScanScreen() {
   lv_obj_set_size(btnRescan, 160, 44);
   lv_obj_align(btnRescan, LV_ALIGN_BOTTOM_MID, 0, -10);
   lv_obj_set_style_bg_color(btnRescan, lv_color_hex(0x374151), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnRescan, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_add_event_cb(btnRescan, cb_rescan, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblRescan = lv_label_create(btnRescan);
   lv_label_set_text(lblRescan, LV_SYMBOL_REFRESH "  Rescan");
@@ -1589,6 +1599,7 @@ void buildWifiPassScreen() {
   lv_obj_set_size(btnBack, 120, 52);
   lv_obj_align(btnBack, LV_ALIGN_TOP_LEFT, 20, 56);
   lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x374151), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnBack, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_add_event_cb(btnBack, cb_wifi_back, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblBack = lv_label_create(btnBack);
   lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
@@ -1599,6 +1610,7 @@ void buildWifiPassScreen() {
   lv_obj_set_size(btnConnect, 200, 52);
   lv_obj_align(btnConnect, LV_ALIGN_TOP_RIGHT, -20, 56);
   lv_obj_set_style_bg_color(btnConnect, lv_color_hex(0x7B74FF), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnConnect, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_add_event_cb(btnConnect, cb_wifi_connect, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblConnect = lv_label_create(btnConnect);
   lv_label_set_text(lblConnect, "Connect");
@@ -1932,6 +1944,7 @@ static void showMorePanel() {
     bool active = (g_theme == themes[i].id);
     lv_obj_set_style_bg_color(btn,
       active ? lv_color_hex(0x222222) : lv_color_hex(0x141414), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn,
       active ? lv_color_hex(themes[i].col) : lv_color_hex(0x333333), LV_PART_MAIN);
     lv_obj_set_style_border_width(btn, active ? 2 : 1, LV_PART_MAIN);
@@ -1973,6 +1986,7 @@ static void showMorePanel() {
   lv_obj_set_size(btnAlarmSet, 346, 48);
   lv_obj_set_pos(btnAlarmSet, 40, 290);
   lv_obj_set_style_bg_color(btnAlarmSet, lv_color_hex(0x1A0A0A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnAlarmSet, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnAlarmSet, lv_color_hex(0x882222), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnAlarmSet, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnAlarmSet, 10, LV_PART_MAIN);
@@ -2007,6 +2021,7 @@ static void showMorePanel() {
   lv_obj_set_size(btnSync, 358, 48);
   lv_obj_set_pos(btnSync, 402, 290);
   lv_obj_set_style_bg_color(btnSync, lv_color_hex(0x0A1A2A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnSync, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnSync, lv_color_hex(0x1A4A7A), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnSync, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnSync, 10, LV_PART_MAIN);
@@ -2168,6 +2183,7 @@ static void showMorePanel() {
   lv_obj_set_size(btnWifi, 720, 52);
   lv_obj_set_pos(btnWifi, 40, 634);
   lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0E0E0E), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnWifi, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x2A2A2A), LV_PART_MAIN);  // neutral
   lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnWifi, 10, LV_PART_MAIN);
@@ -2184,24 +2200,27 @@ static void showMorePanel() {
   lv_label_set_text(lblWifiBtn, LV_SYMBOL_WIFI "  Change WiFi Network");
   lv_obj_center(lblWifiBtn);
 
-  // ── Close button — fixed top-right, sibling of panel so it never scrolls ──
-  // Create on the screen directly (not inside panel) so it stays fixed
-  lv_obj_t *btnClose = lv_btn_create(lv_scr_act());
+  // ── Close button — INSIDE panel so it is auto-deleted when panel is deleted ──
+  // Position is fixed at top-right of the panel (which covers the full screen).
+  // Using lv_obj_del_async(panel) from within the callback is safe because
+  // btnClose is a child of panel — LVGL defers the deletion until after the
+  // event callback returns, so we never use-after-free.
+  lv_obj_t *btnClose = lv_btn_create(panel);
   lv_obj_set_size(btnClose, 52, 52);
-  lv_obj_set_pos(btnClose, 800 - 52 - 12, 12);  // top-right corner
+  lv_obj_set_pos(btnClose, 800 - 52 - 12, 12);  // top-right of the 800px-wide panel
+  lv_obj_clear_flag(btnClose, LV_OBJ_FLAG_SCROLL_CHAIN);
   lv_obj_set_style_bg_color(btnClose, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnClose, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnClose, lv_color_hex(0x444444), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnClose, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnClose, 26, LV_PART_MAIN);  // circle
-  // btnClose lives on scr_clock (sibling of panel), so lv_obj_del(pnl) is safe.
-  // We then async-delete btnClose itself since we are inside its own callback.
   lv_obj_add_event_cb(btnClose, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    lv_obj_t *btn   = lv_event_get_target(e);
-    lv_obj_t *pnl   = (lv_obj_t *)lv_event_get_user_data(e);
-    lv_obj_del(pnl);        // delete the outer panel (and its children) — safe, btn is a sibling
-    lv_obj_del_async(btn);  // async-delete self (safe from within own callback)
-  }, LV_EVENT_ALL, panel);
+    // btnClose is a child of panel — delete the whole panel (parent) async
+    // so we don't destroy an object from within its own event chain.
+    lv_obj_t *pnl = lv_obj_get_parent(lv_event_get_target(e));
+    lv_obj_del_async(pnl);
+  }, LV_EVENT_ALL, nullptr);
   lv_obj_t *lblX = lv_label_create(btnClose);
   lv_obj_set_style_text_font(lblX, &lv_font_montserrat_18, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblX, lv_color_hex(0x888888), LV_PART_MAIN);
@@ -2228,6 +2247,7 @@ static void buildTopNavButtons(lv_color_t col) {
     lv_obj_set_style_pad_all(hit, 0, LV_PART_MAIN);
     lv_obj_clear_flag(hit, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_user_data(hit, (void*)0xCAFE);  // tag: permanent nav widget
 
     // Word label — 14pt, accent colour
     lv_obj_t *lblName = lv_label_create(hit);
@@ -2507,6 +2527,7 @@ void showRecordingScreen(const char *category, const char *folder) {
   lv_obj_set_size(btnStop, 220, 56);
   lv_obj_align(btnStop, LV_ALIGN_BOTTOM_MID, 0, -28);
   lv_obj_set_style_bg_color(btnStop, lv_color_hex(0x1A0000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnStop, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnStop, lv_color_hex(0xFF2222), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnStop, 2, LV_PART_MAIN);
   lv_obj_set_style_radius(btnStop, 28, LV_PART_MAIN);
@@ -2662,6 +2683,7 @@ void buildClockScreen() {
     lv_obj_del(scr_clock);
     scr_clock = nullptr;
     lbl_time = lbl_ampm = lbl_date = lbl_wifi = lbl_alarm1 = lbl_alarm2 = nullptr;
+    overlay_listening = nullptr;  // clear stale pointer — object was deleted with scr_clock
   }
 
   scr_clock = lv_obj_create(nullptr);
@@ -2737,7 +2759,34 @@ void updateClockLabel() {
   }
 }
 
+// Nuclear cleanup: delete every child of scr_clock that is NOT one of the
+// permanent known widgets. This is the safety net that catches any overlay,
+// panel, or button that was not properly cleaned up before returning to the
+// clock screen. Called at the start of showClockScreen().
+static void cleanupClockScreen() {
+  if (!scr_clock) return;
+  // Collect all children first (cannot delete while iterating)
+  std::vector<lv_obj_t*> toDelete;
+  uint32_t cnt = lv_obj_get_child_cnt(scr_clock);
+  for (uint32_t i = 0; i < cnt; i++) {
+    lv_obj_t *child = lv_obj_get_child(scr_clock, i);
+    // Keep the 6 permanent clock label widgets
+    if (child == lbl_time  || child == lbl_ampm  || child == lbl_date ||
+        child == lbl_wifi  || child == lbl_alarm1 || child == lbl_alarm2) continue;
+    // Keep nav hit-area containers (tagged with 0xCAFE user_data)
+    if (lv_obj_get_user_data(child) == (void*)0xCAFE) continue;
+    // Everything else is a stray overlay, panel, or orphaned button — delete it
+    toDelete.push_back(child);
+  }
+  for (lv_obj_t *obj : toDelete) {
+    lv_obj_del(obj);
+  }
+  // Clear the overlay pointer since its object is now gone
+  overlay_listening = nullptr;
+}
+
 void showClockScreen() {
+  cleanupClockScreen();  // remove any stray overlays/panels before showing clock
   lv_disp_load_scr(scr_clock);
   updateClockLabel();
   updateAlarmLabels();  // always refresh alarm text when showing clock
@@ -2796,6 +2845,7 @@ void buildPairingScreen() {
   lv_obj_set_size(btn, 200, 56);
   lv_obj_align(btn, LV_ALIGN_CENTER, 0, 10);
   lv_obj_set_style_bg_color(btn, lv_color_hex(0x7B74FF), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_add_event_cb(btn, cb_pair_connect, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *btnLbl = lv_label_create(btn);
   lv_label_set_text(btnLbl, "Connect");
@@ -2956,6 +3006,7 @@ void buildAlarmScreen() {
   lv_obj_set_size(btnSnooze, 220, 72);
   lv_obj_align(btnSnooze, LV_ALIGN_CENTER, -130, 140);
   lv_obj_set_style_bg_color(btnSnooze, lv_color_hex(snoozeCol), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnSnooze, LV_OPA_COVER, LV_PART_MAIN);  // must set — no theme
   lv_obj_set_style_radius(btnSnooze, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnSnooze, cb_snooze, LV_EVENT_CLICKED, nullptr);
   lv_obj_t *lblSnooze = lv_label_create(btnSnooze);
@@ -2969,6 +3020,7 @@ void buildAlarmScreen() {
   lv_obj_set_size(btnWake, 220, 72);
   lv_obj_align(btnWake, LV_ALIGN_CENTER, 130, 140);
   lv_obj_set_style_bg_color(btnWake, lv_color_hex(0x22C55E), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnWake, LV_OPA_COVER, LV_PART_MAIN);  // must set — no theme
   lv_obj_set_style_radius(btnWake, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnWake, [](lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -3074,6 +3126,7 @@ void buildCheckinScreen() {
     lv_obj_set_size(btn, btnW - 8, 80);
     lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, (b - 1) * btnW, -20);
     lv_obj_set_style_bg_color(btn, lv_color_hex(btns[b].col), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);  // must set — no theme
     lv_obj_set_style_radius(btn, 14, LV_PART_MAIN);
     lv_obj_add_event_cb(btn, btns[b].cb, LV_EVENT_ALL, nullptr);
     lv_obj_t *lbl = lv_label_create(btn);
@@ -3197,6 +3250,7 @@ void showMorningRoutineScreen(const String &meditationId) {
   lv_obj_set_size(btnSkip, 200, 60);
   lv_obj_align(btnSkip, LV_ALIGN_BOTTOM_MID, 0, -24);
   lv_obj_set_style_bg_color(btnSkip, lv_color_hex(0x1E293B), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnSkip, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_radius(btnSkip, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnSkip, [](lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -3455,6 +3509,7 @@ void showAlarmSetScreen() {
   lv_obj_set_size(btnSet, 280, 56);
   lv_obj_align(btnSet, LV_ALIGN_BOTTOM_MID, -80, -16);
   lv_obj_set_style_bg_color(btnSet, lv_color_hex(0x1A3A1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnSet, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnSet, lv_color_hex(0x22C55E), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnSet, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnSet, 12, LV_PART_MAIN);
@@ -3506,6 +3561,7 @@ void showAlarmSetScreen() {
   lv_obj_set_size(btnBack, 140, 56);
   lv_obj_align(btnBack, LV_ALIGN_BOTTOM_MID, 100, -16);
   lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(btnBack, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_color(btnBack, lv_color_hex(0x444444), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnBack, 12, LV_PART_MAIN);
@@ -3689,6 +3745,19 @@ void loop() {
 
   // Keep audio decoder fed every loop
   loopAudio();
+
+  // ── Thread-safe overlay management ──────────────────────────────────────────
+  // Background tasks (voice recording) set these volatile flags.
+  // We process them here on the main LVGL task to keep LVGL calls thread-safe.
+  // Always hide before show to handle rapid flag transitions.
+  if (g_hideListeningOverlay) {
+    g_hideListeningOverlay = false;
+    hideListeningOverlay();
+  }
+  if (g_showListeningOverlay) {
+    g_showListeningOverlay = false;
+    showListeningOverlay();
+  }
 
   // Check voice activity (wake word polling)
   loopVoice();
