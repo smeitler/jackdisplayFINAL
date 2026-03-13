@@ -216,6 +216,7 @@ void buzzerOff();
 void showCelebrationScreen();
 void showMorningRoutineScreen(const String &meditationId);
 static void showMorePanel();
+void showAlarmSetScreen();
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
 void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
 void rtcApplyToSystem();      // read RTC and set ESP32 system clock
@@ -1276,11 +1277,38 @@ static void showMorePanel() {
     }, LV_EVENT_ALL, themeId);
   }
 
+  // ── Alarm section header ──
+  lv_obj_t *lblAlarmSec = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblAlarmSec, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblAlarmSec, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblAlarmSec, LV_ALIGN_TOP_LEFT, 40, 268);
+  lv_label_set_text(lblAlarmSec, "ALARM");
+
+  // Set Alarm button
+  lv_obj_t *btnAlarmSet = lv_btn_create(panel);
+  lv_obj_set_size(btnAlarmSet, 346, 48);
+  lv_obj_set_pos(btnAlarmSet, 40, 290);
+  lv_obj_set_style_bg_color(btnAlarmSet, lv_color_hex(0x1A0A0A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnAlarmSet, lv_color_hex(0x882222), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnAlarmSet, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnAlarmSet, 10, LV_PART_MAIN);
+  lv_obj_add_event_cb(btnAlarmSet, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_obj_t *panel = lv_obj_get_parent(lv_event_get_target(e));
+    lv_obj_del(panel);
+    showAlarmSetScreen();
+  }, LV_EVENT_ALL, nullptr);
+  lv_obj_t *lblAlarmSetBtn = lv_label_create(btnAlarmSet);
+  lv_obj_set_style_text_font(lblAlarmSetBtn, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblAlarmSetBtn, lv_color_hex(0xFF4444), LV_PART_MAIN);
+  lv_label_set_text(lblAlarmSetBtn, LV_SYMBOL_BELL "  Set Alarm");
+  lv_obj_center(lblAlarmSetBtn);
+
   // ── Sync Now button ──
   lv_obj_t *lblSync = lv_label_create(panel);
   lv_obj_set_style_text_font(lblSync, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblSync, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblSync, LV_ALIGN_TOP_LEFT, 40, 268);
+  lv_obj_set_pos(lblSync, 420, 268);
   lv_label_set_text(lblSync, "SYNC");
 
   // Status label (shows OK / WiFi needed after sync)
@@ -1291,8 +1319,8 @@ static void showMorePanel() {
   lv_label_set_text(lblSyncStatus, "");
 
   lv_obj_t *btnSync = lv_btn_create(panel);
-  lv_obj_set_size(btnSync, 720, 52);
-  lv_obj_align(btnSync, LV_ALIGN_TOP_MID, 0, 290);
+  lv_obj_set_size(btnSync, 358, 48);
+  lv_obj_set_pos(btnSync, 402, 290);
   lv_obj_set_style_bg_color(btnSync, lv_color_hex(0x0A1A2A), LV_PART_MAIN);
   lv_obj_set_style_border_color(btnSync, lv_color_hex(0x1A4A7A), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnSync, 1, LV_PART_MAIN);
@@ -1318,19 +1346,19 @@ static void showMorePanel() {
   lv_obj_t *lblSyncBtn = lv_label_create(btnSync);
   lv_obj_set_style_text_font(lblSyncBtn, &lv_font_montserrat_18, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblSyncBtn, lv_color_hex(0x4499DD), LV_PART_MAIN);
-  lv_label_set_text(lblSyncBtn, LV_SYMBOL_REFRESH "  Sync Alarm & Habits Now");
+  lv_label_set_text(lblSyncBtn, LV_SYMBOL_REFRESH "  Sync Now");
   lv_obj_center(lblSyncBtn);
 
   // ── Change WiFi button ──
   lv_obj_t *lblWifi = lv_label_create(panel);
   lv_obj_set_style_text_font(lblWifi, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblWifi, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 358);
+  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 360);
   lv_label_set_text(lblWifi, "NETWORK");
 
   lv_obj_t *btnWifi = lv_btn_create(panel);
   lv_obj_set_size(btnWifi, 720, 52);
-  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 380);
+  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 382);
   lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
   lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
@@ -1930,6 +1958,241 @@ void showCelebrationScreen() {
     }
   }, 2000, pMeditId);
   lv_timer_set_repeat_count(t, 1);
+}
+
+// ─── Alarm Set Screen ────────────────────────────────────────────────────────────────────────
+// Full-screen alarm time picker. Lets the user set the alarm directly on the panel
+// and POSTs it to /api/device/alarm so the DB is updated without needing the app.
+void showAlarmSetScreen() {
+  // State for this screen — use static so lambdas can capture pointers
+  static int s_hour   = 7;
+  static int s_minute = 0;
+  static bool s_enabled = true;
+
+  // Seed from the first cached alarm if available
+  if (g_alarmCount > 0) {
+    s_hour    = g_alarms[0].hour;
+    s_minute  = g_alarms[0].minute;
+    s_enabled = g_alarms[0].enabled;
+  }
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x080808), LV_PART_MAIN);
+  lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Title
+  lv_obj_t *title = lv_label_create(scr);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_color(title, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 24);
+  lv_label_set_text(title, "SET ALARM");
+
+  // ── Hour display + up/down ──
+  // Hour up button
+  lv_obj_t *btnHrUp = lv_btn_create(scr);
+  lv_obj_set_size(btnHrUp, 120, 60);
+  lv_obj_set_pos(btnHrUp, 160, 80);
+  lv_obj_set_style_bg_color(btnHrUp, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnHrUp, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnHrUp, 10, LV_PART_MAIN);
+  lv_obj_t *lblHrUp = lv_label_create(btnHrUp);
+  lv_obj_set_style_text_font(lblHrUp, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblHrUp, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+  lv_label_set_text(lblHrUp, LV_SYMBOL_UP);
+  lv_obj_center(lblHrUp);
+
+  // Hour label
+  lv_obj_t *lblHr = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblHr, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblHr, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_pos(lblHr, 120, 148);
+  lv_obj_set_width(lblHr, 200);
+  lv_obj_set_style_text_align(lblHr, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+  char hrBuf[4]; snprintf(hrBuf, sizeof(hrBuf), "%d", s_hour > 12 ? s_hour - 12 : (s_hour == 0 ? 12 : s_hour));
+  lv_label_set_text(lblHr, hrBuf);
+
+  // Hour down button
+  lv_obj_t *btnHrDn = lv_btn_create(scr);
+  lv_obj_set_size(btnHrDn, 120, 60);
+  lv_obj_set_pos(btnHrDn, 160, 330);
+  lv_obj_set_style_bg_color(btnHrDn, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnHrDn, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnHrDn, 10, LV_PART_MAIN);
+  lv_obj_t *lblHrDn = lv_label_create(btnHrDn);
+  lv_obj_set_style_text_font(lblHrDn, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblHrDn, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+  lv_label_set_text(lblHrDn, LV_SYMBOL_DOWN);
+  lv_obj_center(lblHrDn);
+
+  // Colon
+  lv_obj_t *lblColon = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblColon, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblColon, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_set_pos(lblColon, 330, 148);
+  lv_label_set_text(lblColon, ":");
+
+  // ── Minute display + up/down ──
+  lv_obj_t *btnMinUp = lv_btn_create(scr);
+  lv_obj_set_size(btnMinUp, 120, 60);
+  lv_obj_set_pos(btnMinUp, 520, 80);
+  lv_obj_set_style_bg_color(btnMinUp, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnMinUp, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnMinUp, 10, LV_PART_MAIN);
+  lv_obj_t *lblMinUp = lv_label_create(btnMinUp);
+  lv_obj_set_style_text_font(lblMinUp, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblMinUp, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+  lv_label_set_text(lblMinUp, LV_SYMBOL_UP);
+  lv_obj_center(lblMinUp);
+
+  lv_obj_t *lblMin = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblMin, &montserrat_light_120, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblMin, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_pos(lblMin, 370, 148);
+  lv_obj_set_width(lblMin, 200);
+  lv_obj_set_style_text_align(lblMin, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+  char minBuf[4]; snprintf(minBuf, sizeof(minBuf), "%02d", s_minute);
+  lv_label_set_text(lblMin, minBuf);
+
+  lv_obj_t *btnMinDn = lv_btn_create(scr);
+  lv_obj_set_size(btnMinDn, 120, 60);
+  lv_obj_set_pos(btnMinDn, 520, 330);
+  lv_obj_set_style_bg_color(btnMinDn, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnMinDn, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnMinDn, 10, LV_PART_MAIN);
+  lv_obj_t *lblMinDn = lv_label_create(btnMinDn);
+  lv_obj_set_style_text_font(lblMinDn, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblMinDn, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+  lv_label_set_text(lblMinDn, LV_SYMBOL_DOWN);
+  lv_obj_center(lblMinDn);
+
+  // AM/PM label (updates with hour)
+  lv_obj_t *lblAmPm = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblAmPm, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblAmPm, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_pos(lblAmPm, 600, 220);
+  lv_label_set_text(lblAmPm, s_hour < 12 ? "AM" : "PM");
+
+  // Status label (shows saving... / saved / error)
+  lv_obj_t *lblStatus = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblStatus, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_align(lblStatus, LV_ALIGN_BOTTOM_MID, 0, -80);
+  lv_label_set_text(lblStatus, "");
+
+  // ── Hour up callback ──
+  struct AlarmPickerState { lv_obj_t *lblHr; lv_obj_t *lblMin; lv_obj_t *lblAmPm; lv_obj_t *lblStatus; };
+  AlarmPickerState *st = new AlarmPickerState{lblHr, lblMin, lblAmPm, lblStatus};
+
+  lv_obj_add_event_cb(btnHrUp, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    s_hour = (s_hour + 1) % 24;
+    AlarmPickerState *s = (AlarmPickerState *)lv_event_get_user_data(e);
+    char buf[4]; snprintf(buf, sizeof(buf), "%d", s_hour > 12 ? s_hour - 12 : (s_hour == 0 ? 12 : s_hour));
+    lv_label_set_text(s->lblHr, buf);
+    lv_label_set_text(s->lblAmPm, s_hour < 12 ? "AM" : "PM");
+    lv_label_set_text(s->lblStatus, "");
+  }, LV_EVENT_ALL, st);
+
+  lv_obj_add_event_cb(btnHrDn, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    s_hour = (s_hour + 23) % 24;
+    AlarmPickerState *s = (AlarmPickerState *)lv_event_get_user_data(e);
+    char buf[4]; snprintf(buf, sizeof(buf), "%d", s_hour > 12 ? s_hour - 12 : (s_hour == 0 ? 12 : s_hour));
+    lv_label_set_text(s->lblHr, buf);
+    lv_label_set_text(s->lblAmPm, s_hour < 12 ? "AM" : "PM");
+    lv_label_set_text(s->lblStatus, "");
+  }, LV_EVENT_ALL, st);
+
+  lv_obj_add_event_cb(btnMinUp, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    s_minute = (s_minute + 1) % 60;
+    AlarmPickerState *s = (AlarmPickerState *)lv_event_get_user_data(e);
+    char buf[4]; snprintf(buf, sizeof(buf), "%02d", s_minute);
+    lv_label_set_text(s->lblMin, buf);
+    lv_label_set_text(s->lblStatus, "");
+  }, LV_EVENT_ALL, st);
+
+  lv_obj_add_event_cb(btnMinDn, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    s_minute = (s_minute + 59) % 60;
+    AlarmPickerState *s = (AlarmPickerState *)lv_event_get_user_data(e);
+    char buf[4]; snprintf(buf, sizeof(buf), "%02d", s_minute);
+    lv_label_set_text(s->lblMin, buf);
+    lv_label_set_text(s->lblStatus, "");
+  }, LV_EVENT_ALL, st);
+
+  // ── Set Alarm button ──
+  lv_obj_t *btnSet = lv_btn_create(scr);
+  lv_obj_set_size(btnSet, 280, 56);
+  lv_obj_align(btnSet, LV_ALIGN_BOTTOM_MID, -80, -16);
+  lv_obj_set_style_bg_color(btnSet, lv_color_hex(0x1A3A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnSet, lv_color_hex(0x22C55E), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnSet, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnSet, 12, LV_PART_MAIN);
+  lv_obj_t *lblSet = lv_label_create(btnSet);
+  lv_obj_set_style_text_font(lblSet, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSet, lv_color_hex(0x22C55E), LV_PART_MAIN);
+  lv_label_set_text(lblSet, LV_SYMBOL_OK "  Set Alarm");
+  lv_obj_center(lblSet);
+  lv_obj_add_event_cb(btnSet, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    AlarmPickerState *s = (AlarmPickerState *)lv_event_get_user_data(e);
+    lv_label_set_text(s->lblStatus, "Saving...");
+    lv_obj_set_style_text_color(s->lblStatus, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_timer_handler();
+    // POST to /api/device/alarm
+    bool ok = false;
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      String url = String(API_BASE_URL) + "/api/device/alarm";
+      http.begin(url);
+      http.addHeader("Content-Type", "application/json");
+      String apiKey = ""; { Preferences p; p.begin(NVS_NAMESPACE, true); apiKey = p.getString(NVS_KEY_APIKEY, ""); p.end(); }
+      http.addHeader("X-Device-Key", apiKey);
+      char body[80];
+      snprintf(body, sizeof(body), "{\"hour\":%d,\"minute\":%d,\"days\":\"0,1,2,3,4,5,6\",\"enabled\":true}", s_hour, s_minute);
+      int code = http.POST(body);
+      ok = (code == 200);
+      http.end();
+    }
+    if (ok) {
+      // Update local cache
+      if (g_alarmCount == 0) g_alarmCount = 1;
+      g_alarms[0].hour    = s_hour;
+      g_alarms[0].minute  = s_minute;
+      g_alarms[0].enabled = true;
+      for (int d = 0; d < 7; d++) g_alarms[0].daysOfWeek[d] = d;
+      g_alarms[0].daysCount = 7;
+      updateAlarmLabels();
+      lv_label_set_text(s->lblStatus, LV_SYMBOL_OK "  Alarm set!");
+      lv_obj_set_style_text_color(s->lblStatus, lv_color_hex(0x22C55E), LV_PART_MAIN);
+    } else {
+      lv_label_set_text(s->lblStatus, "Failed — check WiFi");
+      lv_obj_set_style_text_color(s->lblStatus, lv_color_hex(0xFF4444), LV_PART_MAIN);
+    }
+  }, LV_EVENT_ALL, st);
+
+  // ── Back button ──
+  lv_obj_t *btnBack = lv_btn_create(scr);
+  lv_obj_set_size(btnBack, 140, 56);
+  lv_obj_align(btnBack, LV_ALIGN_BOTTOM_MID, 100, -16);
+  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnBack, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnBack, 12, LV_PART_MAIN);
+  lv_obj_t *lblBack = lv_label_create(btnBack);
+  lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblBack, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
+  lv_obj_center(lblBack);
+  lv_obj_add_event_cb(btnBack, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_obj_t *s = lv_disp_get_scr_act(nullptr);
+    showClockScreen();
+    lv_obj_del(s);
+  }, LV_EVENT_ALL, nullptr);
+
+  lv_disp_load_scr(scr);
 }
 
 // ─── Setup ───────────────────────────────────────────────────────────────────────────────────
