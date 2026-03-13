@@ -915,6 +915,14 @@ void sendVoiceToServer(uint8_t *buf, size_t len) {
         // Server already updated; refresh
         fetchSchedule();
         updateAlarmLabels();
+      } else if (strcmp(cmdType, "habit_green") == 0 && g_inCheckin) {
+        ciAdvance(3);  // green = won
+      } else if (strcmp(cmdType, "habit_yellow") == 0 && g_inCheckin) {
+        ciAdvance(2);  // yellow = partial
+      } else if (strcmp(cmdType, "habit_red") == 0 && g_inCheckin) {
+        ciAdvance(1);  // red = missed
+      } else if (strcmp(cmdType, "skip_habit") == 0 && g_inCheckin) {
+        ciAdvance(0);  // 0 = no response / skipped
       }
 
       // Play the confirmation audio
@@ -2275,6 +2283,8 @@ static time_t g_alarmFiredAt = 0;
 #define HABIT_TIMER_TICKS  100   // 100 ticks × 100ms = 10 s per habit
 static int   g_ciHabitIdx  = 0;  // which habit we're currently rating
 static int   g_ciTick      = 0;  // countdown tick (counts down from HABIT_TIMER_TICKS)
+static int   g_ciRereadCount = 0; // how many times we've re-read this habit
+static bool  g_ciListening  = false; // true while waiting for voice response
 static lv_timer_t *g_ciTimer = nullptr;
 
 // LVGL widgets on the check-in screen (rebuilt each call to showCheckinScreen)
@@ -2290,12 +2300,39 @@ static void cb_ci_tick(lv_timer_t *timer) {
   if (g_ciTick > 0) {
     g_ciTick--;
     if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
+
+    // At 50% of the countdown (5s), start listening for voice response if enabled
+    // Only trigger once per habit (when g_ciListening is false)
+    if (g_voiceEnabled && !g_ciListening && g_ciTick == HABIT_TIMER_TICKS / 2) {
+      g_ciListening = true;
+      // Run voice listen in a background task so it doesn't block the UI
+      xTaskCreate([](void *) {
+        startListening();
+        g_ciListening = false;
+        vTaskDelete(nullptr);
+      }, "ci_voice", 8192, nullptr, 1, nullptr);
+    }
   }
   if (g_ciTick == 0) {
-    // Time's up — re-fire buzzer and reset bar (do NOT advance; user must answer)
-    buzzerOn();
-    g_ciTick = HABIT_TIMER_TICKS;
-    if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
+    // Time's up
+    if (g_ciRereadCount < 2) {
+      // Re-read the habit name and reset the bar
+      g_ciRereadCount++;
+      buzzerOn();
+      vTaskDelay(pdMS_TO_TICKS(300));
+      buzzerOff();
+      // Re-play the habit audio
+      if (g_ciHabitIdx < g_habitCount) {
+        playHabitAudio(g_habits[g_ciHabitIdx].name.c_str());
+      }
+      g_ciTick = HABIT_TIMER_TICKS;
+      g_ciListening = false;  // allow voice listen again on next cycle
+      if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
+    } else {
+      // 2 re-reads with no response — auto-skip
+      Serial.println("[checkin] auto-skip after 2 re-reads");
+      ciAdvance(0);  // rating 0 = no response / skipped
+    }
   }
 }
 
@@ -2304,6 +2341,8 @@ static void ciAdvance(int rating) {
   // Stop timer and silence buzzer
   if (g_ciTimer) { lv_timer_del(g_ciTimer); g_ciTimer = nullptr; }
   buzzerOff();
+  g_ciRereadCount = 0;  // reset re-read counter for next habit
+  g_ciListening   = false;
 
   // Save rating for current habit (0=none, 1=red, 2=yellow, 3=green)
   if (g_ciHabitIdx < MAX_HABITS) g_ratings[g_ciHabitIdx] = rating;
