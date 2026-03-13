@@ -289,6 +289,7 @@ void showAlarmSetScreen();
 void showJournalScreen();
 void showGratitudeScreen();
 void showHabitsScreen();
+static void buildTopNavButtons(lv_color_t col);
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
 // Audio
 bool  initSD();
@@ -2159,30 +2160,44 @@ static void showMorePanel() {
   lv_obj_center(lblX);
 }
 
-// ── Helper: build the Journal / Gratitude / Habits top nav buttons ───────────
-// Three compact pill buttons across the top-left of the clock screen.
-// They sit alongside the date label and WiFi icon at y≈8.
+// ── Helper: build the Journal / Gratitude / Habits top nav labels ────────────
+// Three plain tap-targets (no button box) — Journal left, Gratitude center,
+// Habits right.  Each has the word on top and a small upward chevron (∧) below
+// to hint at the physical button beneath it.
 static void buildTopNavButtons(lv_color_t col) {
-  const char *labels[3]  = { "Journal", "Gratitude", "Habits" };
-  const int btnW = 140, btnH = 30, gap = 8, startX = 16, startY = 8;
+  // x-centres for left / mid / right thirds of the 800px screen
+  // Left third: 0-266 → centre 133.  Mid: 267-533 → centre 400.  Right: 534-800 → centre 667.
+  const int cx[3]   = { 133, 400, 667 };
+  const char *names[3]  = { "Journal", "Gratitude", "Habits" };
+
   for (int i = 0; i < 3; i++) {
-    lv_obj_t *btn = lv_btn_create(scr_clock);
-    lv_obj_set_size(btn, btnW, btnH);
-    lv_obj_set_pos(btn, startX + i * (btnW + gap), startY);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x111122), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn, col, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
-    lv_obj_set_style_radius(btn, 15, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(btn, 0, LV_PART_MAIN);
-    lv_obj_t *lbl = lv_label_create(btn);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_set_style_text_color(lbl, col, LV_PART_MAIN);
-    lv_label_set_text(lbl, labels[i]);
-    lv_obj_center(lbl);
-    // Store handler index as user data
+    // Invisible hit-area container — transparent, no border, clickable
+    lv_obj_t *hit = lv_obj_create(scr_clock);
+    lv_obj_set_size(hit, 200, 46);
+    lv_obj_set_pos(hit, cx[i] - 100, 2);
+    lv_obj_set_style_bg_opa(hit, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(hit, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(hit, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(hit, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+
+    // Word label — 14pt, accent colour
+    lv_obj_t *lblName = lv_label_create(hit);
+    lv_obj_set_style_text_font(lblName, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lblName, col, LV_PART_MAIN);
+    lv_label_set_text(lblName, names[i]);
+    lv_obj_align(lblName, LV_ALIGN_TOP_MID, 0, 0);
+
+    // Chevron label — small upward-pointing ∧ below the word
+    lv_obj_t *lblChev = lv_label_create(hit);
+    lv_obj_set_style_text_font(lblChev, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lblChev, col, LV_PART_MAIN);
+    lv_label_set_text(lblChev, "^");  // ASCII caret — upward-pointing chevron hint
+    lv_obj_align(lblChev, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    // Tap callback
     int *idx = new int(i);
-    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+    lv_obj_add_event_cb(hit, [](lv_event_t *e) {
       if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
       int i = *(int *)lv_event_get_user_data(e);
       static void (*h[3])() = { showJournalScreen, showGratitudeScreen, showHabitsScreen };
