@@ -239,6 +239,15 @@ size_t  g_micBufLen    = 0;
 #define CMD_SKIP         "skip"
 #define CMD_DONE         "done"
 
+// ─── Journal/Gratitude/MindDump recording state ─────────────────────────────
+bool            g_recActive    = false;  // currently recording a journal/gratitude/minddump
+i2s_chan_handle_t g_recHandle  = nullptr; // I2S channel handle while recording
+File            g_recFile;               // SD file being written
+size_t          g_recDataBytes = 0;      // PCM bytes written so far (for WAV header)
+lv_obj_t       *g_recScreen    = nullptr; // the full-screen recording UI
+lv_obj_t       *g_recBars[8]   = {};      // VU-meter bar objects
+lv_timer_t     *g_recTimer     = nullptr; // LVGL timer that drives the VU animation
+
 // ─── Low EMF / WiFi sleep mode ────────────────────────────────────────────────
 bool g_lowEmfMode   = false;  // WiFi off while sleeping
 int  g_wifiOffHour  = 22;     // 10 PM
@@ -289,6 +298,8 @@ void showAlarmSetScreen();
 void showJournalScreen();
 void showGratitudeScreen();
 void showHabitsScreen();
+void showRecordMenu();
+void showRecordingScreen(const char *category, const char *folder);
 static void buildTopNavButtons(lv_color_t col);
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
 // Audio
@@ -2182,15 +2193,14 @@ static void showMorePanel() {
   lv_obj_center(lblX);
 }
 
-// ── Helper: build the Journal / Gratitude / Habits top nav labels ────────────
-// Three plain tap-targets (no button box) — Journal left, Gratitude center,
+// ── Helper: build the Record / Gratitude / Habits top nav labels ────────────
+// Three plain tap-targets (no button box) — Record left, Gratitude center,
 // Habits right.  Each has the word on top and a small upward chevron (∧) below
 // to hint at the physical button beneath it.
 static void buildTopNavButtons(lv_color_t col) {
   // x-centres for left / mid / right thirds of the 800px screen
-  // Left third: 0-266 → centre 133.  Mid: 267-533 → centre 400.  Right: 534-800 → centre 667.
   const int cx[3]   = { 133, 400, 667 };
-  const char *names[3]  = { "Journal", "Gratitude", "Habits" };
+  const char *names[3]  = { "Record", "Gratitude", "Habits" };
 
   for (int i = 0; i < 3; i++) {
     // Invisible hit-area container — transparent, no border, clickable
@@ -2217,12 +2227,12 @@ static void buildTopNavButtons(lv_color_t col) {
     lv_label_set_text(lblChev, "^");  // ASCII caret — upward-pointing chevron hint
     lv_obj_align(lblChev, LV_ALIGN_BOTTOM_MID, 0, 0);
 
-    // Tap callback
+    // Tap callback: Record (0) -> showRecordMenu, Gratitude (1) -> showGratitudeScreen, Habits (2) -> showHabitsScreen
     int *idx = new int(i);
     lv_obj_add_event_cb(hit, [](lv_event_t *e) {
       if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
       int i = *(int *)lv_event_get_user_data(e);
-      static void (*h[3])() = { showJournalScreen, showGratitudeScreen, showHabitsScreen };
+      static void (*h[3])() = { showRecordMenu, showGratitudeScreen, showHabitsScreen };
       h[i]();
     }, LV_EVENT_ALL, idx);
   }
@@ -2272,6 +2282,358 @@ static void buildSimpleScreen(const char *title, lv_color_t accentCol) {
 void showJournalScreen()   { buildSimpleScreen("Journal",   lv_color_hex(0x7B74FF)); }
 void showGratitudeScreen() { buildSimpleScreen("Gratitude", lv_color_hex(0xFFAA44)); }
 void showHabitsScreen()    { buildSimpleScreen("Habits",    lv_color_hex(0x44CC88)); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECORD FEATURE: Gratitude / Journal Entry / Mind Dump
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Return the theme accent color for the recording UI
+static lv_color_t recAccentColor() {
+  switch (g_theme) {
+    case THEME_LED:  return lv_color_hex(0x00FF55);
+    case THEME_WARM: return lv_color_hex(0xFF6600);
+    case THEME_RED:  return lv_color_hex(0xFF1111);
+    default:         return lv_color_hex(0xFFFFFF);
+  }
+}
+
+// Write a 44-byte PCM WAV header into the first 44 bytes of an open File.
+// dataBytes = total number of PCM data bytes that follow.
+static void writeWavHeader(File &f, size_t dataBytes) {
+  const uint32_t sampleRate  = 16000;
+  const uint16_t numChannels = 1;
+  const uint16_t bitsPerSamp = 16;
+  const uint32_t byteRate    = sampleRate * numChannels * (bitsPerSamp / 8);
+  const uint16_t blockAlign  = numChannels * (bitsPerSamp / 8);
+  uint32_t chunkSize = 36 + (uint32_t)dataBytes;
+  uint32_t dataSize  = (uint32_t)dataBytes;
+  uint8_t hdr[44];
+  // RIFF chunk
+  hdr[0]='R'; hdr[1]='I'; hdr[2]='F'; hdr[3]='F';
+  hdr[4]=(chunkSize)&0xFF; hdr[5]=(chunkSize>>8)&0xFF; hdr[6]=(chunkSize>>16)&0xFF; hdr[7]=(chunkSize>>24)&0xFF;
+  hdr[8]='W'; hdr[9]='A'; hdr[10]='V'; hdr[11]='E';
+  // fmt sub-chunk
+  hdr[12]='f'; hdr[13]='m'; hdr[14]='t'; hdr[15]=' ';
+  hdr[16]=16; hdr[17]=0; hdr[18]=0; hdr[19]=0;  // sub-chunk size = 16
+  hdr[20]=1;  hdr[21]=0;                         // PCM = 1
+  hdr[22]=numChannels&0xFF; hdr[23]=(numChannels>>8)&0xFF;
+  hdr[24]=(sampleRate)&0xFF; hdr[25]=(sampleRate>>8)&0xFF; hdr[26]=(sampleRate>>16)&0xFF; hdr[27]=(sampleRate>>24)&0xFF;
+  hdr[28]=(byteRate)&0xFF;   hdr[29]=(byteRate>>8)&0xFF;   hdr[30]=(byteRate>>16)&0xFF;   hdr[31]=(byteRate>>24)&0xFF;
+  hdr[32]=blockAlign&0xFF; hdr[33]=(blockAlign>>8)&0xFF;
+  hdr[34]=bitsPerSamp&0xFF; hdr[35]=(bitsPerSamp>>8)&0xFF;
+  // data sub-chunk
+  hdr[36]='d'; hdr[37]='a'; hdr[38]='t'; hdr[39]='a';
+  hdr[40]=(dataSize)&0xFF; hdr[41]=(dataSize>>8)&0xFF; hdr[42]=(dataSize>>16)&0xFF; hdr[43]=(dataSize>>24)&0xFF;
+  f.seek(0);
+  f.write(hdr, 44);
+}
+
+// Open the I2S PDM mic and start streaming to SD.  Returns true on success.
+static bool recStart(const char *folder) {
+  if (g_recActive) return false;
+  if (!g_sdMounted) {
+    Serial.println("[rec] SD not mounted");
+    return false;
+  }
+  // Ensure folder exists
+  if (!SD_MMC.exists(folder)) SD_MMC.mkdir(folder);
+
+  // Build timestamped filename
+  time_t now = time(nullptr);
+  struct tm t;
+  localtime_r(&now, &t);
+  char path[96];
+  snprintf(path, sizeof(path), "%s/%04d-%02d-%02d_%02d-%02d.wav",
+           folder,
+           t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+           t.tm_hour, t.tm_min);
+
+  // Open file and write placeholder WAV header (will be finalised on stop)
+  g_recFile = SD_MMC.open(path, FILE_WRITE);
+  if (!g_recFile) {
+    Serial.printf("[rec] cannot open %s\n", path);
+    return false;
+  }
+  // Reserve 44 bytes for WAV header (filled with zeros for now)
+  uint8_t zeros[44] = {};
+  g_recFile.write(zeros, 44);
+  g_recDataBytes = 0;
+
+  // Init I2S PDM RX (same config as startListening)
+  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
+  chan_cfg.auto_clear = true;
+  i2s_new_channel(&chan_cfg, nullptr, &g_recHandle);
+  i2s_pdm_rx_config_t pdm_cfg = {
+    .clk_cfg  = I2S_PDM_RX_CLK_DEFAULT_CONFIG(16000),
+    .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+    .gpio_cfg = {
+      .clk  = (gpio_num_t)MIC_WS_PIN,
+      .din  = (gpio_num_t)MIC_SD_PIN,
+      .invert_flags = { .clk_inv = false }
+    }
+  };
+  i2s_channel_init_pdm_rx_mode(g_recHandle, &pdm_cfg);
+  i2s_channel_enable(g_recHandle);
+  g_recActive = true;
+  Serial.printf("[rec] started -> %s\n", path);
+  return true;
+}
+
+// Read one chunk of audio from I2S, write to SD, return RMS amplitude (0-32767).
+// Called from the LVGL timer every 80 ms.
+static int16_t recPump() {
+  if (!g_recActive || !g_recHandle) return 0;
+  static uint8_t buf[1024];
+  size_t bytesRead = 0;
+  i2s_channel_read(g_recHandle, buf, sizeof(buf), &bytesRead, pdMS_TO_TICKS(10));
+  if (bytesRead > 0) {
+    g_recFile.write(buf, bytesRead);
+    g_recDataBytes += bytesRead;
+    // Compute RMS of this chunk for VU meter
+    int16_t *samples = (int16_t *)buf;
+    size_t   count   = bytesRead / 2;
+    int64_t  sumSq   = 0;
+    for (size_t i = 0; i < count; i++) sumSq += (int64_t)samples[i] * samples[i];
+    return (int16_t)sqrt((double)sumSq / count);
+  }
+  return 0;
+}
+
+// Stop recording: finalise WAV header, close file, tear down I2S.
+static void recStop() {
+  if (!g_recActive) return;
+  g_recActive = false;
+  i2s_channel_disable(g_recHandle);
+  i2s_del_channel(g_recHandle);
+  g_recHandle = nullptr;
+  // Patch WAV header with actual data size
+  writeWavHeader(g_recFile, g_recDataBytes);
+  g_recFile.close();
+  Serial.printf("[rec] stopped, %u bytes PCM\n", (unsigned)g_recDataBytes);
+}
+
+// LVGL timer callback: pump audio, update VU bars
+static void recTimerCb(lv_timer_t *tmr) {
+  int16_t amp = recPump();
+  if (!g_recBars[0]) return;  // bars not yet built
+  // Normalise amplitude to 0-100
+  int level = (int)(amp / 327);  // 32767 -> 100
+  if (level > 100) level = 100;
+  // Each bar gets a random-ish height around the level for a natural look
+  static uint8_t phase = 0;
+  phase++;
+  lv_color_t accent = recAccentColor();
+  for (int i = 0; i < 8; i++) {
+    // Stagger bars with a sine-like offset
+    int offset = (int)(sinf((phase + i * 40) * 0.08f) * 20);
+    int h = level + offset;
+    if (h < 4)   h = 4;    // minimum visible height
+    if (h > 100) h = 100;
+    lv_obj_set_height(g_recBars[i], h * 2);  // bar height in px (max 200)
+    lv_obj_set_style_bg_color(g_recBars[i], accent, LV_PART_MAIN);
+    // Dim bars below the level threshold
+    lv_obj_set_style_bg_opa(g_recBars[i], (h > 10) ? LV_OPA_COVER : LV_OPA_30, LV_PART_MAIN);
+  }
+}
+
+// Full-screen recording UI
+void showRecordingScreen(const char *category, const char *folder) {
+  lv_color_t accent = recAccentColor();
+
+  g_recScreen = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(g_recScreen, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(g_recScreen, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_clear_flag(g_recScreen, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Category title (e.g. "Gratitude")
+  lv_obj_t *lblCat = lv_label_create(g_recScreen);
+  lv_obj_set_style_text_font(lblCat, &lv_font_montserrat_40, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblCat, accent, LV_PART_MAIN);
+  lv_obj_align(lblCat, LV_ALIGN_TOP_MID, 0, 28);
+  lv_label_set_text(lblCat, category);
+
+  // Mic icon
+  lv_obj_t *lblMic = lv_label_create(g_recScreen);
+  lv_obj_set_style_text_font(lblMic, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblMic, accent, LV_PART_MAIN);
+  lv_obj_align(lblMic, LV_ALIGN_TOP_MID, 0, 88);
+  lv_label_set_text(lblMic, LV_SYMBOL_AUDIO);
+
+  // "Recording..." subtitle
+  lv_obj_t *lblStatus = lv_label_create(g_recScreen);
+  lv_obj_set_style_text_font(lblStatus, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_align(lblStatus, LV_ALIGN_TOP_MID, 0, 150);
+  lv_label_set_text(lblStatus, "Recording...");
+
+  // VU meter — 8 vertical bars centred on screen
+  // Each bar: 28px wide, 4px gap, max 200px tall, bottom-anchored at y=360
+  const int barW   = 28;
+  const int barGap = 8;
+  const int totalW = 8 * barW + 7 * barGap;  // 8*28 + 7*8 = 280
+  const int startX = (800 - totalW) / 2;      // 260
+  const int baseY  = 360;                     // bottom of bars
+  for (int i = 0; i < 8; i++) {
+    g_recBars[i] = lv_obj_create(g_recScreen);
+    lv_obj_set_style_bg_color(g_recBars[i], accent, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(g_recBars[i], LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_border_width(g_recBars[i], 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(g_recBars[i], 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(g_recBars[i], 0, LV_PART_MAIN);
+    lv_obj_set_width(g_recBars[i], barW);
+    lv_obj_set_height(g_recBars[i], 8);  // initial minimal height
+    // Position: bottom edge at baseY, left edge at startX + i*(barW+barGap)
+    lv_obj_set_pos(g_recBars[i], startX + i * (barW + barGap), baseY - 8);
+  }
+
+  // Stop button
+  lv_obj_t *btnStop = lv_btn_create(g_recScreen);
+  lv_obj_set_size(btnStop, 220, 56);
+  lv_obj_align(btnStop, LV_ALIGN_BOTTOM_MID, 0, -28);
+  lv_obj_set_style_bg_color(btnStop, lv_color_hex(0x1A0000), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnStop, lv_color_hex(0xFF2222), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnStop, 2, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnStop, 28, LV_PART_MAIN);
+  lv_obj_t *lblStop = lv_label_create(btnStop);
+  lv_obj_set_style_text_font(lblStop, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblStop, lv_color_hex(0xFF4444), LV_PART_MAIN);
+  lv_label_set_text(lblStop, LV_SYMBOL_STOP "  Stop & Save");
+  lv_obj_center(lblStop);
+
+  // Store category label pointer in btnStop user data so callback can update it
+  lv_obj_add_event_cb(btnStop, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    // Stop I2S + close WAV file
+    recStop();
+    // Kill VU timer
+    if (g_recTimer) { lv_timer_del(g_recTimer); g_recTimer = nullptr; }
+    // Clear bar pointers
+    for (int i = 0; i < 8; i++) g_recBars[i] = nullptr;
+    // Show "Saved!" on the status label (passed as user data)
+    lv_obj_t *statusLbl = (lv_obj_t *)lv_event_get_user_data(e);
+    if (statusLbl) {
+      lv_label_set_text(statusLbl, LV_SYMBOL_OK "  Saved!");
+      lv_obj_set_style_text_color(statusLbl, lv_color_hex(0x22CC66), LV_PART_MAIN);
+    }
+    lv_timer_handler();  // flush UI so user sees "Saved!"
+    // Return to clock after a brief moment (use async delete)
+    lv_obj_t *scr = g_recScreen;
+    g_recScreen = nullptr;
+    showClockScreen();
+    lv_obj_del_async(scr);
+  }, LV_EVENT_ALL, lblStatus);
+
+  // Start I2S recording
+  if (!recStart(folder)) {
+    // SD not available — show error and go back
+    lv_label_set_text(lblStatus, "SD card not found!");
+    lv_obj_set_style_text_color(lblStatus, lv_color_hex(0xFF4444), LV_PART_MAIN);
+    lv_timer_handler();
+    delay(1500);
+    lv_obj_t *scr = g_recScreen;
+    g_recScreen = nullptr;
+    showClockScreen();
+    lv_obj_del_async(scr);
+    return;
+  }
+
+  // Start VU animation timer — fires every 80 ms
+  g_recTimer = lv_timer_create(recTimerCb, 80, nullptr);
+
+  lv_disp_load_scr(g_recScreen);
+}
+
+// Record sub-menu: three buttons — Gratitude, Journal Entry, Mind Dump
+void showRecordMenu() {
+  lv_color_t accent = recAccentColor();
+
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Title
+  lv_obj_t *lblTitle = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_40, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblTitle, accent, LV_PART_MAIN);
+  lv_obj_align(lblTitle, LV_ALIGN_TOP_MID, 0, 30);
+  lv_label_set_text(lblTitle, "Record");
+
+  // Sub-title hint
+  lv_obj_t *lblHint = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblHint, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblHint, lv_color_hex(0x555555), LV_PART_MAIN);
+  lv_obj_align(lblHint, LV_ALIGN_TOP_MID, 0, 86);
+  lv_label_set_text(lblHint, "What would you like to record?");
+
+  // Three buttons — same x-centres as the top nav (133, 400, 667)
+  struct { const char *label; const char *folder; int cx; } opts[3] = {
+    { "Gratitude",     "/gratitudes", 133 },
+    { "Journal Entry", "/journal",    400 },
+    { "Mind Dump",     "/minddump",   667 },
+  };
+
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *btn = lv_btn_create(scr);
+    lv_obj_set_size(btn, 200, 200);
+    lv_obj_set_pos(btn, opts[i].cx - 100, 140);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn, accent, LV_PART_MAIN);
+    lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
+    lv_obj_set_style_radius(btn, 20, LV_PART_MAIN);
+
+    // Mic icon
+    lv_obj_t *ico = lv_label_create(btn);
+    lv_obj_set_style_text_font(ico, &lv_font_montserrat_48, LV_PART_MAIN);
+    lv_obj_set_style_text_color(ico, accent, LV_PART_MAIN);
+    lv_obj_align(ico, LV_ALIGN_TOP_MID, 0, 20);
+    lv_label_set_text(ico, LV_SYMBOL_AUDIO);
+
+    // Category name
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lbl, accent, LV_PART_MAIN);
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_width(lbl, 180);
+    lv_obj_align(lbl, LV_ALIGN_BOTTOM_MID, 0, -18);
+    lv_label_set_text(lbl, opts[i].label);
+
+    // Pass category + folder as a small struct via user data
+    struct RecOpt { const char *cat; const char *fld; };
+    RecOpt *opt = new RecOpt{ opts[i].label, opts[i].folder };
+    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+      if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+      RecOpt *o = (RecOpt *)lv_event_get_user_data(e);
+      // Async-delete this menu screen, then open recording screen
+      lv_obj_t *menuScr = lv_disp_get_scr_act(nullptr);
+      showRecordingScreen(o->cat, o->fld);
+      lv_obj_del_async(menuScr);
+      delete o;
+    }, LV_EVENT_ALL, opt);
+  }
+
+  // Back button (bottom-left, same style as buildSimpleScreen)
+  lv_obj_t *btnBack = lv_btn_create(scr);
+  lv_obj_set_size(btnBack, 160, 48);
+  lv_obj_align(btnBack, LV_ALIGN_BOTTOM_LEFT, 20, -20);
+  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnBack, accent, LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnBack, 10, LV_PART_MAIN);
+  lv_obj_t *lblBack = lv_label_create(btnBack);
+  lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblBack, accent, LV_PART_MAIN);
+  lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
+  lv_obj_center(lblBack);
+  lv_obj_add_event_cb(btnBack, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_obj_t *s = lv_disp_get_scr_act(nullptr);
+    showClockScreen();
+    lv_obj_del_async(s);
+  }, LV_EVENT_ALL, nullptr);
+
+  lv_disp_load_scr(scr);
+}
 
 void buildClockScreen() {
   // Destroy previous screen if rebuilding
