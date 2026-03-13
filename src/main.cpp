@@ -337,16 +337,25 @@ static int  g_ciTick        = 0;
 static int  g_ciRereadCount = 0;
 static bool g_ciListening   = false;
 static void ciAdvance(int rating);  // defined at line ~2305
+static lv_color_t recAccentColor();  // forward decl — defined in RECORD FEATURE section
 
 // ─── Display flush ─────────────────────────────────────────────────────────────
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
-  if (gfx.getStartCount() > 0) gfx.endWrite();
+  // NOTE: do NOT call gfx.endWrite() / gfx.startWrite() here.
+  // The CrowPanel Advance 5" uses an RGB parallel bus (Panel_RGB), not SPI.
+  // On RGB panels, startWrite/endWrite manage an internal transaction counter
+  // that must stay > 0 at all times after gfx.startWrite() in setup().
+  // Calling endWrite() from the flush callback resets that counter to 0,
+  // which closes the RGB DMA descriptor chain and blanks the bottom half of
+  // the display on the next frame.
+  //
+  // Correct pattern for RGB+DMA panels:
+  //   - Call gfx.startWrite() ONCE in setup() (already done)
+  //   - Never call endWrite() again
+  //   - Call waitDMA() before flush_ready to prevent buffer race
   gfx.pushImageDMA(area->x1, area->y1, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1,
                    (lgfx::rgb565_t *)&color_p->full);
-  // FIX: wait for DMA transfer to complete before releasing the buffer back to LVGL.
-  // Without this, LVGL starts drawing the next dirty region into the same buffer
-  // that the DMA is still actively reading -> pixel corruption / glitch bars.
-  gfx.waitDMA();
+  gfx.waitDMA();             // wait for DMA to finish before releasing buffer to LVGL
   lv_disp_flush_ready(disp);
 }
 
@@ -1881,8 +1890,8 @@ static void showMorePanel() {
   lv_slider_set_range(slider, 0, BL_STEPS - 1);  // 0..4
   lv_slider_set_value(slider, curStep, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(slider, lv_color_hex(0x222222), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(slider, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(slider, lv_color_hex(0xFFFFFF), LV_PART_KNOB);
+  lv_obj_set_style_bg_color(slider, recAccentColor(), LV_PART_INDICATOR);  // theme accent
+  lv_obj_set_style_bg_color(slider, recAccentColor(), LV_PART_KNOB);       // theme accent
   lv_obj_set_style_radius(slider, 4, LV_PART_MAIN);
   lv_obj_set_style_radius(slider, 4, LV_PART_INDICATOR);
   lv_obj_set_style_radius(slider, 8, LV_PART_KNOB);
@@ -2048,22 +2057,22 @@ static void showMorePanel() {
   lv_obj_t *rowAudio = lv_obj_create(scroll);
   lv_obj_set_size(rowAudio, 720, 52);
   lv_obj_set_pos(rowAudio, 40, 382);
-  lv_obj_set_style_bg_color(rowAudio, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
-  lv_obj_set_style_border_color(rowAudio, lv_color_hex(0x2A2A5A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(rowAudio, lv_color_hex(0x0E0E0E), LV_PART_MAIN);
+  lv_obj_set_style_border_color(rowAudio, lv_color_hex(0x2A2A2A), LV_PART_MAIN);  // neutral
   lv_obj_set_style_border_width(rowAudio, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(rowAudio, 10, LV_PART_MAIN);
   lv_obj_clear_flag(rowAudio, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *lblAudioToggle = lv_label_create(rowAudio);
   lv_obj_set_style_text_font(lblAudioToggle, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblAudioToggle, lv_color_hex(0xAAAACC), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblAudioToggle, lv_color_hex(0xAAAAAA), LV_PART_MAIN);  // neutral
   lv_obj_align(lblAudioToggle, LV_ALIGN_LEFT_MID, 16, 0);
   lv_label_set_text(lblAudioToggle, LV_SYMBOL_AUDIO "  Read Habits Aloud");
 
   lv_obj_t *sw = lv_switch_create(rowAudio);
   lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -16, 0);
-  lv_obj_set_style_bg_color(sw, lv_color_hex(0x222244), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(sw, lv_color_hex(0x5555FF), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sw, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sw, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   if (g_audioEnabled) lv_obj_add_state(sw, LV_STATE_CHECKED);
   lv_obj_add_event_cb(sw, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
@@ -2077,22 +2086,22 @@ static void showMorePanel() {
   lv_obj_t *rowVoice = lv_obj_create(scroll);
   lv_obj_set_size(rowVoice, 720, 52);
   lv_obj_set_pos(rowVoice, 40, 446);
-  lv_obj_set_style_bg_color(rowVoice, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
-  lv_obj_set_style_border_color(rowVoice, lv_color_hex(0x2A2A5A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(rowVoice, lv_color_hex(0x0E0E0E), LV_PART_MAIN);
+  lv_obj_set_style_border_color(rowVoice, lv_color_hex(0x2A2A2A), LV_PART_MAIN);  // neutral
   lv_obj_set_style_border_width(rowVoice, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(rowVoice, 10, LV_PART_MAIN);
   lv_obj_clear_flag(rowVoice, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *lblVoiceToggle = lv_label_create(rowVoice);
   lv_obj_set_style_text_font(lblVoiceToggle, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblVoiceToggle, lv_color_hex(0xAAAACC), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblVoiceToggle, lv_color_hex(0xAAAAAA), LV_PART_MAIN);  // neutral
   lv_obj_align(lblVoiceToggle, LV_ALIGN_LEFT_MID, 16, 0);
   lv_label_set_text(lblVoiceToggle, LV_SYMBOL_CALL "  Hey Jack (Voice)");
 
   lv_obj_t *swVoice = lv_switch_create(rowVoice);
   lv_obj_align(swVoice, LV_ALIGN_RIGHT_MID, -16, 0);
-  lv_obj_set_style_bg_color(swVoice, lv_color_hex(0x222244), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(swVoice, lv_color_hex(0x5555FF), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(swVoice, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(swVoice, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   if (g_voiceEnabled) lv_obj_add_state(swVoice, LV_STATE_CHECKED);
   lv_obj_add_event_cb(swVoice, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
@@ -2113,22 +2122,22 @@ static void showMorePanel() {
   lv_obj_t *rowEmf = lv_obj_create(scroll);
   lv_obj_set_size(rowEmf, 720, 52);
   lv_obj_set_pos(rowEmf, 40, 540);
-  lv_obj_set_style_bg_color(rowEmf, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
-  lv_obj_set_style_border_color(rowEmf, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(rowEmf, lv_color_hex(0x0E0E0E), LV_PART_MAIN);
+  lv_obj_set_style_border_color(rowEmf, lv_color_hex(0x2A2A2A), LV_PART_MAIN);  // neutral
   lv_obj_set_style_border_width(rowEmf, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(rowEmf, 10, LV_PART_MAIN);
   lv_obj_clear_flag(rowEmf, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *lblEmfToggle = lv_label_create(rowEmf);
   lv_obj_set_style_text_font(lblEmfToggle, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblEmfToggle, lv_color_hex(0xAADDAA), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblEmfToggle, lv_color_hex(0xAAAAAA), LV_PART_MAIN);  // neutral
   lv_obj_align(lblEmfToggle, LV_ALIGN_LEFT_MID, 16, 0);
   lv_label_set_text(lblEmfToggle, LV_SYMBOL_WIFI "  WiFi Off While Sleeping");
 
   lv_obj_t *swEmf = lv_switch_create(rowEmf);
   lv_obj_align(swEmf, LV_ALIGN_RIGHT_MID, -16, 0);
-  lv_obj_set_style_bg_color(swEmf, lv_color_hex(0x224422), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(swEmf, lv_color_hex(0x22BB22), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(swEmf, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(swEmf, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   if (g_lowEmfMode) lv_obj_add_state(swEmf, LV_STATE_CHECKED);
   lv_obj_add_event_cb(swEmf, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
@@ -2160,8 +2169,8 @@ static void showMorePanel() {
   lv_obj_t *btnWifi = lv_btn_create(scroll);
   lv_obj_set_size(btnWifi, 720, 52);
   lv_obj_set_pos(btnWifi, 40, 634);
-  lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
-  lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0E0E0E), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x2A2A2A), LV_PART_MAIN);  // neutral
   lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnWifi, 10, LV_PART_MAIN);
   lv_obj_add_event_cb(btnWifi, [](lv_event_t *e) {
@@ -2174,7 +2183,7 @@ static void showMorePanel() {
   }, LV_EVENT_ALL, nullptr);
   lv_obj_t *lblWifiBtn = lv_label_create(btnWifi);
   lv_obj_set_style_text_font(lblWifiBtn, &lv_font_montserrat_18, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblWifiBtn, lv_color_hex(0x44BB44), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblWifiBtn, recAccentColor(), LV_PART_MAIN);  // theme accent
   lv_label_set_text(lblWifiBtn, LV_SYMBOL_WIFI "  Change WiFi Network");
   lv_obj_center(lblWifiBtn);
 
@@ -2262,14 +2271,14 @@ static void buildSimpleScreen(const char *title, lv_color_t accentCol) {
   lv_label_set_text(lblTitle, title);
   lv_obj_t *lblSub = lv_label_create(scr);
   lv_obj_set_style_text_font(lblSub, &lv_font_montserrat_18, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblSub, lv_color_hex(0x444466), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSub, lv_color_hex(0x333333), LV_PART_MAIN);  // neutral dim grey
   lv_obj_align(lblSub, LV_ALIGN_CENTER, 0, 20);
   lv_label_set_text(lblSub, "Coming soon");
   // Back button
   lv_obj_t *btnBack = lv_btn_create(scr);
   lv_obj_set_size(btnBack, 160, 48);
   lv_obj_align(btnBack, LV_ALIGN_BOTTOM_LEFT, 20, -20);
-  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x111122), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x111111), LV_PART_MAIN);  // neutral dark
   lv_obj_set_style_border_color(btnBack, accentCol, LV_PART_MAIN);
   lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnBack, 10, LV_PART_MAIN);
@@ -2289,9 +2298,9 @@ static void buildSimpleScreen(const char *title, lv_color_t accentCol) {
   lv_disp_load_scr(scr);
 }
 
-void showJournalScreen()   { buildSimpleScreen("Journal",   lv_color_hex(0x7B74FF)); }
-void showGratitudeScreen() { buildSimpleScreen("Gratitude", lv_color_hex(0xFFAA44)); }
-void showHabitsScreen()    { buildSimpleScreen("Habits",    lv_color_hex(0x44CC88)); }
+void showJournalScreen()   { buildSimpleScreen("Journal",   recAccentColor()); }
+void showGratitudeScreen() { buildSimpleScreen("Gratitude", recAccentColor()); }
+void showHabitsScreen()    { buildSimpleScreen("Habits",    recAccentColor()); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RECORD FEATURE: Gratitude / Journal Entry / Mind Dump
@@ -3042,14 +3051,14 @@ void buildCheckinScreen() {
   lv_bar_set_range(bar_ci_timer, 0, HABIT_TIMER_TICKS);
   lv_bar_set_value(bar_ci_timer, HABIT_TIMER_TICKS, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(bar_ci_timer, lv_color_hex(0x222222), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(bar_ci_timer, lv_color_hex(0x5A5AFF), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(bar_ci_timer, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   lv_obj_set_style_radius(bar_ci_timer, 4, LV_PART_MAIN);
   lv_obj_set_style_radius(bar_ci_timer, 4, LV_PART_INDICATOR);
 
   // Habit name label — large, centred
   lbl_ci_habit = lv_label_create(scr_checkin);
   lv_obj_set_style_text_font(lbl_ci_habit, &lv_font_montserrat_28, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lbl_ci_habit, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lbl_ci_habit, recAccentColor(), LV_PART_MAIN);  // theme accent
   lv_obj_set_width(lbl_ci_habit, LCD_H_RES - 60);
   lv_label_set_long_mode(lbl_ci_habit, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(lbl_ci_habit, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
