@@ -1824,30 +1824,24 @@ static void buildThemeRed() {
 
 // ── More panel (full-screen overlay: brightness + theme picker) ───────────────
 static void showMorePanel() {
-  // ── Outer viewport: 800x480, clips content, does NOT scroll itself ──
+  // Single scrollable panel — 800px wide, 710px tall (content height).
+  // LVGL clips it to the 480px viewport automatically via the screen.
+  // Using ONE container avoids the scroll-chain blocking issue where a
+  // non-scrollable outer panel consumed touch/scroll events.
   lv_obj_t *panel = lv_obj_create(lv_scr_act());
-  lv_obj_set_size(panel, 800, 480);
+  lv_obj_set_size(panel, 800, 710);    // full content height — LVGL clips to 480px
   lv_obj_set_pos(panel, 0, 0);
   lv_obj_set_style_bg_color(panel, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);  // viewport does NOT scroll
-
-  // ── Inner scroll container: taller than viewport so LVGL can scroll it ──
-  // All content children go here. Height = total content height.
-  lv_obj_t *scroll = lv_obj_create(panel);
-  lv_obj_set_size(scroll, 800, 710);   // content height: last item bottom ~700px
-  lv_obj_set_pos(scroll, 0, 0);
-  lv_obj_set_style_bg_color(scroll, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(scroll, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_border_width(scroll, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(scroll, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(scroll, 0, LV_PART_MAIN);
-  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
-  lv_obj_set_scroll_snap_y(scroll, LV_SCROLL_SNAP_NONE);
+  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);   // THIS is the scrollable container
+  lv_obj_set_scroll_dir(panel, LV_DIR_VER);
+  lv_obj_set_scroll_snap_y(panel, LV_SCROLL_SNAP_NONE);
+  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLL_ELASTIC);  // no bounce
+  // Use panel as both the outer viewport and the scroll container
+  lv_obj_t *scroll = panel;  // alias — all children go on panel directly
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(scroll);
@@ -1956,13 +1950,9 @@ static void showMorePanel() {
       int id = *(int *)lv_event_get_user_data(e);
       g_theme = id;
       saveTheme(id);
-      // btn -> scroll -> panel (child of scr_clock)
-      // We must delete the panel BEFORE buildClockScreen() destroys scr_clock,
-      // otherwise the outerPanel pointer becomes dangling.
-      // Using lv_obj_del synchronously here is safe because we are about to
-      // destroy the entire parent screen anyway via buildClockScreen().
-      lv_obj_t *scrollCont = lv_obj_get_parent(lv_event_get_target(e));
-      lv_obj_t *outerPanel = lv_obj_get_parent(scrollCont);
+      // btn -> panel (single container — scroll is now the panel itself)
+      // We must delete the panel BEFORE buildClockScreen() destroys scr_clock.
+      lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
       lv_obj_del(outerPanel);  // delete panel first (safe: we're about to nuke scr_clock)
       buildClockScreen();       // destroys old scr_clock, creates new one
       lv_disp_load_scr(scr_clock);
@@ -1988,9 +1978,8 @@ static void showMorePanel() {
   lv_obj_set_style_radius(btnAlarmSet, 10, LV_PART_MAIN);
   lv_obj_add_event_cb(btnAlarmSet, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    // btn -> scroll -> panel (outer viewport)
-    lv_obj_t *scrollCont = lv_obj_get_parent(lv_event_get_target(e));
-    lv_obj_t *outerPanel = lv_obj_get_parent(scrollCont);
+    // btn -> panel (single container)
+    lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
     lv_obj_del(outerPanel);
     showAlarmSetScreen();
   }, LV_EVENT_ALL, nullptr);
@@ -2062,6 +2051,7 @@ static void showMorePanel() {
   lv_obj_set_style_border_width(rowAudio, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(rowAudio, 10, LV_PART_MAIN);
   lv_obj_clear_flag(rowAudio, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(rowAudio, LV_OBJ_FLAG_SCROLL_CHAIN);  // don't bubble scroll up
 
   lv_obj_t *lblAudioToggle = lv_label_create(rowAudio);
   lv_obj_set_style_text_font(lblAudioToggle, &lv_font_montserrat_16, LV_PART_MAIN);
@@ -2071,6 +2061,8 @@ static void showMorePanel() {
 
   lv_obj_t *sw = lv_switch_create(rowAudio);
   lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -16, 0);
+  lv_obj_add_flag(sw, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(sw, LV_OBJ_FLAG_SCROLL_CHAIN);
   lv_obj_set_style_bg_color(sw, lv_color_hex(0x222222), LV_PART_MAIN);
   lv_obj_set_style_bg_color(sw, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   if (g_audioEnabled) lv_obj_add_state(sw, LV_STATE_CHECKED);
@@ -2091,6 +2083,7 @@ static void showMorePanel() {
   lv_obj_set_style_border_width(rowVoice, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(rowVoice, 10, LV_PART_MAIN);
   lv_obj_clear_flag(rowVoice, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(rowVoice, LV_OBJ_FLAG_SCROLL_CHAIN);  // don't bubble scroll up
 
   lv_obj_t *lblVoiceToggle = lv_label_create(rowVoice);
   lv_obj_set_style_text_font(lblVoiceToggle, &lv_font_montserrat_16, LV_PART_MAIN);
@@ -2100,6 +2093,8 @@ static void showMorePanel() {
 
   lv_obj_t *swVoice = lv_switch_create(rowVoice);
   lv_obj_align(swVoice, LV_ALIGN_RIGHT_MID, -16, 0);
+  lv_obj_add_flag(swVoice, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(swVoice, LV_OBJ_FLAG_SCROLL_CHAIN);
   lv_obj_set_style_bg_color(swVoice, lv_color_hex(0x222222), LV_PART_MAIN);
   lv_obj_set_style_bg_color(swVoice, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   if (g_voiceEnabled) lv_obj_add_state(swVoice, LV_STATE_CHECKED);
@@ -2127,6 +2122,7 @@ static void showMorePanel() {
   lv_obj_set_style_border_width(rowEmf, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(rowEmf, 10, LV_PART_MAIN);
   lv_obj_clear_flag(rowEmf, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(rowEmf, LV_OBJ_FLAG_SCROLL_CHAIN);  // don't bubble scroll up
 
   lv_obj_t *lblEmfToggle = lv_label_create(rowEmf);
   lv_obj_set_style_text_font(lblEmfToggle, &lv_font_montserrat_16, LV_PART_MAIN);
@@ -2136,6 +2132,8 @@ static void showMorePanel() {
 
   lv_obj_t *swEmf = lv_switch_create(rowEmf);
   lv_obj_align(swEmf, LV_ALIGN_RIGHT_MID, -16, 0);
+  lv_obj_add_flag(swEmf, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(swEmf, LV_OBJ_FLAG_SCROLL_CHAIN);
   lv_obj_set_style_bg_color(swEmf, lv_color_hex(0x222222), LV_PART_MAIN);
   lv_obj_set_style_bg_color(swEmf, recAccentColor(), LV_PART_INDICATOR);  // theme accent
   if (g_lowEmfMode) lv_obj_add_state(swEmf, LV_STATE_CHECKED);
@@ -2175,9 +2173,8 @@ static void showMorePanel() {
   lv_obj_set_style_radius(btnWifi, 10, LV_PART_MAIN);
   lv_obj_add_event_cb(btnWifi, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    // btn -> scroll -> panel (outer viewport)
-    lv_obj_t *scrollCont = lv_obj_get_parent(lv_event_get_target(e));
-    lv_obj_t *outerPanel = lv_obj_get_parent(scrollCont);
+    // btn -> panel (single container)
+    lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
     lv_obj_del(outerPanel);
     showWifiScanScreen();
   }, LV_EVENT_ALL, nullptr);
