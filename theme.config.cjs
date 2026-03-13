@@ -1,5 +1,5 @@
 /** @type {const} */
-export const themeColors = {
+const themeColors = {
   primary: { light: '#6C63FF', dark: '#7B74FF' },
   background: { light: '#F8F7FF', dark: '#0F0E1A' },
   surface: { light: '#FFFFFF', dark: '#1C1B2E' },
@@ -17,3 +17,4 @@ export const themeColors = {
   tint: { light: '#6C63FF', dark: '#7B74FF' },
 };
 
+module.exports = { themeColors };

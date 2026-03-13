@@ -1,0 +1,31 @@
+import { themeColors } from "./theme.config.js";
+import plugin from "tailwindcss/plugin";
+
+const tailwindColors = Object.fromEntries(
+  Object.entries(themeColors).map(([name, swatch]) => [
+    name,
+    {
+      DEFAULT: `var(--color-${name})`,
+      light: swatch.light,
+      dark: swatch.dark,
+    },
+  ]),
+);
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  darkMode: "class",
+  content: ["./app/**/*.{js,ts,tsx}", "./components/**/*.{js,ts,tsx}", "./lib/**/*.{js,ts,tsx}", "./hooks/**/*.{js,ts,tsx}"],
+  presets: [require("nativewind/preset")], // jiti handles this require in ESM context
+  theme: {
+    extend: {
+      colors: tailwindColors,
+    },
+  },
+  plugins: [
+    plugin(({ addVariant }) => {
+      addVariant("light", ':root:not([data-theme="dark"]) &');
+      addVariant("dark", ':root[data-theme="dark"] &');
+    }),
+  ],
+};
