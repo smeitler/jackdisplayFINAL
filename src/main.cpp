@@ -1295,7 +1295,7 @@ String alarmString(int idx) {
 
 // Update both bottom alarm labels on the clock face
 void updateAlarmLabels() {
-  if (!lbl_alarm1) return;
+  if (!lbl_alarm1 || !lbl_alarm2) return;
 
   // Show up to 2 alarms — all alarms shown, enabled ones bright, disabled ones with (off) suffix
   // This ensures the label is never blank just because enabled=false
@@ -1794,8 +1794,7 @@ static void buildThemeRed() {
 
 // ── More panel (full-screen overlay: brightness + theme picker) ───────────────
 static void showMorePanel() {
-  // Single scrollable panel — 800x480 viewport, content extends to ~700px.
-  // LVGL scrolls the panel's own children when the user drags vertically.
+  // ── Outer viewport: 800x480, clips content, does NOT scroll itself ──
   lv_obj_t *panel = lv_obj_create(lv_scr_act());
   lv_obj_set_size(panel, 800, 480);
   lv_obj_set_pos(panel, 0, 0);
@@ -1804,32 +1803,41 @@ static void showMorePanel() {
   lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
-  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);    // panel scrolls its own children
-  lv_obj_set_scroll_dir(panel, LV_DIR_VER);
-  lv_obj_set_scroll_snap_y(panel, LV_SCROLL_SNAP_NONE);
-  lv_obj_set_style_clip_corner(panel, true, LV_PART_MAIN);
-  // Alias so all child-creation code below stays unchanged
-  lv_obj_t *scroll = panel;
+  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);  // viewport does NOT scroll
+
+  // ── Inner scroll container: taller than viewport so LVGL can scroll it ──
+  // All content children go here. Height = total content height.
+  lv_obj_t *scroll = lv_obj_create(panel);
+  lv_obj_set_size(scroll, 800, 710);   // content height: last item bottom ~700px
+  lv_obj_set_pos(scroll, 0, 0);
+  lv_obj_set_style_bg_color(scroll, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scroll, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_border_width(scroll, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(scroll, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(scroll, 0, LV_PART_MAIN);
+  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
+  lv_obj_set_scroll_snap_y(scroll, LV_SCROLL_SNAP_NONE);
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(scroll);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_18, LV_PART_MAIN);
   lv_obj_set_style_text_color(title, lv_color_hex(0x555555), LV_PART_MAIN);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+  lv_obj_set_pos(title, 360, 18);   // centred on 800px
   lv_label_set_text(title, "SETTINGS");
 
   // ── Brightness section ──
   lv_obj_t *lblBr = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblBr, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblBr, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblBr, LV_ALIGN_TOP_LEFT, 40, 58);
+  lv_obj_set_pos(lblBr, 40, 58);
   lv_label_set_text(lblBr, "BRIGHTNESS");
 
   // Brightness value label
   lv_obj_t *lblBrVal = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblBrVal, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblBrVal, lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_obj_align(lblBrVal, LV_ALIGN_TOP_RIGHT, -40, 58);
+  lv_obj_set_pos(lblBrVal, 680, 58);
   // (label text set below after computing curStep)
 
   // Brightness slider — 6 discrete steps matching the STC8H1K28 backlight levels
@@ -1848,7 +1856,7 @@ static void showMorePanel() {
 
   lv_obj_t *slider = lv_slider_create(scroll);
   lv_obj_set_size(slider, 720, 36);
-  lv_obj_align(slider, LV_ALIGN_TOP_MID, 0, 84);
+  lv_obj_set_pos(slider, 40, 84);
   lv_slider_set_range(slider, 0, BL_STEPS - 1);  // 0..4
   lv_slider_set_value(slider, curStep, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(slider, lv_color_hex(0x222222), LV_PART_MAIN);
@@ -1880,7 +1888,7 @@ static void showMorePanel() {
   lv_obj_t *lblTh = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblTh, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblTh, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblTh, LV_ALIGN_TOP_LEFT, 40, 148);
+  lv_obj_set_pos(lblTh, 40, 148);
   lv_label_set_text(lblTh, "THEME");
 
   struct { const char *name; int id; uint32_t col; } themes[] = {
@@ -1918,7 +1926,15 @@ static void showMorePanel() {
       int id = *(int *)lv_event_get_user_data(e);
       g_theme = id;
       saveTheme(id);
-      buildClockScreen();
+      // btn -> scroll -> panel (child of scr_clock)
+      // We must delete the panel BEFORE buildClockScreen() destroys scr_clock,
+      // otherwise the outerPanel pointer becomes dangling.
+      // Using lv_obj_del synchronously here is safe because we are about to
+      // destroy the entire parent screen anyway via buildClockScreen().
+      lv_obj_t *scrollCont = lv_obj_get_parent(lv_event_get_target(e));
+      lv_obj_t *outerPanel = lv_obj_get_parent(scrollCont);
+      lv_obj_del(outerPanel);  // delete panel first (safe: we're about to nuke scr_clock)
+      buildClockScreen();       // destroys old scr_clock, creates new one
       lv_disp_load_scr(scr_clock);
       updateClockLabel();
       updateAlarmLabels();
@@ -1929,7 +1945,7 @@ static void showMorePanel() {
   lv_obj_t *lblAlarmSec = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblAlarmSec, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblAlarmSec, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblAlarmSec, LV_ALIGN_TOP_LEFT, 40, 268);
+  lv_obj_set_pos(lblAlarmSec, 40, 268);
   lv_label_set_text(lblAlarmSec, "ALARM");
 
   // Set Alarm button
@@ -1942,8 +1958,9 @@ static void showMorePanel() {
   lv_obj_set_style_radius(btnAlarmSet, 10, LV_PART_MAIN);
   lv_obj_add_event_cb(btnAlarmSet, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    // btn -> panel; delete panel
-    lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
+    // btn -> scroll -> panel (outer viewport)
+    lv_obj_t *scrollCont = lv_obj_get_parent(lv_event_get_target(e));
+    lv_obj_t *outerPanel = lv_obj_get_parent(scrollCont);
     lv_obj_del(outerPanel);
     showAlarmSetScreen();
   }, LV_EVENT_ALL, nullptr);
@@ -1964,7 +1981,7 @@ static void showMorePanel() {
   lv_obj_t *lblSyncStatus = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblSyncStatus, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblSyncStatus, lv_color_hex(0x444444), LV_PART_MAIN);
-  lv_obj_align(lblSyncStatus, LV_ALIGN_TOP_RIGHT, -40, 268);
+  lv_obj_set_pos(lblSyncStatus, 620, 268);
   lv_label_set_text(lblSyncStatus, "");
 
   lv_obj_t *btnSync = lv_btn_create(scroll);
@@ -2003,13 +2020,13 @@ static void showMorePanel() {
   lv_obj_t *lblAudioSec = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblAudioSec, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblAudioSec, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblAudioSec, LV_ALIGN_TOP_LEFT, 40, 360);
+  lv_obj_set_pos(lblAudioSec, 40, 360);
   lv_label_set_text(lblAudioSec, "AUDIO");
 
   // Audio toggle row
   lv_obj_t *rowAudio = lv_obj_create(scroll);
   lv_obj_set_size(rowAudio, 720, 52);
-  lv_obj_align(rowAudio, LV_ALIGN_TOP_MID, 0, 382);
+  lv_obj_set_pos(rowAudio, 40, 382);
   lv_obj_set_style_bg_color(rowAudio, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
   lv_obj_set_style_border_color(rowAudio, lv_color_hex(0x2A2A5A), LV_PART_MAIN);
   lv_obj_set_style_border_width(rowAudio, 1, LV_PART_MAIN);
@@ -2038,7 +2055,7 @@ static void showMorePanel() {
   // ── Voice toggle row ──
   lv_obj_t *rowVoice = lv_obj_create(scroll);
   lv_obj_set_size(rowVoice, 720, 52);
-  lv_obj_align(rowVoice, LV_ALIGN_TOP_MID, 0, 446);
+  lv_obj_set_pos(rowVoice, 40, 446);
   lv_obj_set_style_bg_color(rowVoice, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
   lv_obj_set_style_border_color(rowVoice, lv_color_hex(0x2A2A5A), LV_PART_MAIN);
   lv_obj_set_style_border_width(rowVoice, 1, LV_PART_MAIN);
@@ -2069,12 +2086,12 @@ static void showMorePanel() {
   lv_obj_t *lblEmfSec = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblEmfSec, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblEmfSec, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblEmfSec, LV_ALIGN_TOP_LEFT, 40, 518);
+  lv_obj_set_pos(lblEmfSec, 40, 518);
   lv_label_set_text(lblEmfSec, "LOW EMF MODE");
 
   lv_obj_t *rowEmf = lv_obj_create(scroll);
   lv_obj_set_size(rowEmf, 720, 52);
-  lv_obj_align(rowEmf, LV_ALIGN_TOP_MID, 0, 540);
+  lv_obj_set_pos(rowEmf, 40, 540);
   lv_obj_set_style_bg_color(rowEmf, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
   lv_obj_set_style_border_color(rowEmf, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
   lv_obj_set_style_border_width(rowEmf, 1, LV_PART_MAIN);
@@ -2116,21 +2133,21 @@ static void showMorePanel() {
   lv_obj_t *lblWifi = lv_label_create(scroll);
   lv_obj_set_style_text_font(lblWifi, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblWifi, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 612);
+  lv_obj_set_pos(lblWifi, 40, 612);
   lv_label_set_text(lblWifi, "NETWORK");
 
   lv_obj_t *btnWifi = lv_btn_create(scroll);
   lv_obj_set_size(btnWifi, 720, 52);
-  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 634);
+  lv_obj_set_pos(btnWifi, 40, 634);
   lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
   lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnWifi, 10, LV_PART_MAIN);
   lv_obj_add_event_cb(btnWifi, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    // Close the More panel then open WiFi scan
-    // btn -> panel
-    lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
+    // btn -> scroll -> panel (outer viewport)
+    lv_obj_t *scrollCont = lv_obj_get_parent(lv_event_get_target(e));
+    lv_obj_t *outerPanel = lv_obj_get_parent(scrollCont);
     lv_obj_del(outerPanel);
     showWifiScanScreen();
   }, LV_EVENT_ALL, nullptr);
@@ -2149,12 +2166,13 @@ static void showMorePanel() {
   lv_obj_set_style_border_color(btnClose, lv_color_hex(0x444444), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnClose, 1, LV_PART_MAIN);
   lv_obj_set_style_radius(btnClose, 26, LV_PART_MAIN);  // circle
-  // Pass panel pointer as user data so the callback can delete it
+  // btnClose lives on scr_clock (sibling of panel), so lv_obj_del(pnl) is safe.
+  // We then async-delete btnClose itself since we are inside its own callback.
   lv_obj_add_event_cb(btnClose, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     lv_obj_t *btn   = lv_event_get_target(e);
     lv_obj_t *pnl   = (lv_obj_t *)lv_event_get_user_data(e);
-    lv_obj_del(pnl);        // delete the outer panel (and its children)
+    lv_obj_del(pnl);        // delete the outer panel (and its children) — safe, btn is a sibling
     lv_obj_del_async(btn);  // async-delete self (safe from within own callback)
   }, LV_EVENT_ALL, panel);
   lv_obj_t *lblX = lv_label_create(btnClose);
@@ -2275,6 +2293,9 @@ void buildClockScreen() {
 }
 
 void updateClockLabel() {
+  // Guard: if clock screen objects are not yet built, skip silently
+  if (!lbl_time || !lbl_ampm || !lbl_date || !lbl_wifi) return;
+
   time_t now = time(nullptr);
   struct tm t;
   localtime_r(&now, &t);
@@ -3082,7 +3103,7 @@ void showAlarmSetScreen() {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     lv_obj_t *s = lv_disp_get_scr_act(nullptr);
     showClockScreen();
-    lv_obj_del(s);
+    lv_obj_del_async(s);  // safe: don't delete active screen from within its own callback
   }, LV_EVENT_ALL, nullptr);
 
   lv_disp_load_scr(scr);
