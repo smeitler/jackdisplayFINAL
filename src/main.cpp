@@ -1735,9 +1735,10 @@ static void buildThemeRed() {
 
 // ── More panel (full-screen overlay: brightness + theme picker) ───────────────
 static void showMorePanel() {
-  // Full-screen dark overlay
+  // Full-screen dark overlay — scrollable, tall enough for all content
+  // Content ends at ~720px so set height to 760 to give bottom padding
   lv_obj_t *panel = lv_obj_create(lv_scr_act());
-  lv_obj_set_size(panel, 800, 480);
+  lv_obj_set_size(panel, 800, 760);   // taller than screen → enables scroll
   lv_obj_set_pos(panel, 0, 0);
   lv_obj_set_style_bg_color(panel, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
@@ -1745,6 +1746,9 @@ static void showMorePanel() {
   lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
   lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(panel, LV_DIR_VER);
+  lv_obj_set_scroll_snap_y(panel, LV_SCROLL_SNAP_NONE);
+  // Clip children to panel bounds so nothing bleeds outside
+  lv_obj_add_flag(panel, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(panel);
@@ -2073,24 +2077,28 @@ static void showMorePanel() {
   lv_label_set_text(lblWifiBtn, LV_SYMBOL_WIFI "  Change WiFi Network");
   lv_obj_center(lblWifiBtn);
 
-  // ── Close / Back button ──
-  lv_obj_t *btnBack = lv_btn_create(panel);
-  lv_obj_set_size(btnBack, 160, 44);
-  lv_obj_align(btnBack, LV_ALIGN_BOTTOM_MID, 0, -20);
-  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
-  lv_obj_set_style_border_color(btnBack, lv_color_hex(0x444444), LV_PART_MAIN);
-  lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
-  lv_obj_set_style_radius(btnBack, 22, LV_PART_MAIN);
-  lv_obj_add_event_cb(btnBack, [](lv_event_t *e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-      lv_obj_del(lv_obj_get_parent(lv_event_get_target(e)));
-    }
-  }, LV_EVENT_ALL, nullptr);
-  lv_obj_t *lblBack = lv_label_create(btnBack);
-  lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblBack, lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
-  lv_obj_center(lblBack);
+  // ── Close button — fixed top-right, sibling of panel so it never scrolls ──
+  // Create on the screen directly (not inside panel) so it stays fixed
+  lv_obj_t *btnClose = lv_btn_create(lv_scr_act());
+  lv_obj_set_size(btnClose, 52, 52);
+  lv_obj_set_pos(btnClose, 800 - 52 - 12, 12);  // top-right corner
+  lv_obj_set_style_bg_color(btnClose, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnClose, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnClose, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnClose, 26, LV_PART_MAIN);  // circle
+  // Pass panel pointer as user data so the callback can delete it
+  lv_obj_add_event_cb(btnClose, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_obj_t *btn   = lv_event_get_target(e);
+    lv_obj_t *pnl   = (lv_obj_t *)lv_event_get_user_data(e);
+    lv_obj_del(pnl);   // delete the scrollable panel
+    lv_obj_del(btn);   // delete this button too
+  }, LV_EVENT_ALL, panel);
+  lv_obj_t *lblX = lv_label_create(btnClose);
+  lv_obj_set_style_text_font(lblX, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblX, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_label_set_text(lblX, LV_SYMBOL_CLOSE);
+  lv_obj_center(lblX);
 }
 
 void buildClockScreen() {
