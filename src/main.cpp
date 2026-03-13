@@ -286,6 +286,9 @@ void showCelebrationScreen();
 void showMorningRoutineScreen(const String &meditationId);
 static void showMorePanel();
 void showAlarmSetScreen();
+void showJournalScreen();
+void showGratitudeScreen();
+void showHabitsScreen();
 bool rtcRead(struct tm *t);   // read PCF8563 -> struct tm (local time)
 // Audio
 bool  initSD();
@@ -1674,7 +1677,7 @@ static void buildThemeMinimal() {
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x333344), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
   lv_label_set_text(lbl_date, "Monday, Jan 1");
 
   // Time — 150pt, centred
@@ -1693,6 +1696,7 @@ static void buildThemeMinimal() {
 
   buildAlarmLabels(lv_color_hex(0x8888BB));
   buildMoreButton(lv_color_hex(0x8888BB));
+  buildTopNavButtons(lv_color_hex(0x8888BB));
 }
 
 // ── THEME 1: LED ──────────────────────────────────────────────────────────────
@@ -1704,7 +1708,7 @@ static void buildThemeLED() {
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x001100), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
   lv_label_set_text(lbl_date, "");
 
   lbl_time = lv_label_create(scr_clock);
@@ -1721,6 +1725,7 @@ static void buildThemeLED() {
 
   buildAlarmLabels(lv_color_hex(0x00CC77));
   buildMoreButton(lv_color_hex(0x00CC77));
+  buildTopNavButtons(lv_color_hex(0x00CC77));
 }
 
 // ── THEME 2: WARM ─────────────────────────────────────────────────────────────
@@ -1732,7 +1737,7 @@ static void buildThemeWarm() {
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_12, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x442200), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
   lv_label_set_text(lbl_date, "THURSDAY  \xE2\x80\xA2  MARCH 12");
 
   lbl_time = lv_label_create(scr_clock);
@@ -1749,6 +1754,7 @@ static void buildThemeWarm() {
 
   buildAlarmLabels(lv_color_hex(0xCC6600));
   buildMoreButton(lv_color_hex(0xCC6600));
+  buildTopNavButtons(lv_color_hex(0xCC6600));
 }
 
 // ── THEME 3: RED ──────────────────────────────────────────────────────────────
@@ -1760,7 +1766,7 @@ static void buildThemeRed() {
   lbl_date = lv_label_create(scr_clock);
   lv_obj_set_style_text_font(lbl_date, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_date, lv_color_hex(0x550000), LV_PART_MAIN);
-  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 14);
+  lv_obj_align(lbl_date, LV_ALIGN_TOP_MID, 0, 46);
   lv_label_set_text(lbl_date, "Monday, Jan 1");
 
   // Time — true red
@@ -1778,12 +1784,13 @@ static void buildThemeRed() {
 
   buildAlarmLabels(lv_color_hex(0xCC2222));
   buildMoreButton(lv_color_hex(0xCC2222));
+  buildTopNavButtons(lv_color_hex(0xCC2222));
 }
 
 // ── More panel (full-screen overlay: brightness + theme picker) ───────────────
 static void showMorePanel() {
-  // Outer panel: 800x480 viewport — clips overflow, does NOT scroll itself.
-  // Overflow clipping is handled by lv_obj_set_style_clip_corner + OVF_HIDDEN.
+  // Single scrollable panel — 800x480 viewport, content extends to ~700px.
+  // LVGL scrolls the panel's own children when the user drags vertically.
   lv_obj_t *panel = lv_obj_create(lv_scr_act());
   lv_obj_set_size(panel, 800, 480);
   lv_obj_set_pos(panel, 0, 0);
@@ -1792,22 +1799,12 @@ static void showMorePanel() {
   lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(panel, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);  // panel itself does NOT scroll
+  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);    // panel scrolls its own children
+  lv_obj_set_scroll_dir(panel, LV_DIR_VER);
+  lv_obj_set_scroll_snap_y(panel, LV_SCROLL_SNAP_NONE);
   lv_obj_set_style_clip_corner(panel, true, LV_PART_MAIN);
-
-  // Inner scrollable content container: 800x760 — taller than the 480px panel so
-  // the user can scroll down to see items below y=480.
-  lv_obj_t *scroll = lv_obj_create(panel);
-  lv_obj_set_size(scroll, 800, 760);   // taller than viewport to enable scrolling
-  lv_obj_set_pos(scroll, 0, 0);
-  lv_obj_set_style_bg_color(scroll, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(scroll, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_border_width(scroll, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(scroll, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(scroll, 0, LV_PART_MAIN);
-  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);   // THIS container scrolls
-  lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
-  lv_obj_set_scroll_snap_y(scroll, LV_SCROLL_SNAP_NONE);
+  // Alias so all child-creation code below stays unchanged
+  lv_obj_t *scroll = panel;
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(scroll);
@@ -1940,8 +1937,8 @@ static void showMorePanel() {
   lv_obj_set_style_radius(btnAlarmSet, 10, LV_PART_MAIN);
   lv_obj_add_event_cb(btnAlarmSet, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    // btn -> scroll -> outer panel; delete outer panel
-    lv_obj_t *outerPanel = lv_obj_get_parent(lv_obj_get_parent(lv_event_get_target(e)));
+    // btn -> panel; delete panel
+    lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
     lv_obj_del(outerPanel);
     showAlarmSetScreen();
   }, LV_EVENT_ALL, nullptr);
@@ -2127,8 +2124,8 @@ static void showMorePanel() {
   lv_obj_add_event_cb(btnWifi, [](lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     // Close the More panel then open WiFi scan
-    // btn -> scroll -> outer panel
-    lv_obj_t *outerPanel = lv_obj_get_parent(lv_obj_get_parent(lv_event_get_target(e)));
+    // btn -> panel
+    lv_obj_t *outerPanel = lv_obj_get_parent(lv_event_get_target(e));
     lv_obj_del(outerPanel);
     showWifiScanScreen();
   }, LV_EVENT_ALL, nullptr);
@@ -2161,6 +2158,82 @@ static void showMorePanel() {
   lv_label_set_text(lblX, LV_SYMBOL_CLOSE);
   lv_obj_center(lblX);
 }
+
+// ── Helper: build the Journal / Gratitude / Habits top nav buttons ───────────
+// Three compact pill buttons across the top-left of the clock screen.
+// They sit alongside the date label and WiFi icon at y≈8.
+static void buildTopNavButtons(lv_color_t col) {
+  const char *labels[3]  = { "Journal", "Gratitude", "Habits" };
+  const int btnW = 140, btnH = 30, gap = 8, startX = 16, startY = 8;
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *btn = lv_btn_create(scr_clock);
+    lv_obj_set_size(btn, btnW, btnH);
+    lv_obj_set_pos(btn, startX + i * (btnW + gap), startY);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x111122), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn, col, LV_PART_MAIN);
+    lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(btn, 15, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(btn, 0, LV_PART_MAIN);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lbl, col, LV_PART_MAIN);
+    lv_label_set_text(lbl, labels[i]);
+    lv_obj_center(lbl);
+    // Store handler index as user data
+    int *idx = new int(i);
+    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+      if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+      int i = *(int *)lv_event_get_user_data(e);
+      static void (*h[3])() = { showJournalScreen, showGratitudeScreen, showHabitsScreen };
+      h[i]();
+    }, LV_EVENT_ALL, idx);
+  }
+}
+
+// ── Stub screens for Journal, Gratitude, Habits ───────────────────────────────
+// These show a placeholder card with a Back button. Replace with full UI later.
+static void buildSimpleScreen(const char *title, lv_color_t accentCol) {
+  lv_obj_t *scr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *lblTitle = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblTitle, &lv_font_montserrat_40, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblTitle, accentCol, LV_PART_MAIN);
+  lv_obj_align(lblTitle, LV_ALIGN_CENTER, 0, -40);
+  lv_label_set_text(lblTitle, title);
+  lv_obj_t *lblSub = lv_label_create(scr);
+  lv_obj_set_style_text_font(lblSub, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblSub, lv_color_hex(0x444466), LV_PART_MAIN);
+  lv_obj_align(lblSub, LV_ALIGN_CENTER, 0, 20);
+  lv_label_set_text(lblSub, "Coming soon");
+  // Back button
+  lv_obj_t *btnBack = lv_btn_create(scr);
+  lv_obj_set_size(btnBack, 160, 48);
+  lv_obj_align(btnBack, LV_ALIGN_BOTTOM_LEFT, 20, -20);
+  lv_obj_set_style_bg_color(btnBack, lv_color_hex(0x111122), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnBack, accentCol, LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnBack, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnBack, 10, LV_PART_MAIN);
+  lv_obj_t *lblBack = lv_label_create(btnBack);
+  lv_obj_set_style_text_font(lblBack, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblBack, accentCol, LV_PART_MAIN);
+  lv_label_set_text(lblBack, LV_SYMBOL_LEFT "  Back");
+  lv_obj_center(lblBack);
+  lv_obj_add_event_cb(btnBack, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    // Delete this screen and go back to clock
+    lv_obj_t *s = lv_disp_get_scr_act(nullptr);
+    showClockScreen();
+    lv_obj_del(s);
+  }, LV_EVENT_ALL, nullptr);
+  lv_disp_load_scr(scr);
+}
+
+void showJournalScreen()   { buildSimpleScreen("Journal",   lv_color_hex(0x7B74FF)); }
+void showGratitudeScreen() { buildSimpleScreen("Gratitude", lv_color_hex(0xFFAA44)); }
+void showHabitsScreen()    { buildSimpleScreen("Habits",    lv_color_hex(0x44CC88)); }
 
 void buildClockScreen() {
   // Destroy previous screen if rebuilding
@@ -3031,8 +3104,11 @@ void setup() {
   disp_drv.ver_res  = LCD_V_RES;
   disp_drv.flush_cb = my_disp_flush;
   disp_drv.draw_buf = &draw_buf;
-  lv_disp_drv_register(&disp_drv);
-
+  lv_disp_t *disp = lv_disp_drv_register(&disp_drv);
+  // Belt-and-suspenders: set display background to black so even if a screen's
+  // own bg_color is somehow transparent, the fallback is black (not white).
+  lv_disp_set_bg_color(disp, lv_color_hex(0x000000));
+  lv_disp_set_bg_opa(disp, LV_OPA_COVER);
   static lv_indev_drv_t indev_drv;
   lv_indev_drv_init(&indev_drv);
   indev_drv.type    = LV_INDEV_TYPE_POINTER;
