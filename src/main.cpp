@@ -1625,6 +1625,7 @@ static void buildMoreButton(lv_color_t col) {
 // ── THEME 0: MINIMAL ─────────────────────────────────────────────────────────
 static void buildThemeMinimal() {
   lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0x555580), lv_color_hex(0x222230));
 
   lbl_date = lv_label_create(scr_clock);
@@ -1654,6 +1655,7 @@ static void buildThemeMinimal() {
 // ── THEME 1: LED ──────────────────────────────────────────────────────────────
 static void buildThemeLED() {
   lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0x00CC44), lv_color_hex(0x002200));
 
   lbl_date = lv_label_create(scr_clock);
@@ -1681,6 +1683,7 @@ static void buildThemeLED() {
 // ── THEME 2: WARM ─────────────────────────────────────────────────────────────
 static void buildThemeWarm() {
   lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0xCC5500), lv_color_hex(0x1A0800));
 
   lbl_date = lv_label_create(scr_clock);
@@ -1708,6 +1711,7 @@ static void buildThemeWarm() {
 // ── THEME 3: RED ──────────────────────────────────────────────────────────────
 static void buildThemeRed() {
   lv_obj_set_style_bg_color(scr_clock, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr_clock, LV_OPA_COVER, LV_PART_MAIN);
   buildWifiDot(lv_color_hex(0xFF0000), lv_color_hex(0x330000));
 
   lbl_date = lv_label_create(scr_clock);
@@ -1746,19 +1750,20 @@ static void showMorePanel() {
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
   lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);  // viewport does NOT scroll
 
-  // Inner scrollable content container: 800x760, all settings go here
+  // Inner scrollable content container: 800x760 (taller than the 480px viewport so
+  // the panel clips it and vertical scrolling actually works).
   lv_obj_t *scroll = lv_obj_create(panel);
-  lv_obj_set_size(scroll, 800, 480);   // same as viewport
+  lv_obj_set_size(scroll, 800, 760);   // MUST be > 480 to enable scrolling
   lv_obj_set_pos(scroll, 0, 0);
   lv_obj_set_style_bg_color(scroll, lv_color_hex(0x0A0A0A), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(scroll, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_width(scroll, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(scroll, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(scroll, 0, LV_PART_MAIN);
-  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
-  lv_obj_set_scroll_snap_y(scroll, LV_SCROLL_SNAP_NONE);
-  lv_obj_set_style_max_height(scroll, 760, LV_PART_MAIN);  // content height
+  lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);  // scroll is driven by the panel
+  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE);     // outer panel does the scrolling
+  lv_obj_set_scroll_dir(panel, LV_DIR_VER);
+  lv_obj_set_scroll_snap_y(panel, LV_SCROLL_SNAP_NONE);
 
   // ── Title ──
   lv_obj_t *title = lv_label_create(scroll);
@@ -2103,8 +2108,8 @@ static void showMorePanel() {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     lv_obj_t *btn   = lv_event_get_target(e);
     lv_obj_t *pnl   = (lv_obj_t *)lv_event_get_user_data(e);
-    lv_obj_del(pnl);   // delete the scrollable panel
-    lv_obj_del(btn);   // delete this button too
+    lv_obj_del(pnl);        // delete the outer panel (and its children)
+    lv_obj_del_async(btn);  // async-delete self (safe from within own callback)
   }, LV_EVENT_ALL, panel);
   lv_obj_t *lblX = lv_label_create(btnClose);
   lv_obj_set_style_text_font(lblX, &lv_font_montserrat_18, LV_PART_MAIN);
