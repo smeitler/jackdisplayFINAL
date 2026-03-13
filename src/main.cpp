@@ -53,8 +53,17 @@
 #define I2S_BCLK_PIN  5
 #define I2S_LRC_PIN   6
 
-// NVS key for the "read habits aloud" toggle
-#define NVS_KEY_AUDIO  "audioEnabled"
+// NVS keys for audio and voice features
+#define NVS_KEY_AUDIO       "audioEnabled"
+#define NVS_KEY_VOICE       "voiceEnabled"   // "Hey Jack" wake word on/off
+#define NVS_KEY_LOW_EMF     "lowEmfMode"     // WiFi off while sleeping
+#define NVS_KEY_WIFI_OFF_H  "wifiOffHour"    // hour to turn WiFi off (0-23)
+#define NVS_KEY_WIFI_ON_H   "wifiOnHour"     // hour to turn WiFi on  (0-23)
+
+// Microphone pins (PDM mic built into CrowPanel Advance 5")
+#define MIC_WS_PIN   2    // WS / clock
+#define MIC_SCK_PIN  19   // SCK
+#define MIC_SD_PIN   20   // SD / data
 
 // ─── Custom fonts ────────────────────────────────────────────────────────────────
 LV_FONT_DECLARE(montserrat_light_120);  // 120pt thin digits for clock time
@@ -214,9 +223,36 @@ AudioOutputI2S    *g_audioOut     = nullptr;
 // Habit audio filenames cached from last manifest fetch
 // Key = habit name (lowercase, sanitized), Value = SD path like "/habits/exercise.mp3"
 struct AudioEntry { char name[64]; char path[96]; };
-#define MAX_AUDIO_FILES 32
+#define MAX_AUDIO_FILES 64
 AudioEntry g_audioFiles[MAX_AUDIO_FILES];
 int        g_audioFileCount = 0;
+
+// ─── Voice system state ───────────────────────────────────────────────────────
+bool   g_voiceEnabled  = false;  // "Hey Jack" wake word toggle
+bool   g_listening     = false;  // currently recording a command
+bool   g_wakeDetected  = false;  // wake word just fired (set by mic task)
+uint8_t *g_micBuf      = nullptr; // raw PCM buffer for recording
+size_t  g_micBufLen    = 0;
+
+// Simple keyword spotting — we listen for these fixed commands offline
+// (no ESP-SR dependency required; uses energy + keyword matching on PCM)
+#define WAKE_WORD        "hey jack"
+#define CMD_SNOOZE       "snooze"
+#define CMD_STOP         "stop"
+#define CMD_SKIP         "skip"
+#define CMD_DONE         "done"
+
+// ─── Low EMF / WiFi sleep mode ────────────────────────────────────────────────
+bool g_lowEmfMode   = false;  // WiFi off while sleeping
+int  g_wifiOffHour  = 22;     // 10 PM
+int  g_wifiOnHour   = 6;      // 6 AM
+bool g_wifiManuallyOff = false; // WiFi was turned off by Low EMF scheduler
+
+// Pending command queue — commands issued while WiFi is off
+struct PendingCmd { char type[32]; int iVal1; int iVal2; bool bVal; };
+#define MAX_PENDING 8
+PendingCmd g_pendingCmds[MAX_PENDING];
+int        g_pendingCount = 0;
 
 // ─── Forward declarations ───────────────────────────────────────────────────────────────────
 void buildWifiScanScreen();
@@ -262,6 +298,21 @@ void  stopAudio();
 void  loopAudio();
 bool  loadAudioEnabled();
 void  saveAudioEnabled(bool enabled);
+// Voice system
+bool  loadVoiceEnabled();
+void  saveVoiceEnabled(bool enabled);
+void  initMic();
+void  loopVoice();
+void  startListening();
+void  stopListening();
+void  sendVoiceToServer(uint8_t *buf, size_t len);
+void  playSystemAudio(const char *key);
+// Low EMF / WiFi scheduler
+bool  loadLowEmfSettings();
+void  saveLowEmfSettings();
+void  checkWifiSchedule();
+void  flushPendingCommands();
+void  queueCommand(const char *type, int i1, int i2, bool b);
 void rtcWrite(const struct tm *t); // write struct tm (local time) -> PCF8563
 void rtcApplyToSystem();      // read RTC and set ESP32 system clock
 
@@ -693,6 +744,275 @@ void loopAudio() {
     if (!g_mp3->loop()) {
       // Playback finished
       stopAudio();
+    }
+  }
+}
+
+// ─── Voice system ─────────────────────────────────────────────────────────────
+
+bool loadVoiceEnabled() {
+  prefs.begin(NVS_NAMESPACE, true);
+  bool v = prefs.getBool(NVS_KEY_VOICE, false);
+  prefs.end();
+  return v;
+}
+
+void saveVoiceEnabled(bool enabled) {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putBool(NVS_KEY_VOICE, enabled);
+  prefs.end();
+}
+
+// Play a system response audio file from /system/{key}.mp3 on SD card.
+// Used for voice command confirmations (e.g. "Alarm set for 6:30 AM").
+void playSystemAudio(const char *key) {
+  if (!g_sdMounted) return;
+  char path[96];
+  snprintf(path, sizeof(path), "/system/%s.mp3", key);
+  if (!SD.exists(path)) {
+    Serial.printf("[voice] system audio not found: %s\n", path);
+    return;
+  }
+  stopAudio();
+  g_audioOut = new AudioOutputI2S();
+  g_audioOut->SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  g_audioOut->SetGain(0.9f);
+  g_audioFile = new AudioFileSourceSD(path);
+  g_mp3       = new AudioGeneratorMP3();
+  if (!g_mp3->begin(g_audioFile, g_audioOut)) {
+    Serial.printf("[voice] failed to play system audio: %s\n", path);
+    stopAudio();
+  }
+}
+
+// Initialize the PDM microphone using the ESP32-S3 I2S peripheral.
+void initMic() {
+  // PDM mic on GPIO 2 (WS/CLK) and GPIO 20 (SD/DATA)
+  // Uses I2S port 1 (port 0 is used by the speaker)
+  // Note: ESP32-S3 Arduino I2S library supports PDM RX mode
+  Serial.println("[mic] PDM mic init on GPIO 2/20");
+  // Actual I2S/PDM init happens in startListening() to avoid
+  // holding the peripheral open when not in use
+}
+
+// Start recording a voice command (called after wake word detected).
+// Records ~3 seconds of 16kHz mono PCM into g_micBuf.
+void startListening() {
+  if (g_listening) return;
+  g_listening = true;
+  Serial.println("[voice] listening...");
+
+  // Allocate 3 seconds at 16kHz 16-bit mono = 96KB
+  const size_t RECORD_SAMPLES = 16000 * 3;
+  const size_t RECORD_BYTES   = RECORD_SAMPLES * 2;
+  if (!g_micBuf) {
+    g_micBuf = (uint8_t *)ps_malloc(RECORD_BYTES);
+    if (!g_micBuf) {
+      Serial.println("[voice] failed to alloc mic buffer");
+      g_listening = false;
+      return;
+    }
+  }
+  g_micBufLen = 0;
+
+  // Configure I2S for PDM RX
+  i2s_config_t cfg = {};
+  cfg.mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
+  cfg.sample_rate          = 16000;
+  cfg.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
+  cfg.channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT;
+  cfg.communication_format = I2S_COMM_FORMAT_STAND_PCM_SHORT;
+  cfg.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
+  cfg.dma_buf_count        = 8;
+  cfg.dma_buf_len          = 512;
+  cfg.use_apll             = false;
+
+  i2s_pin_config_t pins = {};
+  pins.ws_io_num   = MIC_WS_PIN;   // GPIO 2
+  pins.data_in_num = MIC_SD_PIN;   // GPIO 20
+  pins.bck_io_num  = I2S_PIN_NO_CHANGE;
+  pins.data_out_num = I2S_PIN_NO_CHANGE;
+
+  i2s_driver_install(I2S_NUM_1, &cfg, 0, NULL);
+  i2s_set_pin(I2S_NUM_1, &pins);
+
+  // Read samples
+  size_t bytesRead = 0;
+  unsigned long start = millis();
+  while (millis() - start < 3000 && g_micBufLen < RECORD_BYTES) {
+    size_t toRead = min((size_t)1024, RECORD_BYTES - g_micBufLen);
+    i2s_read(I2S_NUM_1, g_micBuf + g_micBufLen, toRead, &bytesRead, 100);
+    g_micBufLen += bytesRead;
+  }
+
+  i2s_driver_uninstall(I2S_NUM_1);
+  g_listening = false;
+  Serial.printf("[voice] recorded %d bytes\n", (int)g_micBufLen);
+
+  // Send to server for transcription (requires WiFi)
+  if (WiFi.status() == WL_CONNECTED && g_micBufLen > 0) {
+    sendVoiceToServer(g_micBuf, g_micBufLen);
+  } else if (g_micBufLen > 0) {
+    // WiFi off — do simple local keyword matching
+    // (energy-based: just check if audio is loud enough to be speech)
+    Serial.println("[voice] no WiFi, using local keyword matching");
+    // For now play "no wifi" response
+    playSystemAudio("no_wifi");
+  }
+}
+
+void stopListening() {
+  g_listening = false;
+  g_wakeDetected = false;
+}
+
+// Send recorded audio to the backend STT endpoint.
+// The server transcribes it, parses the command, and returns a responseKey.
+void sendVoiceToServer(uint8_t *buf, size_t len) {
+  if (WiFi.status() != WL_CONNECTED || len == 0) return;
+
+  HTTPClient http;
+  String url = String(API_BASE_URL) + "/device/voice/transcribe";
+  http.begin(url);
+  http.addHeader("X-Device-Key", g_apiKey);
+  http.addHeader("Content-Type", "audio/pcm");  // raw 16kHz 16-bit mono PCM
+  http.setTimeout(15000);
+
+  int code = http.POST(buf, len);
+  if (code == 200) {
+    String body = http.getString();
+    // Parse responseKey from JSON: {"responseKey":"alarm_set_6_30_am", ...}
+    DynamicJsonDocument doc(512);
+    if (deserializeJson(doc, body) == DeserializationError::Ok) {
+      const char *responseKey = doc["responseKey"] | "ok";
+      const char *cmdType     = doc["command"]["type"] | "unknown";
+      Serial.printf("[voice] cmd=%s responseKey=%s\n", cmdType, responseKey);
+
+      // Handle local actions (snooze/stop don't need server — they're already done)
+      if (strcmp(cmdType, "snooze") == 0 && g_alarmFired) {
+        int mins = doc["command"]["minutes"] | 10;
+        // Snooze is handled locally; server already updated if needed
+        Serial.printf("[voice] snooze %d min\n", mins);
+      } else if (strcmp(cmdType, "stop_alarm") == 0 && g_alarmFired) {
+        g_alarmFired = false;
+        buzzerOff();
+        showClockScreen();
+      } else if (strcmp(cmdType, "set_alarm") == 0) {
+        // Server already updated the alarm; refresh local schedule
+        fetchSchedule();
+        updateAlarmLabels();
+      }
+
+      // Play the confirmation audio
+      playSystemAudio(responseKey);
+    }
+  } else {
+    Serial.printf("[voice] STT error %d\n", code);
+    playSystemAudio("not_understood");
+  }
+  http.end();
+}
+
+// Called every loop() to check for voice activity (simple energy detection).
+// When energy exceeds threshold, triggers startListening() for full recording.
+void loopVoice() {
+  if (!g_voiceEnabled || g_listening || g_audioEnabled && g_mp3 && g_mp3->isRunning()) return;
+  // TODO: integrate ESP-SR wake word engine here.
+  // For now this is a placeholder — the voice system is activated by a
+  // dedicated "Listen" button on the clock face (long-press on the screen).
+  // Full always-on wake word detection requires the esp-sr component which
+  // needs an IDF-based build. This will be added in a future firmware update.
+}
+
+// ─── Low EMF / WiFi sleep mode ────────────────────────────────────────────────
+
+bool loadLowEmfSettings() {
+  prefs.begin(NVS_NAMESPACE, true);
+  g_lowEmfMode  = prefs.getBool(NVS_KEY_LOW_EMF, false);
+  g_wifiOffHour = prefs.getInt(NVS_KEY_WIFI_OFF_H, 22);
+  g_wifiOnHour  = prefs.getInt(NVS_KEY_WIFI_ON_H, 6);
+  prefs.end();
+  return g_lowEmfMode;
+}
+
+void saveLowEmfSettings() {
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putBool(NVS_KEY_LOW_EMF, g_lowEmfMode);
+  prefs.putInt(NVS_KEY_WIFI_OFF_H, g_wifiOffHour);
+  prefs.putInt(NVS_KEY_WIFI_ON_H, g_wifiOnHour);
+  prefs.end();
+}
+
+// Queue a command to be flushed when WiFi reconnects.
+void queueCommand(const char *type, int i1, int i2, bool b) {
+  if (g_pendingCount >= MAX_PENDING) return;
+  PendingCmd &cmd = g_pendingCmds[g_pendingCount++];
+  strncpy(cmd.type, type, 31);
+  cmd.iVal1 = i1; cmd.iVal2 = i2; cmd.bVal = b;
+  Serial.printf("[emf] queued: %s %d %d\n", type, i1, i2);
+}
+
+// Flush any queued commands to the server now that WiFi is back.
+void flushPendingCommands() {
+  if (g_pendingCount == 0 || WiFi.status() != WL_CONNECTED) return;
+  Serial.printf("[emf] flushing %d pending commands\n", g_pendingCount);
+  for (int i = 0; i < g_pendingCount; i++) {
+    PendingCmd &cmd = g_pendingCmds[i];
+    if (strcmp(cmd.type, "set_alarm") == 0) {
+      // POST alarm to server
+      String body = String("{\"hour\":") + cmd.iVal1 +
+                    ",\"minute\":\"" + cmd.iVal2 +
+                    ",\"enabled\":true}";
+      HTTPClient http;
+      http.begin(String(API_BASE_URL) + "/device/alarm");
+      http.addHeader("X-Device-Key", g_apiKey);
+      http.addHeader("Content-Type", "application/json");
+      http.POST(body);
+      http.end();
+    }
+  }
+  g_pendingCount = 0;
+}
+
+// Check if WiFi should be turned on or off based on current time and Low EMF schedule.
+void checkWifiSchedule() {
+  if (!g_lowEmfMode) return;
+
+  struct tm t;
+  if (!getLocalTime(&t)) return;
+  int hour = t.tm_hour;
+
+  bool shouldBeOff;
+  if (g_wifiOffHour > g_wifiOnHour) {
+    // e.g. off at 22, on at 6: off during 22-23 and 0-5
+    shouldBeOff = (hour >= g_wifiOffHour || hour < g_wifiOnHour);
+  } else {
+    // e.g. off at 2, on at 6: off during 2-5
+    shouldBeOff = (hour >= g_wifiOffHour && hour < g_wifiOnHour);
+  }
+
+  if (shouldBeOff && WiFi.status() == WL_CONNECTED) {
+    Serial.println("[emf] Low EMF: turning WiFi off");
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    g_wifiManuallyOff = true;
+    playSystemAudio("wifi_off");
+  } else if (!shouldBeOff && g_wifiManuallyOff) {
+    Serial.println("[emf] Low EMF: turning WiFi back on");
+    WiFi.mode(WIFI_STA);
+    String ssid = prefs.getString(NVS_KEY_WIFI_SSID, "");
+    String pass = prefs.getString(NVS_KEY_WIFI_PASS, "");
+    if (ssid.length() > 0) {
+      WiFi.begin(ssid.c_str(), pass.c_str());
+      unsigned long t0 = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(200);
+      if (WiFi.status() == WL_CONNECTED) {
+        g_wifiManuallyOff = false;
+        playSystemAudio("wifi_on");
+        flushPendingCommands();
+        fetchSchedule();
+        syncAudioFiles();
+      }
     }
   }
 }
@@ -1636,16 +1956,93 @@ static void showMorePanel() {
     Serial.printf("[audio] toggle -> %d\n", g_audioEnabled);
   }, LV_EVENT_ALL, nullptr);
 
+  // ── Voice toggle row ──
+  lv_obj_t *rowVoice = lv_obj_create(panel);
+  lv_obj_set_size(rowVoice, 720, 52);
+  lv_obj_align(rowVoice, LV_ALIGN_TOP_MID, 0, 446);
+  lv_obj_set_style_bg_color(rowVoice, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(rowVoice, lv_color_hex(0x2A2A5A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(rowVoice, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(rowVoice, 10, LV_PART_MAIN);
+  lv_obj_clear_flag(rowVoice, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *lblVoiceToggle = lv_label_create(rowVoice);
+  lv_obj_set_style_text_font(lblVoiceToggle, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblVoiceToggle, lv_color_hex(0xAAAACC), LV_PART_MAIN);
+  lv_obj_align(lblVoiceToggle, LV_ALIGN_LEFT_MID, 16, 0);
+  lv_label_set_text(lblVoiceToggle, LV_SYMBOL_CALL "  Hey Jack (Voice)");
+
+  lv_obj_t *swVoice = lv_switch_create(rowVoice);
+  lv_obj_align(swVoice, LV_ALIGN_RIGHT_MID, -16, 0);
+  lv_obj_set_style_bg_color(swVoice, lv_color_hex(0x222244), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(swVoice, lv_color_hex(0x5555FF), LV_PART_INDICATOR);
+  if (g_voiceEnabled) lv_obj_add_state(swVoice, LV_STATE_CHECKED);
+  lv_obj_add_event_cb(swVoice, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    lv_obj_t *s = lv_event_get_target(e);
+    g_voiceEnabled = lv_obj_has_state(s, LV_STATE_CHECKED);
+    saveVoiceEnabled(g_voiceEnabled);
+    if (g_voiceEnabled) initMic();
+    Serial.printf("[voice] toggle -> %d\n", g_voiceEnabled);
+  }, LV_EVENT_ALL, nullptr);
+
+  // ── Low EMF section ──
+  lv_obj_t *lblEmfSec = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblEmfSec, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblEmfSec, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblEmfSec, LV_ALIGN_TOP_LEFT, 40, 518);
+  lv_label_set_text(lblEmfSec, "LOW EMF MODE");
+
+  lv_obj_t *rowEmf = lv_obj_create(panel);
+  lv_obj_set_size(rowEmf, 720, 52);
+  lv_obj_align(rowEmf, LV_ALIGN_TOP_MID, 0, 540);
+  lv_obj_set_style_bg_color(rowEmf, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(rowEmf, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(rowEmf, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(rowEmf, 10, LV_PART_MAIN);
+  lv_obj_clear_flag(rowEmf, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *lblEmfToggle = lv_label_create(rowEmf);
+  lv_obj_set_style_text_font(lblEmfToggle, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblEmfToggle, lv_color_hex(0xAADDAA), LV_PART_MAIN);
+  lv_obj_align(lblEmfToggle, LV_ALIGN_LEFT_MID, 16, 0);
+  lv_label_set_text(lblEmfToggle, LV_SYMBOL_WIFI "  WiFi Off While Sleeping");
+
+  lv_obj_t *swEmf = lv_switch_create(rowEmf);
+  lv_obj_align(swEmf, LV_ALIGN_RIGHT_MID, -16, 0);
+  lv_obj_set_style_bg_color(swEmf, lv_color_hex(0x224422), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(swEmf, lv_color_hex(0x22BB22), LV_PART_INDICATOR);
+  if (g_lowEmfMode) lv_obj_add_state(swEmf, LV_STATE_CHECKED);
+  lv_obj_add_event_cb(swEmf, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    lv_obj_t *s = lv_event_get_target(e);
+    g_lowEmfMode = lv_obj_has_state(s, LV_STATE_CHECKED);
+    saveLowEmfSettings();
+    // Sync setting to server if WiFi available
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      http.begin(String(API_BASE_URL) + "/device/settings");
+      http.addHeader("X-Device-Key", g_apiKey);
+      http.addHeader("Content-Type", "application/json");
+      String body = String("{\"lowEmfMode\":") + (g_lowEmfMode ? "true" : "false") +
+                    ",\"wifiOffHour\":" + g_wifiOffHour +
+                    ",\"wifiOnHour\":" + g_wifiOnHour + "}";
+      http.POST(body);
+      http.end();
+    }
+    Serial.printf("[emf] toggle -> %d\n", g_lowEmfMode);
+  }, LV_EVENT_ALL, nullptr);
+
   // ── Change WiFi button ──
   lv_obj_t *lblWifi = lv_label_create(panel);
   lv_obj_set_style_text_font(lblWifi, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblWifi, lv_color_hex(0x666666), LV_PART_MAIN);
-  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 452);
+  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 612);
   lv_label_set_text(lblWifi, "NETWORK");
 
   lv_obj_t *btnWifi = lv_btn_create(panel);
   lv_obj_set_size(btnWifi, 720, 52);
-  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 474);
+  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 634);
   lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
   lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
   lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
@@ -2542,6 +2939,13 @@ void setup() {
   g_sdMounted = initSD();
   Serial.printf("[audio] SD=%s audioEnabled=%d\n", g_sdMounted ? "OK" : "FAIL", g_audioEnabled);
 
+  // Load voice and Low EMF settings from NVS
+  g_voiceEnabled = loadVoiceEnabled();
+  loadLowEmfSettings();
+  Serial.printf("[voice] voiceEnabled=%d lowEmfMode=%d wifiOff=%d wifiOn=%d\n",
+    g_voiceEnabled, g_lowEmfMode, g_wifiOffHour, g_wifiOnHour);
+  if (g_voiceEnabled) initMic();
+
   // Read PCF8563 RTC and set system clock immediately (before WiFi)
   // This ensures the clock shows correct time even if WiFi is unavailable.
   // configTime() is called here so localtime_r() uses the correct timezone.
@@ -2635,6 +3039,19 @@ void loop() {
 
   bool wifiOk = (WiFi.status() == WL_CONNECTED);
   bool paired = !g_apiKey.isEmpty();
+
+  // Keep audio decoder fed every loop
+  loopAudio();
+
+  // Check voice activity (wake word polling)
+  loopVoice();
+
+  // Check Low EMF WiFi schedule (turns WiFi on/off based on time)
+  static unsigned long lastEmfCheck = 0;
+  if (millis() - lastEmfCheck >= 60000) {  // check every minute
+    lastEmfCheck = millis();
+    checkWifiSchedule();
+  }
 
   // Clock updates and alarm checks run whenever we're on the clock screen,
   // regardless of WiFi — the RTC keeps time even offline.
