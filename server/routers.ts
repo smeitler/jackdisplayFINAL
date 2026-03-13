@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
-import { VOICES, DEFAULT_VOICE, generateSpeech, generateAndStoreAudio, type VoiceId } from "./audioService";
+import { VOICES, generateAndStoreAudio } from "./audioService";
+import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -520,35 +521,64 @@ export const appRouter = router({
 
   // ─── Voice / TTS ──────────────────────────────────────────────────────────────────
   voice: router({
-    /** Return the list of available ElevenLabs voices the user can choose from. */
-    listVoices: protectedProcedure.query(() => {
-      return Object.entries(VOICES).map(([key, id]) => ({
-        id: key as VoiceId,
-        voiceId: id,
-        name: key.charAt(0).toUpperCase() + key.slice(1),
-        description: {
-          rachel:  "Warm, clear female — great for habits & affirmations",
-          aria:    "Bright, energetic female",
-          adam:    "Deep, calm male",
-          josh:    "Conversational male",
-          bella:   "Soft, soothing female",
-        }[key] ?? "",
-      }));
+    /**
+     * Fetch the user’s saved voices from ElevenLabs API dynamically.
+     * Returns voice_id (ElevenLabs ID) and name for each voice.
+     * Sorted: cloned voices first, then professional, then premade.
+     */
+    listVoices: protectedProcedure.query(async () => {
+      const apiKey = ENV.elevenLabsApiKey;
+      if (!apiKey) {
+        // Fallback to hardcoded list if no API key configured
+        return Object.entries(VOICES).map(([key, id]) => ({
+          voice_id: id,
+          name: key.charAt(0).toUpperCase() + key.slice(1),
+          category: "premade" as string,
+        }));
+      }
+      try {
+        const resp = await fetch("https://api.elevenlabs.io/v1/voices", {
+          headers: { "xi-api-key": apiKey },
+        });
+        if (!resp.ok) throw new Error(`ElevenLabs voices API error: ${resp.status}`);
+        const data = await resp.json() as { voices: { voice_id: string; name: string; category: string }[] };
+        return data.voices
+          .map((v) => ({ voice_id: v.voice_id, name: v.name, category: v.category ?? "premade" }))
+          .sort((a, b) => {
+            const rank = (c: string) => c === "cloned" ? 0 : c === "professional" ? 1 : 2;
+            return rank(a.category) - rank(b.category) || a.name.localeCompare(b.name);
+          });
+      } catch (err) {
+        console.error("[voice.listVoices]", err);
+        return Object.entries(VOICES).map(([key, id]) => ({
+          voice_id: id,
+          name: key.charAt(0).toUpperCase() + key.slice(1),
+          category: "premade" as string,
+        }));
+      }
     }),
 
-    /** Generate a short TTS preview clip and return a signed URL. */
+    /**
+     * Return the ElevenLabs API key to authenticated users so the app
+     * can call ElevenLabs TTS directly on-device for fast preview.
+     * The key is never exposed to unauthenticated requests.
+     */
+    getApiKey: protectedProcedure.query(() => {
+      return { apiKey: ENV.elevenLabsApiKey ?? "" };
+    }),
+
+    /** Server-side TTS generation (kept for alarm fire, not preview). */
     preview: protectedProcedure
       .input(z.object({
-        voiceKey: z.string(),
+        voiceId: z.string(),
         text: z.string().max(200).default("Good morning! Time to rise and shine."),
       }))
       .mutation(async ({ input }) => {
-        const voiceId = VOICES[input.voiceKey as VoiceId] ?? VOICES[DEFAULT_VOICE];
-        const url = await generateAndStoreAudio(input.text, "alarm", voiceId);
+        const url = await generateAndStoreAudio(input.text, "alarm", input.voiceId);
         return { url };
       }),
 
-    /** Save the user's preferred voice key (stored in the alarm config). */
+    /** Save the user’s preferred voice ID (stored in the alarm config). */
     setPreference: protectedProcedure
       .input(z.object({ voiceKey: z.string() }))
       .mutation(async ({ ctx, input }) => {
