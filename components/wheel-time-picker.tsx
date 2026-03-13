@@ -7,11 +7,9 @@
  * Platform strategy:
  * - iOS/Android: snapToInterval + decelerationRate="fast" handles native snapping.
  *   useLayoutEffect enforces initial scroll position (RN ignores contentOffset on mount).
- * - Web: snapToInterval is ignored by browsers. We listen to the native DOM "wheel"
- *   event via a ref, debounce it, and call scrollTo() to snap programmatically.
- *
- * Center-line: two thin horizontal lines (top + bottom border of the selection band)
- * make the target row visually obvious on all platforms.
+ * - Web: inject CSS scroll-snap-type onto the ScrollView's underlying div so the
+ *   browser handles snapping natively without blocking scroll events.
+ *   After scroll settles, read scrollTop and emit the value.
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -50,7 +48,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const isDragging = useRef(false);
-  const webDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const webScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveIdx, setLiveIdx] = useState(selectedIndex);
 
   // Force scroll to correct position after mount and on external change
@@ -67,37 +65,72 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
     }
   }, [selectedIndex]);
 
-  // Web: attach a native DOM wheel listener to snap on scroll
+  // Web: inject CSS scroll-snap onto the underlying div, and listen for scrollend
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    // Access the underlying DOM node via the ref's internal _nativeTag or getNode
-    // In React Native Web, ScrollView ref exposes a scrollTo method and the
-    // underlying div is accessible via (ref as any).current?._listRef?._scrollRef
-    // or simply via the scrollRef directly as it wraps a div.
-    const node = (scrollRef.current as any)?._nativeRef?.current
-      ?? (scrollRef.current as any)?.getScrollableNode?.()
-      ?? (scrollRef.current as any)?._scrollRef?.current;
 
-    if (!node) return;
+    // Give RN Web a tick to render the DOM node
+    const setup = setTimeout(() => {
+      // RN Web ScrollView renders as a div; access it via the internal ref
+      const node: HTMLElement | null =
+        (scrollRef.current as any)?._nativeRef?.current ??
+        (scrollRef.current as any)?.getScrollableNode?.() ??
+        null;
 
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      if (webDebounceRef.current) clearTimeout(webDebounceRef.current);
-      webDebounceRef.current = setTimeout(() => {
-        isDragging.current = false;
-        const currentY = node.scrollTop;
-        const idx = clamp(Math.round(currentY / ITEM_HEIGHT), 0, items.length - 1);
-        node.scrollTo({ top: idx * ITEM_HEIGHT, behavior: 'smooth' });
+      if (!node) return;
+
+      // Apply CSS scroll snap — this lets the browser snap natively without blocking scroll
+      node.style.overflowY = 'scroll';
+      node.style.scrollSnapType = 'y mandatory';
+      // Apply snap-align to each child item div
+      const applySnapToChildren = () => {
+        Array.from(node.children).forEach((child) => {
+          (child as HTMLElement).style.scrollSnapAlign = 'center';
+        });
+      };
+      applySnapToChildren();
+
+      // Set initial scroll position
+      node.scrollTop = selectedIndex * ITEM_HEIGHT;
+
+      // After scroll settles, emit the value
+      const handleScrollEnd = () => {
+        if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
+        webScrollTimer.current = setTimeout(() => {
+          const idx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
+          // Snap to exact position
+          node.scrollTo({ top: idx * ITEM_HEIGHT, behavior: 'smooth' });
+          setLiveIdx(idx);
+          onSelect(idx);
+        }, 100);
+      };
+
+      const handleScroll = () => {
+        isDragging.current = true;
+        const idx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
         setLiveIdx(idx);
-        onSelect(idx);
-      }, 120);
-    };
+        if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
+        webScrollTimer.current = setTimeout(() => {
+          isDragging.current = false;
+          const finalIdx = clamp(Math.round(node.scrollTop / ITEM_HEIGHT), 0, items.length - 1);
+          node.scrollTo({ top: finalIdx * ITEM_HEIGHT, behavior: 'smooth' });
+          setLiveIdx(finalIdx);
+          onSelect(finalIdx);
+        }, 150);
+      };
 
-    node.addEventListener('wheel', handleWheel, { passive: false });
-    return () => node.removeEventListener('wheel', handleWheel);
+      node.addEventListener('scroll', handleScroll);
+      return () => {
+        node.removeEventListener('scroll', handleScroll);
+        if (webScrollTimer.current) clearTimeout(webScrollTimer.current);
+      };
+    }, 50);
+
+    return () => clearTimeout(setup);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length, onSelect]);
 
+  // Mobile scroll handlers
   const handleScrollBegin = useCallback(() => {
     isDragging.current = true;
   }, []);
@@ -128,7 +161,7 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_HEIGHT}
+        snapToInterval={Platform.OS !== 'web' ? ITEM_HEIGHT : undefined}
         decelerationRate="fast"
         scrollEventThrottle={16}
         onScrollBeginDrag={handleScrollBegin}
