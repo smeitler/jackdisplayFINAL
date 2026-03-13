@@ -888,17 +888,31 @@ void sendVoiceToServer(uint8_t *buf, size_t len) {
       const char *cmdType     = doc["command"]["type"] | "unknown";
       Serial.printf("[voice] cmd=%s responseKey=%s\n", cmdType, responseKey);
 
-      // Handle local actions (snooze/stop don't need server — they're already done)
+      // Handle local actions
       if (strcmp(cmdType, "snooze") == 0 && g_alarmFired) {
-        int mins = doc["command"]["minutes"] | 10;
-        // Snooze is handled locally; server already updated if needed
+        int mins = doc["command"]["minutes"] | 9;
         Serial.printf("[voice] snooze %d min\n", mins);
-      } else if (strcmp(cmdType, "stop_alarm") == 0 && g_alarmFired) {
-        g_alarmFired = false;
         buzzerOff();
+        g_snoozeCount++;
+        sendEvent("snooze", g_alarms[g_firedAlarmIdx].id.c_str(), g_alarmFiredAt, 0, g_snoozeCount);
+        // Re-arm alarm after snooze duration
+        g_alarms[g_firedAlarmIdx].nextFire = time(nullptr) + (mins * 60);
+        g_alarmFired = false;
         showClockScreen();
+      } else if (strcmp(cmdType, "stop_alarm") == 0 && g_alarmFired) {
+        Serial.println("[voice] stop alarm");
+        buzzerOff();
+        g_alarmFired = false;
+        g_inCheckin  = true;
+        g_ciHabitIdx = 0;
+        memset(g_ratings, 0, sizeof(g_ratings));
+        showCheckinScreen();
       } else if (strcmp(cmdType, "set_alarm") == 0) {
         // Server already updated the alarm; refresh local schedule
+        fetchSchedule();
+        updateAlarmLabels();
+      } else if (strcmp(cmdType, "alarm_off") == 0 || strcmp(cmdType, "alarm_on") == 0) {
+        // Server already updated; refresh
         fetchSchedule();
         updateAlarmLabels();
       }
@@ -1606,6 +1620,19 @@ static void buildMoreButton(lv_color_t col) {
   lv_obj_add_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(lbl, [](lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) showMorePanel();
+  }, LV_EVENT_ALL, nullptr);
+
+  // Long-press anywhere on the clock face triggers voice command
+  lv_obj_add_event_cb(scr_clock, [](lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+      if (g_voiceEnabled && !g_listening) {
+        Serial.println("[voice] long-press detected, starting listen");
+        playSystemAudio("wake_ack");
+        // Small delay so the ack plays before mic init
+        vTaskDelay(pdMS_TO_TICKS(600));
+        startListening();
+      }
+    }
   }, LV_EVENT_ALL, nullptr);
 }
 
@@ -2381,6 +2408,18 @@ void buildAlarmScreen() {
   lv_obj_set_style_text_font(lblWake, &lv_font_montserrat_20, LV_PART_MAIN);
   lv_obj_set_style_text_color(lblWake, lv_color_hex(0x000000), LV_PART_MAIN);
   lv_obj_center(lblWake);
+
+  // Long-press on alarm screen triggers voice command (snooze / stop)
+  lv_obj_add_event_cb(scr_alarm, [](lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+      if (g_voiceEnabled && !g_listening) {
+        Serial.println("[voice] alarm long-press, starting listen");
+        playSystemAudio("wake_ack");
+        vTaskDelay(pdMS_TO_TICKS(600));
+        startListening();
+      }
+    }
+  }, LV_EVENT_ALL, nullptr);
 }
 
 void showAlarmScreen(int alarmIdx) {
