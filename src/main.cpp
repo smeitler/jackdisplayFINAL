@@ -592,9 +592,11 @@ bool initSD() {
   }
   uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
   Serial.printf("[SD] Card size: %llu MB\n", cardSize);
-  // Ensure /habits and /system directories exist
-  if (!SD_MMC.exists("/habits"))  SD_MMC.mkdir("/habits");
-  if (!SD_MMC.exists("/system"))  SD_MMC.mkdir("/system");
+  // Ensure all audio directories exist
+  const char *dirs[] = { "/habits", "/system", "/meditations", "/breathwork",
+                         "/visualization", "/priming", "/journaling",
+                         "/gratitudes", "/journal", "/minddump" };
+  for (auto d : dirs) if (!SD_MMC.exists(d)) SD_MMC.mkdir(d);
   return true;
 }
 
@@ -3139,13 +3141,19 @@ void showMorningRoutineScreen(const String &meditationId) {
   lv_obj_align(lbl_desc, LV_ALIGN_TOP_MID, 0, 80);
   lv_label_set_text(lbl_desc, desc);
 
+  // Audio status hint — shows whether SD audio is available
   lv_obj_t *lbl_hint = lv_label_create(card);
   lv_obj_set_style_text_font(lbl_hint, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x4B6A8A), LV_PART_MAIN);
   lv_obj_align(lbl_hint, LV_ALIGN_TOP_MID, 0, 130);
-  lv_label_set_text(lbl_hint, "Open the Jack app to start audio");
+  // Check if the SD audio file exists
+  char audioPath[64];
+  snprintf(audioPath, sizeof(audioPath), "/system/%s.mp3", meditationId.c_str());
+  bool audioAvail = g_sdMounted && SD_MMC.exists(audioPath);
+  lv_label_set_text(lbl_hint, audioAvail ? LV_SYMBOL_AUDIO "  Playing from SD card..." : "No audio file on SD card");
+  lv_obj_set_style_text_color(lbl_hint, audioAvail ? lv_color_hex(0x22C55E) : lv_color_hex(0xFF6666), LV_PART_MAIN);
 
-  // Skip button
+  // Done button
   lv_obj_t *btnSkip = lv_btn_create(scr);
   lv_obj_set_size(btnSkip, 200, 60);
   lv_obj_align(btnSkip, LV_ALIGN_BOTTOM_MID, 0, -24);
@@ -3153,8 +3161,9 @@ void showMorningRoutineScreen(const String &meditationId) {
   lv_obj_set_style_radius(btnSkip, 12, LV_PART_MAIN);
   lv_obj_add_event_cb(btnSkip, [](lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-      g_alarmFired  = false;
-      g_inCheckin   = false;
+      stopAudio();
+      g_alarmFired    = false;
+      g_inCheckin     = false;
       g_firedAlarmIdx = -1;
       showClockScreen();
     }
@@ -3166,6 +3175,11 @@ void showMorningRoutineScreen(const String &meditationId) {
   lv_obj_center(lblSkip);
 
   lv_disp_load_scr(scr);
+
+  // Start SD audio playback immediately after screen is loaded
+  if (audioAvail) {
+    playSystemAudio(meditationId.c_str());
+  }
 }
 
 // ─── Celebration screen ───────────────────────────────────────────────────────
