@@ -624,5 +624,3 @@
 ## Time Picker UX (Mar 13 2026)
 
 - [x] Compact wheel picker: 3 rows only (1 above, selected, 1 below), adjacent numbers slanted + faded
-- [x] Fix wheel picker snap alignment (always lands centered on selected value)
-- [x] Infinite-loop scrolling: repeat values 21x so user can scroll freely in either direction
