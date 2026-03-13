@@ -1321,6 +1321,33 @@ static void showMorePanel() {
   lv_label_set_text(lblSyncBtn, LV_SYMBOL_REFRESH "  Sync Alarm & Habits Now");
   lv_obj_center(lblSyncBtn);
 
+  // ── Change WiFi button ──
+  lv_obj_t *lblWifi = lv_label_create(panel);
+  lv_obj_set_style_text_font(lblWifi, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblWifi, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_align(lblWifi, LV_ALIGN_TOP_LEFT, 40, 358);
+  lv_label_set_text(lblWifi, "NETWORK");
+
+  lv_obj_t *btnWifi = lv_btn_create(panel);
+  lv_obj_set_size(btnWifi, 720, 52);
+  lv_obj_align(btnWifi, LV_ALIGN_TOP_MID, 0, 380);
+  lv_obj_set_style_bg_color(btnWifi, lv_color_hex(0x0A1A0A), LV_PART_MAIN);
+  lv_obj_set_style_border_color(btnWifi, lv_color_hex(0x1A5A1A), LV_PART_MAIN);
+  lv_obj_set_style_border_width(btnWifi, 1, LV_PART_MAIN);
+  lv_obj_set_style_radius(btnWifi, 10, LV_PART_MAIN);
+  lv_obj_add_event_cb(btnWifi, [](lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    // Close the More panel then open WiFi scan
+    lv_obj_t *panel = lv_obj_get_parent(lv_event_get_target(e));
+    lv_obj_del(panel);
+    showWifiScanScreen();
+  }, LV_EVENT_ALL, nullptr);
+  lv_obj_t *lblWifiBtn = lv_label_create(btnWifi);
+  lv_obj_set_style_text_font(lblWifiBtn, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_set_style_text_color(lblWifiBtn, lv_color_hex(0x44BB44), LV_PART_MAIN);
+  lv_label_set_text(lblWifiBtn, LV_SYMBOL_WIFI "  Change WiFi Network");
+  lv_obj_center(lblWifiBtn);
+
   // ── Close / Back button ──
   lv_obj_t *btnBack = lv_btn_create(panel);
   lv_obj_set_size(btnBack, 160, 44);
