@@ -1,18 +1,12 @@
 /**
  * WheelTimePicker
  *
- * A native iOS-style drum-roll time picker with three columns:
+ * A compact iOS-style drum-roll time picker with three columns:
  *   Hour (1–12)  |  Minute (00–59)  |  AM / PM
  *
- * The selected row is highlighted by a rounded-rectangle band that
- * spans all three columns, exactly like the iOS Clock app.
- *
- * Usage:
- *   <WheelTimePicker
- *     hour={7}          // 0-23 (24-hour)
- *     minute={30}
- *     onChange={(h, m) => { setHour(h); setMinute(m); }}
- *   />
+ * Design: 3 visible rows (1 above, selected, 1 below).
+ * Adjacent rows are smaller, italic, and faded — giving a perspective/slant feel.
+ * The selection band spans all three columns.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -29,10 +23,10 @@ import { useColors } from '@/hooks/use-colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_HEIGHT = 52;   // height of each row
-const VISIBLE_ITEMS = 5;  // rows visible at once (must be odd)
-const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
-const CENTER_OFFSET = Math.floor(VISIBLE_ITEMS / 2); // 2
+const ITEM_HEIGHT   = 48;   // height of each row
+const VISIBLE_ITEMS = 3;    // 1 above + selected + 1 below
+const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;  // 144px total
+const CENTER_OFFSET = 1;    // one padding item top/bottom
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,9 +51,8 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const isDragging = useRef(false);
-  const pendingIndex = useRef(selectedIndex);
 
-  // Scroll to the selected index whenever it changes externally
+  // Scroll to selected index whenever it changes externally
   useEffect(() => {
     if (!isDragging.current) {
       scrollRef.current?.scrollTo({
@@ -69,25 +62,23 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
     }
   }, [selectedIndex]);
 
+  const handleScrollBegin = useCallback(() => {
+    isDragging.current = true;
+  }, []);
+
   const handleScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       isDragging.current = false;
       const raw = e.nativeEvent.contentOffset.y;
       const idx = clamp(snapIndex(raw), 0, items.length - 1);
-      pendingIndex.current = idx;
-      // Snap scroll position
       scrollRef.current?.scrollTo({ y: idx * ITEM_HEIGHT, animated: true });
       onSelect(idx);
     },
     [items.length, onSelect],
   );
 
-  const handleScrollBegin = useCallback(() => {
-    isDragging.current = true;
-  }, []);
-
-  // Padding items so the first/last real item can sit in the center
-  const paddingItems = Array(CENTER_OFFSET).fill('');
+  // One padding item top/bottom so first/last real item can center
+  const padding = Array(CENTER_OFFSET).fill('');
 
   return (
     <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
@@ -100,34 +91,46 @@ function WheelColumn({ items, selectedIndex, onSelect, width }: ColumnProps) {
         onScrollBeginDrag={handleScrollBegin}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
-        contentContainerStyle={{ paddingVertical: 0 }}
-        // Initial offset
         contentOffset={{ x: 0, y: selectedIndex * ITEM_HEIGHT }}
       >
         {/* Top padding */}
-        {paddingItems.map((_, i) => (
+        {padding.map((_, i) => (
           <View key={`top-${i}`} style={styles.item} />
         ))}
 
         {items.map((label, i) => {
-          const isSelected = i === selectedIndex;
+          const dist = i - selectedIndex; // -1, 0, +1 (only ±1 visible)
+          const isSelected = dist === 0;
+          const isAdjacent = Math.abs(dist) === 1;
+
+          // Adjacent items: smaller, faded, slightly italic (skew via transform)
+          const textStyle = isSelected
+            ? [styles.itemText, styles.itemTextSelected, { color: colors.foreground }]
+            : isAdjacent
+            ? [
+                styles.itemText,
+                styles.itemTextAdjacent,
+                {
+                  color: colors.muted,
+                  // Slant toward center: top item tilts down, bottom item tilts up
+                  transform: [
+                    { perspective: 300 },
+                    { rotateX: dist < 0 ? '-28deg' : '28deg' },
+                    { scaleY: 0.82 },
+                  ],
+                },
+              ]
+            : [styles.itemText, { color: 'transparent' }]; // invisible (outside ±1)
+
           return (
             <View key={i} style={styles.item}>
-              <Text
-                style={[
-                  styles.itemText,
-                  { color: isSelected ? colors.foreground : colors.muted },
-                  isSelected && styles.itemTextSelected,
-                ]}
-              >
-                {label}
-              </Text>
+              <Text style={textStyle}>{label}</Text>
             </View>
           );
         })}
 
         {/* Bottom padding */}
-        {paddingItems.map((_, i) => (
+        {padding.map((_, i) => (
           <View key={`bot-${i}`} style={styles.item} />
         ))}
       </ScrollView>
@@ -144,26 +147,22 @@ interface WheelTimePickerProps {
   onChange: (hour: number, minute: number) => void;
 }
 
-const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));   // '1' … '12'
-const MINUTES  = Array.from({ length: 60 }, (_, i) =>
-  i.toString().padStart(2, '0'),
-);                                                                         // '00' … '59'
+const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const MINUTES  = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
 const PERIODS  = ['AM', 'PM'];
 
 export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps) {
   const colors = useColors();
 
-  // Decompose 24-hour into 12-hour + period
-  const isPM = hour >= 12;
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12; // 1-12
+  const isPM    = hour >= 12;
+  const hour12  = hour % 12 === 0 ? 12 : hour % 12;
 
-  const [hourIdx, setHourIdx]     = useState(hour12 - 1);   // 0-based index into HOURS_12
-  const [minuteIdx, setMinuteIdx] = useState(minute);        // 0-based index into MINUTES
-  const [periodIdx, setPeriodIdx] = useState(isPM ? 1 : 0);  // 0=AM, 1=PM
+  const [hourIdx,   setHourIdx]   = useState(hour12 - 1);
+  const [minuteIdx, setMinuteIdx] = useState(minute);
+  const [periodIdx, setPeriodIdx] = useState(isPM ? 1 : 0);
 
-  // Keep local state in sync when props change externally
   useEffect(() => {
-    const newIsPM = hour >= 12;
+    const newIsPM   = hour >= 12;
     const newHour12 = hour % 12 === 0 ? 12 : hour % 12;
     setHourIdx(newHour12 - 1);
     setMinuteIdx(minute);
@@ -172,47 +171,35 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
   const emit = useCallback(
     (hIdx: number, mIdx: number, pIdx: number) => {
-      const h12 = hIdx + 1;  // 1-12
-      let h24 = h12 % 12;    // 0 for 12, 1-11 for others
-      if (pIdx === 1) h24 += 12; // PM
+      const h12 = hIdx + 1;
+      let h24   = h12 % 12;
+      if (pIdx === 1) h24 += 12;
       onChange(h24, mIdx);
     },
     [onChange],
   );
 
   const onHourSelect = useCallback(
-    (idx: number) => {
-      setHourIdx(idx);
-      emit(idx, minuteIdx, periodIdx);
-    },
+    (idx: number) => { setHourIdx(idx);   emit(idx, minuteIdx, periodIdx); },
     [minuteIdx, periodIdx, emit],
   );
-
   const onMinuteSelect = useCallback(
-    (idx: number) => {
-      setMinuteIdx(idx);
-      emit(hourIdx, idx, periodIdx);
-    },
+    (idx: number) => { setMinuteIdx(idx); emit(hourIdx, idx, periodIdx); },
     [hourIdx, periodIdx, emit],
   );
-
   const onPeriodSelect = useCallback(
-    (idx: number) => {
-      setPeriodIdx(idx);
-      emit(hourIdx, minuteIdx, idx);
-    },
+    (idx: number) => { setPeriodIdx(idx); emit(hourIdx, minuteIdx, idx); },
     [hourIdx, minuteIdx, emit],
   );
 
-  // Column widths
-  const hourW   = 72;
-  const minuteW = 72;
-  const periodW = 72;
+  const hourW   = 68;
+  const minuteW = 68;
+  const periodW = 64;
   const totalW  = hourW + minuteW + periodW;
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Selection highlight band — sits behind the columns */}
+      {/* Selection highlight band */}
       <View
         pointerEvents="none"
         style={[
@@ -227,52 +214,17 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
         ]}
       />
 
-      {/* Fade masks — top and bottom */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.fadeMask,
-          styles.fadeMaskTop,
-          { backgroundColor: colors.background },
-        ]}
-      />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.fadeMask,
-          styles.fadeMaskBottom,
-          { backgroundColor: colors.background },
-        ]}
-      />
-
       {/* Columns */}
       <View style={styles.columns}>
-        <WheelColumn
-          items={HOURS_12}
-          selectedIndex={hourIdx}
-          onSelect={onHourSelect}
-          width={hourW}
-        />
-        <WheelColumn
-          items={MINUTES}
-          selectedIndex={minuteIdx}
-          onSelect={onMinuteSelect}
-          width={minuteW}
-        />
-        <WheelColumn
-          items={PERIODS}
-          selectedIndex={periodIdx}
-          onSelect={onPeriodSelect}
-          width={periodW}
-        />
+        <WheelColumn items={HOURS_12} selectedIndex={hourIdx}   onSelect={onHourSelect}   width={hourW} />
+        <WheelColumn items={MINUTES}  selectedIndex={minuteIdx} onSelect={onMinuteSelect} width={minuteW} />
+        <WheelColumn items={PERIODS}  selectedIndex={periodIdx} onSelect={onPeriodSelect} width={periodW} />
       </View>
     </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
-const FADE_HEIGHT = ITEM_HEIGHT * CENTER_OFFSET;
 
 const styles = StyleSheet.create({
   container: {
@@ -291,37 +243,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   itemText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '400',
     letterSpacing: 0.2,
     ...(Platform.OS === 'ios' ? { fontFamily: 'System' } : {}),
   },
   itemTextSelected: {
-    fontSize: 26,
-    fontWeight: '600',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  itemTextAdjacent: {
+    fontSize: 17,
+    fontWeight: '300',
+    opacity: 0.45,
   },
   selectionBand: {
     position: 'absolute',
     height: ITEM_HEIGHT,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     zIndex: 0,
-  },
-  fadeMask: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 2,
-    pointerEvents: 'none',
-  },
-  fadeMaskTop: {
-    top: 0,
-    height: FADE_HEIGHT,
-    opacity: 0.75,
-  },
-  fadeMaskBottom: {
-    bottom: 0,
-    height: FADE_HEIGHT,
-    opacity: 0.75,
   },
 });

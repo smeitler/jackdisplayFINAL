@@ -620,3 +620,7 @@
 - [x] Auto-save AI-extracted gratitude items to Gratitude tab storage on recording stop
 - [x] Show recordings library in More tab with playback, date, duration, and entry count badges
 - [x] Delete recording from library (removes local file + metadata)
+
+## Time Picker UX (Mar 13 2026)
+
+- [x] Compact wheel picker: 3 rows only (1 above, selected, 1 below), adjacent numbers slanted + faded
