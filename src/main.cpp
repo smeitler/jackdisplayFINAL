@@ -2314,25 +2314,19 @@ static void cb_ci_tick(lv_timer_t *timer) {
     }
   }
   if (g_ciTick == 0) {
-    // Time's up
-    if (g_ciRereadCount < 2) {
-      // Re-read the habit name and reset the bar
-      g_ciRereadCount++;
-      buzzerOn();
-      vTaskDelay(pdMS_TO_TICKS(300));
-      buzzerOff();
-      // Re-play the habit audio
-      if (g_ciHabitIdx < g_habitCount) {
-        playHabitAudio(g_habits[g_ciHabitIdx].name.c_str());
-      }
-      g_ciTick = HABIT_TIMER_TICKS;
-      g_ciListening = false;  // allow voice listen again on next cycle
-      if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
-    } else {
-      // 2 re-reads with no response — auto-skip
-      Serial.println("[checkin] auto-skip after 2 re-reads");
-      ciAdvance(0);  // rating 0 = no response / skipped
+    // Time's up — re-read the habit name and reset the bar
+    // Never auto-skip: keep prompting until the user physically responds
+    g_ciRereadCount++;
+    buzzerOn();
+    vTaskDelay(pdMS_TO_TICKS(300));
+    buzzerOff();
+    // Re-play the habit audio
+    if (g_ciHabitIdx < g_habitCount) {
+      playHabitAudio(g_habits[g_ciHabitIdx].name.c_str());
     }
+    g_ciTick = HABIT_TIMER_TICKS;
+    g_ciListening = false;  // allow voice listen again on next cycle
+    if (bar_ci_timer) lv_bar_set_value(bar_ci_timer, g_ciTick, LV_ANIM_OFF);
   }
 }
 
