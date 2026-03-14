@@ -144,6 +144,7 @@ export default function RootLayout() {
               <Stack.Screen name="mind-dump" options={{ presentation: 'modal' }} />
               <Stack.Screen name="team/[id]" options={{ presentation: 'modal' }} />
               <Stack.Screen name="team/chat/[id]" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="permissions-setup" options={{ presentation: 'fullScreenModal' }} />
             </Stack>
             <StatusBar style="auto" />
           </AppProvider>

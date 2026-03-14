@@ -635,3 +635,11 @@
 - [x] Post-alarm auto-launch: after habit check-in, generates personalized practice and shows Begin card
 - [x] Personalization: pulls name, goals, habits, yesterday's gratitudes into the script
 - [x] Script regenerates when user data changes
+
+## Permissions Onboarding (Mar 13 2026)
+
+- [x] Build 3-step permissions setup screen (Notifications → Time-Sensitive → Focus guide)
+- [x] Upgrade all alarm notifications to Time-Sensitive interruption level (breaks through Focus/DND)
+- [x] Wire first-launch redirect: HomeScreen checks AsyncStorage and pushes to permissions-setup once
+- [x] Permissions setup screen marks itself done in AsyncStorage so it never shows again
+- [x] Step 3 opens iOS Settings so user can add Jack to Focus allowed apps list

@@ -1,5 +1,5 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity } from "react-native";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
@@ -10,6 +10,8 @@ import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
 import Svg, { Circle } from "react-native-svg";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
@@ -423,6 +425,16 @@ export default function HomeScreen() {
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
+
+  // First-launch: show permissions setup screen once on mobile
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    AsyncStorage.getItem(PERMISSIONS_DONE_KEY).then((done) => {
+      if (!done) {
+        router.push('/permissions-setup' as never);
+      }
+    });
+  }, [router]);
 
   function handleCheckIn(date?: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

@@ -34,6 +34,9 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       allowAlert: true,
       allowBadge: true,
       allowSound: true,
+      // Requests Time-Sensitive notification level (iOS 15+)
+      // Breaks through Focus modes and Do Not Disturb
+      provideAppNotificationSettings: true,
     },
   });
   return status === 'granted';
@@ -72,6 +75,10 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
         body: "How did yesterday go? Tap to log your progress.",
         data: { action: 'open_checkin' },
         sound: soundFile,
+        // Time-Sensitive: breaks through Focus modes and DND on iOS 15+
+        ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+        // Android: highest priority channel ensures alarm-level delivery
+        priority: 'max',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
