@@ -321,8 +321,8 @@ void  initMic();
 void  loopVoice();
 void  startListening();
 void  stopListening();
-void  showListeningOverlay();
-void  hideListeningOverlay();
+void  showListeningStatus();   // update lbl_wifi text to show listening (no LVGL objects)
+void  hideListeningStatus();   // restore lbl_wifi text after listening
 void  sendVoiceToServer(uint8_t *buf, size_t len);
 void  playSystemAudio(const char *key);
 // Low EMF / WiFi scheduler
@@ -812,41 +812,20 @@ void initMic() {
   // holding the peripheral open when not in use
 }
 
-// ─── Voice listening overlay ─────────────────────────────────────────────────
-// Shows a semi-transparent overlay on the active screen with a pulsing mic icon
-// and "Listening..." text so the user knows the device is recording.
-void showListeningOverlay() {
-  if (overlay_listening) return;  // already shown
-  lv_obj_t *scr = lv_disp_get_scr_act(nullptr);
-  overlay_listening = lv_obj_create(scr);
-  lv_obj_set_size(overlay_listening, 320, 160);
-  lv_obj_center(overlay_listening);
-  lv_obj_set_style_bg_color(overlay_listening, lv_color_hex(0x0A0A1A), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(overlay_listening, LV_OPA_90, LV_PART_MAIN);
-  lv_obj_set_style_border_color(overlay_listening, lv_color_hex(0x4444AA), LV_PART_MAIN);
-  lv_obj_set_style_border_width(overlay_listening, 2, LV_PART_MAIN);
-  lv_obj_set_style_radius(overlay_listening, 20, LV_PART_MAIN);
-  lv_obj_clear_flag(overlay_listening, LV_OBJ_FLAG_SCROLLABLE);
-  // Mic icon (large)
-  lv_obj_t *lblMic = lv_label_create(overlay_listening);
-  lv_obj_set_style_text_font(lblMic, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblMic, lv_color_hex(0x6666FF), LV_PART_MAIN);
-  lv_obj_align(lblMic, LV_ALIGN_TOP_MID, 0, 18);
-  lv_label_set_text(lblMic, LV_SYMBOL_AUDIO);
-  // "Listening..." text
-  lv_obj_t *lblTxt = lv_label_create(overlay_listening);
-  lv_obj_set_style_text_font(lblTxt, &lv_font_montserrat_18, LV_PART_MAIN);
-  lv_obj_set_style_text_color(lblTxt, lv_color_hex(0xAAAADD), LV_PART_MAIN);
-  lv_obj_align(lblTxt, LV_ALIGN_BOTTOM_MID, 0, -18);
-  lv_label_set_text(lblTxt, "Listening...");
-  lv_timer_handler();  // force immediate render
+// ─── Voice listening status (NO overlay — safe, no LVGL objects created) ────────
+// Instead of creating an overlay object (which could block the clock screen if
+// not deleted), we simply update the WiFi status label text. This is 100% safe
+// because lbl_wifi is a permanent label on scr_clock and no new LVGL objects
+// are ever created or deleted.
+void showListeningStatus() {
+  if (lbl_wifi) lv_label_set_text(lbl_wifi, LV_SYMBOL_AUDIO " Listening...");
 }
 
-void hideListeningOverlay() {
-  if (!overlay_listening) return;
-  lv_obj_del(overlay_listening);
-  overlay_listening = nullptr;
-  lv_timer_handler();  // force immediate redraw
+void hideListeningStatus() {
+  // Restore the WiFi dot text based on current connection state
+  if (lbl_wifi) {
+    lv_label_set_text(lbl_wifi, WiFi.status() == WL_CONNECTED ? LV_SYMBOL_WIFI : LV_SYMBOL_WARNING);
+  }
 }
 
 // Start recording a voice command (called after wake word detected).
@@ -2683,7 +2662,6 @@ void buildClockScreen() {
     lv_obj_del(scr_clock);
     scr_clock = nullptr;
     lbl_time = lbl_ampm = lbl_date = lbl_wifi = lbl_alarm1 = lbl_alarm2 = nullptr;
-    overlay_listening = nullptr;  // clear stale pointer — object was deleted with scr_clock
   }
 
   scr_clock = lv_obj_create(nullptr);
@@ -2781,8 +2759,6 @@ static void cleanupClockScreen() {
   for (lv_obj_t *obj : toDelete) {
     lv_obj_del(obj);
   }
-  // Clear the overlay pointer since its object is now gone
-  overlay_listening = nullptr;
 }
 
 void showClockScreen() {
@@ -3752,11 +3728,11 @@ void loop() {
   // Always hide before show to handle rapid flag transitions.
   if (g_hideListeningOverlay) {
     g_hideListeningOverlay = false;
-    hideListeningOverlay();
+    hideListeningStatus();  // update lbl_wifi text only — no LVGL objects created/deleted
   }
   if (g_showListeningOverlay) {
     g_showListeningOverlay = false;
-    showListeningOverlay();
+    showListeningStatus();  // update lbl_wifi text only — no LVGL objects created/deleted
   }
 
   // Check voice activity (wake word polling)
@@ -3772,6 +3748,19 @@ void loop() {
   // Clock updates and alarm checks run whenever we're on the clock screen,
   // regardless of WiFi — the RTC keeps time even offline.
   unsigned long now = millis();
+
+  // ── Clock screen watchdog ─────────────────────────────────────────────
+  // Every 5 seconds, if we are on the clock screen, run cleanupClockScreen().
+  // This is the permanent safety net: even if a future bug leaves a stray
+  // overlay or panel on scr_clock, it will be automatically removed within
+  // 5 seconds without any user action.
+  static unsigned long lastWatchdog = 0;
+  if (now - lastWatchdog >= 5000) {
+    lastWatchdog = now;
+    if (scr_clock && lv_disp_get_scr_act(nullptr) == scr_clock) {
+      cleanupClockScreen();
+    }
+  }
 
   if (now - g_lastClockUpd >= CLOCK_UPDATE_MS) {
     g_lastClockUpd = now;
