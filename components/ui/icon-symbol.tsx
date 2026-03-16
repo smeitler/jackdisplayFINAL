@@ -89,6 +89,13 @@ const MAPPING = {
   "stop.fill": "stop",
   "moon.stars.fill": "bedtime",
   "waveform": "graphic-eq",
+  "mic.fill": "mic",
+  "mic": "mic-none",
+  "book.fill": "menu-book",
+  "book.closed.fill": "book",
+  "diamond.fill": "diamond",
+  "pause.fill": "pause",
+  "arrow.counterclockwise": "replay",
   // Life area / category icons
   "figure.strengthtraining.traditional": "fitness-center",
   "brain.head.profile.fill": "psychology",

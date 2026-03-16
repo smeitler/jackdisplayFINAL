@@ -533,11 +533,22 @@ export function formatDisplayDate(dateStr: string): string {
 // ─── Journal Entries ──────────────────────────────────────────────────────────
 const JOURNAL_ENTRIES_KEY = 'daycheck:journal_entries';
 
+export interface JournalHabitMapping {
+  habitId: string;
+  habitName: string;
+  suggestedNote: string;
+  excerpt: string;
+  accepted?: boolean; // undefined = pending, true = accepted, false = dismissed
+}
+
 export interface JournalEntry {
   id: string;
   date: string;       // YYYY-MM-DD
-  text: string;
+  text: string;       // transcript or manual text
   audioUri?: string;  // local file:// path to voice recording (if any)
+  audioUrl?: string;  // remote R2 URL (if uploaded)
+  duration?: number;  // recording duration in seconds
+  habitMappings?: JournalHabitMapping[]; // AI-suggested habit notes
   createdAt: string;  // ISO
 }
 

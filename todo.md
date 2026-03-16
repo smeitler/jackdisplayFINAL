@@ -700,3 +700,45 @@
 - [x] Make current-period ring (This Wk/This Mo) larger than the two historical rings
 - [x] Cap missed days lookback to 7 days (not 30)
 - [x] Restore all 3 habit rings to same size (uniform)
+
+## Navigation + Journal + AI Habit Mapping (Mar 16 2026)
+
+### Navigation Redesign
+- [x] Tab 1: Home — house icon with upward progress bar (keep existing)
+- [x] Tab 2: Journal — book/journal icon (replaces Vision tab)
+- [x] Tab 3: Rewards — diamond icon (replaces current Rewards tab icon)
+- [x] Tab 4: Community — keep same icon
+- [x] Tab 5: More — keep same icon
+- [x] Remove Vision Board as a standalone tab
+
+### Rewards Section Restructure
+- [x] Move Vision Board into Rewards section (as a second top tab)
+- [x] Rewards section: top tab bar with "Rewards" (first, default) and "Vision Board"
+- [x] Wire Vision Board content into the new Rewards > Vision Board tab
+
+### Journal Screen (new full screen)
+- [x] Create app/(tabs)/journal.tsx screen
+- [x] Chronological list of journal entries by day (collapsed rows: date + preview text)
+- [x] Tap a day row to expand dropdown: full transcript, audio playback, AI habit mappings
+- [x] Hold-to-record mic button pinned at bottom of journal screen
+- [x] While holding mic: record audio via expo-audio
+- [x] On release: show "Processing..." state, save recording locally
+- [ ] Server runs Whisper transcription, returns transcript (backend phase)
+- [ ] Display transcript in new journal entry for that day (backend phase)
+- [ ] Save journal entry (date, transcript, audioUrl) to AsyncStorage + server DB (backend phase)
+
+### Backend Infrastructure
+- [ ] Add journal_entries table to DB schema (id, userId, date, transcript, audioUrl, createdAt)
+- [ ] Add Cloudflare R2 credentials to server env (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME)
+- [ ] Add /api/journal/upload-url endpoint: returns pre-signed R2 upload URL for audio file
+- [ ] Install and configure self-hosted Whisper on server (openai-whisper Python package)
+- [ ] Add /api/journal/transcribe endpoint: receives audio file path/URL, runs Whisper, returns transcript
+- [ ] Add tRPC journal router: saveEntry, getEntries, deleteEntry
+
+### AI Habit Mapping
+- [ ] After transcription, server sends transcript + user's habit list to built-in LLM
+- [ ] LLM returns structured suggestions: [{habitId, habitName, suggestedNote, excerpt}]
+- [ ] App shows AI review screen: each suggestion as editable card (accept / edit / dismiss)
+- [ ] Confirmed suggestions saved as notes on the corresponding habit for that day
+- [ ] Journal entry stores linked habit note IDs for display in expanded dropdown
+- [ ] Expanded journal entry shows: audio player, full transcript, linked habit notes with edit/remove
