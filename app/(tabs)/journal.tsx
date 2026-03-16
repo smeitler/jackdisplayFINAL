@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, FlatList, Alert, Platform,
+  View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
@@ -16,6 +16,8 @@ import {
   loadJournalEntries, saveJournalEntries, addJournalEntry, deleteJournalEntry,
   JournalEntry, JournalHabitMapping, formatDisplayDate, toDateString,
 } from "@/lib/storage";
+import { trpc } from "@/lib/trpc";
+import * as FileSystem from "expo-file-system/legacy";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDuration(seconds: number): string {
@@ -382,6 +384,8 @@ export default function JournalScreen() {
   const [textInput, setTextInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [processingLabel, setProcessingLabel] = useState("Processing…");
+  const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   useEffect(() => {
     loadJournalEntries().then(setEntries);
@@ -415,17 +419,89 @@ export default function JournalScreen() {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
-  // Handle voice recording complete
+  // Handle voice recording complete — upload, transcribe, AI-map habits
   async function handleRecordingComplete(uri: string, duration: number) {
-    // Save immediately with empty text (transcription is a future server feature)
+    // 1. Save entry immediately so user sees it right away
     const entry = await saveEntry({ text: "", audioUri: uri, duration });
-    // Note: Full Whisper transcription will be added in the server integration phase
-    // For now, show a placeholder that transcription is pending
-    const updated = { ...entry, text: "[Voice recording saved — transcription coming soon]" };
-    const all = await loadJournalEntries();
-    const newAll = all.map((e) => e.id === entry.id ? updated : e);
-    await saveJournalEntries(newAll);
-    setEntries(newAll);
+
+    // 2. Read audio file as base64 for server upload
+    setIsAnalyzing(true);
+    setProcessingLabel("Uploading…");
+    try {
+      let audioBase64 = "";
+      let mimeType = "audio/m4a";
+      if (Platform.OS !== "web") {
+        try {
+          audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          // Detect mime type from extension
+          const ext = uri.split(".").pop()?.toLowerCase() ?? "m4a";
+          mimeType = ext === "webm" ? "audio/webm" : ext === "mp4" ? "audio/mp4" : "audio/m4a";
+        } catch (fsErr) {
+          console.warn("[Journal] FileSystem read error:", fsErr);
+        }
+      }
+
+      if (!audioBase64) {
+        // Fallback: save without transcript
+        const updated = { ...entry, text: "[Voice entry — transcription unavailable on this platform]" };
+        const all = await loadJournalEntries();
+        await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
+        setEntries(all.map((e) => e.id === entry.id ? updated : e));
+        return;
+      }
+
+      setProcessingLabel("Transcribing…");
+      const result = await transcribeMutation.mutateAsync({
+        audioBase64,
+        mimeType,
+        date: toDateString(),
+      });
+
+      // 3. Build AI habit mappings from server suggestions
+      setProcessingLabel("Analyzing habits…");
+      const habitMappings: JournalHabitMapping[] = [];
+      if (result.journalEntries && result.journalEntries.length > 0 && habits.length > 0) {
+        // Simple keyword matching: find habits mentioned in the transcript
+        const transcript = result.transcript.toLowerCase();
+        for (const habit of habits) {
+          const habitWords = habit.name.toLowerCase().split(/\s+/);
+          const mentioned = habitWords.some((w) => w.length > 3 && transcript.includes(w));
+          if (mentioned) {
+            // Find the most relevant journal entry snippet
+            const relevantEntry = result.journalEntries.find((je) =>
+              habitWords.some((w) => w.length > 3 && je.toLowerCase().includes(w))
+            ) ?? result.journalEntries[0];
+            habitMappings.push({
+              habitId: habit.id,
+              habitName: habit.name,
+              suggestedNote: relevantEntry ?? result.transcript.slice(0, 120),
+              excerpt: relevantEntry ? relevantEntry.slice(0, 80) : "",
+              accepted: undefined,
+            });
+          }
+        }
+      }
+
+      // 4. Update entry with transcript and mappings
+      const fullText = result.transcript || "[No speech detected]";
+      const updated: JournalEntry = { ...entry, text: fullText, habitMappings };
+      const all = await loadJournalEntries();
+      const newAll = all.map((e) => e.id === entry.id ? updated : e);
+      await saveJournalEntries(newAll);
+      setEntries(newAll);
+
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      console.warn("[Journal] Transcription error:", err);
+      // Save with error note so user knows something happened
+      const updated = { ...entry, text: "[Voice entry — transcription failed. Tap to retry.]" };
+      const all = await loadJournalEntries();
+      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
+      setEntries(all.map((e) => e.id === entry.id ? updated : e));
+    } finally {
+      setIsAnalyzing(false);
+      setProcessingLabel("Processing…");
+    }
   }
 
   // Delete an entry
@@ -459,7 +535,14 @@ export default function JournalScreen() {
           {/* ── Record section ── */}
           <View style={[styles.recordCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionLabel, { color: colors.muted }]}>VOICE ENTRY</Text>
-            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
+            {isAnalyzing ? (
+              <View style={styles.processingRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.processingText, { color: colors.primary }]}>{processingLabel}</Text>
+              </View>
+            ) : (
+              <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
+            )}
           </View>
 
           {/* ── Text entry ── */}
@@ -528,4 +611,6 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontSize: 18, fontWeight: "700" },
   emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20, color: "#9BA1A6" },
+  processingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 28 },
+  processingText: { fontSize: 15, fontWeight: "600" },
 });

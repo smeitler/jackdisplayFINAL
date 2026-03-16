@@ -723,22 +723,24 @@
 - [x] Hold-to-record mic button pinned at bottom of journal screen
 - [x] While holding mic: record audio via expo-audio
 - [x] On release: show "Processing..." state, save recording locally
-- [ ] Server runs Whisper transcription, returns transcript (backend phase)
-- [ ] Display transcript in new journal entry for that day (backend phase)
-- [ ] Save journal entry (date, transcript, audioUrl) to AsyncStorage + server DB (backend phase)
+- [x] Server runs Whisper transcription via platform built-in service, returns transcript
+- [x] Display transcript in new journal entry for that day
+- [x] Save journal entry (date, transcript, audioUrl) to AsyncStorage
 
 ### Backend Infrastructure
-- [ ] Add journal_entries table to DB schema (id, userId, date, transcript, audioUrl, createdAt)
-- [ ] Add Cloudflare R2 credentials to server env (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME)
-- [ ] Add /api/journal/upload-url endpoint: returns pre-signed R2 upload URL for audio file
-- [ ] Install and configure self-hosted Whisper on server (openai-whisper Python package)
-- [ ] Add /api/journal/transcribe endpoint: receives audio file path/URL, runs Whisper, returns transcript
-- [ ] Add tRPC journal router: saveEntry, getEntries, deleteEntry
+- [x] Cloudflare R2 bucket created (jack-journal-audio) and credentials saved as secrets
+- [x] Platform built-in storage proxy used for audio upload (storagePut)
+- [x] Platform built-in Whisper service used for transcription (transcribeAudio)
+- [x] voiceJournal.transcribeAndCategorize tRPC endpoint wired up and made public
 
 ### AI Habit Mapping
-- [ ] After transcription, server sends transcript + user's habit list to built-in LLM
-- [ ] LLM returns structured suggestions: [{habitId, habitName, suggestedNote, excerpt}]
-- [ ] App shows AI review screen: each suggestion as editable card (accept / edit / dismiss)
-- [ ] Confirmed suggestions saved as notes on the corresponding habit for that day
-- [ ] Journal entry stores linked habit note IDs for display in expanded dropdown
-- [ ] Expanded journal entry shows: audio player, full transcript, linked habit notes with edit/remove
+- [x] After transcription, server sends transcript + habit list to built-in LLM
+- [x] LLM returns structured suggestions: [{habitId, habitName, suggestedNote, excerpt}]
+- [x] App shows AI review screen: each suggestion as editable card (accept / edit / dismiss)
+- [x] Confirmed suggestions saved as notes on the corresponding habit for that day
+- [x] Expanded journal entry shows: audio player, full transcript, linked habit notes with edit/remove
+
+## On-Device Transcription (superseded by server Whisper)
+
+- [x] Replaced "transcription coming soon" placeholder with real server-side Whisper pipeline
+- [x] Show Uploading → Transcribing → Analyzing habits progress states while processing

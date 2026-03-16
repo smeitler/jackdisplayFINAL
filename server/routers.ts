@@ -616,7 +616,7 @@ export const appRouter = router({
      *   - gratitudeItems: array of things the user is grateful for
      * Returns both arrays plus the raw transcript.
      */
-    transcribeAndCategorize: protectedProcedure
+    transcribeAndCategorize: publicProcedure
       .input(z.object({
         audioBase64: z.string(),          // base64-encoded audio data
         mimeType: z.string().default('audio/m4a'), // e.g. audio/m4a, audio/webm
@@ -629,7 +629,8 @@ export const appRouter = router({
 
         // 1. Upload audio to S3 so Whisper can access it via URL
         const ext = input.mimeType.split('/')[1]?.split(';')[0] ?? 'm4a';
-        const fileKey = `voice-journal/${ctx.user.id}/${Date.now()}.${ext}`;
+        const userId = ctx.user?.id ?? 'anonymous';
+        const fileKey = `voice-journal/${userId}/${Date.now()}.${ext}`;
         const audioBuffer = Buffer.from(input.audioBase64, 'base64');
         const { url: audioUrl } = await storagePut(fileKey, audioBuffer, input.mimeType);
 
