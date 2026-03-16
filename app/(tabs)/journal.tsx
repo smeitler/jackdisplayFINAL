@@ -19,6 +19,62 @@ import {
 import { trpc } from "@/lib/trpc";
 import * as FileSystem from "expo-file-system/legacy";
 
+// ─── Web MediaRecorder Hook ──────────────────────────────────────────────────
+/**
+ * On web, expo-audio's recorder doesn't produce a usable URI.
+ * This hook uses the browser's native MediaRecorder API instead.
+ */
+function useWebRecorder() {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [blobUri, setBlobUri] = useState<string | null>(null);
+
+  const start = useCallback(async () => {
+    setBlobUri(null);
+    chunksRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Prefer webm/opus; fall back to whatever the browser supports
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setBlobUri(url);
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+    } catch (e) {
+      console.warn("[WebRecorder] getUserMedia failed:", e);
+    }
+  }, []);
+
+  const stop = useCallback((): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const mr = mediaRecorderRef.current;
+      if (!mr || mr.state === "inactive") { resolve(null); return; }
+      mr.addEventListener("stop", () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setBlobUri(url);
+        setIsRecording(false);
+        resolve(url);
+      }, { once: true });
+      mr.stop();
+    });
+  }, []);
+
+  return { start, stop, isRecording, blobUri };
+}
+
 // ─── Web Audio Helpers ────────────────────────────────────────────────────────
 /** Read a blob: or file URI as base64 on web using fetch */
 async function readUriAsBase64Web(uri: string): Promise<{ base64: string; mimeType: string }> {
@@ -274,10 +330,16 @@ function DayGroupRow({
                   {new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                 </Text>
                 <Pressable
-                  onPress={() => Alert.alert("Delete Entry", "Delete this journal entry?", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Delete", style: "destructive", onPress: () => onDelete(entry.id) },
-                  ])}
+                  onPress={() => {
+                    if (Platform.OS === "web") {
+                      if ((window as any).confirm("Delete this journal entry?")) onDelete(entry.id);
+                    } else {
+                      Alert.alert("Delete Entry", "Delete this journal entry?", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: () => onDelete(entry.id) },
+                      ]);
+                    }
+                  }}
                   style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
                 >
                   <IconSymbol name="trash.fill" size={14} color={colors.muted} />
@@ -395,8 +457,12 @@ function MicButton({ onRecordingComplete, colors }: {
   onRecordingComplete: (uri: string, duration: number) => void;
   colors: ReturnType<typeof useColors>;
 }) {
+  // Native recorder (expo-audio) — iOS/Android
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const recorderState = useAudioRecorderState(recorder);
+  // Web recorder (MediaRecorder API) — browser
+  const webRecorder = useWebRecorder();
+
   const [permGranted, setPermGranted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
@@ -407,75 +473,81 @@ function MicButton({ onRecordingComplete, colors }: {
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
+    if (Platform.OS === "web") { setPermGranted(true); return; }
     (async () => {
       const status = await requestRecordingPermissionsAsync();
       setPermGranted(status.granted);
-      if (status.granted) {
-        await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
-      }
+      if (status.granted) await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
     })();
   }, []);
 
+  function runStartAnimations() {
+    startTime.current = Date.now();
+    setElapsedSecs(0);
+    timerRef.current = setInterval(() => setElapsedSecs(Math.round((Date.now() - startTime.current) / 1000)), 500);
+    pulseLoopRef.current = Animated.loop(Animated.sequence([
+      Animated.timing(pulseAnim, { toValue: 1.6, duration: 700, useNativeDriver: true }),
+      Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+    ]));
+    pulseLoopRef.current.start();
+    Animated.spring(scaleAnim, { toValue: 1.15, useNativeDriver: true, speed: 20 }).start();
+  }
+
+  function runStopAnimations() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    pulseLoopRef.current?.stop();
+    Animated.spring(pulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
+  }
+
   const startRecording = useCallback(async () => {
+    if (Platform.OS === "web") {
+      runStartAnimations();
+      await webRecorder.start();
+      return;
+    }
     if (!permGranted) {
       const status = await requestRecordingPermissionsAsync();
       if (!status.granted) { Alert.alert("Microphone permission required", "Please allow microphone access in Settings."); return; }
       setPermGranted(true);
     }
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    startTime.current = Date.now();
-    setElapsedSecs(0);
-    timerRef.current = setInterval(() => {
-      setElapsedSecs(Math.round((Date.now() - startTime.current) / 1000));
-    }, 500);
-    // Pulse ring animation
-    pulseLoopRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.6, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-      ])
-    );
-    pulseLoopRef.current.start();
-    Animated.spring(scaleAnim, { toValue: 1.15, useNativeDriver: true, speed: 20 }).start();
-    try {
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-    } catch (e) {
-      console.warn("Recording start error:", e);
-    }
-  }, [permGranted, recorder, scaleAnim, pulseAnim]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    runStartAnimations();
+    try { await recorder.prepareToRecordAsync(); recorder.record(); }
+    catch (e) { console.warn("Recording start error:", e); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permGranted, recorder, webRecorder]);
 
   const stopRecording = useCallback(async () => {
-    if (!recorderState.isRecording) return;
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    pulseLoopRef.current?.stop();
-    Animated.spring(pulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
+    runStopAnimations();
+    const duration = Math.max(1, Math.round((Date.now() - startTime.current) / 1000));
     setIsProcessing(true);
     try {
-      await recorder.stop();
-      const uri = recorder.uri;
-      const duration = Math.round((Date.now() - startTime.current) / 1000);
-      if (uri && duration >= 1) {
-        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onRecordingComplete(uri, duration);
+      if (Platform.OS === "web") {
+        const uri = await webRecorder.stop();
+        if (uri) onRecordingComplete(uri, duration);
+      } else {
+        if (!recorderState.isRecording) return;
+        await recorder.stop();
+        const uri = recorder.uri;
+        if (uri && duration >= 1) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          onRecordingComplete(uri, duration);
+        }
       }
-    } catch (e) {
-      console.warn("Recording stop error:", e);
-    } finally {
-      setIsProcessing(false);
-      setElapsedSecs(0);
-    }
-  }, [recorderState.isRecording, recorder, scaleAnim, pulseAnim, onRecordingComplete]);
+    } catch (e) { console.warn("Recording stop error:", e); }
+    finally { setIsProcessing(false); setElapsedSecs(0); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recorderState.isRecording, recorder, webRecorder, onRecordingComplete]);
 
-  const isRecording = recorderState.isRecording;
+  const isRecording = Platform.OS === "web" ? webRecorder.isRecording : recorderState.isRecording;
 
   return (
     <View style={micStyles.wrap}>
       {/* Recording active state — waveform + timer */}
       {isRecording && (
         <View style={micStyles.recordingRow}>
-          <WaveformBars metering={recorderState.metering} />
+          {Platform.OS !== "web" && <WaveformBars metering={recorderState.metering} />}
           <Text style={micStyles.timer}>{fmtDuration(elapsedSecs)}</Text>
           <Text style={micStyles.releaseHint}>Release to stop</Text>
         </View>

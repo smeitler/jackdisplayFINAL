@@ -772,3 +772,7 @@
 - [x] Fix: audio entry saved immediately after recording stops — mic button is unblocked right away
 - [x] Fix: "No speech detected" no longer shown as entry text — empty transcript leaves text blank
 - [x] Fix: transcription runs in background; each entry shows a spinner while its transcript is loading
+
+## Journal Bug Fixes (Mar 16 2026 - Round 2)
+- [x] Fix: delete button now uses window.confirm on web (Alert.alert is a no-op in browsers)
+- [x] Fix: mic button on web now uses browser MediaRecorder API directly — expo-audio recorder produces empty URI on web
