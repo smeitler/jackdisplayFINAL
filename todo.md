@@ -698,3 +698,5 @@
 - [x] Replace streak sub-line text with today's date in the header
 - [x] Redesign Today's Focus card "All caught up" state to look more polished/celebratory
 - [x] Make current-period ring (This Wk/This Mo) larger than the two historical rings
+- [x] Cap missed days lookback to 7 days (not 30)
+- [x] Restore all 3 habit rings to same size (uniform)

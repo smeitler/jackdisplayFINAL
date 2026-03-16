@@ -210,8 +210,8 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-const RING_SIZE = 42;      // current period — hero
-const RING_SIZE_SM = 26;   // historical periods
+const RING_SIZE = 30;      // all rings same size
+const RING_SIZE_SM = 30;   // same as RING_SIZE
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -554,8 +554,8 @@ export default function HomeScreen() {
     if (activeHabits.length === 0) return [];
     const checkedDates = new Set(checkIns.map((e) => e.date));
     const missed: string[] = [];
-    // Look back up to 30 days, skip today
-    for (let i = 1; i <= 30; i++) {
+    // Look back up to 7 days, skip today
+    for (let i = 1; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = toDateString(d);
@@ -563,7 +563,7 @@ export default function HomeScreen() {
         missed.push(dateStr);
       }
     }
-    return missed.slice(0, 14); // cap at 14 days shown
+    return missed.slice(0, 7); // cap at 7 days shown
   }, [activeHabits, checkIns]);
 
   // Use 7-day rolling window for goal card score
