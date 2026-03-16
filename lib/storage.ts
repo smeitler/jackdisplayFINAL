@@ -531,7 +531,12 @@ export function formatDisplayDate(dateStr: string): string {
 }
 
 // ─── Journal Entries ──────────────────────────────────────────────────────────
-const JOURNAL_ENTRIES_KEY = 'daycheck:journal_entries';
+const JOURNAL_ENTRIES_KEY_PREFIX = 'daycheck:journal_entries';
+
+/** Get the storage key for journal entries, scoped to a user if userId is provided */
+function journalKey(userId?: string | null): string {
+  return userId ? `${JOURNAL_ENTRIES_KEY_PREFIX}:${userId}` : JOURNAL_ENTRIES_KEY_PREFIX;
+}
 
 export interface JournalHabitMapping {
   habitId: string;
@@ -552,25 +557,25 @@ export interface JournalEntry {
   createdAt: string;  // ISO
 }
 
-export async function loadJournalEntries(): Promise<JournalEntry[]> {
+export async function loadJournalEntries(userId?: string | null): Promise<JournalEntry[]> {
   try {
-    const raw = await AsyncStorage.getItem(JOURNAL_ENTRIES_KEY);
+    const raw = await AsyncStorage.getItem(journalKey(userId));
     return raw ? (JSON.parse(raw) as JournalEntry[]) : [];
   } catch { return []; }
 }
 
-export async function saveJournalEntries(entries: JournalEntry[]): Promise<void> {
-  await AsyncStorage.setItem(JOURNAL_ENTRIES_KEY, JSON.stringify(entries));
+export async function saveJournalEntries(entries: JournalEntry[], userId?: string | null): Promise<void> {
+  await AsyncStorage.setItem(journalKey(userId), JSON.stringify(entries));
 }
 
-export async function addJournalEntry(entry: JournalEntry): Promise<void> {
-  const entries = await loadJournalEntries();
-  await saveJournalEntries([entry, ...entries]);
+export async function addJournalEntry(entry: JournalEntry, userId?: string | null): Promise<void> {
+  const entries = await loadJournalEntries(userId);
+  await saveJournalEntries([entry, ...entries], userId);
 }
 
-export async function deleteJournalEntry(id: string): Promise<void> {
-  const entries = await loadJournalEntries();
-  await saveJournalEntries(entries.filter(e => e.id !== id));
+export async function deleteJournalEntry(id: string, userId?: string | null): Promise<void> {
+  const entries = await loadJournalEntries(userId);
+  await saveJournalEntries(entries.filter(e => e.id !== id), userId);
 }
 
 // ─── Gratitude Entries ────────────────────────────────────────────────────────

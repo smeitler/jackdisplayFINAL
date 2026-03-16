@@ -16,7 +16,7 @@ import { CategoryIcon } from "@/components/category-icon";
 import {
   loadVisionBoard, saveVisionBoard, VisionBoard,
   loadVisionMotivations, saveVisionMotivations, VisionMotivations,
-  loadJournalEntries, saveJournalEntries, addJournalEntry, deleteJournalEntry, JournalEntry,
+  loadJournalEntries, saveJournalEntries, addJournalEntry, deleteJournalEntry, JournalEntry, getLastUserId,
   loadGratitudeEntries, addGratitudeEntry, deleteGratitudeEntry, GratitudeEntry,
   toDateString, formatDisplayDate,
 } from "@/lib/storage";
@@ -429,7 +429,7 @@ export default function VisionBoardScreen() {
       }
     });
     loadVisionMotivations().then(setMotivations);
-    loadJournalEntries().then(setJournalEntries);
+    getLastUserId().then(uid => loadJournalEntries(uid).then(setJournalEntries));
     loadGratitudeEntries().then(setGratitudeEntries);
   }, [isDemoMode]);
 
@@ -452,14 +452,16 @@ export default function VisionBoardScreen() {
       text: journalText.trim(),
       createdAt: new Date().toISOString(),
     };
-    await addJournalEntry(entry);
+    const uid = await getLastUserId();
+    await addJournalEntry(entry, uid);
     setJournalEntries(prev => [entry, ...prev]);
     setJournalText('');
     setJournalSaving(false);
   }
 
   async function handleDeleteJournal(id: string) {
-    await deleteJournalEntry(id);
+    const uid = await getLastUserId();
+    await deleteJournalEntry(id, uid);
     setJournalEntries(prev => prev.filter(e => e.id !== id));
   }
 

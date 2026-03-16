@@ -253,6 +253,8 @@ export async function transcribeAudioBuffer(
  * Helper function to get file extension from MIME type
  */
 function getFileExtension(mimeType: string): string {
+  // Strip codec suffixes like ";codecs=opus" before lookup
+  const baseMime = mimeType.split(";")[0].trim().toLowerCase();
   const mimeToExt: Record<string, string> = {
     "audio/webm": "webm",
     "audio/mp3": "mp3",
@@ -260,11 +262,15 @@ function getFileExtension(mimeType: string): string {
     "audio/wav": "wav",
     "audio/wave": "wav",
     "audio/ogg": "ogg",
+    "audio/oga": "ogg",
     "audio/m4a": "m4a",
     "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/aac": "m4a",
+    "audio/flac": "flac",
   };
 
-  return mimeToExt[mimeType] || "audio";
+  return mimeToExt[baseMime] || "webm";
 }
 
 /**

@@ -780,3 +780,11 @@
 ## Journal + Login Bugs (Mar 16 2026 - Round 3)
 - [x] Fix: web recording failure now shows a clear error message ("No microphone found. Open this link on your phone to record.") — sandbox VM has no mic hardware; recording works correctly on phone browser
 - [x] Fix: Apple Sign In button is intentionally iOS-only (Apple SDK doesn't work in browsers); web login screen correctly shows "Sign in to get started" + Dev Login; clarified this is by design
+
+## CRITICAL: Web Recording Broken on Phone (Mar 16 2026)
+- [x] Fix: MicButton now uses raw onTouchStart/onTouchEnd events on web (Pressable onPressIn/onPressOut unreliable on mobile Safari/Chrome)
+- [x] Fix: useWebRecorder.stop() returns Blob directly, converted to persistent data: URI via blobToDataUri()
+- [x] Fix: recording indicator (timer + "Release to stop") shows correctly on web
+- [x] Fix: WebAudioPlayer uses HTML <audio> with data: URI for reliable playback
+- [x] Fix: server getFileExtension() now strips codec suffixes (audio/webm;codecs=opus → webm) so Whisper accepts the file
+- [x] Fix: journal entries are now user-specific — storage key includes userId from getLastUserId()

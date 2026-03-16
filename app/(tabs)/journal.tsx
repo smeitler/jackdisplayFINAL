@@ -14,7 +14,7 @@ import {
 } from "expo-audio";
 import {
   loadJournalEntries, saveJournalEntries, addJournalEntry, deleteJournalEntry,
-  JournalEntry, JournalHabitMapping, formatDisplayDate, toDateString,
+  JournalEntry, JournalHabitMapping, formatDisplayDate, toDateString, getLastUserId,
 } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 import * as FileSystem from "expo-file-system/legacy";
@@ -23,37 +23,38 @@ import * as FileSystem from "expo-file-system/legacy";
 /**
  * On web, expo-audio's recorder doesn't produce a usable URI.
  * This hook uses the browser's native MediaRecorder API instead.
+ * Returns the Blob directly from stop() so callers can convert to data URI.
  */
 function useWebRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [blobUri, setBlobUri] = useState<string | null>(null);
   const [micError, setMicError] = useState<string | null>(null);
 
-  const start = useCallback(async () => {
-    setBlobUri(null);
+  const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
     chunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Prefer webm/opus; fall back to whatever the browser supports
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "";
+      streamRef.current = stream;
+      // Safari doesn't support webm — try webm first, then fall back to whatever browser supports
+      let mimeType = "";
+      if (typeof MediaRecorder.isTypeSupported === "function") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
+        else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
+        else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
+        // else let browser choose default
+      }
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setBlobUri(url);
-      };
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
       mr.start(100); // collect data every 100ms for reliability
       mediaRecorderRef.current = mr;
+      isRecordingRef.current = true;
       setIsRecording(true);
+      console.log("[WebRecorder] Started recording, mimeType:", mr.mimeType);
+      return true;
     } catch (e: any) {
       const name = e?.name ?? "";
       if (name === "NotFoundError" || name === "DevicesNotFoundError") {
@@ -64,45 +65,67 @@ function useWebRecorder() {
         setMicError("Microphone unavailable: " + (e?.message ?? name));
       }
       console.warn("[WebRecorder] getUserMedia failed:", e);
+      return false;
     }
   }, []);
 
-  const stop = useCallback((): Promise<string | null> => {
+  const stop = useCallback((): Promise<Blob | null> => {
     return new Promise((resolve) => {
       const mr = mediaRecorderRef.current;
-      if (!mr || mr.state === "inactive") { resolve(null); return; }
-      mr.addEventListener("stop", () => {
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
-        if (blob.size === 0) { setIsRecording(false); resolve(null); return; }
-        const url = URL.createObjectURL(blob);
-        setBlobUri(url);
+      if (!mr || mr.state === "inactive") {
+        isRecordingRef.current = false;
         setIsRecording(false);
-        resolve(url);
+        resolve(null);
+        return;
+      }
+      const recordedMime = mr.mimeType || "audio/webm";
+      mr.addEventListener("stop", () => {
+        // Stop all mic tracks
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(chunksRef.current, { type: recordedMime });
+        console.log("[WebRecorder] Stopped. Blob size:", blob.size, "type:", blob.type);
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        if (blob.size === 0) { resolve(null); return; }
+        resolve(blob);
       }, { once: true });
       mr.stop();
     });
   }, []);
 
-  return { start, stop, isRecording, blobUri, micError };
+  return { start, stop, isRecording, isRecordingRef, micError };
 }
 
 // ─── Web Audio Helpers ────────────────────────────────────────────────────────
-/** Read a blob: or file URI as base64 on web using fetch */
-async function readUriAsBase64Web(uri: string): Promise<{ base64: string; mimeType: string }> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  const mimeType = blob.type || "audio/webm";
+/** Convert a Blob to a data:...;base64,... URI */
+function blobToDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      // dataUrl is "data:audio/webm;base64,XXXX" — strip the prefix
-      const base64 = dataUrl.split(",")[1];
-      resolve({ base64, mimeType });
-    };
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+/** Extract base64 and mimeType from a data URI */
+function parseDataUri(dataUri: string): { base64: string; mimeType: string } {
+  // data:audio/webm;base64,XXXX
+  const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+  if (match) return { mimeType: match[1], base64: match[2] };
+  // fallback: strip prefix
+  const base64 = dataUri.split(",")[1] || "";
+  return { mimeType: "audio/webm", base64 };
+}
+
+/** Read a blob: or file URI as base64 on web using fetch */
+async function readUriAsBase64Web(uri: string): Promise<{ base64: string; mimeType: string }> {
+  // If it's already a data URI, just parse it
+  if (uri.startsWith("data:")) return parseDataUri(uri);
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const dataUri = await blobToDataUri(blob);
+  return parseDataUri(dataUri);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -513,11 +536,9 @@ function MicButton({ onRecordingComplete, colors }: {
 
   const startRecording = useCallback(async () => {
     if (Platform.OS === "web") {
-      runStartAnimations();
-      await webRecorder.start();
-      // If mic failed (error set), stop the animations immediately
-      if (!webRecorder.isRecording) {
-        runStopAnimations();
+      const ok = await webRecorder.start();
+      if (ok) {
+        runStartAnimations();
       }
       return;
     }
@@ -539,8 +560,15 @@ function MicButton({ onRecordingComplete, colors }: {
     setIsProcessing(true);
     try {
       if (Platform.OS === "web") {
-        const uri = await webRecorder.stop();
-        if (uri) onRecordingComplete(uri, duration);
+        const blob = await webRecorder.stop();
+        if (blob && blob.size > 0) {
+          // Convert blob to persistent data URI so it survives page reloads
+          const dataUri = await blobToDataUri(blob);
+          console.log("[MicButton] Web recording done. Blob size:", blob.size, "dataUri length:", dataUri.length);
+          onRecordingComplete(dataUri, duration);
+        } else {
+          console.warn("[MicButton] Web recording produced empty blob");
+        }
       } else {
         if (!recorderState.isRecording) return;
         await recorder.stop();
@@ -555,7 +583,24 @@ function MicButton({ onRecordingComplete, colors }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorderState.isRecording, recorder, webRecorder, onRecordingComplete]);
 
+  // Use ref for web to avoid stale closure in touch handlers
+  const startRecordingRef = useRef(startRecording);
+  startRecordingRef.current = startRecording;
+  const stopRecordingRef = useRef(stopRecording);
+  stopRecordingRef.current = stopRecording;
+
   const isRecording = Platform.OS === "web" ? webRecorder.isRecording : recorderState.isRecording;
+
+  // On web, use raw touch/mouse events because Pressable onPressIn/onPressOut
+  // is unreliable on mobile Safari/Chrome touch devices
+  const webTouchProps = Platform.OS === "web" ? {
+    onTouchStart: (e: any) => { e.preventDefault(); startRecordingRef.current(); },
+    onTouchEnd: (e: any) => { e.preventDefault(); stopRecordingRef.current(); },
+    onTouchCancel: (e: any) => { e.preventDefault(); stopRecordingRef.current(); },
+    onMouseDown: (e: any) => { e.preventDefault(); startRecordingRef.current(); },
+    onMouseUp: (e: any) => { e.preventDefault(); stopRecordingRef.current(); },
+    onMouseLeave: (e: any) => { if (webRecorder.isRecordingRef.current) stopRecordingRef.current(); },
+  } : {};
 
   return (
     <View style={micStyles.wrap}>
@@ -585,16 +630,28 @@ function MicButton({ onRecordingComplete, colors }: {
           />
         )}
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Pressable
-            onPressIn={startRecording}
-            onPressOut={stopRecording}
-            style={[
-              micStyles.micBtn,
-              { backgroundColor: isRecording ? "#EF4444" : colors.primary },
-            ]}
-          >
-            <IconSymbol name="mic.fill" size={28} color="#fff" />
-          </Pressable>
+          {Platform.OS === "web" ? (
+            <View
+              {...webTouchProps}
+              style={[
+                micStyles.micBtn,
+                { backgroundColor: isRecording ? "#EF4444" : colors.primary, cursor: "pointer" } as any,
+              ]}
+            >
+              <IconSymbol name="mic.fill" size={28} color="#fff" />
+            </View>
+          ) : (
+            <Pressable
+              onPressIn={startRecording}
+              onPressOut={stopRecording}
+              style={[
+                micStyles.micBtn,
+                { backgroundColor: isRecording ? "#EF4444" : colors.primary },
+              ]}
+            >
+              <IconSymbol name="mic.fill" size={28} color="#fff" />
+            </Pressable>
+          )}
         </Animated.View>
       </View>
       {!isRecording && !isProcessing && webRecorder.micError ? (
@@ -626,12 +683,18 @@ export default function JournalScreen() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [textInput, setTextInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   // Per-entry transcription state: entryId -> label
   const [transcribingEntries, setTranscribingEntries] = useState<Record<string, string>>({});
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   useEffect(() => {
-    loadJournalEntries().then(setEntries);
+    (async () => {
+      const uid = await getLastUserId();
+      setUserId(uid);
+      const loaded = await loadJournalEntries(uid);
+      setEntries(loaded);
+    })();
   }, []);
 
   const grouped = groupByDate(entries);
@@ -647,7 +710,7 @@ export default function JournalScreen() {
       duration: partial.duration,
       createdAt: new Date().toISOString(),
     };
-    await addJournalEntry(entry);
+    await addJournalEntry(entry, userId);
     setEntries((prev) => [entry, ...prev]);
     setIsSaving(false);
     return entry;
@@ -732,8 +795,8 @@ export default function JournalScreen() {
       // Update entry with transcript (leave empty string if no speech, not an error message)
       const fullText = result.transcript?.trim() || "";
       const updated: JournalEntry = { ...entry, text: fullText, habitMappings };
-      const all = await loadJournalEntries();
-      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
+      const all = await loadJournalEntries(userId);
+      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e), userId);
       setEntries(all.map((e) => e.id === entry.id ? updated : e));
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -741,8 +804,8 @@ export default function JournalScreen() {
       console.warn("[Journal] Transcription error:", err);
       // Leave audio playable, just mark transcript as failed
       const updated = { ...entry, text: "" };
-      const all = await loadJournalEntries();
-      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
+      const all = await loadJournalEntries(userId);
+      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e), userId);
       setEntries(all.map((e) => e.id === entry.id ? updated : e));
     } finally {
       setTranscribingEntries((prev) => { const n = { ...prev }; delete n[entry.id]; return n; });
@@ -751,15 +814,15 @@ export default function JournalScreen() {
 
   // Delete an entry
   async function handleDelete(id: string) {
-    await deleteJournalEntry(id);
+    await deleteJournalEntry(id, userId);
     setEntries((prev) => prev.filter((e) => e.id !== id));
   }
 
   // Update habit mappings for an entry
   async function handleUpdateMappings(entryId: string, mappings: JournalHabitMapping[]) {
-    const all = await loadJournalEntries();
+    const all = await loadJournalEntries(userId);
     const updated = all.map((e) => e.id === entryId ? { ...e, habitMappings: mappings } : e);
-    await saveJournalEntries(updated);
+    await saveJournalEntries(updated, userId);
     setEntries(updated);
   }
 
