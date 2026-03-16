@@ -763,3 +763,7 @@
 - [x] Fix: storage upload and Whisper transcription now run in parallel for speed
 - [x] Fix: empty transcript (silent audio) no longer throws an error
 - [x] Fix: better error messages include HTTP status and Whisper error details
+
+## Web Recording & Playback Fix (Mar 16 2026)
+- [x] Fix web: recording now reads blob: URI via fetch + FileReader and sends base64 to Whisper for transcription
+- [x] Fix web: audio playback now uses native HTML <audio> element on web (useAudioPlayer doesn't support blob: URIs on web)

@@ -19,6 +19,25 @@ import {
 import { trpc } from "@/lib/trpc";
 import * as FileSystem from "expo-file-system/legacy";
 
+// ─── Web Audio Helpers ────────────────────────────────────────────────────────
+/** Read a blob: or file URI as base64 on web using fetch */
+async function readUriAsBase64Web(uri: string): Promise<{ base64: string; mimeType: string }> {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const mimeType = blob.type || "audio/webm";
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // dataUrl is "data:audio/webm;base64,XXXX" — strip the prefix
+      const base64 = dataUrl.split(",")[1];
+      resolve({ base64, mimeType });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -41,6 +60,58 @@ function groupByDate(entries: JournalEntry[]): { date: string; entries: JournalE
 // ─── Audio Playback Row ───────────────────────────────────────────────────────
 function AudioPlaybackRow({ uri, duration }: { uri: string; duration?: number }) {
   const colors = useColors();
+
+  // ── Web: use native HTML <audio> element ──
+  if (Platform.OS === "web") {
+    return <WebAudioPlayer uri={uri} duration={duration} colors={colors} />;
+  }
+
+  // ── Native: use expo-audio ──
+  return <NativeAudioPlayer uri={uri} duration={duration} colors={colors} />;
+}
+
+function WebAudioPlayer({ uri, duration, colors }: { uri: string; duration?: number; colors: any }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [pos, setPos] = useState(0);
+  const [dur, setDur] = useState(duration ?? 0);
+
+  useEffect(() => {
+    const audio = new (window as any).Audio(uri) as HTMLAudioElement;
+    audioRef.current = audio;
+    audio.addEventListener("timeupdate", () => setPos(audio.currentTime));
+    audio.addEventListener("durationchange", () => { if (isFinite(audio.duration)) setDur(audio.duration); });
+    audio.addEventListener("ended", () => { setIsPlaying(false); audio.currentTime = 0; setPos(0); });
+    audio.addEventListener("pause", () => setIsPlaying(false));
+    audio.addEventListener("play", () => setIsPlaying(true));
+    return () => { audio.pause(); audio.src = ""; };
+  }, [uri]);
+
+  function togglePlay() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) { audio.pause(); } else { audio.play().catch(() => {}); }
+  }
+
+  const pct = dur > 0 ? pos / dur : 0;
+  return (
+    <View style={[pbStyles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Pressable onPress={togglePlay} style={[pbStyles.playBtn, { backgroundColor: colors.primary }]}>
+        <IconSymbol name={isPlaying ? "pause.fill" : "play.fill"} size={14} color="#fff" />
+      </Pressable>
+      <View style={pbStyles.progressWrap}>
+        <View style={[pbStyles.track, { backgroundColor: colors.border }]}>
+          <View style={[pbStyles.fill, { width: `${pct * 100}%` as any, backgroundColor: colors.primary }]} />
+        </View>
+        <Text style={[pbStyles.time, { color: colors.muted }]}>
+          {fmtDuration(pos)} / {fmtDuration(dur)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function NativeAudioPlayer({ uri, duration, colors }: { uri: string; duration?: number; colors: any }) {
   const player = useAudioPlayer({ uri });
   const status = useAudioPlayerStatus(player);
   const isPlaying = status.playing;
@@ -49,7 +120,7 @@ function AudioPlaybackRow({ uri, duration }: { uri: string; duration?: number })
   const pct = dur > 0 ? pos / dur : 0;
 
   function togglePlay() {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isPlaying) { player.pause(); } else { player.play(); }
   }
 
@@ -505,7 +576,16 @@ export default function JournalScreen() {
     try {
       let audioBase64 = "";
       let mimeType = "audio/m4a";
-      if (Platform.OS !== "web") {
+      if (Platform.OS === "web") {
+        // On web, recorder.uri is a blob: URL — read it via fetch + FileReader
+        try {
+          const result = await readUriAsBase64Web(uri);
+          audioBase64 = result.base64;
+          mimeType = result.mimeType;
+        } catch (webErr) {
+          console.warn("[Journal] Web blob read error:", webErr);
+        }
+      } else {
         try {
           audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
           // Detect mime type from extension
@@ -517,8 +597,8 @@ export default function JournalScreen() {
       }
 
       if (!audioBase64) {
-        // Fallback: save without transcript (web doesn't support FileSystem)
-        const updated = { ...entry, text: "(Voice entry — open on your iPhone to transcribe)" };
+        // Could not read audio — save with error note
+        const updated = { ...entry, text: "[Voice entry — could not read audio file]" };
         const all = await loadJournalEntries();
         await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
         setEntries(all.map((e) => e.id === entry.id ? updated : e));
