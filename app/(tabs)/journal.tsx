@@ -273,6 +273,49 @@ const dgStyles = StyleSheet.create({
   mappingsLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, marginBottom: 4 },
 });
 
+// ─── Waveform Bars ───────────────────────────────────────────────────────────
+function WaveformBars({ isActive }: { isActive: boolean }) {
+  const bars = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current];
+  const anims = useRef<Animated.CompositeAnimation[]>([]);
+
+  useEffect(() => {
+    if (isActive) {
+      anims.current = bars.map((bar, i) => {
+        const anim = Animated.loop(
+          Animated.sequence([
+            Animated.delay(i * 80),
+            Animated.timing(bar, { toValue: 1, duration: 300 + i * 60, useNativeDriver: true }),
+            Animated.timing(bar, { toValue: 0.2, duration: 300 + i * 60, useNativeDriver: true }),
+          ])
+        );
+        anim.start();
+        return anim;
+      });
+    } else {
+      anims.current.forEach((a) => a.stop());
+      bars.forEach((b) => Animated.timing(b, { toValue: 0.3, duration: 200, useNativeDriver: true }).start());
+    }
+    return () => { anims.current.forEach((a) => a.stop()); };
+  }, [isActive]);
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 36 }}>
+      {bars.map((bar, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 4,
+            height: 36,
+            borderRadius: 2,
+            backgroundColor: "#EF4444",
+            transform: [{ scaleY: bar }],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 // ─── Mic Button ───────────────────────────────────────────────────────────────
 function MicButton({ onRecordingComplete, colors }: {
   onRecordingComplete: (uri: string, duration: number) => void;
@@ -282,8 +325,12 @@ function MicButton({ onRecordingComplete, colors }: {
   const recorderState = useAudioRecorderState(recorder);
   const [permGranted, setPermGranted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const startTime = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -303,17 +350,32 @@ function MicButton({ onRecordingComplete, colors }: {
     }
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     startTime.current = Date.now();
-    Animated.spring(scaleAnim, { toValue: 1.2, useNativeDriver: true, speed: 20 }).start();
+    setElapsedSecs(0);
+    timerRef.current = setInterval(() => {
+      setElapsedSecs(Math.round((Date.now() - startTime.current) / 1000));
+    }, 500);
+    // Pulse ring animation
+    pulseLoopRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.6, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    pulseLoopRef.current.start();
+    Animated.spring(scaleAnim, { toValue: 1.15, useNativeDriver: true, speed: 20 }).start();
     try {
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch (e) {
       console.warn("Recording start error:", e);
     }
-  }, [permGranted, recorder, scaleAnim]);
+  }, [permGranted, recorder, scaleAnim, pulseAnim]);
 
   const stopRecording = useCallback(async () => {
     if (!recorderState.isRecording) return;
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    pulseLoopRef.current?.stop();
+    Animated.spring(pulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
     setIsProcessing(true);
     try {
@@ -328,51 +390,67 @@ function MicButton({ onRecordingComplete, colors }: {
       console.warn("Recording stop error:", e);
     } finally {
       setIsProcessing(false);
+      setElapsedSecs(0);
     }
-  }, [recorderState.isRecording, recorder, scaleAnim, onRecordingComplete]);
+  }, [recorderState.isRecording, recorder, scaleAnim, pulseAnim, onRecordingComplete]);
 
   const isRecording = recorderState.isRecording;
-  const elapsed = isRecording ? Math.round((Date.now() - startTime.current) / 1000) : 0;
 
   return (
     <View style={micStyles.wrap}>
+      {/* Recording active state — waveform + timer */}
       {isRecording && (
-        <View style={micStyles.recordingIndicator}>
-          <View style={[micStyles.redDot, { backgroundColor: "#EF4444" }]} />
-          <Text style={[micStyles.recordingText, { color: "#EF4444" }]}>Recording…</Text>
+        <View style={micStyles.recordingRow}>
+          <WaveformBars isActive={isRecording} />
+          <Text style={micStyles.timer}>{fmtDuration(elapsedSecs)}</Text>
+          <Text style={micStyles.releaseHint}>Release to stop</Text>
         </View>
       )}
+      {/* Processing state */}
       {isProcessing && (
-        <View style={micStyles.recordingIndicator}>
+        <View style={micStyles.recordingRow}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[micStyles.recordingText, { color: colors.muted }]}>Saving…</Text>
+          <Text style={[micStyles.releaseHint, { color: colors.muted }]}>Saving…</Text>
         </View>
       )}
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <Pressable
-          onPressIn={startRecording}
-          onPressOut={stopRecording}
-          style={[
-            micStyles.micBtn,
-            { backgroundColor: isRecording ? "#EF4444" : colors.primary },
-          ]}
-        >
-          <IconSymbol name="mic.fill" size={28} color="#fff" />
-        </Pressable>
-      </Animated.View>
-      <Text style={[micStyles.hint, { color: colors.muted }]}>
-        {isRecording ? "Release to stop" : "Hold to record"}
-      </Text>
+      {/* Mic button with pulsing ring */}
+      <View style={micStyles.btnWrap}>
+        {isRecording && (
+          <Animated.View
+            style={[
+              micStyles.pulseRing,
+              { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.6], outputRange: [0.5, 0] }) },
+            ]}
+          />
+        )}
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <Pressable
+            onPressIn={startRecording}
+            onPressOut={stopRecording}
+            style={[
+              micStyles.micBtn,
+              { backgroundColor: isRecording ? "#EF4444" : colors.primary },
+            ]}
+          >
+            <IconSymbol name="mic.fill" size={28} color="#fff" />
+          </Pressable>
+        </Animated.View>
+      </View>
+      {!isRecording && !isProcessing && (
+        <Text style={[micStyles.hint, { color: colors.muted }]}>Hold to record</Text>
+      )}
     </View>
   );
 }
 
 const micStyles = StyleSheet.create({
-  wrap: { alignItems: "center", paddingVertical: 20, gap: 8 },
-  micBtn: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
-  recordingIndicator: { flexDirection: "row", alignItems: "center", gap: 6 },
-  redDot: { width: 8, height: 8, borderRadius: 4 },
-  recordingText: { fontSize: 13, fontWeight: "600" },
+  wrap: { alignItems: "center", paddingVertical: 20, gap: 10 },
+  btnWrap: { position: "relative", alignItems: "center", justifyContent: "center", width: 100, height: 100 },
+  micBtn: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", shadowColor: "#EF4444", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  pulseRing: { position: "absolute", width: 72, height: 72, borderRadius: 36, backgroundColor: "#EF4444" },
+  recordingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  timer: { fontSize: 18, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any },
+  releaseHint: { fontSize: 12, fontWeight: "500", color: "#EF4444" },
   hint: { fontSize: 12, marginTop: 2 },
 });
 

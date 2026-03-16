@@ -744,3 +744,10 @@
 
 - [x] Replaced "transcription coming soon" placeholder with real server-side Whisper pipeline
 - [x] Show Uploading → Transcribing → Analyzing habits progress states while processing
+
+## Recording Visual Feedback (Mar 16 2026)
+- [x] Pulsing ring animation around mic button while recording
+- [x] Animated waveform bars (5 bars bouncing) while recording
+- [x] Live recording timer (0:00 counting up) while recording
+- [x] Mic button turns red while recording
+- [x] Full recording overlay/card replaces the bottom bar while recording
