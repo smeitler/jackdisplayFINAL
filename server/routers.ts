@@ -622,26 +622,35 @@ export const appRouter = router({
         mimeType: z.string().default('audio/m4a'), // e.g. audio/m4a, audio/webm
         date: z.string().optional(),      // YYYY-MM-DD, defaults to today
       }))
-      .mutation(async ({ ctx, input }) => {
+        .mutation(async ({ ctx, input }) => {
         const { invokeLLM } = await import('./_core/llm.js');
-        const { transcribeAudio } = await import('./_core/voiceTranscription.js');
+        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
         const { storagePut } = await import('./storage.js');
 
-        // 1. Upload audio to S3 so Whisper can access it via URL
+        // 1. Upload audio to S3 for storage (async, non-blocking for transcription)
         const ext = input.mimeType.split('/')[1]?.split(';')[0] ?? 'm4a';
         const userId = ctx.user?.id ?? 'anonymous';
         const fileKey = `voice-journal/${userId}/${Date.now()}.${ext}`;
         const audioBuffer = Buffer.from(input.audioBase64, 'base64');
-        const { url: audioUrl } = await storagePut(fileKey, audioBuffer, input.mimeType);
 
-        // 2. Transcribe with Whisper
-        const transcription = await transcribeAudio({
-          audioUrl,
-          language: 'en',
-          prompt: 'Personal journal entry, gratitude, reflections, daily thoughts',
-        });
+        // Upload to storage and transcribe in parallel for speed
+        const [storageResult, transcription] = await Promise.all([
+          storagePut(fileKey, audioBuffer, input.mimeType).catch((err) => {
+            console.warn('[voiceJournal] Storage upload failed (non-fatal):', err.message);
+            return { key: fileKey, url: '' };
+          }),
+          transcribeAudioBuffer(audioBuffer, input.mimeType, {
+            language: 'en',
+            prompt: 'Personal journal entry, gratitude, reflections, daily thoughts',
+          }),
+        ]);
+        const audioUrl = storageResult.url;
+
+        // 2. Check transcription result
         if ('error' in transcription) {
-          throw new Error(`Transcription failed: ${transcription.error}`);
+          const details = (transcription as any).details ?? '';
+          console.error('[voiceJournal] Transcription error:', transcription.error, details);
+          throw new Error(`Transcription failed: ${transcription.error}${details ? ` (${details})` : ''}`);
         }
         const transcript = transcription.text?.trim() ?? '';
         if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], audioUrl };

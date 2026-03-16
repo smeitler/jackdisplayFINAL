@@ -755,3 +755,11 @@
 ## Audio Metering + Transcription Fix (Mar 16 2026)
 - [x] Wire waveform bars to real microphone audio metering levels (isMeteringEnabled + dBFS mapping)
 - [x] Replace "transcription unavailable" with friendlier web fallback message
+
+## Bug: Server 500 Crash in Expo Go (Mar 16 2026)
+- [x] Fix HTTP 500 server crash when submitting voice journal recordings
+- [x] Root cause: transcribeAudio() downloaded audio from storage URL which lost the MIME type — Whisper rejected it as "Invalid file format"
+- [x] Fix: added transcribeAudioBuffer() that sends audio buffer directly to Whisper (no URL round-trip)
+- [x] Fix: storage upload and Whisper transcription now run in parallel for speed
+- [x] Fix: empty transcript (silent audio) no longer throws an error
+- [x] Fix: better error messages include HTTP status and Whisper error details
