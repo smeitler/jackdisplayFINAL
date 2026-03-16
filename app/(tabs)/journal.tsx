@@ -29,9 +29,11 @@ function useWebRecorder() {
   const chunksRef = useRef<Blob[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [blobUri, setBlobUri] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const start = useCallback(async () => {
     setBlobUri(null);
+    setMicError(null);
     chunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -49,10 +51,18 @@ function useWebRecorder() {
         const url = URL.createObjectURL(blob);
         setBlobUri(url);
       };
-      mr.start();
+      mr.start(100); // collect data every 100ms for reliability
       mediaRecorderRef.current = mr;
       setIsRecording(true);
-    } catch (e) {
+    } catch (e: any) {
+      const name = e?.name ?? "";
+      if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setMicError("No microphone found. Open this link on your phone to record.");
+      } else if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setMicError("Microphone access denied. Allow mic in browser settings and try again.");
+      } else {
+        setMicError("Microphone unavailable: " + (e?.message ?? name));
+      }
       console.warn("[WebRecorder] getUserMedia failed:", e);
     }
   }, []);
@@ -63,6 +73,7 @@ function useWebRecorder() {
       if (!mr || mr.state === "inactive") { resolve(null); return; }
       mr.addEventListener("stop", () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (blob.size === 0) { setIsRecording(false); resolve(null); return; }
         const url = URL.createObjectURL(blob);
         setBlobUri(url);
         setIsRecording(false);
@@ -72,7 +83,7 @@ function useWebRecorder() {
     });
   }, []);
 
-  return { start, stop, isRecording, blobUri };
+  return { start, stop, isRecording, blobUri, micError };
 }
 
 // ─── Web Audio Helpers ────────────────────────────────────────────────────────
@@ -504,6 +515,10 @@ function MicButton({ onRecordingComplete, colors }: {
     if (Platform.OS === "web") {
       runStartAnimations();
       await webRecorder.start();
+      // If mic failed (error set), stop the animations immediately
+      if (!webRecorder.isRecording) {
+        runStopAnimations();
+      }
       return;
     }
     if (!permGranted) {
@@ -582,9 +597,13 @@ function MicButton({ onRecordingComplete, colors }: {
           </Pressable>
         </Animated.View>
       </View>
-      {!isRecording && !isProcessing && (
+      {!isRecording && !isProcessing && webRecorder.micError ? (
+        <Text style={[micStyles.hint, { color: colors.error ?? "#EF4444", textAlign: "center", fontSize: 12, paddingHorizontal: 8 }]}>
+          {webRecorder.micError}
+        </Text>
+      ) : !isRecording && !isProcessing ? (
         <Text style={[micStyles.hint, { color: colors.muted }]}>Hold to record</Text>
-      )}
+      ) : null}
     </View>
   );
 }

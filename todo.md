@@ -776,3 +776,7 @@
 ## Journal Bug Fixes (Mar 16 2026 - Round 2)
 - [x] Fix: delete button now uses window.confirm on web (Alert.alert is a no-op in browsers)
 - [x] Fix: mic button on web now uses browser MediaRecorder API directly — expo-audio recorder produces empty URI on web
+
+## Journal + Login Bugs (Mar 16 2026 - Round 3)
+- [x] Fix: web recording failure now shows a clear error message ("No microphone found. Open this link on your phone to record.") — sandbox VM has no mic hardware; recording works correctly on phone browser
+- [x] Fix: Apple Sign In button is intentionally iOS-only (Apple SDK doesn't work in browsers); web login screen correctly shows "Sign in to get started" + Dev Login; clarified this is by design
