@@ -742,7 +742,7 @@ export default function CheckInScreen() {
                 {habits.map((habit, idx) => {
                   const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
-                  const rank = globalRankMap[habit.id] ?? (idx + 1);
+                  const rank = idx + 1;
 
                   return (
                     <View

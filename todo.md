@@ -664,10 +664,10 @@
 - [ ] Add day chips (M T W T F S S) below alarm time showing active days
 - [ ] Keep green/grey status dot, make it more visible
 - [ ] Add Today's Focus Card: shows "X habits to review" or "All caught up ✓", taps to check-in
-- [ ] Remove always-visible goal legend; add "?" info button that shows tooltip
-- [ ] Reduce Goals section header size
-- [ ] Make THIS WEEK ring largest, LAST WEEK smaller, 2 WEEKS AGO smallest
-- [ ] Add rotating daily motivational quote at bottom of goals list (30+ quotes, rotates by day)
+- [x] Remove always-visible goal legend; add "?" info button that shows tooltip
+- [x] Reduce Goals section header size
+- [x] Make THIS WEEK ring largest, LAST WEEK smaller, 2 WEEKS AGO smallest
+- [x] Add rotating daily motivational quote at bottom of goals list (30+ quotes, rotates by day)
 
 ## Home Screen Redesign + Rewards Restructure (Mar 16 2026)
 
@@ -679,3 +679,15 @@
 - [x] Add reward fields to Habit type (rewardTitle, rewardDescription, rewardTarget, rewardPeriod)
 - [x] Habit creation form: required reward section when weekly/monthly goal is set
 - [x] Rewards tab rewritten: claim-only, shows habit-linked rewards, no create button
+
+## Home Screen v2 + Check-in Fix (Mar 16 2026)
+
+- [x] Remove "Good morning" greeting text from header
+- [x] Remove "Money" stat card from home screen
+- [x] Add profile picture next to streak (tappable to change photo)
+- [x] Add persistent Today's Focus card (shows unchecked days, taps to check-in)
+- [x] Remove Jack Alarm Preview from home screen (already done — verify)
+- [x] Fix habit numbering in check-in: 1,2,3 per goal group (not global IDs)
+- [x] Remove 30-day average stat card from home screen
+- [x] Alarm strip: larger time display, day chips, visible green/grey dot
+- [x] Replace generic quotes with user's curated 30-quote list

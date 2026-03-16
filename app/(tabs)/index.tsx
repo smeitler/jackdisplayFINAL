@@ -1,52 +1,54 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image } from "react-native";
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
 import Svg, { Circle } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
+import * as ImagePicker from "expo-image-picker";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
+const PROFILE_PIC_KEY = 'daycheck:profilePicUri';
 
-// Daily motivational quotes (rotates by day of year)
+// ── Daily motivational quotes (user-curated, rotates by day of year) ──────────
 const DAILY_QUOTES = [
-  "Discipline is choosing between what you want now and what you want most.",
-  "Small daily improvements are the key to staggering long-term results.",
-  "You don't rise to the level of your goals. You fall to the level of your systems.",
-  "The secret of your future is hidden in your daily routine.",
-  "Motivation gets you started. Habit keeps you going.",
-  "Success is the sum of small efforts, repeated day in and day out.",
-  "Don't count the days. Make the days count.",
-  "The only bad workout is the one that didn't happen.",
-  "You are what you repeatedly do. Excellence is not an act, but a habit.",
-  "Every action you take is a vote for the type of person you wish to become.",
-  "It's not about having time. It's about making time.",
-  "The pain of discipline is far less than the pain of regret.",
-  "Push yourself, because no one else is going to do it for you.",
-  "Great things never come from comfort zones.",
-  "Dream it. Wish it. Do it.",
-  "Success doesn't just find you. You have to go out and get it.",
-  "The harder you work for something, the greater you'll feel when you achieve it.",
-  "Don't stop when you're tired. Stop when you're done.",
-  "Wake up with determination. Go to bed with satisfaction.",
-  "Do something today that your future self will thank you for.",
-  "Little things make big days.",
-  "It's going to be hard, but hard is not impossible.",
-  "Don't wait for opportunity. Create it.",
-  "Sometimes we're tested not to show our weaknesses, but to discover our strengths.",
-  "The key to success is to focus on goals, not obstacles.",
-  "Dream bigger. Do bigger.",
-  "You don't have to be great to start, but you have to start to be great.",
-  "Act as if what you do makes a difference. It does.",
-  "Success is not final, failure is not fatal: it is the courage to continue that counts.",
-  "Believe you can and you're halfway there.",
+  "Discipline is choosing what you want most over what you want now.",
+  "You don't rise to goals—you fall to habits.",
+  "The cost of discipline is always cheaper than regret.",
+  "Become the person your goals require.",
+  "The standard you tolerate becomes your life.",
+  "Hard things build easy lives.",
+  "Comfort today is debt tomorrow.",
+  "Every excuse is a vote against your future.",
+  "Greatness is boring repetition done well.",
+  "A thousand tiny efforts beat one heroic burst.",
+  "Your habits are voting for your future.",
+  "Discipline is self-respect in action.",
+  "Champions look ordinary most days.",
+  "Growth begins where comfort ends.",
+  "Consistency turns effort into inevitability.",
+  "The work you repeat is the life you build.",
+  "Effort compounds faster than talent.",
+  "The real opponent is yesterday's version of you.",
+  "Momentum is built one unexciting day at a time.",
+  "The next level requires the next you.",
+  "Quiet progress wins loud battles.",
+  "Strength is built in resisted moments.",
+  "Time rewards the persistent.",
+  "Focus is force.",
+  "Most people stop right before it works.",
+  "Self-control is strategic advantage.",
+  "Discipline is remembering what you're working for.",
+  "The long game defeats almost everyone.",
+  "Consistency is proof you mean it.",
+  "Become the person who finishes.",
 ];
 
 function getDailyQuote(): string {
@@ -56,26 +58,18 @@ function getDailyQuote(): string {
   return DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
 }
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
 // ── Helpers: days remaining in current week / month ─────────────────────────
 
 function getDaysLeftInWeek(): number {
   const now = new Date();
-  // Week ends Sunday (day 0). Days left = days until end of Sunday
-  const day = now.getDay(); // 0=Sun, 1=Mon ... 6=Sat
-  return day === 0 ? 0 : 7 - day; // 0 means today is the last day
+  const day = now.getDay();
+  return day === 0 ? 0 : 7 - day;
 }
 
 function getDaysLeftInMonth(): number {
   const now = new Date();
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return lastDay - now.getDate(); // 0 means today is the last day
+  return lastDay - now.getDate();
 }
 
 function daysLeftLabel(daysLeft: number, period: 'week' | 'month'): string {
@@ -84,7 +78,7 @@ function daysLeftLabel(daysLeft: number, period: 'week' | 'month'): string {
   return `${daysLeft} days left`;
 }
 
-// ── Period Chip (This Week / Last Week / This Month / Last Month) ─────────────
+// ── Period Chip ───────────────────────────────────────────────────────────────
 
 function PeriodGoalChip({
   currentDone,
@@ -111,7 +105,7 @@ function PeriodGoalChip({
   const lastLabel = period === 'week' ? 'Last Week' : 'Last Month';
 
   const daysLeft = period === 'week' ? getDaysLeftInWeek() : getDaysLeftInMonth();
-  const needMore = currentGoal - currentDone; // how many more days needed
+  const needMore = currentGoal - currentDone;
   const canStillHit = !hitCurrent && needMore > 0 && needMore <= daysLeft + 1;
   const motivationLabel = hitCurrent
     ? null
@@ -123,7 +117,6 @@ function PeriodGoalChip({
 
   return (
     <View style={styles.periodChipGroup}>
-      {/* This period */}
       <View style={styles.periodChipBlock}>
         <Text style={[styles.periodChipPeriodLabel, { color: colors.muted }]}>{thisLabel}</Text>
         <View style={[styles.periodChip, { backgroundColor: currentColor + '18', borderColor: currentColor + '55' }]}>
@@ -138,10 +131,8 @@ function PeriodGoalChip({
         )}
       </View>
 
-      {/* Divider */}
       <View style={[styles.periodChipDivider, { backgroundColor: colors.border }]} />
 
-      {/* Last period */}
       <View style={styles.periodChipBlock}>
         <Text style={[styles.periodChipPeriodLabel, { color: colors.muted }]}>{lastLabel}</Text>
         {lastGoal > 0 ? (
@@ -171,17 +162,15 @@ function fmtDate(d: Date): string {
   return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
 }
 
-/** Returns "Mon D – Mon D" for the current ISO week (Mon–Sun). */
 function currentWeekRange(): string {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun
+  const day = now.getDay();
   const diffToMon = (day === 0 ? -6 : 1 - day);
   const mon = new Date(now); mon.setDate(now.getDate() + diffToMon);
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
   return `${fmtDate(mon)} – ${fmtDate(sun)}`;
 }
 
-/** Returns "Mon D – Mon D" for the previous ISO week. */
 function lastWeekRange(): string {
   const now = new Date();
   const day = now.getDay();
@@ -192,7 +181,6 @@ function lastWeekRange(): string {
   return `${fmtDate(lastMon)} – ${fmtDate(lastSun)}`;
 }
 
-/** Returns "Mon D – Mon D" for two weeks ago. */
 function weekBeforeRange(): string {
   const now = new Date();
   const day = now.getDay();
@@ -203,20 +191,17 @@ function weekBeforeRange(): string {
   return `${fmtDate(wbMon)} – ${fmtDate(wbSun)}`;
 }
 
-/** Returns "Mon YYYY" for the current month. */
 function currentMonthRange(): string {
   const now = new Date();
   return `${MONTH_ABBR[now.getMonth()]} ${now.getFullYear()}`;
 }
 
-/** Returns "Mon YYYY" for last month. */
 function lastMonthRange(): string {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return `${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** Returns "Mon YYYY" for two months ago. */
 function monthBeforeRange(): string {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() - 2, 1);
@@ -225,9 +210,9 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-// Fixed container height = label height (12) + gap (3) + ring size (38)
-// Smaller rings (38px) to fit 3 in a row without crowding the habit name
 const RING_SIZE = 38;
+const RING_SIZE_SM = 28;
+const RING_SIZE_XS = 22;
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -247,7 +232,7 @@ function CircleRing({
   const ringColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
   const textColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#9BA1A6';
 
-  const strokeWidth = 3.5;
+  const strokeWidth = size <= 24 ? 2.5 : 3.5;
   const r = (size - strokeWidth) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -255,45 +240,39 @@ function CircleRing({
   const dash = pct * circumference;
   const gap = circumference - dash;
 
-  // Fraction text: always show plain fraction (e.g. 5/6)
   const fractionText = goal > 0 ? `${done}/${goal}` : '\u2014';
-  const fractionFontSize = 10;
+  const fractionFontSize = size <= 24 ? 7 : size <= 30 ? 9 : 10;
 
   return (
-    // Fixed height container so both rings in a pair always align regardless of label text
-    <View style={{ alignItems: 'center', height: RING_CONTAINER_HEIGHT, justifyContent: 'flex-end' }}>
-      {/* Period label above ring — always reserve space even if empty */}
-      <View style={{ height: RING_LABEL_HEIGHT, justifyContent: 'center', marginBottom: 3 }}>
-        {periodLabel ? (
-          <Text style={{ fontSize: 9, fontWeight: '600', color: '#9BA1A6', textTransform: 'uppercase', letterSpacing: 0.3 }}>
-            {periodLabel}
-          </Text>
-        ) : null}
-      </View>
-      {/* Ring + fraction — fixed size */}
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
-          <Circle cx={cx} cy={cy} r={r} stroke="#334155" strokeWidth={strokeWidth} fill="none" />
+    <View style={{ alignItems: 'center', gap: 3 }}>
+      {periodLabel && (
+        <Text style={[styles.ringPeriodLabel, { color: '#9BA1A6', fontSize: size <= 24 ? 8 : 9 }]}>{periodLabel}</Text>
+      )}
+      <View style={{ width: size, height: size, position: 'relative' }}>
+        <Svg width={size} height={size}>
+          <Circle
+            cx={cx} cy={cy} r={r}
+            stroke="#334155" strokeWidth={strokeWidth} fill="none"
+          />
           {pct > 0 && (
             <Circle
               cx={cx} cy={cy} r={r}
-              stroke={ringColor}
-              strokeWidth={strokeWidth}
-              fill="none"
+              stroke={ringColor} strokeWidth={strokeWidth} fill="none"
               strokeDasharray={`${dash} ${gap}`}
               strokeLinecap="round"
+              transform={`rotate(-90 ${cx} ${cy})`}
             />
           )}
         </Svg>
-        <Text style={{ fontSize: fractionFontSize, fontWeight: '700', color: textColor, textAlign: 'center' }}>
-          {fractionText}
-        </Text>
+        <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={{ fontSize: fractionFontSize, fontWeight: '700', color: textColor }}>{fractionText}</Text>
+        </View>
       </View>
     </View>
   );
 }
 
-// ── Habit Row ─────────────────────────────────────────────────────────────────
+// ── Habit Goal Row ────────────────────────────────────────────────────────────
 
 function HabitGoalRow({
   habit,
@@ -310,20 +289,17 @@ function HabitGoalRow({
     getHabitWeekBeforeDone, getHabitMonthBeforeDone,
   } = useApp();
 
-  // Each habit self-determines its period from its frequencyType
   const isMonthly = habit.frequencyType === 'monthly';
-
   const goal = isMonthly ? (habit.monthlyGoal ?? 0) : (habit.weeklyGoal ?? 0);
 
-  // 3 rolling periods: current → last → one before
-  const p0Done = isMonthly ? getHabitMonthlyDone(habit.id) : getHabitWeeklyDone(habit.id);
+  // 3 rolling periods: oldest (left/smallest) → current (right/largest)
+  const p0Done = isMonthly ? getHabitMonthBeforeDone(habit.id) : getHabitWeekBeforeDone(habit.id);
   const p1Done = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
-  const p2Done = isMonthly ? getHabitMonthBeforeDone(habit.id) : getHabitWeekBeforeDone(habit.id);
+  const p2Done = isMonthly ? getHabitMonthlyDone(habit.id) : getHabitWeeklyDone(habit.id);
 
-  // Period labels
-  const p0Label = isMonthly ? 'This Mo' : 'This Wk';
+  const p0Label = isMonthly ? '2 Mo Ago' : '2 Wks';
   const p1Label = isMonthly ? 'Last Mo' : 'Last Wk';
-  const p2Label = isMonthly ? '2 Mo Ago' : '2 Wks Ago';
+  const p2Label = isMonthly ? 'This Mo' : 'This Wk';
 
   return (
     <TouchableOpacity
@@ -336,15 +312,18 @@ function HabitGoalRow({
         {habit.name}
       </Text>
 
-      {/* Right side: three rings (oldest left → newest right) + chevron */}
+      {/* Right side: three rings — smallest (oldest) to largest (current) */}
       <View style={styles.habitRight}>
         {goal > 0 ? (
           <View style={styles.ringTriple}>
-            <CircleRing done={p2Done} goal={goal} periodLabel={p2Label} />
+            {/* 2 periods ago — smallest */}
+            <CircleRing done={p0Done} goal={goal} size={RING_SIZE_XS} periodLabel={p0Label} />
             <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-            <CircleRing done={p1Done} goal={goal} periodLabel={p1Label} />
+            {/* Last period — medium */}
+            <CircleRing done={p1Done} goal={goal} size={RING_SIZE_SM} periodLabel={p1Label} />
             <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-            <CircleRing done={p0Done} goal={goal} periodLabel={p0Label} />
+            {/* Current period — largest / hero */}
+            <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
           </View>
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
@@ -357,7 +336,7 @@ function HabitGoalRow({
   );
 }
 
-// ── Goal Card (full-width) ────────────────────────────────────────────────────
+// ── Goal Card ────────────────────────────────────────────────────────────────
 
 function GoalCard({
   cat,
@@ -399,7 +378,6 @@ function GoalCard({
 
   return (
     <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: colors.border, borderLeftColor: accentColor, borderLeftWidth: 3 }]}>
-      {/* Goal header */}
       <TouchableOpacity onPress={onPressGoal} style={styles.goalCardHeader} activeOpacity={0.8}>
         <CategoryIcon
           categoryId={cat.id}
@@ -431,7 +409,6 @@ function GoalCard({
 
       <View style={[styles.goalCardDivider, { backgroundColor: accentColor + '25' }]} />
 
-      {/* Habit rows */}
       {habits.length === 0 ? (
         <Text style={[styles.noHabitsText, { color: colors.muted }]}>No habits yet</Text>
       ) : (
@@ -448,6 +425,99 @@ function GoalCard({
   );
 }
 
+// ── Profile Avatar ────────────────────────────────────────────────────────────
+
+function ProfileAvatar({
+  uri,
+  onPress,
+  size = 40,
+}: {
+  uri: string | null;
+  onPress: () => void;
+  size?: number;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.profileAvatar,
+        {
+          width: size, height: size, borderRadius: size / 2,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}
+    >
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
+          resizeMode="cover"
+        />
+      ) : (
+        <IconSymbol name="person.fill" size={size * 0.5} color={colors.muted} />
+      )}
+    </Pressable>
+  );
+}
+
+// ── Missed Days Modal ─────────────────────────────────────────────────────────
+
+function MissedDaysModal({
+  visible,
+  missedDates,
+  onClose,
+  onSelectDate,
+  colors,
+}: {
+  visible: boolean;
+  missedDates: string[];
+  onClose: () => void;
+  onSelectDate: (date: string) => void;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <View style={[styles.missedDaysSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.missedDaysHandle} />
+          <Text style={[styles.missedDaysTitle, { color: colors.foreground }]}>Missed Check-ins</Text>
+          {missedDates.length === 0 ? (
+            <Text style={[styles.missedDaysEmpty, { color: colors.muted }]}>All caught up! ✓</Text>
+          ) : (
+            missedDates.map((date) => (
+              <Pressable
+                key={date}
+                onPress={() => { onSelectDate(date); onClose(); }}
+                style={({ pressed }) => [
+                  styles.missedDayRow,
+                  { borderColor: colors.border, backgroundColor: pressed ? colors.border : 'transparent' },
+                ]}
+              >
+                <View style={styles.missedDayLeft}>
+                  <IconSymbol name="calendar" size={16} color={colors.primary} />
+                  <Text style={[styles.missedDayDate, { color: colors.foreground }]}>
+                    {formatDisplayDate(date)}
+                  </Text>
+                </View>
+                <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+              </Pressable>
+            ))
+          )}
+          <Pressable
+            onPress={onClose}
+            style={[styles.missedDaysClose, { backgroundColor: colors.border }]}
+          >
+            <Text style={[styles.missedDaysCloseText, { color: colors.foreground }]}>Done</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Home Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -456,17 +526,22 @@ export default function HomeScreen() {
     streak, categories, activeHabits, checkIns,
   } = useApp();
   const [showLegend, setShowLegend] = useState(false);
+  const [showMissedDays, setShowMissedDays] = useState(false);
+  const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
-  const overallRate = useMemo(() => {
-    if (sortedCategories.length === 0) return 0;
-    return sortedCategories.reduce((s, c) => s + getCategoryRate(c.id, 30), 0) / sortedCategories.length;
-  }, [sortedCategories, getCategoryRate]);
   const colors = useColors();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
+
+  // Load profile picture on mount
+  useEffect(() => {
+    AsyncStorage.getItem(PROFILE_PIC_KEY).then((uri) => {
+      if (uri) setProfilePicUri(uri);
+    });
+  }, []);
 
   // First-launch: show permissions setup screen once on mobile
   useEffect(() => {
@@ -477,6 +552,47 @@ export default function HomeScreen() {
       }
     });
   }, [router]);
+
+  // Calculate missed check-in dates (up to last 30 days, excluding today)
+  const missedDates = useMemo(() => {
+    if (activeHabits.length === 0) return [];
+    const checkedDates = new Set(checkIns.map((e) => e.date));
+    const missed: string[] = [];
+    // Look back up to 30 days, skip today
+    for (let i = 1; i <= 30; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = toDateString(d);
+      if (!checkedDates.has(dateStr)) {
+        missed.push(dateStr);
+      }
+    }
+    return missed.slice(0, 14); // cap at 14 days shown
+  }, [activeHabits, checkIns]);
+
+  // Use 7-day rolling window for goal card score
+  const rateRange = 7;
+
+  async function handlePickProfilePic() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]?.uri) {
+        const uri = result.assets[0].uri;
+        setProfilePicUri(uri);
+        await AsyncStorage.setItem(PROFILE_PIC_KEY, uri);
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   function handleCheckIn(date?: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -489,37 +605,38 @@ export default function HomeScreen() {
     return `${hour}:${m.toString().padStart(2, '0')} ${ph}`;
   }
 
-  // Use 7-day rolling window for goal card score
-  const rateRange = 7;
-
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
-          {/* ── Header ── */}
+          {/* ── Header: streak pill + profile pic ── */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.greeting, { color: colors.foreground }]}>{getGreeting()}</Text>
               <Text style={[styles.dateText, { color: colors.muted }]}>
-                {streak > 0
-                  ? `Day ${streak} of your streak 🔥`
-                  : isPendingCheckIn
+                {isPendingCheckIn
                   ? 'Yesterday needs a review'
-                  : overallRate >= 0.8
-                  ? "You're crushing it this week 💪"
+                  : streak > 0
+                  ? `Day ${streak} of your streak 🔥`
                   : 'Keep showing up — it adds up'}
               </Text>
             </View>
-            {streak > 0 && (
-              <View style={styles.streakPill}>
-                <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
-                <Text style={styles.streakNum}>{streak}</Text>
-              </View>
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {streak > 0 && (
+                <View style={styles.streakPill}>
+                  <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
+                  <Text style={styles.streakNum}>{streak}</Text>
+                </View>
+              )}
+              <ProfileAvatar
+                uri={profilePicUri}
+                onPress={handlePickProfilePic}
+                size={40}
+              />
+            </View>
           </View>
 
-          {/* ── Stats row ── */}
+          {/* ── Stats row: Streak + Days Logged (removed 30-day avg) ── */}
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
@@ -531,29 +648,57 @@ export default function HomeScreen() {
               <Text style={[styles.statValue, { color: colors.foreground }]}>{totalDaysLogged}</Text>
               <Text style={[styles.statLabel, { color: colors.muted }]}>Days Logged</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <IconSymbol name="trophy.fill" size={16} color="#F59E0B" />
-              <Text style={[styles.statValue, { color: colors.foreground }]}>{Math.round(overallRate * 100)}%</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>30-Day Avg</Text>
-            </View>
           </View>
 
-          {/* ── Yesterday's review banner ── */}
-          {isPendingCheckIn && (
-            <Pressable
-              onPress={() => handleCheckIn(yesterday)}
-              style={({ pressed }) => [
-                styles.checkInBanner,
-                { backgroundColor: colors.primary, transform: [{ scale: pressed ? 0.98 : 1 }] },
-              ]}
-            >
-              <View style={styles.checkInLeft}>
-                <Text style={styles.checkInTitle}>Yesterday's Review</Text>
-                <Text style={styles.checkInSub}>{formatDisplayDate(yesterday)} · Tap to rate habits</Text>
-              </View>
-              <IconSymbol name="chevron.right" size={18} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-          )}
+          {/* ── Today's Focus Card (replaces disappearing check-in banner) ── */}
+          <Pressable
+            onPress={() => {
+              if (missedDates.length > 0) {
+                setShowMissedDays(true);
+              } else {
+                handleCheckIn(yesterday);
+              }
+            }}
+            style={({ pressed }) => [
+              styles.focusCard,
+              {
+                backgroundColor: isPendingCheckIn
+                  ? colors.primary
+                  : colors.surface,
+                borderColor: isPendingCheckIn ? colors.primary : colors.border,
+                opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[
+                styles.focusCardTitle,
+                { color: isPendingCheckIn ? '#fff' : colors.foreground },
+              ]}>
+                {isPendingCheckIn
+                  ? `${activeHabits.length} habit${activeHabits.length !== 1 ? 's' : ''} to review`
+                  : missedDates.length > 0
+                  ? `${missedDates.length} day${missedDates.length !== 1 ? 's' : ''} to catch up`
+                  : 'All caught up ✓'}
+              </Text>
+              <Text style={[
+                styles.focusCardSub,
+                { color: isPendingCheckIn ? 'rgba(255,255,255,0.75)' : colors.muted },
+              ]}>
+                {isPendingCheckIn
+                  ? `${formatDisplayDate(yesterday)} · Tap to rate`
+                  : missedDates.length > 0
+                  ? 'Tap to review missed days'
+                  : 'Great work keeping up your streak'}
+              </Text>
+            </View>
+            <IconSymbol
+              name="chevron.right"
+              size={18}
+              color={isPendingCheckIn ? 'rgba(255,255,255,0.8)' : colors.muted}
+            />
+          </Pressable>
 
           {/* ── Alarm strip ── */}
           <Pressable
@@ -597,8 +742,6 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-
-
           {/* ── Section title ── */}
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
@@ -627,6 +770,9 @@ export default function HomeScreen() {
                   <IconSymbol name="crown.fill" size={11} color="#FFD700" />
                   <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
                 </View>
+                <Text style={[styles.legendHint, { color: colors.muted }]}>
+                  Rings: smallest = 2 periods ago, medium = last period, largest = current period
+                </Text>
               </View>
             </Pressable>
           </Modal>
@@ -638,7 +784,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.goalList}>
-              {categories.map((cat) => {
+              {sortedCategories.map((cat) => {
                 const catHabits = activeHabits.filter((h) => h.category === cat.id);
                 return (
                   <GoalCard
@@ -684,6 +830,15 @@ export default function HomeScreen() {
           <View style={{ height: 32 }} />
         </View>
       </ScrollView>
+
+      {/* ── Missed Days Modal ── */}
+      <MissedDaysModal
+        visible={showMissedDays}
+        missedDates={missedDates}
+        onClose={() => setShowMissedDays(false)}
+        onSelectDate={handleCheckIn}
+        colors={colors}
+      />
     </ScreenContainer>
   );
 }
@@ -692,24 +847,28 @@ const styles = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 40 },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, gap: 12 },
-  greeting: { fontSize: 26, fontWeight: '800', letterSpacing: -0.6 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
   dateText: { fontSize: 13, marginTop: 3 },
   streakPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FF6B3520', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 7, marginTop: 2,
+    paddingHorizontal: 12, paddingVertical: 7,
   },
   streakNum: { fontSize: 17, fontWeight: '800', color: '#FF6B35' },
 
-  // Check-in banner
-  checkInBanner: {
+  // Profile avatar
+  profileAvatar: {
+    borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+
+  // Today's Focus Card
+  focusCard: {
     flexDirection: 'row', alignItems: 'center',
     borderRadius: 16, padding: 16, marginBottom: 14, gap: 8,
+    borderWidth: 1,
   },
-  checkInLeft: { flex: 1, gap: 3 },
-  checkInTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  checkInSub: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
+  focusCardTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  focusCardSub: { fontSize: 12 },
 
   // Alarm strip
   alarmStrip: {
@@ -719,7 +878,6 @@ const styles = StyleSheet.create({
   },
   alarmDot: { width: 8, height: 8, borderRadius: 4 },
   alarmLabel: { fontSize: 12, fontWeight: '500' },
-  alarmTime: { fontSize: 15, fontWeight: '700' },
   alarmTimeLarge: { fontSize: 32, fontWeight: '800', letterSpacing: -1, lineHeight: 36 },
   alarmDayChips: { flexDirection: 'row', gap: 4, marginTop: 6 },
   alarmDayChip: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
@@ -731,29 +889,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: 10,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
   legendInfoBtn: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   legendInfoBtnText: { fontSize: 12, fontWeight: '700' },
   legendOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   legendModal: { borderRadius: 16, borderWidth: 1, padding: 20, minWidth: 220, gap: 10 },
   legendModalTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  legendHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
 
-  // Period toggle
-  periodToggle: {
-    flexDirection: 'row', borderRadius: 10, borderWidth: 1,
-    overflow: 'hidden', padding: 2, gap: 2,
-  },
-  periodToggleBtn: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8,
-  },
-  periodToggleBtnText: { fontSize: 13, fontWeight: '700' },
-
-  // Legend
-  legendRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginBottom: 14, flexWrap: 'wrap',
-  },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  // Legend items
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 7, height: 7, borderRadius: 4 },
   legendText: { fontSize: 11, fontWeight: '500' },
 
@@ -783,16 +928,9 @@ const styles = StyleSheet.create({
   deadlineText: { fontSize: 10, fontWeight: '700' },
 
   // Habit row
-  habitLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, minWidth: 0 },
   ringWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0, left: 0, right: 0, bottom: 0 },
-  ringCenterSmall: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0, left: 0, right: 0, bottom: 0 },
-  ringCount: { fontSize: 11, fontWeight: '700' },
-  ringCountSmall: { fontSize: 9, fontWeight: '700' },
-  periodLabels: { alignItems: 'flex-end', gap: 1 },
-  periodLabelSmall: { fontSize: 9, fontWeight: '600' },
-  ringPair: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ringTriple: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ringPeriodLabel: { fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  ringTriple: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   ringDivider: { width: StyleSheet.hairlineWidth, height: 36, borderRadius: 1 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -805,16 +943,11 @@ const styles = StyleSheet.create({
   noGoalText: { fontSize: 11, fontStyle: 'italic' },
   noHabitsText: { fontSize: 12, padding: 12, textAlign: 'center' },
 
-  // Period chip group (This Week + Last Week side by side)
-  periodChipGroup: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-  },
+  // Period chip group
+  periodChipGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   periodChipBlock: { alignItems: 'center', gap: 2 },
   periodChipPeriodLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  periodChip: {
-    borderRadius: 7, borderWidth: 1,
-    paddingHorizontal: 7, paddingVertical: 3,
-  },
+  periodChip: { borderRadius: 7, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3 },
   periodChipValue: { fontSize: 11, fontWeight: '700' },
   periodChipMotivation: { fontSize: 9, fontWeight: '600', textAlign: 'center', marginTop: 1 },
   periodChipDivider: { width: 1, height: 28, borderRadius: 1 },
@@ -827,7 +960,7 @@ const styles = StyleSheet.create({
   },
   emptyText: { fontSize: 14, textAlign: 'center' },
 
-  // Stats row
+  // Stats row (2 cards now)
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   statCard: {
     flex: 1, borderRadius: 14, padding: 10,
@@ -842,4 +975,34 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 16, borderWidth: 1,
   },
   manageBtnText: { flex: 1, fontSize: 15, fontWeight: '600' },
+
+  // Modal overlay
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+
+  // Missed days sheet
+  missedDaysSheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderWidth: 1, borderBottomWidth: 0,
+    padding: 24, paddingBottom: 40, gap: 12,
+    maxHeight: '80%',
+  },
+  missedDaysHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: '#334155', alignSelf: 'center', marginBottom: 8,
+  },
+  missedDaysTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  missedDaysEmpty: { fontSize: 15, textAlign: 'center', paddingVertical: 16 },
+  missedDayRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderRadius: 12, borderWidth: 1, padding: 14,
+  },
+  missedDayLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  missedDayDate: { fontSize: 15, fontWeight: '600' },
+  missedDaysClose: {
+    borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8,
+  },
+  missedDaysCloseText: { fontSize: 15, fontWeight: '700' },
 });
