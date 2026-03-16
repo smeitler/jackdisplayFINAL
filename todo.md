@@ -767,3 +767,8 @@
 ## Web Recording & Playback Fix (Mar 16 2026)
 - [x] Fix web: recording now reads blob: URI via fetch + FileReader and sends base64 to Whisper for transcription
 - [x] Fix web: audio playback now uses native HTML <audio> element on web (useAudioPlayer doesn't support blob: URIs on web)
+
+## Journal UX Fix (Mar 16 2026)
+- [x] Fix: audio entry saved immediately after recording stops — mic button is unblocked right away
+- [x] Fix: "No speech detected" no longer shown as entry text — empty transcript leaves text blank
+- [x] Fix: transcription runs in background; each entry shows a spinner while its transcript is loading

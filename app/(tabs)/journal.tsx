@@ -221,13 +221,14 @@ const hmStyles = StyleSheet.create({
 
 // ─── Day Group Row ────────────────────────────────────────────────────────────
 function DayGroupRow({
-  date, entries, onDelete, onUpdateMappings, colors,
+  date, entries, onDelete, onUpdateMappings, colors, transcribingEntries,
 }: {
   date: string;
   entries: JournalEntry[];
   onDelete: (id: string) => void;
   onUpdateMappings: (entryId: string, mappings: JournalHabitMapping[]) => void;
   colors: ReturnType<typeof useColors>;
+  transcribingEntries: Record<string, string>;
 }) {
   const [expanded, setExpanded] = useState(date === toDateString());
   const totalWords = entries.reduce((acc, e) => acc + (e.text?.split(" ").filter(Boolean).length ?? 0), 0);
@@ -283,8 +284,13 @@ function DayGroupRow({
                 </Pressable>
               </View>
 
-              {/* Transcript text */}
-              {entry.text ? (
+              {/* Transcript text or transcribing indicator */}
+              {transcribingEntries[entry.id] ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={{ fontSize: 13, color: colors.muted }}>Transcribing…</Text>
+                </View>
+              ) : entry.text ? (
                 <Text style={[dgStyles.entryText, { color: colors.foreground }]}>{entry.text}</Text>
               ) : null}
 
@@ -529,8 +535,8 @@ export default function JournalScreen() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [textInput, setTextInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [processingLabel, setProcessingLabel] = useState("Processing…");
+  // Per-entry transcription state: entryId -> label
+  const [transcribingEntries, setTranscribingEntries] = useState<Record<string, string>>({});
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   useEffect(() => {
@@ -565,19 +571,21 @@ export default function JournalScreen() {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
-  // Handle voice recording complete — upload, transcribe, AI-map habits
+  // Handle voice recording complete — save immediately, transcribe in background
   async function handleRecordingComplete(uri: string, duration: number) {
-    // 1. Save entry immediately so user sees it right away
+    // 1. Save entry immediately with audio so user can play it right away
     const entry = await saveEntry({ text: "", audioUri: uri, duration });
 
-    // 2. Read audio file as base64 for server upload
-    setIsAnalyzing(true);
-    setProcessingLabel("Uploading…");
+    // 2. Kick off transcription in background (non-blocking)
+    transcribeInBackground(entry, uri);
+  }
+
+  async function transcribeInBackground(entry: JournalEntry, uri: string) {
+    setTranscribingEntries((prev) => ({ ...prev, [entry.id]: "Transcribing…" }));
     try {
       let audioBase64 = "";
       let mimeType = "audio/m4a";
       if (Platform.OS === "web") {
-        // On web, recorder.uri is a blob: URL — read it via fetch + FileReader
         try {
           const result = await readUriAsBase64Web(uri);
           audioBase64 = result.base64;
@@ -588,7 +596,6 @@ export default function JournalScreen() {
       } else {
         try {
           audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-          // Detect mime type from extension
           const ext = uri.split(".").pop()?.toLowerCase() ?? "m4a";
           mimeType = ext === "webm" ? "audio/webm" : ext === "mp4" ? "audio/mp4" : "audio/m4a";
         } catch (fsErr) {
@@ -597,32 +604,26 @@ export default function JournalScreen() {
       }
 
       if (!audioBase64) {
-        // Could not read audio — save with error note
-        const updated = { ...entry, text: "[Voice entry — could not read audio file]" };
-        const all = await loadJournalEntries();
-        await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
-        setEntries(all.map((e) => e.id === entry.id ? updated : e));
+        // Could not read audio — leave text empty, audio is still playable
+        setTranscribingEntries((prev) => { const n = { ...prev }; delete n[entry.id]; return n; });
         return;
       }
 
-      setProcessingLabel("Transcribing…");
+      setTranscribingEntries((prev) => ({ ...prev, [entry.id]: "Transcribing…" }));
       const result = await transcribeMutation.mutateAsync({
         audioBase64,
         mimeType,
         date: toDateString(),
       });
 
-      // 3. Build AI habit mappings from server suggestions
-      setProcessingLabel("Analyzing habits…");
+      // Build AI habit mappings
       const habitMappings: JournalHabitMapping[] = [];
       if (result.journalEntries && result.journalEntries.length > 0 && habits.length > 0) {
-        // Simple keyword matching: find habits mentioned in the transcript
         const transcript = result.transcript.toLowerCase();
         for (const habit of habits) {
           const habitWords = habit.name.toLowerCase().split(/\s+/);
           const mentioned = habitWords.some((w) => w.length > 3 && transcript.includes(w));
           if (mentioned) {
-            // Find the most relevant journal entry snippet
             const relevantEntry = result.journalEntries.find((je) =>
               habitWords.some((w) => w.length > 3 && je.toLowerCase().includes(w))
             ) ?? result.journalEntries[0];
@@ -637,25 +638,23 @@ export default function JournalScreen() {
         }
       }
 
-      // 4. Update entry with transcript and mappings
-      const fullText = result.transcript || "[No speech detected]";
+      // Update entry with transcript (leave empty string if no speech, not an error message)
+      const fullText = result.transcript?.trim() || "";
       const updated: JournalEntry = { ...entry, text: fullText, habitMappings };
       const all = await loadJournalEntries();
-      const newAll = all.map((e) => e.id === entry.id ? updated : e);
-      await saveJournalEntries(newAll);
-      setEntries(newAll);
+      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
+      setEntries(all.map((e) => e.id === entry.id ? updated : e));
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: any) {
       console.warn("[Journal] Transcription error:", err);
-      // Save with error note so user knows something happened
-      const updated = { ...entry, text: "[Voice entry — transcription failed. Tap to retry.]" };
+      // Leave audio playable, just mark transcript as failed
+      const updated = { ...entry, text: "" };
       const all = await loadJournalEntries();
       await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
       setEntries(all.map((e) => e.id === entry.id ? updated : e));
     } finally {
-      setIsAnalyzing(false);
-      setProcessingLabel("Processing…");
+      setTranscribingEntries((prev) => { const n = { ...prev }; delete n[entry.id]; return n; });
     }
   }
 
@@ -690,14 +689,7 @@ export default function JournalScreen() {
           {/* ── Record section ── */}
           <View style={[styles.recordCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionLabel, { color: colors.muted }]}>VOICE ENTRY</Text>
-            {isAnalyzing ? (
-              <View style={styles.processingRow}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.processingText, { color: colors.primary }]}>{processingLabel}</Text>
-              </View>
-            ) : (
-              <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
-            )}
+            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
           </View>
 
           {/* ── Text entry ── */}
@@ -739,6 +731,7 @@ export default function JournalScreen() {
                 onDelete={handleDelete}
                 onUpdateMappings={handleUpdateMappings}
                 colors={colors}
+                transcribingEntries={transcribingEntries}
               />
             ))
           )}
