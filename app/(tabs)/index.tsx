@@ -210,7 +210,8 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-const RING_SIZE = 30;
+const RING_SIZE = 42;      // current period — hero
+const RING_SIZE_SM = 26;   // historical periods
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -310,13 +311,13 @@ function HabitGoalRow({
         {habit.name}
       </Text>
 
-            {/* Right side: three rings — all same size */}
+            {/* Right side: three rings — current period is largest */}
           <View style={styles.habitRight}>
             {goal > 0 ? (
               <View style={styles.ringTriple}>
-                <CircleRing done={p0Done} goal={goal} size={RING_SIZE} periodLabel={p0Label} />
+                <CircleRing done={p0Done} goal={goal} size={RING_SIZE_SM} periodLabel={p0Label} />
                 <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-                <CircleRing done={p1Done} goal={goal} size={RING_SIZE} periodLabel={p1Label} />
+                <CircleRing done={p1Done} goal={goal} size={RING_SIZE_SM} periodLabel={p1Label} />
                 <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
                 <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
               </View>
@@ -946,7 +947,7 @@ const styles = StyleSheet.create({
   ringWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
   ringPeriodLabel: { fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
   ringTriple: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  ringDivider: { width: StyleSheet.hairlineWidth, height: 36, borderRadius: 1 },
+  ringDivider: { width: StyleSheet.hairlineWidth, height: 44, borderRadius: 1 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 10,

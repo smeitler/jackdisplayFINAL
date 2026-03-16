@@ -697,3 +697,4 @@
 - [x] Make all 3 habit progress rings the same size (uniform, no hierarchy)
 - [x] Replace streak sub-line text with today's date in the header
 - [x] Redesign Today's Focus card "All caught up" state to look more polished/celebratory
+- [x] Make current-period ring (This Wk/This Mo) larger than the two historical rings
