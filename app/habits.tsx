@@ -220,7 +220,7 @@ interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
   entryCount: number;
-  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) => Promise<void>;
+  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string) => Promise<void>;
   onDelete: (id: string) => void;
   onDeactivate: (id: string) => void;
   onClose: () => void;
@@ -235,14 +235,25 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
   const [frequencyType, setFrequencyType] = useState<import('@/lib/storage').FrequencyType>(editHabit?.frequencyType ?? 'weekly');
   const [weeklyGoal, setWeeklyGoal] = useState<number | undefined>(editHabit?.weeklyGoal);
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(editHabit?.monthlyGoal);
+  const [rewardName, setRewardName] = useState(editHabit?.rewardName ?? '');
+  const [rewardEmoji, setRewardEmoji] = useState(editHabit?.rewardEmoji ?? '🎁');
+  const [rewardDescription, setRewardDescription] = useState(editHabit?.rewardDescription ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const currentGoal = frequencyType === 'weekly' ? weeklyGoal : monthlyGoal;
-  const canSave = name.trim().length > 0 && currentGoal !== undefined;
+  const canSave = name.trim().length > 0 && currentGoal !== undefined && rewardName.trim().length > 0;
 
   async function handleSave() {
     if (!canSave) return;
-    await onSave(name.trim(), '', description.trim() || undefined, frequencyType === 'weekly' ? weeklyGoal : undefined, frequencyType, frequencyType === 'monthly' ? monthlyGoal : undefined);
+    await onSave(
+      name.trim(), '', description.trim() || undefined,
+      frequencyType === 'weekly' ? weeklyGoal : undefined,
+      frequencyType,
+      frequencyType === 'monthly' ? monthlyGoal : undefined,
+      rewardName.trim(),
+      rewardEmoji,
+      rewardDescription.trim() || undefined,
+    );
     onClose();
   }
 
@@ -403,6 +414,58 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                     {monthlyGoal ? `${monthlyGoal}x per month` : 'Required — tap a number above'}
                   </Text>
                 </>
+              )}
+            </View>
+
+            {/* Reward section — required */}
+            <View style={[styles.weeklyGoalRow, { marginTop: 4 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={[styles.weeklyGoalLabel, { color: colors.foreground, marginBottom: 0 }]}>Your reward for hitting this goal</Text>
+                <Text style={{ color: colors.error, fontSize: 13, marginLeft: 4, lineHeight: 18 }}> *</Text>
+              </View>
+              <Text style={[styles.weeklyGoalHint, { color: colors.muted, marginBottom: 8, marginTop: 0 }]}>
+                What will you treat yourself to when you hit your {frequencyType} goal?
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const emojis = ['🎁','🏆','🎉','🍕','🎬','✈️','👟','💆','🛍️','🍦','🎮','📚','🎵','🌴','💪'];
+                    const idx = emojis.indexOf(rewardEmoji);
+                    setRewardEmoji(emojis[(idx + 1) % emojis.length]);
+                  }}
+                  style={[styles.weeklyGoalDay, { width: 44, height: 44, borderRadius: 10 }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 22 }}>{rewardEmoji}</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[styles.nameInput, { flex: 1, backgroundColor: colors.background, borderColor: rewardName.trim().length === 0 ? colors.error + '80' : colors.border, color: colors.foreground }]}
+                  placeholder="e.g. New running shoes, spa day…"
+                  placeholderTextColor={colors.muted}
+                  value={rewardName}
+                  onChangeText={(t) => setRewardName(t.slice(0, 60))}
+                  maxLength={60}
+                  returnKeyType="done"
+                  blurOnSubmit
+                  autoCapitalize="sentences"
+                />
+              </View>
+              <TextInput
+                style={[styles.descInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                placeholder="Why does this reward matter to you? (optional)"
+                placeholderTextColor={colors.muted}
+                value={rewardDescription}
+                onChangeText={(t) => setRewardDescription(t.slice(0, 120))}
+                maxLength={120}
+                multiline
+                numberOfLines={2}
+                returnKeyType="done"
+                blurOnSubmit
+              />
+              {rewardName.trim().length === 0 && (
+                <Text style={[styles.weeklyGoalHint, { color: colors.error, marginTop: 4 }]}>
+                  Required — enter what you'll reward yourself with
+                </Text>
               )}
             </View>
 
@@ -719,11 +782,11 @@ export default function HabitsScreen() {
     setExpandedCat((prev) => (prev === id ? null : id));
   }
 
-  async function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number) {
+  async function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string) {
     if (habitModal.edit) {
-      await updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal });
+      await updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal, rewardName, rewardEmoji, rewardDescription });
     } else {
-      await addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal);
+      await addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal, undefined, undefined, rewardName, rewardEmoji, rewardDescription);
     }
   }
 

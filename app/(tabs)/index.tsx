@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal } from "react-native";
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
@@ -14,6 +14,47 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
+
+// Daily motivational quotes (rotates by day of year)
+const DAILY_QUOTES = [
+  "Discipline is choosing between what you want now and what you want most.",
+  "Small daily improvements are the key to staggering long-term results.",
+  "You don't rise to the level of your goals. You fall to the level of your systems.",
+  "The secret of your future is hidden in your daily routine.",
+  "Motivation gets you started. Habit keeps you going.",
+  "Success is the sum of small efforts, repeated day in and day out.",
+  "Don't count the days. Make the days count.",
+  "The only bad workout is the one that didn't happen.",
+  "You are what you repeatedly do. Excellence is not an act, but a habit.",
+  "Every action you take is a vote for the type of person you wish to become.",
+  "It's not about having time. It's about making time.",
+  "The pain of discipline is far less than the pain of regret.",
+  "Push yourself, because no one else is going to do it for you.",
+  "Great things never come from comfort zones.",
+  "Dream it. Wish it. Do it.",
+  "Success doesn't just find you. You have to go out and get it.",
+  "The harder you work for something, the greater you'll feel when you achieve it.",
+  "Don't stop when you're tired. Stop when you're done.",
+  "Wake up with determination. Go to bed with satisfaction.",
+  "Do something today that your future self will thank you for.",
+  "Little things make big days.",
+  "It's going to be hard, but hard is not impossible.",
+  "Don't wait for opportunity. Create it.",
+  "Sometimes we're tested not to show our weaknesses, but to discover our strengths.",
+  "The key to success is to focus on goals, not obstacles.",
+  "Dream bigger. Do bigger.",
+  "You don't have to be great to start, but you have to start to be great.",
+  "Act as if what you do makes a difference. It does.",
+  "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+  "Believe you can and you're halfway there.",
+];
+
+function getDailyQuote(): string {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+  return DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
+}
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -414,6 +455,7 @@ export default function HomeScreen() {
     alarm, isPendingCheckIn, getCategoryRate,
     streak, categories, activeHabits, checkIns,
   } = useApp();
+  const [showLegend, setShowLegend] = useState(false);
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
@@ -460,7 +502,13 @@ export default function HomeScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.greeting, { color: colors.foreground }]}>{getGreeting()}</Text>
               <Text style={[styles.dateText, { color: colors.muted }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                {streak > 0
+                  ? `Day ${streak} of your streak 🔥`
+                  : isPendingCheckIn
+                  ? 'Yesterday needs a review'
+                  : overallRate >= 0.8
+                  ? "You're crushing it this week 💪"
+                  : 'Keep showing up — it adds up'}
               </Text>
             </View>
             {streak > 0 && (
@@ -515,60 +563,73 @@ export default function HomeScreen() {
               { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
             ]}
           >
-            <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
-            <Text style={[styles.alarmLabel, { color: colors.muted }]}>Alarm</Text>
-            <Text style={[styles.alarmTime, { color: colors.foreground }]}>
-              {alarm.isEnabled ? formatAlarmTime(alarm.hour, alarm.minute) : 'Off'}
-            </Text>
-            <View style={{ flex: 1 }} />
-            <Text style={[styles.alarmEdit, { color: colors.primary }]}>Edit</Text>
-            <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
+                <Text style={[styles.alarmLabel, { color: colors.muted }]}>
+                  {alarm.isEnabled ? 'Alarm set' : 'Alarm off'}
+                </Text>
+              </View>
+              <Text style={[styles.alarmTimeLarge, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
+                {alarm.isEnabled ? formatAlarmTime(alarm.hour, alarm.minute) : '—'}
+              </Text>
+              {alarm.isEnabled && alarm.days && alarm.days.length > 0 && (
+                <View style={styles.alarmDayChips}>
+                  {['M','T','W','T','F','S','S'].map((d, i) => {
+                    const dayMap = [1,2,3,4,5,6,0];
+                    const active = alarm.days!.includes(dayMap[i]);
+                    return (
+                      <View key={i} style={[
+                        styles.alarmDayChip,
+                        { backgroundColor: active ? colors.primary + '25' : 'transparent',
+                          borderColor: active ? colors.primary : colors.border },
+                      ]}>
+                        <Text style={[styles.alarmDayChipText, { color: active ? colors.primary : colors.muted }]}>{d}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <Text style={[styles.alarmEdit, { color: colors.primary }]}>Edit</Text>
+              <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+            </View>
           </Pressable>
 
-          {/* ── Jack Alarm Display Preview ── */}
-          <Pressable
-            onPress={() => router.push('/crowpanel-preview' as never)}
-            style={({ pressed }) => [{
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-              backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1,
-              borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10,
-              marginBottom: 10, opacity: pressed ? 0.7 : 1,
-            }]}
-          >
-            <View style={{ width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '18' }}>
-              <IconSymbol name="desktopcomputer" size={15} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>Jack Alarm Preview</Text>
-              <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>Tap to preview the 800×480 alarm UI</Text>
-            </View>
-            <IconSymbol name="chevron.right" size={13} color={colors.muted} />
-          </Pressable>
+
 
           {/* ── Section title ── */}
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
+            <Pressable
+              onPress={() => setShowLegend(true)}
+              style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            >
+              <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
+            </Pressable>
           </View>
 
-          {/* ── Legend ── */}
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#22C55E' }]} />
-              <Text style={[styles.legendText, { color: colors.muted }]}>Hit</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={[styles.legendText, { color: colors.muted }]}>On Track</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-              <Text style={[styles.legendText, { color: colors.muted }]}>Behind</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <IconSymbol name="crown.fill" size={11} color="#FFD700" />
-              <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
-            </View>
-          </View>
+          {/* ── Legend modal ── */}
+          <Modal visible={showLegend} transparent animationType="fade" onRequestClose={() => setShowLegend(false)}>
+            <Pressable style={styles.legendOverlay} onPress={() => setShowLegend(false)}>
+              <View style={[styles.legendModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.legendModalTitle, { color: colors.foreground }]}>Ring Colors</Text>
+                {(['#22C55E', '#F59E0B', '#EF4444'] as const).map((c, i) => (
+                  <View key={c} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: c }]} />
+                    <Text style={[styles.legendText, { color: colors.muted }]}>
+                      {i === 0 ? 'Hit — goal reached' : i === 1 ? 'On Track — ≥60% of goal' : 'Behind — <60% of goal'}
+                    </Text>
+                  </View>
+                ))}
+                <View style={styles.legendItem}>
+                  <IconSymbol name="crown.fill" size={11} color="#FFD700" />
+                  <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
+                </View>
+              </View>
+            </Pressable>
+          </Modal>
 
           {/* ── Goal cards ── */}
           {categories.length === 0 ? (
@@ -597,6 +658,13 @@ export default function HomeScreen() {
                   />
                 );
               })}
+            </View>
+          )}
+
+          {/* ── Daily quote ── */}
+          {categories.length > 0 && (
+            <View style={styles.quoteBlock}>
+              <Text style={[styles.quoteText, { color: colors.muted }]}>"{getDailyQuote()}"</Text>
             </View>
           )}
 
@@ -652,6 +720,10 @@ const styles = StyleSheet.create({
   alarmDot: { width: 8, height: 8, borderRadius: 4 },
   alarmLabel: { fontSize: 12, fontWeight: '500' },
   alarmTime: { fontSize: 15, fontWeight: '700' },
+  alarmTimeLarge: { fontSize: 32, fontWeight: '800', letterSpacing: -1, lineHeight: 36 },
+  alarmDayChips: { flexDirection: 'row', gap: 4, marginTop: 6 },
+  alarmDayChip: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  alarmDayChipText: { fontSize: 10, fontWeight: '700' },
   alarmEdit: { fontSize: 13, fontWeight: '600' },
 
   // Section header
@@ -660,6 +732,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 10,
   },
   sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
+  legendInfoBtn: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  legendInfoBtnText: { fontSize: 12, fontWeight: '700' },
+  legendOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  legendModal: { borderRadius: 16, borderWidth: 1, padding: 20, minWidth: 220, gap: 10 },
+  legendModalTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
 
   // Period toggle
   periodToggle: {
@@ -679,6 +756,10 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 7, height: 7, borderRadius: 4 },
   legendText: { fontSize: 11, fontWeight: '500' },
+
+  // Daily quote
+  quoteBlock: { paddingHorizontal: 4, paddingVertical: 16, marginBottom: 8 },
+  quoteText: { fontSize: 13, fontStyle: 'italic', textAlign: 'center', lineHeight: 20 },
 
   // Goal list
   goalList: { gap: 12, marginBottom: 24 },
