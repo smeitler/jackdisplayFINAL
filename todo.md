@@ -751,3 +751,7 @@
 - [x] Live recording timer (0:00 counting up) while recording
 - [x] Mic button turns red while recording
 - [x] Full recording overlay/card replaces the bottom bar while recording
+
+## Audio Metering + Transcription Fix (Mar 16 2026)
+- [x] Wire waveform bars to real microphone audio metering levels (isMeteringEnabled + dBFS mapping)
+- [x] Replace "transcription unavailable" with friendlier web fallback message

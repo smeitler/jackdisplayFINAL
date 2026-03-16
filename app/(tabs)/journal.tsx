@@ -274,37 +274,34 @@ const dgStyles = StyleSheet.create({
 });
 
 // ─── Waveform Bars ───────────────────────────────────────────────────────────
-function WaveformBars({ isActive }: { isActive: boolean }) {
-  const bars = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current];
-  const anims = useRef<Animated.CompositeAnimation[]>([]);
+function WaveformBars({ metering }: { metering: number | undefined }) {
+  // metering is in dBFS: typically -160 (silence) to 0 (max). Map to 0..1 scale.
+  const NUM_BARS = 7;
+  const bars = useRef(Array.from({ length: NUM_BARS }, () => new Animated.Value(0.15))).current;
+  const prevMetering = useRef<number>(-160);
 
   useEffect(() => {
-    if (isActive) {
-      anims.current = bars.map((bar, i) => {
-        const anim = Animated.loop(
-          Animated.sequence([
-            Animated.delay(i * 80),
-            Animated.timing(bar, { toValue: 1, duration: 300 + i * 60, useNativeDriver: true }),
-            Animated.timing(bar, { toValue: 0.2, duration: 300 + i * 60, useNativeDriver: true }),
-          ])
-        );
-        anim.start();
-        return anim;
-      });
-    } else {
-      anims.current.forEach((a) => a.stop());
-      bars.forEach((b) => Animated.timing(b, { toValue: 0.3, duration: 200, useNativeDriver: true }).start());
-    }
-    return () => { anims.current.forEach((a) => a.stop()); };
-  }, [isActive]);
+    const db = metering ?? -160;
+    // Smooth: blend toward new level
+    const blended = prevMetering.current * 0.4 + db * 0.6;
+    prevMetering.current = blended;
+    // Map dBFS -60..0 to 0.1..1.0
+    const normalized = Math.max(0.1, Math.min(1.0, (blended + 60) / 60));
+    // Each bar gets a slightly randomized height around the normalized level
+    bars.forEach((bar, i) => {
+      const variance = (Math.random() - 0.5) * 0.3;
+      const target = Math.max(0.1, Math.min(1.0, normalized + variance));
+      Animated.timing(bar, { toValue: target, duration: 80, useNativeDriver: true }).start();
+    });
+  }, [metering]);
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 36 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, height: 36 }}>
       {bars.map((bar, i) => (
         <Animated.View
           key={i}
           style={{
-            width: 4,
+            width: 3,
             height: 36,
             borderRadius: 2,
             backgroundColor: "#EF4444",
@@ -321,7 +318,7 @@ function MicButton({ onRecordingComplete, colors }: {
   onRecordingComplete: (uri: string, duration: number) => void;
   colors: ReturnType<typeof useColors>;
 }) {
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const recorderState = useAudioRecorderState(recorder);
   const [permGranted, setPermGranted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -401,7 +398,7 @@ function MicButton({ onRecordingComplete, colors }: {
       {/* Recording active state — waveform + timer */}
       {isRecording && (
         <View style={micStyles.recordingRow}>
-          <WaveformBars isActive={isRecording} />
+          <WaveformBars metering={recorderState.metering} />
           <Text style={micStyles.timer}>{fmtDuration(elapsedSecs)}</Text>
           <Text style={micStyles.releaseHint}>Release to stop</Text>
         </View>
@@ -520,8 +517,8 @@ export default function JournalScreen() {
       }
 
       if (!audioBase64) {
-        // Fallback: save without transcript
-        const updated = { ...entry, text: "[Voice entry — transcription unavailable on this platform]" };
+        // Fallback: save without transcript (web doesn't support FileSystem)
+        const updated = { ...entry, text: "(Voice entry — open on your iPhone to transcribe)" };
         const all = await loadJournalEntries();
         await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e));
         setEntries(all.map((e) => e.id === entry.id ? updated : e));
