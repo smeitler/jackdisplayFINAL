@@ -691,3 +691,9 @@
 - [x] Remove 30-day average stat card from home screen
 - [x] Alarm strip: larger time display, day chips, visible green/grey dot
 - [x] Replace generic quotes with user's curated 30-quote list
+
+## Home Screen Polish (Mar 16 2026)
+
+- [x] Make all 3 habit progress rings the same size (uniform, no hierarchy)
+- [x] Replace streak sub-line text with today's date in the header
+- [x] Redesign Today's Focus card "All caught up" state to look more polished/celebratory

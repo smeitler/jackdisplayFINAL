@@ -210,9 +210,7 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-const RING_SIZE = 38;
-const RING_SIZE_SM = 28;
-const RING_SIZE_XS = 22;
+const RING_SIZE = 30;
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -312,19 +310,16 @@ function HabitGoalRow({
         {habit.name}
       </Text>
 
-      {/* Right side: three rings — smallest (oldest) to largest (current) */}
-      <View style={styles.habitRight}>
-        {goal > 0 ? (
-          <View style={styles.ringTriple}>
-            {/* 2 periods ago — smallest */}
-            <CircleRing done={p0Done} goal={goal} size={RING_SIZE_XS} periodLabel={p0Label} />
-            <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-            {/* Last period — medium */}
-            <CircleRing done={p1Done} goal={goal} size={RING_SIZE_SM} periodLabel={p1Label} />
-            <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-            {/* Current period — largest / hero */}
-            <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
-          </View>
+            {/* Right side: three rings — all same size */}
+          <View style={styles.habitRight}>
+            {goal > 0 ? (
+              <View style={styles.ringTriple}>
+                <CircleRing done={p0Done} goal={goal} size={RING_SIZE} periodLabel={p0Label} />
+                <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
+                <CircleRing done={p1Done} goal={goal} size={RING_SIZE} periodLabel={p1Label} />
+                <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
+                <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
+              </View>
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
             {isMonthly ? 'No monthly goal' : 'No weekly goal'}
@@ -610,15 +605,11 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
-          {/* ── Header: streak pill + profile pic ── */}
+          {/* ── Header: date + streak pill + profile pic ── */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.dateText, { color: colors.muted }]}>
-                {isPendingCheckIn
-                  ? 'Yesterday needs a review'
-                  : streak > 0
-                  ? `Day ${streak} of your streak 🔥`
-                  : 'Keep showing up — it adds up'}
+              <Text style={[styles.dateText, { color: colors.foreground }]}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -650,55 +641,63 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── Today's Focus Card (replaces disappearing check-in banner) ── */}
-          <Pressable
-            onPress={() => {
-              if (missedDates.length > 0) {
-                setShowMissedDays(true);
-              } else {
-                handleCheckIn(yesterday);
-              }
-            }}
-            style={({ pressed }) => [
-              styles.focusCard,
-              {
-                backgroundColor: isPendingCheckIn
-                  ? colors.primary
-                  : colors.surface,
-                borderColor: isPendingCheckIn ? colors.primary : colors.border,
-                opacity: pressed ? 0.9 : 1,
-                transform: [{ scale: pressed ? 0.98 : 1 }],
-              },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[
-                styles.focusCardTitle,
-                { color: isPendingCheckIn ? '#fff' : colors.foreground },
-              ]}>
-                {isPendingCheckIn
-                  ? `${activeHabits.length} habit${activeHabits.length !== 1 ? 's' : ''} to review`
-                  : missedDates.length > 0
-                  ? `${missedDates.length} day${missedDates.length !== 1 ? 's' : ''} to catch up`
-                  : 'All caught up ✓'}
-              </Text>
-              <Text style={[
-                styles.focusCardSub,
-                { color: isPendingCheckIn ? 'rgba(255,255,255,0.75)' : colors.muted },
-              ]}>
-                {isPendingCheckIn
-                  ? `${formatDisplayDate(yesterday)} · Tap to rate`
-                  : missedDates.length > 0
-                  ? 'Tap to review missed days'
-                  : 'Great work keeping up your streak'}
-              </Text>
+          {/* ── Today's Focus Card ── */}
+          {(isPendingCheckIn || missedDates.length > 0) ? (
+            <Pressable
+              onPress={() => {
+                if (missedDates.length > 0) {
+                  setShowMissedDays(true);
+                } else {
+                  handleCheckIn(yesterday);
+                }
+              }}
+              style={({ pressed }) => [
+                styles.focusCard,
+                {
+                  backgroundColor: isPendingCheckIn ? colors.primary : colors.surface,
+                  borderColor: isPendingCheckIn ? colors.primary : '#F59E0B',
+                  opacity: pressed ? 0.9 : 1,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.focusCardTitle, { color: isPendingCheckIn ? '#fff' : colors.foreground }]}>
+                  {isPendingCheckIn
+                    ? `${activeHabits.length} habit${activeHabits.length !== 1 ? 's' : ''} to review`
+                    : `${missedDates.length} day${missedDates.length !== 1 ? 's' : ''} to catch up`}
+                </Text>
+                <Text style={[styles.focusCardSub, { color: isPendingCheckIn ? 'rgba(255,255,255,0.75)' : colors.muted }]}>
+                  {isPendingCheckIn
+                    ? `${formatDisplayDate(yesterday)} · Tap to rate`
+                    : 'Tap to review missed days'}
+                </Text>
+              </View>
+              <IconSymbol
+                name="chevron.right"
+                size={18}
+                color={isPendingCheckIn ? 'rgba(255,255,255,0.8)' : '#F59E0B'}
+              />
+            </Pressable>
+          ) : (
+            <View style={[styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.allCaughtUpLeft}>
+                <View style={[styles.allCaughtUpIconWrap, { backgroundColor: '#22C55E20' }]}>
+                  <IconSymbol name="checkmark.circle.fill" size={22} color="#22C55E" />
+                </View>
+                <View>
+                  <Text style={[styles.allCaughtUpTitle, { color: colors.foreground }]}>All caught up</Text>
+                  <Text style={[styles.allCaughtUpSub, { color: colors.muted }]}>You're on top of your habits</Text>
+                </View>
+              </View>
+              {streak > 0 && (
+                <View style={styles.allCaughtUpStreak}>
+                  <IconSymbol name="flame.fill" size={14} color="#FF6B35" />
+                  <Text style={styles.allCaughtUpStreakNum}>{streak}</Text>
+                </View>
+              )}
             </View>
-            <IconSymbol
-              name="chevron.right"
-              size={18}
-              color={isPendingCheckIn ? 'rgba(255,255,255,0.8)' : colors.muted}
-            />
-          </Pressable>
+          )}
 
           {/* ── Alarm strip ── */}
           <Pressable
@@ -771,7 +770,7 @@ export default function HomeScreen() {
                   <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
                 </View>
                 <Text style={[styles.legendHint, { color: colors.muted }]}>
-                  Rings: smallest = 2 periods ago, medium = last period, largest = current period
+                  Rings: left = 2 periods ago, middle = last period, right = current period
                 </Text>
               </View>
             </Pressable>
@@ -848,7 +847,7 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  dateText: { fontSize: 13, marginTop: 3 },
+  dateText: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   streakPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FF6B3520', borderRadius: 20,
@@ -869,6 +868,22 @@ const styles = StyleSheet.create({
   },
   focusCardTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   focusCardSub: { fontSize: 12 },
+
+  // All Caught Up card
+  allCaughtUpCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1,
+  },
+  allCaughtUpLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  allCaughtUpIconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  allCaughtUpTitle: { fontSize: 15, fontWeight: '700' },
+  allCaughtUpSub: { fontSize: 12, marginTop: 1 },
+  allCaughtUpStreak: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FF6B3520', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  allCaughtUpStreakNum: { fontSize: 15, fontWeight: '800', color: '#FF6B35' },
 
   // Alarm strip
   alarmStrip: {
