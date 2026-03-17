@@ -553,13 +553,13 @@ export default function HomeScreen() {
     });
   }, [router]);
 
-  // Calculate missed check-in dates (up to last 30 days, excluding today)
+  // Calculate missed check-in dates: today + up to 7 days back
   const missedDates = useMemo(() => {
     if (activeHabits.length === 0) return [];
     const checkedDates = new Set(checkIns.map((e) => e.date));
     const missed: string[] = [];
-    // Look back up to 7 days, skip today
-    for (let i = 1; i <= 7; i++) {
+    // Include today first, then look back up to 7 days
+    for (let i = 0; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = toDateString(d);
@@ -695,7 +695,14 @@ export default function HomeScreen() {
                 </Text>
                 <Text style={[styles.focusCardSub, { color: isPendingCheckIn ? 'rgba(255,255,255,0.75)' : colors.muted }]}>
                   {isPendingCheckIn
-                    ? `${formatDisplayDate(yesterday)} · Tap to rate`
+                    ? (() => {
+                        const todayStr = toDateString(new Date());
+                        const todayDone = checkIns.some((e) => e.date === todayStr);
+                        const yestDone = checkIns.some((e) => e.date === yesterday);
+                        if (!todayDone && !yestDone) return `Today & ${formatDisplayDate(yesterday)} · Tap to rate`;
+                        if (!todayDone) return `Today · Tap to rate`;
+                        return `${formatDisplayDate(yesterday)} · Tap to rate`;
+                      })()
                     : 'Tap to review missed days'}
                 </Text>
               </View>
