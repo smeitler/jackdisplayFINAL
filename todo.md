@@ -951,3 +951,10 @@
 - [x] Root cause: deduplicateTranscript over-matched after first habit, returning empty string for all subsequent windows
 - [x] Root cause 2: rollingWindowRef not reset on new session, old audio poisoned first window
 - [x] Fix: switched to cumulative audio approach — send ALL audio since start to Whisper each tick, replace transcript with full result (no deduplication)
+
+## Voice Check-in Speed Improvements (Mar 17 2026 - session 12)
+
+- [x] Reduce CHUNK_INTERVAL_MS from 3000ms to 1500ms for faster transcription ticks
+- [x] Reduce SILENCE_TRIGGER_MS from 1200ms to 600ms so LLM fires sooner after speech ends
+- [x] Reduce WORD_DELTA_TRIGGER from 3 to 2 words so LLM fires more eagerly
+- [x] Overlap Whisper and LLM calls: fire LLM on previous transcript while Whisper processes new audio

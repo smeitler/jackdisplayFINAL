@@ -25,18 +25,19 @@ import {
 
 // ─── Voice Check-in Sliding Window Recorder (isolated from journal code) ────
 // Architecture:
-//   1. Cumulative audio: every 3s, send ALL audio since recording started to Whisper
+//   1. Cumulative audio: every 1.5s, send ALL audio since recording started to Whisper
 //      → Whisper gets the full context and returns the complete transcript so far
 //      → No deduplication needed — we just REPLACE the transcript with Whisper's result
 //      → Whisper's `prompt` parameter is set to the previous transcript so it continues naturally
 //   2. Smart LLM debounce: fire analyzeTranscript on EITHER:
-//      a) 1.2s of silence detected via Web Audio AnalyserNode RMS measurement
-//      b) transcript grew by 3+ words since last LLM call
+//      a) 0.6s of silence detected via Web Audio AnalyserNode RMS measurement
+//      b) transcript grew by 2+ words since last LLM call
+//      c) Parallel path: LLM fires on previous transcript WHILE Whisper processes new audio
 //   3. Mandatory final analysis on stop (complete transcript, awaited)
-const CHUNK_INTERVAL_MS = 3000;        // send cumulative audio every 3s
+const CHUNK_INTERVAL_MS = 1500;        // send cumulative audio every 1.5s (was 3s)
 const SILENCE_THRESHOLD_RMS = 0.02;    // RMS below this = silence
-const SILENCE_TRIGGER_MS = 1200;       // 1.2s of continuous silence → trigger LLM
-const WORD_DELTA_TRIGGER = 3;          // 3+ new words since last LLM → trigger LLM
+const SILENCE_TRIGGER_MS = 600;        // 0.6s of continuous silence → trigger LLM (was 1.2s)
+const WORD_DELTA_TRIGGER = 2;          // 2+ new words since last LLM → trigger LLM (was 3)
 
 type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
 type SilenceCallback = () => void;
@@ -360,6 +361,15 @@ export default function CheckInScreen() {
       }
     }, 12000);
 
+    // PARALLEL PATH: fire LLM on the CURRENT transcript immediately while Whisper processes new audio
+    // This hides Whisper latency — LLM analysis starts ~1.5s earlier than sequential approach
+    const transcriptAtTickStart = vcTranscriptRef.current;
+    const wordsAtTickStart = transcriptAtTickStart.split(/\s+/).filter(Boolean).length;
+    const parallelWordDelta = wordsAtTickStart - vcLastLlmWordCountRef.current;
+    if (parallelWordDelta >= WORD_DELTA_TRIGGER && transcriptAtTickStart.trim()) {
+      fireAnalyzeTranscript(transcriptAtTickStart);
+    }
+
     try {
       // STEP 1: Whisper — transcribe ALL audio since recording started
       // Pass previousTranscript as a prompt hint so Whisper continues naturally
@@ -382,9 +392,10 @@ export default function CheckInScreen() {
           setVcTranscript(fullText);
           vcTranscriptRef.current = fullText;
 
-          // STEP 2: Smart LLM debounce — fire if word delta >= WORD_DELTA_TRIGGER
-          const wordDelta = newWordCount - vcLastLlmWordCountRef.current;
-          if (wordDelta >= WORD_DELTA_TRIGGER) {
+          // STEP 2: Fire LLM again if Whisper returned MORE words than the parallel path saw
+          // (catches words that arrived during Whisper's processing time)
+          const postWhisperDelta = newWordCount - vcLastLlmWordCountRef.current;
+          if (postWhisperDelta >= WORD_DELTA_TRIGGER) {
             fireAnalyzeTranscript(fullText);
           }
           // (Silence path fires separately via handleVcSilence callback)
