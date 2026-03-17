@@ -858,3 +858,6 @@
 - [x] Calendar: ensure photos always show in cells immediately after being added (fix reactivity)
 - [x] Media tab: show each item with date, photo thumbnail preview, and entry context
 - [x] Media tab: audio entries show text preview snippet alongside the audio player
+- [x] Fix photo preview disappearing in journal list after saving
+- [x] Fix templates not applying content when selected from dropdown
+- [x] Show template prompts/questions as an overlay during recording so user can see what to talk about

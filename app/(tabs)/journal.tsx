@@ -223,9 +223,10 @@ const pbStyles = StyleSheet.create({
 });
 
 // ─── MicButton ───────────────────────────────────────────────────────────────
-function MicButton({ onRecordingComplete, colors }: {
+function MicButton({ onRecordingComplete, colors, templatePrompt }: {
   onRecordingComplete: (uri: string, duration: number, mimeType: string) => void;
   colors: any;
+  templatePrompt?: string; // prompts to show while recording
 }) {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 100);
@@ -328,14 +329,39 @@ function MicButton({ onRecordingComplete, colors }: {
 
   return (
     <View style={{ alignItems: "center", gap: 4 }}>
-      {isRecording && (
+      {/* Template prompt overlay — shown while recording */}
+      {isRecording && templatePrompt ? (
+        <View style={{
+          position: "absolute", bottom: 80, left: -140, right: -140,
+          backgroundColor: colors.surface,
+          borderRadius: 14, padding: 14,
+          borderWidth: 1, borderColor: colors.border,
+          shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15, shadowRadius: 8, elevation: 8,
+          zIndex: 100,
+        }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
+            <Text style={{ fontSize: 12, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any }}>
+              {fmtDuration(elapsedSecs)}
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.muted, marginLeft: 4 }}>Recording…</Text>
+          </View>
+          <Text style={{ fontSize: 13, color: colors.foreground, lineHeight: 20, fontWeight: "600", marginBottom: 4 }}>
+            Talking points:
+          </Text>
+          <Text style={{ fontSize: 13, color: colors.foreground, lineHeight: 20 }}>
+            {templatePrompt}
+          </Text>
+        </View>
+      ) : isRecording ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
           <Text style={{ fontSize: 14, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any }}>
             {fmtDuration(elapsedSecs)}
           </Text>
         </View>
-      )}
+      ) : null}
       <View style={{ position: "relative", alignItems: "center", justifyContent: "center", width: 64, height: 64 }}>
         {isRecording && (
           <Animated.View
@@ -441,23 +467,8 @@ function EntryEditor({
     }
   }, [visible, entry, initialDate]);
 
-  function applyTemplate(t: JournalTemplate) {
-    setTemplate(t);
-    if (t === "habit-checkin" as any) {
-      // Build a habit-based template body
-      const lines: string[] = ["Daily Habit Notes", ""];
-      for (const h of habits) {
-        lines.push(`${h.emoji} ${h.name}`);
-        lines.push("Notes: ");
-        lines.push("");
-      }
-      if (!body.trim()) setBody(lines.join("\n"));
-    } else {
-      const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === t);
-      if (tmpl && tmpl.prompt && !body.trim()) setBody(tmpl.prompt);
-    }
-    setShowTemplates(false);
-  }
+  // applyTemplate is replaced by applyTemplateByKey below — kept as no-op for safety
+  function applyTemplate(_t: JournalTemplate) {}
 
   async function handleAddLocation() {
     try {
@@ -572,24 +583,55 @@ function EntryEditor({
   async function handleSave() {
     if (!body.trim() && attachments.length === 0) return;
     setIsSaving(true);
-    const now = new Date().toISOString();
-    const saved: JournalEntry = {
-      id: entry?.id || generateId(),
-      userId,
-      date,
-      createdAt: entry?.createdAt || now,
-      updatedAt: now,
-      title: title.trim(),
-      body: body.trim(),
-      template,
-      attachments,
-      location,
-      mood,
-      tags: [],
-    };
-    onSave(saved);
-    setIsSaving(false);
-    onClose();
+    try {
+      const now = new Date().toISOString();
+
+      // Convert photo/video file URIs to base64 data URIs so they persist across app restarts.
+      // Audio URIs are already data URIs from the recorder, so skip those.
+      const persistedAttachments: JournalAttachment[] = await Promise.all(
+        attachments.map(async (att) => {
+          if ((att.type === "photo" || att.type === "video") && att.uri && !att.uri.startsWith("data:")) {
+            try {
+              if (Platform.OS === "web") {
+                // On web, fetch the blob and convert to data URI
+                const resp = await fetch(att.uri);
+                const blob = await resp.blob();
+                const dataUri = await blobToDataUri(blob);
+                return { ...att, uri: dataUri };
+              } else {
+                // On native, read as base64 and build data URI
+                const base64 = await FileSystem.readAsStringAsync(att.uri, { encoding: FileSystem.EncodingType.Base64 });
+                const mime = att.mimeType || "image/jpeg";
+                return { ...att, uri: `data:${mime};base64,${base64}` };
+              }
+            } catch {
+              // If conversion fails, keep original URI
+              return att;
+            }
+          }
+          return att;
+        })
+      );
+
+      const saved: JournalEntry = {
+        id: entry?.id || generateId(),
+        userId,
+        date,
+        createdAt: entry?.createdAt || now,
+        updatedAt: now,
+        title: title.trim(),
+        body: body.trim(),
+        template,
+        attachments: persistedAttachments,
+        location,
+        mood,
+        tags: [],
+      };
+      onSave(saved);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   // All templates including the new habit-based one
@@ -622,25 +664,35 @@ function EntryEditor({
   }, [habits]);
 
   function applyTemplateByKey(key: string) {
-    if (key === "habit-checkin") {
-      setTemplate("blank");
-      const lines: string[] = [];
-      for (const h of habits) {
-        lines.push(`${h.emoji} ${h.name}`);
-        lines.push("");
-      }
-      if (!body.trim()) setBody(lines.join("\n"));
-    } else if (key === "morning-pages") {
-      setTemplate("free-write");
-      if (!body.trim()) setBody("Just write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n");
-    } else if (key === "weekly-review") {
-      setTemplate("goal-review");
-      if (!body.trim()) setBody("This week's wins:\n\n\nThis week's challenges:\n\n\nLessons learned:\n\n\nFocus for next week:\n\n");
-    } else {
-      applyTemplate(key as JournalTemplate);
-      return;
-    }
+    // Always apply the template — overwrite body if it's empty OR if user explicitly picks a template
     setShowTemplates(false);
+    if (key === "habit-checkin") {
+      setTemplate("blank" as JournalTemplate);
+      const lines: string[] = ["📋 Daily Habit Notes", ""];
+      if (habits.length > 0) {
+        for (const h of habits) {
+          lines.push(`${h.emoji} ${h.name}`);
+          lines.push("Notes: ");
+          lines.push("");
+        }
+      } else {
+        lines.push("No active habits found. Add habits in the Habits tab first.");
+      }
+      setBody(lines.join("\n"));
+    } else if (key === "morning-pages") {
+      setTemplate("free-write" as JournalTemplate);
+      setBody("🌅 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n");
+    } else if (key === "weekly-review") {
+      setTemplate("goal-review" as JournalTemplate);
+      setBody("📊 Weekly Review\n\n✅ This week's wins:\n\n\n⚠️ This week's challenges:\n\n\n💡 Lessons learned:\n\n\n🎯 Focus for next week:\n\n");
+    } else {
+      // Built-in templates
+      const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === key);
+      if (tmpl) {
+        setTemplate(tmpl.key);
+        if (tmpl.prompt) setBody(tmpl.prompt);
+      }
+    }
   }
 
   if (!visible) return null;
@@ -794,7 +846,22 @@ function EntryEditor({
                 <IconSymbol name="paperclip" size={22} color={colors.muted} />
               </Pressable>
             </View>
-            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
+            <MicButton
+              onRecordingComplete={handleRecordingComplete}
+              colors={colors}
+              templatePrompt={(() => {
+                // Build the prompt to show during recording based on current template
+                if (template === "habit-checkin" as any) {
+                  return habits.length > 0
+                    ? habits.map((h) => `${h.emoji} ${h.name}`).join("  ·  ")
+                    : "Talk about your habits today";
+                }
+                const tmpl = allTemplates.find((t) => t.key === template);
+                if (tmpl && tmpl.description && tmpl.description !== "Start from scratch") return tmpl.description;
+                const baseTmpl = JOURNAL_TEMPLATES.find((t) => t.key === template);
+                return baseTmpl?.prompt || undefined;
+              })()}
+            />
             <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
               {!location ? (
                 <Pressable onPress={handleAddLocation} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
