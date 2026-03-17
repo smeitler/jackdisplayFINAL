@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
-  Modal, FlatList, Dimensions,
+  Modal, FlatList, Dimensions, Image,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -23,7 +23,7 @@ import {
   JOURNAL_TEMPLATES, generateId, todayDateStr, formatDateLabel, formatTime,
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
-import { getLastUserId } from "@/lib/storage";
+import { getLastUserId, loadHabits, type Habit } from "@/lib/storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -326,21 +326,20 @@ function MicButton({ onRecordingComplete, colors }: {
   } : {};
 
   return (
-    <View style={{ alignItems: "center", gap: 8 }}>
+    <View style={{ alignItems: "center", gap: 4 }}>
       {isRecording && (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#EF4444" }} />
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
+          <Text style={{ fontSize: 14, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any }}>
             {fmtDuration(elapsedSecs)}
           </Text>
-          <Text style={{ fontSize: 12, color: "#EF4444" }}>Release to stop</Text>
         </View>
       )}
-      <View style={{ position: "relative", alignItems: "center", justifyContent: "center", width: 80, height: 80 }}>
+      <View style={{ position: "relative", alignItems: "center", justifyContent: "center", width: 64, height: 64 }}>
         {isRecording && (
           <Animated.View
             style={[{
-              position: "absolute", width: 56, height: 56, borderRadius: 28, backgroundColor: "#EF4444",
+              position: "absolute", width: 48, height: 48, borderRadius: 24, backgroundColor: "#EF4444",
               transform: [{ scale: pulseAnim }],
               opacity: pulseAnim.interpolate({ inputRange: [1, 1.6], outputRange: [0.5, 0] }),
             }]}
@@ -351,34 +350,34 @@ function MicButton({ onRecordingComplete, colors }: {
             <View
               {...webTouchProps}
               style={[{
-                width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
+                width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center",
                 backgroundColor: isRecording ? "#EF4444" : colors.primary, cursor: "pointer",
               } as any]}
             >
-              <IconSymbol name="mic.fill" size={24} color="#fff" />
+              <IconSymbol name="mic.fill" size={22} color="#fff" />
             </View>
           ) : (
             <Pressable
               onPressIn={startRecording}
               onPressOut={stopRecording}
               style={[{
-                width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
+                width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center",
                 backgroundColor: isRecording ? "#EF4444" : colors.primary,
               }]}
             >
-              <IconSymbol name="mic.fill" size={24} color="#fff" />
+              <IconSymbol name="mic.fill" size={22} color="#fff" />
             </Pressable>
           )}
         </Animated.View>
       </View>
       {!isRecording && !isProcessing && webRecorder.micError ? (
-        <Text style={{ color: colors.error ?? "#EF4444", fontSize: 11, textAlign: "center" }}>{webRecorder.micError}</Text>
+        <Text style={{ color: colors.error ?? "#EF4444", fontSize: 10, textAlign: "center", maxWidth: 200 }}>{webRecorder.micError}</Text>
       ) : !isRecording && !isProcessing ? (
-        <Text style={{ fontSize: 11, color: colors.muted }}>Hold to record</Text>
+        <Text style={{ fontSize: 10, color: colors.muted }}>Hold to record</Text>
       ) : isProcessing ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={{ fontSize: 11, color: colors.muted }}>Saving…</Text>
+          <Text style={{ fontSize: 10, color: colors.muted }}>Saving…</Text>
         </View>
       ) : null}
     </View>
@@ -410,7 +409,13 @@ function EntryEditor({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
+  const [habits, setHabits] = useState<Habit[]>([]);
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
+
+  // Load habits for template
+  useEffect(() => {
+    loadHabits().then((h) => setHabits(h.filter((x) => x.isActive)));
+  }, []);
 
   // Reset form when opening
   useEffect(() => {
@@ -437,20 +442,29 @@ function EntryEditor({
 
   function applyTemplate(t: JournalTemplate) {
     setTemplate(t);
-    const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === t);
-    if (tmpl && tmpl.prompt && !body.trim()) setBody(tmpl.prompt);
+    if (t === "habit-checkin" as any) {
+      // Build a habit-based template body
+      const lines: string[] = ["Daily Habit Notes", ""];
+      for (const h of habits) {
+        lines.push(`${h.emoji} ${h.name}`);
+        lines.push("Notes: ");
+        lines.push("");
+      }
+      if (!body.trim()) setBody(lines.join("\n"));
+    } else {
+      const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === t);
+      if (tmpl && tmpl.prompt && !body.trim()) setBody(tmpl.prompt);
+    }
     setShowTemplates(false);
   }
 
   async function handleAddLocation() {
     try {
       if (Platform.OS === "web") {
-        // Use browser geolocation API
         if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             const loc: JournalLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-            // Try reverse geocode
             try {
               const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${loc.latitude}&lon=${loc.longitude}&format=json`);
               const data = await resp.json();
@@ -524,7 +538,6 @@ function EntryEditor({
       durationMs: duration * 1000,
     };
     setAttachments((prev) => [...prev, att]);
-    // Kick off transcription in background
     transcribeAudio(att, uri, mimeType);
   }
 
@@ -578,7 +591,56 @@ function EntryEditor({
     onClose();
   }
 
-  const MOODS = ["😊", "😐", "😢", "😤", "🥳", "😴", "🤔", "💪", "🙏", "❤️"];
+  // All templates including the new habit-based one
+  const allTemplates = useMemo(() => {
+    const base = JOURNAL_TEMPLATES.map((t) => ({
+      key: t.key,
+      label: t.label,
+      description: t.prompt ? t.prompt.split("\n")[0] : "Start from scratch",
+    }));
+    // Insert habit check-in template after "Blank"
+    base.splice(1, 0, {
+      key: "habit-checkin" as any,
+      label: "Habit Notes",
+      description: habits.length > 0
+        ? `Notes for your ${habits.length} active habits`
+        : "Add notes for each of your habits",
+    });
+    // Add more useful templates
+    base.push({
+      key: "morning-pages" as any,
+      label: "Morning Pages",
+      description: "Stream of consciousness writing",
+    });
+    base.push({
+      key: "weekly-review" as any,
+      label: "Weekly Review",
+      description: "Review your week's progress",
+    });
+    return base;
+  }, [habits]);
+
+  function applyTemplateByKey(key: string) {
+    if (key === "habit-checkin") {
+      setTemplate("blank");
+      const lines: string[] = [];
+      for (const h of habits) {
+        lines.push(`${h.emoji} ${h.name}`);
+        lines.push("");
+      }
+      if (!body.trim()) setBody(lines.join("\n"));
+    } else if (key === "morning-pages") {
+      setTemplate("free-write");
+      if (!body.trim()) setBody("Just write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n");
+    } else if (key === "weekly-review") {
+      setTemplate("goal-review");
+      if (!body.trim()) setBody("This week's wins:\n\n\nThis week's challenges:\n\n\nLessons learned:\n\n\nFocus for next week:\n\n");
+    } else {
+      applyTemplate(key as JournalTemplate);
+      return;
+    }
+    setShowTemplates(false);
+  }
 
   if (!visible) return null;
 
@@ -606,7 +668,7 @@ function EntryEditor({
             </Pressable>
           </View>
 
-          {/* Date picker (simple month/day selector) */}
+          {/* Date picker */}
           {showDatePicker && (
             <View style={[editorStyles.datePicker, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
               <TextInput
@@ -624,44 +686,33 @@ function EntryEditor({
             </View>
           )}
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
-            {/* Mood selector */}
-            <View style={editorStyles.moodRow}>
-              {MOODS.map((m) => (
-                <Pressable
-                  key={m}
-                  onPress={() => setMood(mood === m ? "" : m)}
-                  style={[editorStyles.moodBtn, mood === m && { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}
-                >
-                  <Text style={{ fontSize: 20 }}>{m}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Template selector */}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+            {/* Template selector — compact pill */}
             <Pressable
               onPress={() => setShowTemplates(!showTemplates)}
-              style={[editorStyles.templateToggle, { borderColor: colors.border }]}
+              style={[editorStyles.templateToggle, { borderColor: colors.border, backgroundColor: colors.surface }]}
             >
-              <IconSymbol name="doc.fill" size={16} color={colors.muted} />
-              <Text style={{ fontSize: 13, color: colors.muted }}>
-                Template: {JOURNAL_TEMPLATES.find((t) => t.key === template)?.label || "Blank"}
+              <IconSymbol name="doc.fill" size={14} color={colors.muted} />
+              <Text style={{ fontSize: 13, color: colors.muted, flex: 1 }}>
+                {allTemplates.find((t) => t.key === template)?.label || "Choose template"}
               </Text>
               <IconSymbol name={showTemplates ? "chevron.up" : "chevron.down"} size={14} color={colors.muted} />
             </Pressable>
 
             {showTemplates && (
               <View style={editorStyles.templateGrid}>
-                {JOURNAL_TEMPLATES.map((t) => (
+                {allTemplates.map((t) => (
                   <Pressable
                     key={t.key}
-                    onPress={() => applyTemplate(t.key)}
-                    style={[
-                      editorStyles.templateCard,
-                      { borderColor: template === t.key ? colors.primary : colors.border, backgroundColor: colors.surface },
-                    ]}
+                    onPress={() => applyTemplateByKey(t.key)}
+                    style={({ pressed }) => [{
+                      paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5,
+                      borderColor: template === t.key ? colors.primary : colors.border,
+                      backgroundColor: pressed ? colors.primary + "10" : colors.surface,
+                    }]}
                   >
                     <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>{t.label}</Text>
+                    <Text style={{ fontSize: 10, color: colors.muted, marginTop: 2 }} numberOfLines={1}>{t.description}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -732,21 +783,26 @@ function EntryEditor({
             )}
           </ScrollView>
 
-          {/* Bottom toolbar */}
+          {/* Bottom toolbar — mic CENTERED, actions on right */}
           <View style={[editorStyles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
             <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
               <Pressable onPress={handlePickPhoto} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                <IconSymbol name="photo.fill" size={24} color={colors.primary} />
+                <IconSymbol name="photo.fill" size={22} color={colors.muted} />
               </Pressable>
               <Pressable onPress={handlePickDocument} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                <IconSymbol name="doc.fill" size={24} color={colors.primary} />
+                <IconSymbol name="paperclip" size={22} color={colors.muted} />
               </Pressable>
-              {!location && (
+            </View>
+            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
+            <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
+              {!location ? (
                 <Pressable onPress={handleAddLocation} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                  <IconSymbol name="location.fill" size={24} color={colors.primary} />
+                  <IconSymbol name="location.fill" size={22} color={colors.muted} />
                 </Pressable>
+              ) : (
+                <View style={{ width: 22 }} />
               )}
+              <View style={{ width: 22 }} />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -758,16 +814,13 @@ function EntryEditor({
 const editorStyles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, paddingTop: 56 },
   datePicker: { borderBottomWidth: 0.5, paddingVertical: 4 },
-  moodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
-  moodBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "transparent" },
   templateToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderRadius: 10, marginBottom: 12 },
-  templateGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
-  templateCard: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5 },
+  templateGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
   titleInput: { fontSize: 22, fontWeight: "700", paddingVertical: 12, borderBottomWidth: 0.5, marginBottom: 8 },
   bodyInput: { fontSize: 16, lineHeight: 24, minHeight: 200, paddingVertical: 8 },
   attachRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 10, borderWidth: 1 },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 12 },
-  toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
+  toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 6, paddingBottom: 16, borderTopWidth: 0.5 },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -794,7 +847,7 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
   if (entries.length === 0) {
     return (
       <View style={{ alignItems: "center", paddingVertical: 60, gap: 12 }}>
-        <Text style={{ fontSize: 40 }}>📔</Text>
+        <IconSymbol name="book.fill" size={40} color={colors.muted} />
         <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>No entries yet</Text>
         <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
           Tap the + button to create your first journal entry.
@@ -810,59 +863,53 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
           <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, marginBottom: 8 }}>
             {formatDateLabel(date)}
           </Text>
-          {items.map((entry) => (
-            <Pressable
-              key={entry.id}
-              onPress={() => onEdit(entry)}
-              style={({ pressed }) => [{
-                backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8,
-                borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.8 : 1,
-              }]}
-            >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  {entry.mood ? <Text style={{ fontSize: 20 }}>{entry.mood}</Text> : null}
-                  {entry.title ? (
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }} numberOfLines={1}>{entry.title}</Text>
-                  ) : null}
-                  <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }} numberOfLines={3}>
-                    {entry.body || "(audio entry)"}
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
-                    <Text style={{ fontSize: 11, color: colors.muted }}>{formatTime(entry.createdAt)}</Text>
-                    {entry.attachments.length > 0 && (
-                      <View style={{ flexDirection: "row", gap: 4 }}>
-                        {entry.attachments.some((a) => a.type === "photo") && <IconSymbol name="photo.fill" size={12} color={colors.muted} />}
-                        {entry.attachments.some((a) => a.type === "audio") && <IconSymbol name="mic.fill" size={12} color={colors.muted} />}
-                        {entry.attachments.some((a) => a.type === "video") && <IconSymbol name="video.fill" size={12} color={colors.muted} />}
-                        {entry.attachments.some((a) => a.type === "pdf") && <IconSymbol name="doc.fill" size={12} color={colors.muted} />}
-                      </View>
-                    )}
-                    {entry.location && <IconSymbol name="location.fill" size={12} color={colors.muted} />}
+          {items.map((entry) => {
+            const firstPhoto = entry.attachments.find((a) => a.type === "photo");
+            return (
+              <Pressable
+                key={entry.id}
+                onPress={() => onEdit(entry)}
+                style={({ pressed }) => [{
+                  backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8,
+                  borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.8 : 1,
+                }]}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    {entry.title ? (
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }} numberOfLines={1}>{entry.title}</Text>
+                    ) : null}
+                    <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }} numberOfLines={3}>
+                      {entry.body || "(audio entry)"}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                      <Text style={{ fontSize: 11, color: colors.muted }}>{formatTime(entry.createdAt)}</Text>
+                      {entry.attachments.length > 0 && (
+                        <View style={{ flexDirection: "row", gap: 4 }}>
+                          {entry.attachments.some((a) => a.type === "photo") && <IconSymbol name="photo.fill" size={12} color={colors.muted} />}
+                          {entry.attachments.some((a) => a.type === "audio") && <IconSymbol name="mic.fill" size={12} color={colors.muted} />}
+                          {entry.attachments.some((a) => a.type === "video") && <IconSymbol name="video.fill" size={12} color={colors.muted} />}
+                          {entry.attachments.some((a) => a.type === "pdf") && <IconSymbol name="doc.fill" size={12} color={colors.muted} />}
+                        </View>
+                      )}
+                      {entry.location && <IconSymbol name="location.fill" size={12} color={colors.muted} />}
+                    </View>
                   </View>
+                  {firstPhoto && (
+                    <Image
+                      source={{ uri: firstPhoto.uri }}
+                      style={{ width: 56, height: 56, borderRadius: 8, marginLeft: 10 }}
+                      resizeMode="cover"
+                    />
+                  )}
                 </View>
-                <Pressable
-                  onPress={() => {
-                    if (Platform.OS === "web") {
-                      if (window.confirm("Delete this entry?")) onDelete(entry.id);
-                    } else {
-                      Alert.alert("Delete Entry", "Are you sure?", [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Delete", style: "destructive", onPress: () => onDelete(entry.id) },
-                      ]);
-                    }
-                  }}
-                  style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
-                >
-                  <IconSymbol name="trash" size={16} color={colors.muted} />
-                </Pressable>
-              </View>
-              {/* Audio attachments inline */}
-              {entry.attachments.filter((a) => a.type === "audio").map((att) => (
-                <AudioPlaybackRow key={att.id} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
-              ))}
-            </Pressable>
-          ))}
+                {/* Audio attachments inline */}
+                {entry.attachments.filter((a) => a.type === "audio").map((att) => (
+                  <AudioPlaybackRow key={att.id} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
+                ))}
+              </Pressable>
+            );
+          })}
         </View>
       ))}
     </View>
@@ -870,117 +917,182 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── CALENDAR TAB ────────────────────────────────────────────────────────────
+// ─── CALENDAR TAB — Infinite vertical scroll ─────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/** Generate an array of { year, month } going back `count` months from a given month */
+function generateMonths(endYear: number, endMonth: number, count: number): { year: number; month: number }[] {
+  const result: { year: number; month: number }[] = [];
+  let y = endYear;
+  let m = endMonth;
+  for (let i = 0; i < count; i++) {
+    result.push({ year: y, month: m });
+    m--;
+    if (m < 1) { m = 12; y--; }
+  }
+  return result.reverse(); // oldest first
+}
+
 function CalendarTab({ entries, onDayPress, colors }: {
   entries: JournalEntry[];
   onDayPress: (date: string) => void;
   colors: any;
 }) {
   const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth() + 1);
-
-  // Build a map of date -> entries for the current month
-  const entryMap = useMemo(() => {
-    const map = new Map<string, JournalEntry[]>();
-    const prefix = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
-    for (const e of entries) {
-      if (e.date.startsWith(prefix)) {
-        const list = map.get(e.date) ?? [];
-        list.push(e);
-        map.set(e.date, list);
-      }
-    }
-    return map;
-  }, [entries, viewYear, viewMonth]);
-
-  const daysInMonth = getMonthDays(viewYear, viewMonth);
-  const firstDay = getFirstDayOfWeek(viewYear, viewMonth);
   const todayStr = todayDateStr();
 
-  function prevMonth() {
-    if (viewMonth === 1) { setViewMonth(12); setViewYear(viewYear - 1); }
-    else setViewMonth(viewMonth - 1);
-  }
-  function nextMonth() {
-    if (viewMonth === 12) { setViewMonth(1); setViewYear(viewYear + 1); }
-    else setViewMonth(viewMonth + 1);
-  }
+  // Show 12 months: current + 11 past months
+  const months = useMemo(() => generateMonths(today.getFullYear(), today.getMonth() + 1, 12), []);
 
-  const cellWidth = Math.floor((SCREEN_WIDTH - 32) / 7);
+  // Build a global map of date -> entries
+  const entryMap = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const e of entries) {
+      const list = map.get(e.date) ?? [];
+      list.push(e);
+      map.set(e.date, list);
+    }
+    return map;
+  }, [entries]);
+
+  // Cell size: 7 columns, fill full width with 2px gap
+  const GAP = 2;
+  const PADDING = 8;
+  const totalGaps = 6 * GAP;
+  const cellSize = Math.floor((SCREEN_WIDTH - PADDING * 2 - totalGaps) / 7);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const [didScroll, setDidScroll] = useState(false);
+
+  // Scroll to bottom (current month) on mount
+  useEffect(() => {
+    if (!didScroll) {
+      const timer = setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: false });
+        setDidScroll(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [didScroll]);
 
   return (
-    <View>
-      {/* Month nav */}
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 }}>
-        <Pressable onPress={prevMonth} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 8 }]}>
-          <IconSymbol name="chevron.left" size={20} color={colors.primary} />
-        </Pressable>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>
-          {MONTH_NAMES[viewMonth - 1]} {viewYear}
-        </Text>
-        <Pressable onPress={nextMonth} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 8 }]}>
-          <IconSymbol name="chevron.right" size={20} color={colors.primary} />
-        </Pressable>
-      </View>
-
-      {/* Day headers */}
-      <View style={{ flexDirection: "row" }}>
+    <ScrollView
+      ref={scrollRef}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: PADDING, paddingBottom: 20 }}
+    >
+      {/* Day-of-week headers (sticky-looking) */}
+      <View style={{ flexDirection: "row", gap: GAP, marginBottom: 8, paddingVertical: 6 }}>
         {DAY_HEADERS.map((d, i) => (
-          <View key={i} style={{ width: cellWidth, alignItems: "center", paddingVertical: 4 }}>
+          <View key={i} style={{ width: cellSize, alignItems: "center" }}>
             <Text style={{ fontSize: 11, fontWeight: "600", color: colors.muted }}>{d}</Text>
           </View>
         ))}
       </View>
 
-      {/* Calendar grid */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-        {/* Empty cells for offset */}
-        {Array.from({ length: firstDay }).map((_, i) => (
-          <View key={`empty-${i}`} style={{ width: cellWidth, height: cellWidth + 20 }} />
-        ))}
-        {/* Day cells */}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1;
-          const dateStr = `${viewYear}-${String(viewMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const dayEntries = entryMap.get(dateStr) || [];
-          const isToday = dateStr === todayStr;
-          const hasEntries = dayEntries.length > 0;
-          const preview = dayEntries[0]?.body?.slice(0, 30) || "";
+      {months.map(({ year, month }) => {
+        const daysInMonth = getMonthDays(year, month);
+        const firstDay = getFirstDayOfWeek(year, month);
 
-          return (
-            <Pressable
-              key={day}
-              onPress={() => onDayPress(dateStr)}
-              style={({ pressed }) => [{
-                width: cellWidth, minHeight: cellWidth + 20, padding: 2,
-                borderWidth: 0.5, borderColor: colors.border,
-                backgroundColor: isToday ? colors.primary + "10" : hasEntries ? colors.surface : "transparent",
-                opacity: pressed ? 0.7 : 1,
-              }]}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                <Text style={{
-                  fontSize: 11, fontWeight: isToday ? "800" : "500",
-                  color: isToday ? colors.primary : colors.foreground,
-                }}>
-                  {day}
-                </Text>
-                {hasEntries && (
-                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary }} />
-                )}
-              </View>
-              {preview ? (
-                <Text style={{ fontSize: 8, color: colors.muted, lineHeight: 10, marginTop: 1 }} numberOfLines={3}>
-                  {preview}
-                </Text>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+        return (
+          <View key={`${year}-${month}`} style={{ marginBottom: 24 }}>
+            {/* Month label */}
+            <Text style={{
+              fontSize: 17, fontWeight: "700", color: colors.foreground,
+              marginBottom: 8, paddingLeft: 2,
+            }}>
+              {MONTH_NAMES[month - 1]} {year}
+            </Text>
+
+            {/* Grid */}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
+              {/* Empty cells for offset */}
+              {Array.from({ length: firstDay }).map((_, i) => (
+                <View key={`empty-${i}`} style={{ width: cellSize, height: cellSize }} />
+              ))}
+              {/* Day cells */}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const dayEntries = entryMap.get(dateStr) || [];
+                const isToday = dateStr === todayStr;
+                const hasEntries = dayEntries.length > 0;
+
+                // Find first photo attachment across all entries for this day
+                let photoUri: string | null = null;
+                for (const de of dayEntries) {
+                  const photo = de.attachments.find((a) => a.type === "photo");
+                  if (photo) { photoUri = photo.uri; break; }
+                }
+
+                // Text preview only if no photo
+                const textPreview = !photoUri && hasEntries
+                  ? (dayEntries[0]?.body?.slice(0, 40) || "")
+                  : "";
+
+                return (
+                  <Pressable
+                    key={day}
+                    onPress={() => onDayPress(dateStr)}
+                    style={({ pressed }) => [{
+                      width: cellSize, height: cellSize,
+                      borderRadius: 4, overflow: "hidden",
+                      backgroundColor: isToday ? colors.primary + "18" : hasEntries ? colors.surface : colors.background,
+                      borderWidth: isToday ? 2 : 0.5,
+                      borderColor: isToday ? colors.primary : hasEntries ? colors.border : colors.border + "60",
+                      opacity: pressed ? 0.7 : 1,
+                    }]}
+                  >
+                    {/* Photo background */}
+                    {photoUri && (
+                      <Image
+                        source={{ uri: photoUri }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
+                      />
+                    )}
+                    {/* Overlay for readability when photo exists */}
+                    {photoUri && (
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.2)" }]} />
+                    )}
+
+                    {/* Day number */}
+                    <View style={{ padding: 3, flex: 1 }}>
+                      <Text style={{
+                        fontSize: 12, fontWeight: isToday ? "800" : hasEntries ? "700" : "400",
+                        color: photoUri ? "#fff" : isToday ? colors.primary : colors.foreground,
+                        textShadowColor: photoUri ? "rgba(0,0,0,0.6)" : "transparent",
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: photoUri ? 2 : 0,
+                      }}>
+                        {day}
+                      </Text>
+
+                      {/* Text preview (only when no photo) */}
+                      {textPreview ? (
+                        <Text style={{
+                          fontSize: 7, color: colors.muted, lineHeight: 9, marginTop: 1,
+                        }} numberOfLines={3}>
+                          {textPreview}
+                        </Text>
+                      ) : null}
+
+                      {/* Entry dot indicator (when photo exists, show at bottom) */}
+                      {hasEntries && !photoUri && (
+                        <View style={{
+                          position: "absolute", bottom: 3, right: 3,
+                          width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary,
+                        }} />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -1006,11 +1118,15 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
 
   const FILTERS: { key: MediaFilter; label: string }[] = [
     { key: "all", label: "All" },
-    { key: "photo", label: "Photo" },
-    { key: "video", label: "Video" },
+    { key: "photo", label: "Photos" },
     { key: "audio", label: "Audio" },
-    { key: "pdf", label: "PDF" },
+    { key: "video", label: "Video" },
   ];
+
+  // Photo grid for photo items
+  const photoItems = filtered.filter((a) => a.type === "photo");
+  const otherItems = filtered.filter((a) => a.type !== "photo");
+  const photoSize = Math.floor((SCREEN_WIDTH - 32 - 8) / 3);
 
   return (
     <View>
@@ -1041,27 +1157,45 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
           <Text style={{ fontSize: 14, color: colors.muted }}>No media yet</Text>
         </View>
       ) : (
-        <View style={{ gap: 8 }}>
-          {filtered.map((att) => (
-            <View key={att.id} style={[{
-              flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12,
-              backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-            }]}>
-              <IconSymbol
-                name={att.type === "photo" ? "photo.fill" : att.type === "video" ? "video.fill" : att.type === "audio" ? "mic.fill" : "doc.fill"}
-                size={20} color={colors.primary}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }} numberOfLines={1}>
-                  {att.name || att.type.charAt(0).toUpperCase() + att.type.slice(1)}
-                </Text>
-                <Text style={{ fontSize: 11, color: colors.muted }}>{att.entryDate}</Text>
-              </View>
-              {att.type === "audio" && att.durationMs && (
-                <Text style={{ fontSize: 12, color: colors.muted }}>{fmtDuration(att.durationMs / 1000)}</Text>
-              )}
+        <View>
+          {/* Photo grid */}
+          {photoItems.length > 0 && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
+              {photoItems.map((att) => (
+                <Image
+                  key={att.id}
+                  source={{ uri: att.uri }}
+                  style={{ width: photoSize, height: photoSize, borderRadius: 6 }}
+                  resizeMode="cover"
+                />
+              ))}
             </View>
-          ))}
+          )}
+          {/* Other items (audio, video, pdf) */}
+          {otherItems.length > 0 && (
+            <View style={{ gap: 8 }}>
+              {otherItems.map((att) => (
+                <View key={att.id} style={[{
+                  flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12,
+                  backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+                }]}>
+                  <IconSymbol
+                    name={att.type === "video" ? "video.fill" : att.type === "audio" ? "mic.fill" : "doc.fill"}
+                    size={20} color={colors.primary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }} numberOfLines={1}>
+                      {att.name || att.type.charAt(0).toUpperCase() + att.type.slice(1)}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.muted }}>{att.entryDate}</Text>
+                  </View>
+                  {att.type === "audio" && att.durationMs && (
+                    <Text style={{ fontSize: 12, color: colors.muted }}>{fmtDuration(att.durationMs / 1000)}</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -1085,7 +1219,6 @@ function MapTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
     );
   }
 
-  // Web fallback: show a list of locations (react-native-maps doesn't work on web)
   return (
     <View style={{ gap: 8 }}>
       <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, marginBottom: 4 }}>
@@ -1168,11 +1301,10 @@ export default function JournalScreen() {
   }
 
   function handleCalendarDayPress(date: string) {
-    // If there are entries for this day, show them in journal tab
-    // Otherwise open new entry for that date
     const dayEntries = entries.filter((e) => e.date === date);
     if (dayEntries.length > 0) {
-      setActiveTab("journal");
+      // Open the first entry for editing
+      openEditEntry(dayEntries[0]);
     } else {
       openNewEntry(date);
     }
@@ -1219,6 +1351,11 @@ export default function JournalScreen() {
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : activeTab === "calendar" ? (
+        // Calendar gets its own scroll — no outer ScrollView wrapper
+        <View style={{ flex: 1 }}>
+          <CalendarTab entries={entries} onDayPress={handleCalendarDayPress} colors={colors} />
+        </View>
       ) : (
         <ScrollView
           style={{ flex: 1 }}
@@ -1229,9 +1366,6 @@ export default function JournalScreen() {
           {activeTab === "journal" && (
             <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
           )}
-          {activeTab === "calendar" && (
-            <CalendarTab entries={entries} onDayPress={handleCalendarDayPress} colors={colors} />
-          )}
           {activeTab === "media" && (
             <MediaTab entries={entries} colors={colors} />
           )}
@@ -1241,16 +1375,16 @@ export default function JournalScreen() {
         </ScrollView>
       )}
 
-      {/* FAB — always visible */}
+      {/* FAB — lower position, smaller shadow */}
       <Pressable
         onPress={() => openNewEntry()}
         style={({ pressed }) => [{
-          position: "absolute", bottom: 90, right: 20,
+          position: "absolute", bottom: 24, right: 20,
           width: 56, height: 56, borderRadius: 28,
           backgroundColor: colors.primary,
           alignItems: "center", justifyContent: "center",
-          shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
+          shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25, shadowRadius: 6, elevation: 6,
           opacity: pressed ? 0.8 : 1,
         }]}
       >

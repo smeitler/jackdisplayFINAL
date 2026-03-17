@@ -831,3 +831,22 @@
 - [x] Location captured at time of journal submission
 - [x] Data migration from old journal format to new format
 - [x] JournalProvider wired in app _layout.tsx
+
+## Journal Polish & Improvements (Mar 17 2026)
+
+### Calendar Improvements
+- [x] Infinite vertical scroll instead of left/right arrows — current month shown, scroll up for past months
+- [x] Square cells (not rectangles) — fill the full screen width
+- [x] Photos fill entire cell if entry has a photo (first photo takes priority)
+- [x] Words preview only if no photo exists for that day
+- [x] Remove month navigation arrows, replace with seamless scroll
+
+### Entry Editor Improvements
+- [x] Remove emoji mood bar from top of editor
+- [x] Center the mic/record button (not on left side)
+- [x] Improve templates — add habits-based template that pulls user's habits and creates note fields for each
+- [x] Add more useful templates overall
+- [x] Fix FAB (+) button position — needs to be lower in the journal section
+
+### General Polish
+- [x] Any additional visual improvements to make the journal look cleaner and more professional
