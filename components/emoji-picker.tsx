@@ -1,146 +1,239 @@
-import { View, Text, Pressable, FlatList, TextInput, StyleSheet, Modal, Dimensions } from 'react-native';
-import { useState, useMemo } from 'react';
+/**
+ * EmojiPicker — Modal with emoji grid + photo upload for reward icons.
+ * Used in HabitModal to let users pick a custom reward icon.
+ *
+ * Props:
+ *   visible       — whether the modal is open
+ *   selectedEmoji — currently selected emoji (shown with highlight)
+ *   onSelectEmoji — called with the chosen emoji string
+ *   onSelectImage — called with a base64 data URI when a photo is picked
+ *   onClose       — called when the modal is dismissed
+ */
+import {
+  Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image,
+  TouchableOpacity,
+} from 'react-native';
+import { useState } from 'react';
 import { useColors } from '@/hooks/use-colors';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import * as ImagePicker from 'expo-image-picker';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
-// Curated emoji list grouped by theme
-const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
-  { label: 'Numbers', emojis: ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔢','#️⃣','*️⃣','0️⃣'] },
-  { label: 'Health & Body', emojis: ['💪','🏋️','🧘','🏃','🚴','🤸','🥗','🥦','💧','😴','🧠','❤️','🫀','🦷','👁️','🩺','💊','🏥','🌿','🍎'] },
-  { label: 'Mind & Growth', emojis: ['📚','📖','✍️','🎯','🏆','⭐','💡','🔬','🎓','🧩','🎨','🎭','🎵','🎤','🎸','🎹','📝','🗒️','📓','🔭'] },
-  { label: 'Wealth & Work', emojis: ['💰','💵','📈','💼','🏦','💳','🪙','📊','🏢','🤝','📱','💻','🖥️','⌨️','🛠️','🔧','⚙️','🚀','✈️','🌐'] },
-  { label: 'Relationships', emojis: ['❤️','🧡','💛','💚','💙','💜','🤍','🖤','💕','💞','🫂','👨‍👩‍👧','👫','👬','👭','🙏','🤲','🫶','😊','😍'] },
-  { label: 'Nature & Life', emojis: ['🌱','🌿','🍃','🌸','🌺','🌻','🌞','🌙','⭐','🌈','🌊','🏔️','🌲','🍀','🦋','🐝','🌍','🌅','🌄','🏡'] },
-  { label: 'Food & Drink', emojis: ['🍎','🍊','🍋','🍇','🍓','🥑','🥗','🥦','🍳','☕','🍵','💧','🥤','🧃','🍰','🎂','🍫','🍕','🥩','🌮'] },
-  { label: 'Activities', emojis: ['⚽','🏀','🎾','🏊','🎿','🏄','🧗','🤺','🎯','🎲','♟️','🃏','🎮','🕹️','🎳','🏹','🥊','🤼','🎭','🎪'] },
-  { label: 'Symbols', emojis: ['✅','❌','⚡','🔥','💫','✨','🌟','💥','🎉','🎊','🏅','🥇','🎖️','🔑','🗝️','🔒','🛡️','⚔️','🪄','🔮'] },
+// ─── Emoji categories ─────────────────────────────────────────────────────────
+const CATEGORIES: { label: string; emojis: string[] }[] = [
+  {
+    label: 'Rewards',
+    emojis: ['🎁','🏆','🥇','🎉','🎊','🎖️','🏅','🎀','🎗️','🎫','🎟️','🥂','🍾','🎈','🎆'],
+  },
+  {
+    label: 'Food & Drink',
+    emojis: ['🍕','🍔','🍣','🍜','🍦','🧁','🍰','🎂','🍩','🍪','🍫','🥗','🍱','🍛','🥩'],
+  },
+  {
+    label: 'Travel',
+    emojis: ['✈️','🌴','🏖️','🗺️','🌍','🏔️','🚀','🛳️','🏕️','🌅','🗼','🏰','🎡','🎢','🌋'],
+  },
+  {
+    label: 'Lifestyle',
+    emojis: ['👟','💆','🛍️','🎮','📚','🎵','🎬','💪','🧘','🛁','🏊','🎸','🎨','🖼️','🪴'],
+  },
+  {
+    label: 'Nature',
+    emojis: ['🌸','🌺','🌻','🌹','🌿','🍀','🌊','🌈','⭐','🌙','☀️','🦋','🐬','🦁','🌲'],
+  },
+  {
+    label: 'Objects',
+    emojis: ['💎','💍','👑','🔑','🪄','🎯','🧩','🎲','🎻','🎹','📷','🖥️','⌚','🧳','🪞'],
+  },
 ];
-
-const ALL_EMOJIS = EMOJI_GROUPS.flatMap((g) => g.emojis);
 
 interface EmojiPickerProps {
   visible: boolean;
-  onSelect: (emoji: string) => void;
+  selectedEmoji?: string;
+  onSelectEmoji: (emoji: string) => void;
+  onSelectImage: (uri: string) => void;
   onClose: () => void;
-  currentEmoji?: string;
 }
 
-export function EmojiPicker({ visible, onSelect, onClose, currentEmoji }: EmojiPickerProps) {
+export function EmojiPicker({
+  visible, selectedEmoji, onSelectEmoji, onSelectImage, onClose,
+}: EmojiPickerProps) {
   const colors = useColors();
-  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState(0);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return null; // show groups
-    return ALL_EMOJIS.filter((e) => e.includes(search));
-  }, [search]);
-
-  function handleSelect(emoji: string) {
-    onSelect(emoji);
-    setSearch('');
-    onClose();
+  async function handlePickPhoto() {
+    try {
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          const mimeType = asset.mimeType ?? 'image/jpeg';
+          onSelectImage(`data:${mimeType};base64,${asset.base64}`);
+          onClose();
+        } else if (asset.uri) {
+          onSelectImage(asset.uri);
+          onClose();
+        }
+      }
+    } catch (e) {
+      console.warn('[EmojiPicker] Photo pick error:', e);
+    }
   }
 
-  const COLS = 8;
-  const CELL = Math.floor((Dimensions.get('window').width - 48 - (COLS - 1) * 6) / COLS);
-
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        {/* Handle */}
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Pick an Emoji</Text>
-          <Pressable onPress={onClose} style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.5 : 1 }]}>
-            <IconSymbol name="xmark.circle.fill" size={24} color={colors.muted} />
-          </Pressable>
-        </View>
-
-        {/* Search */}
-        <View style={[styles.searchWrap, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <IconSymbol name="magnifyingglass" size={16} color={colors.muted} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.foreground }]}
-            placeholder="Search emoji…"
-            placeholderTextColor={colors.muted}
-            value={search}
-            onChangeText={setSearch}
-            autoCorrect={false}
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch('')}>
-              <IconSymbol name="xmark.circle.fill" size={16} color={colors.muted} />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable
+          style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.title, { color: colors.foreground }]}>Choose reward icon</Text>
+            <Pressable onPress={onClose} style={styles.closeBtn}>
+              <Text style={[styles.closeBtnText, { color: colors.muted }]}>✕</Text>
             </Pressable>
-          )}
-        </View>
+          </View>
 
-        {/* Grid */}
-        <FlatList
-          data={filtered ? [{ label: 'Results', emojis: filtered }] : EMOJI_GROUPS}
-          keyExtractor={(_, i) => String(i)}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-          renderItem={({ item }) => (
-            <View style={styles.group}>
-              {!filtered && <Text style={[styles.groupLabel, { color: colors.muted }]}>{item.label}</Text>}
-              <View style={styles.emojiGrid}>
-                {item.emojis.map((e) => (
-                  <EmojiCell key={e} emoji={e} size={CELL} selected={e === currentEmoji} onPress={() => handleSelect(e)} colors={colors} />
-                ))}
-              </View>
+          {/* Photo upload button */}
+          <TouchableOpacity
+            onPress={handlePickPhoto}
+            style={[styles.photoBtn, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.photoBtnIcon, { color: colors.primary }]}>📷</Text>
+            <Text style={[styles.photoBtnText, { color: colors.primary }]}>Use a photo from your library</Text>
+          </TouchableOpacity>
+
+          {/* Category tabs */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.catScroll}
+            contentContainerStyle={styles.catScrollContent}
+          >
+            {CATEGORIES.map((cat, i) => (
+              <TouchableOpacity
+                key={cat.label}
+                onPress={() => setActiveCategory(i)}
+                style={[
+                  styles.catTab,
+                  {
+                    backgroundColor: activeCategory === i ? colors.primary : 'transparent',
+                    borderColor: activeCategory === i ? colors.primary : colors.border,
+                  },
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.catTabText, { color: activeCategory === i ? '#fff' : colors.muted }]}>
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Emoji grid */}
+          <ScrollView style={styles.gridScroll} showsVerticalScrollIndicator={false}>
+            <View style={styles.grid}>
+              {CATEGORIES[activeCategory].emojis.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={() => { onSelectEmoji(emoji); onClose(); }}
+                  style={[
+                    styles.emojiCell,
+                    {
+                      backgroundColor: emoji === selectedEmoji ? colors.primary + '25' : 'transparent',
+                      borderColor: emoji === selectedEmoji ? colors.primary : 'transparent',
+                    },
+                  ]}
+                  activeOpacity={0.65}
+                >
+                  <Text style={styles.emojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          )}
-        />
-      </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
 
-function EmojiCell({ emoji, size, selected, onPress, colors }: { emoji: string; size: number; selected: boolean; onPress: () => void; colors: any }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.emojiCell,
-        { width: size, height: size, borderRadius: size * 0.22 },
-        selected && { backgroundColor: colors.primary + '33' },
-        pressed && { opacity: 0.6 },
-      ]}
-    >
-      <Text style={{ fontSize: size * 0.55 }}>{emoji}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
   sheet: {
-    maxHeight: SCREEN_HEIGHT * 0.75,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    paddingTop: 8,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    maxHeight: '75%',
+    paddingBottom: 24,
   },
-  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 10 },
-  title: { fontSize: 17, fontWeight: '700' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+  },
+  title: { fontSize: 16, fontWeight: '700' },
   closeBtn: { padding: 4 },
-  searchWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginHorizontal: 16, marginBottom: 12,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 10, borderWidth: 1,
+  closeBtnText: { fontSize: 16, fontWeight: '600' },
+  photoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
-  searchInput: { flex: 1, fontSize: 15 },
-  group: { marginBottom: 16 },
-  groupLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
-  emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  emojiCell: { alignItems: 'center', justifyContent: 'center' },
+  photoBtnIcon: { fontSize: 20 },
+  photoBtnText: { fontSize: 14, fontWeight: '600' },
+  catScroll: { flexGrow: 0, marginTop: 10 },
+  catScrollContent: { paddingHorizontal: 14, gap: 8 },
+  catTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  catTabText: { fontSize: 12, fontWeight: '600' },
+  gridScroll: { marginTop: 10, paddingHorizontal: 8 },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  emojiCell: {
+    width: '14.28%', // 7 columns
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  emojiText: { fontSize: 26 },
 });

@@ -1,6 +1,6 @@
 import {
   View, Text, TouchableOpacity, TextInput, Pressable,
-  StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView,
+  StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView, Image,
 } from 'react-native';
 import { useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
@@ -220,7 +220,7 @@ interface HabitModalProps {
   visible: boolean;
   editHabit?: Habit | null;
   entryCount: number;
-  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string) => Promise<void>;
+  onSave: (name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string, rewardImageUri?: string) => Promise<void>;
   onDelete: (id: string) => void;
   onDeactivate: (id: string) => void;
   onClose: () => void;
@@ -237,7 +237,9 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
   const [monthlyGoal, setMonthlyGoal] = useState<number | undefined>(editHabit?.monthlyGoal);
   const [rewardName, setRewardName] = useState(editHabit?.rewardName ?? '');
   const [rewardEmoji, setRewardEmoji] = useState(editHabit?.rewardEmoji ?? '🎁');
+  const [rewardImageUri, setRewardImageUri] = useState<string | undefined>(editHabit?.rewardImageUri);
   const [rewardDescription, setRewardDescription] = useState(editHabit?.rewardDescription ?? '');
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const currentGoal = frequencyType === 'weekly' ? weeklyGoal : monthlyGoal;
@@ -253,6 +255,7 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
       rewardName.trim(),
       rewardEmoji,
       rewardDescription.trim() || undefined,
+      rewardImageUri,
     );
     onClose();
   }
@@ -427,17 +430,31 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                 What will you treat yourself to when you hit your {frequencyType} goal?
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                {/* Reward icon button — opens emoji picker */}
                 <TouchableOpacity
-                  onPress={() => {
-                    const emojis = ['🎁','🏆','🎉','🍕','🎬','✈️','👟','💆','🛍️','🍦','🎮','📚','🎵','🌴','💪'];
-                    const idx = emojis.indexOf(rewardEmoji);
-                    setRewardEmoji(emojis[(idx + 1) % emojis.length]);
-                  }}
-                  style={[styles.weeklyGoalDay, { width: 44, height: 44, borderRadius: 10 }]}
+                  onPress={() => setEmojiPickerOpen(true)}
+                  style={[styles.weeklyGoalDay, { width: 52, height: 52, borderRadius: 12, overflow: 'hidden', position: 'relative' }]}
                   activeOpacity={0.7}
                 >
-                  <Text style={{ fontSize: 22 }}>{rewardEmoji}</Text>
+                  {rewardImageUri ? (
+                    <Image source={{ uri: rewardImageUri }} style={{ width: 52, height: 52, borderRadius: 12 }} />
+                  ) : (
+                    <Text style={{ fontSize: 26 }}>{rewardEmoji}</Text>
+                  )}
+                  {/* Small edit badge */}
+                  <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.45)', borderTopLeftRadius: 6, paddingHorizontal: 3, paddingVertical: 1 }}>
+                    <Text style={{ fontSize: 9, color: '#fff' }}>✏️</Text>
+                  </View>
                 </TouchableOpacity>
+                {rewardImageUri && (
+                  <TouchableOpacity
+                    onPress={() => setRewardImageUri(undefined)}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 12, color: '#EF4444' }}>Remove photo</Text>
+                  </TouchableOpacity>
+                )}
                 <TextInput
                   style={[styles.nameInput, { flex: 1, backgroundColor: colors.background, borderColor: rewardName.trim().length === 0 ? colors.error + '80' : colors.border, color: colors.foreground }]}
                   placeholder="e.g. New running shoes, spa day…"
@@ -540,6 +557,14 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Emoji / photo picker for reward icon */}
+      <EmojiPicker
+        visible={emojiPickerOpen}
+        selectedEmoji={rewardEmoji}
+        onSelectEmoji={(e) => { setRewardEmoji(e); setRewardImageUri(undefined); }}
+        onSelectImage={(uri) => setRewardImageUri(uri)}
+        onClose={() => setEmojiPickerOpen(false)}
+      />
     </>
   );
 }
@@ -782,11 +807,11 @@ export default function HabitsScreen() {
     setExpandedCat((prev) => (prev === id ? null : id));
   }
 
-  async function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string) {
+  async function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string, rewardImageUri?: string) {
     if (habitModal.edit) {
-      await updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal, rewardName, rewardEmoji, rewardDescription });
+      await updateHabit(habitModal.edit.id, { name, emoji, description, weeklyGoal, frequencyType, monthlyGoal, rewardName, rewardEmoji, rewardDescription, rewardImageUri });
     } else {
-      await addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal, undefined, undefined, rewardName, rewardEmoji, rewardDescription);
+      await addHabit(name, emoji, habitModal.categoryId, description, weeklyGoal, frequencyType, monthlyGoal, undefined, undefined, rewardName, rewardEmoji, rewardDescription, rewardImageUri);
     }
   }
 
@@ -981,6 +1006,7 @@ export default function HabitsScreen() {
 
       {/* Modals */}
       <HabitModal
+        key={habitModal.edit?.id ?? 'new'}
         visible={habitModal.open}
         editHabit={habitModal.edit}
         entryCount={habitModal.edit ? (checkIns as CheckInEntry[]).filter((e) => e.habitId === habitModal.edit!.id).length : 0}

@@ -893,3 +893,10 @@
 - [x] Fix calendar day tap not working on habit detail screen (tapping a date cell should open check-in for that date)
 - [x] Fix "All caught up" banner on home screen — should be tappable to open check-in for today or yesterday
 - [x] Real-time chunked voice check-in: 3-second chunks sent to Whisper+AI, ratings update live as you speak (habits only, no journal code)
+
+## Reward & Voice Note Improvements (Mar 17 2026 - session 3)
+
+- [x] Fix per-habit rewards: each habit stores its own reward text, emoji, and photo (not shared)
+- [x] Add emoji picker popup to reward icon square in Edit Habit form
+- [x] Add photo upload option to reward icon in Edit Habit form
+- [x] Save voice check-in notes to habit history (shows in habit detail Recent History)

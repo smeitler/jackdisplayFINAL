@@ -48,7 +48,8 @@ export type Habit = {
   teamId?: number;         // the team the proposal belongs to
   // Reward tied to this habit's goal milestone
   rewardName?: string;        // e.g. "New Running Shoes"
-  rewardEmoji?: string;       // e.g. "👟"
+  rewardEmoji?: string;       // e.g. "👟" (used when no image)
+  rewardImageUri?: string;    // base64 data URI or local file URI for custom reward photo
   rewardDescription?: string; // optional longer description
   rewardClaimedAt?: string;   // ISO date when claimed
 };

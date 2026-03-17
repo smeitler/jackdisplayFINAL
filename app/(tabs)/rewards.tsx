@@ -362,6 +362,7 @@ type HabitReward = {
   habitEmoji: string;
   rewardName: string;
   rewardEmoji: string;
+  rewardImageUri?: string;
   rewardDescription?: string;
   frequencyType: "weekly" | "monthly";
   goal: number;
@@ -393,8 +394,12 @@ function HabitRewardCard({ item, onClaim, onUnclaim, colors }: {
   return (
     <View style={[rStyles.card, { backgroundColor: colors.surface, borderColor: isClaimed ? "#22C55E" : item.isUnlocked ? "#22C55E" : colors.border, borderWidth: isClaimed || item.isUnlocked ? 1.5 : 1 }]}>
       <View style={rStyles.cardHeader}>
-        <View style={[rStyles.emojiCircle, { backgroundColor: accent + "22" }]}>
-          <Text style={rStyles.emojiText}>{item.rewardEmoji}</Text>
+        <View style={[rStyles.emojiCircle, { backgroundColor: accent + "22", overflow: 'hidden' }]}>
+          {item.rewardImageUri ? (
+            <Image source={{ uri: item.rewardImageUri }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+          ) : (
+            <Text style={rStyles.emojiText}>{item.rewardEmoji}</Text>
+          )}
         </View>
         <View style={rStyles.cardTitleBlock}>
           <Text style={[rStyles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{item.rewardName}</Text>
@@ -490,6 +495,7 @@ function RewardsTab() {
         return {
           habitId: h.id, habitName: h.name, habitEmoji: h.emoji ?? "⭐",
           rewardName: h.rewardName!, rewardEmoji: h.rewardEmoji ?? "🎁",
+          rewardImageUri: h.rewardImageUri,
           rewardDescription: h.rewardDescription, frequencyType: freqType,
           goal, currentCount, progress: goal > 0 ? currentCount / goal : 0,
           isUnlocked, claimedAt: claimRecord?.claimedAt, periodKey,

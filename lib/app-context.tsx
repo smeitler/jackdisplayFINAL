@@ -142,7 +142,7 @@ function serverAlarmToLocal(row: { hour: number; minute: number; days: string; e
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 type AppContextValue = AppState & {
-  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string) => Promise<void>;
+  addHabit: (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string, rewardImageUri?: string) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   addCategory: (label: string, emoji: string, lifeArea?: LifeArea) => Promise<void>;
@@ -406,7 +406,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string) => {
+  const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string, rewardImageUri?: string) => {
     const catHabits = state.habits.filter((h) => h.category === category);
     const newHabit: Habit = {
       id: `${category[0]}${Date.now()}`,
@@ -421,6 +421,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       monthlyGoal,
       rewardName,
       rewardEmoji,
+      rewardImageUri,
       rewardDescription,
       createdAt: new Date().toISOString(),
       ...(teamProposalId !== undefined ? { teamProposalId, teamId } : {}),

@@ -19,6 +19,8 @@ import {
   loadHabits,
   loadGratitudeEntries,
   yesterdayString as yesterdayStr,
+  loadDayNotes,
+  saveDayNotes,
 } from '@/lib/storage';
 
 // ─── Voice Check-in Chunked Streaming Recorder (isolated from journal code) ────
@@ -466,6 +468,24 @@ export default function CheckInScreen() {
     // Stop countdown before submitting
     if (countdownAnimRef.current) countdownAnimRef.current.stop();
     if (countdownRef.current) clearTimeout(countdownRef.current);
+
+    // Save voice check-in notes to DayNotes so they appear in habit detail history
+    const noteEntries = Object.entries(vcNotes).filter(([, v]) => v.trim().length > 0);
+    if (noteEntries.length > 0) {
+      try {
+        const existing = await loadDayNotes();
+        const updated = { ...existing };
+        for (const [habitId, note] of noteEntries) {
+          const key = `${habitId}:${currentDate}`;
+          // Append to existing note if one already exists, otherwise set
+          updated[key] = existing[key] ? `${existing[key]} | ${note}` : note;
+        }
+        await saveDayNotes(updated);
+      } catch (e) {
+        console.warn('[CheckIn] Failed to save voice notes:', e);
+      }
+    }
+
     await submitCheckIn(currentDate, ratings);
     setSubmitted(true);
 
