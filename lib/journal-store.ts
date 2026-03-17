@@ -46,8 +46,6 @@ export interface JournalEntry {
   /** Transcription status for audio entries */
   transcriptionStatus?: "pending" | "done" | "failed";
   transcriptionText?: string;
-  /** Per-habit notes: map of habitId -> note text, saved back to DayNotes on entry save */
-  habitNotes?: Record<string, string>;
 }
 
 // ── Templates ──────────────────────────────────────────────────────────────────

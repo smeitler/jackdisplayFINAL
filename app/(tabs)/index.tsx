@@ -5,7 +5,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
@@ -15,8 +15,7 @@ import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
-// Profile pic key is per-user — built dynamically once userId is known
-function profilePicKey(userId: string) { return `daycheck:profilePicUri:${userId}`; }
+const PROFILE_PIC_KEY = 'daycheck:profilePicUri';
 
 // ── Daily motivational quotes (user-curated, rotates by day of year) ──────────
 const DAILY_QUOTES = [
@@ -211,8 +210,8 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-const RING_SIZE = 60;      // current period ring — large
-const RING_SIZE_SM = 48;   // older period rings — medium
+const RING_SIZE = 30;      // all rings same size
+const RING_SIZE_SM = 30;   // same as RING_SIZE
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -232,7 +231,7 @@ function CircleRing({
   const ringColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
   const textColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#9BA1A6';
 
-  const strokeWidth = size <= 24 ? 2.5 : size <= 48 ? 4 : 5;
+  const strokeWidth = size <= 24 ? 2.5 : 3.5;
   const r = (size - strokeWidth) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -241,12 +240,12 @@ function CircleRing({
   const gap = circumference - dash;
 
   const fractionText = goal > 0 ? `${done}/${goal}` : '\u2014';
-  const fractionFontSize = size <= 24 ? 7 : size <= 48 ? 12 : 14;
+  const fractionFontSize = size <= 24 ? 7 : size <= 30 ? 9 : 10;
 
   return (
     <View style={{ alignItems: 'center', gap: 3 }}>
       {periodLabel && (
-        <Text style={[styles.ringPeriodLabel, { color: '#9BA1A6', fontSize: size <= 24 ? 8 : size <= 48 ? 10 : 11 }]}>{periodLabel}</Text>
+        <Text style={[styles.ringPeriodLabel, { color: '#9BA1A6', fontSize: size <= 24 ? 8 : 9 }]}>{periodLabel}</Text>
       )}
       <View style={{ width: size, height: size, position: 'relative' }}>
         <Svg width={size} height={size}>
@@ -533,14 +532,11 @@ export default function HomeScreen() {
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
 
-  // Load profile picture — per-user key so switching accounts shows the right photo
+  // Load profile picture on mount
   useEffect(() => {
-    (async () => {
-      const uid = await getLastUserId();
-      const key = profilePicKey(uid || 'default');
-      const uri = await AsyncStorage.getItem(key);
+    AsyncStorage.getItem(PROFILE_PIC_KEY).then((uri) => {
       if (uri) setProfilePicUri(uri);
-    })();
+    });
   }, []);
 
   // First-launch: show permissions setup screen once on mobile
@@ -587,22 +583,7 @@ export default function HomeScreen() {
       if (!result.canceled && result.assets[0]?.uri) {
         const uri = result.assets[0].uri;
         setProfilePicUri(uri);
-        const uid = await getLastUserId();
-        await AsyncStorage.setItem(profilePicKey(uid || 'default'), uri);
-        // Also convert to base64 data URI for persistence across app restarts
-        try {
-          if (Platform.OS === 'web') {
-            const resp = await fetch(uri);
-            const blob = await resp.blob();
-            const dataUri = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            setProfilePicUri(dataUri);
-            await AsyncStorage.setItem(profilePicKey(uid || 'default'), dataUri);
-          }
-        } catch { /* keep original URI if conversion fails */ }
+        await AsyncStorage.setItem(PROFILE_PIC_KEY, uri);
       }
     } catch {
       // ignore
@@ -965,11 +946,11 @@ const styles = StyleSheet.create({
   // Habit row
   ringWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
   ringPeriodLabel: { fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  ringTriple: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  ringDivider: { width: StyleSheet.hairlineWidth, height: 60, borderRadius: 1 },
+  ringTriple: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  ringDivider: { width: StyleSheet.hairlineWidth, height: 44, borderRadius: 1 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 14,
+    paddingHorizontal: 14, paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },

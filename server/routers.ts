@@ -621,12 +621,6 @@ export const appRouter = router({
         audioBase64: z.string(),          // base64-encoded audio data
         mimeType: z.string().default('audio/m4a'), // e.g. audio/m4a, audio/webm
         date: z.string().optional(),      // YYYY-MM-DD, defaults to today
-        habits: z.array(z.object({
-          id: z.string(),
-          name: z.string(),
-          emoji: z.string().optional(),
-          description: z.string().optional(),
-        })).optional(),                   // active habits for per-habit note extraction
       }))
         .mutation(async ({ ctx, input }) => {
         const { invokeLLM } = await import('./_core/llm.js');
@@ -661,35 +655,21 @@ export const appRouter = router({
         const transcript = transcription.text?.trim() ?? '';
         if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], audioUrl };
 
-        // 3. AI categorization — extract journal thoughts, gratitude, and per-habit notes
-        const habits = input.habits ?? [];
-        const habitListText = habits.length > 0
-          ? `\n\nThe user tracks these habits:\n${habits.map((h) => `- ID: "${h.id}" | Name: "${h.name}"${h.description ? ` | Description: "${h.description}"` : ''}`).join('\n')}`
-          : '';
-
-        const habitInstructions = habits.length > 0
-          ? `3. "habitNotes": an object mapping habit IDs to relevant notes. For each habit, extract ONLY sentences/phrases from the transcript that are directly relevant to that specific habit. Use the habit's name and description to judge relevance. If nothing in the transcript relates to a habit, omit that habit's key entirely. Keep the user's natural language.`
-          : '';
-
-        const jsonShape = habits.length > 0
-          ? `{"journalEntries": [...], "gratitudeItems": [...], "habitNotes": {"<habitId>": "<relevant text>", ...}}`
-          : `{"journalEntries": [...], "gratitudeItems": [...]}`;
-
+        // 3. AI categorization — extract journal thoughts vs gratitude items
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
               content: `You are a personal journal assistant. Given a voice journal transcript, extract:
 1. "journalEntries": an array of reflective thoughts, observations, plans, or general statements (each a concise sentence or short paragraph, preserving the user's voice)
-2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)${habitInstructions ? `\n${habitInstructions}` : ''}${habitListText}
+2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)
 
 Rules:
 - A sentence expressing gratitude ("I'm grateful for...", "I appreciate...", "thankful for...") → gratitudeItems
-- Content relevant to a specific habit → habitNotes for that habit (can also appear in journalEntries if it's a general reflection)
 - Everything else → journalEntries
 - Keep the user's natural language; don't rewrite or summarize
-- If nothing fits a category, return an empty array/object for it
-Return ONLY valid JSON: ${jsonShape}`,
+- If nothing fits a category, return an empty array for it
+Return ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...]}`,
             },
             {
               role: 'user',
@@ -701,24 +681,16 @@ Return ONLY valid JSON: ${jsonShape}`,
 
         let journalEntries: string[] = [];
         let gratitudeItems: string[] = [];
-        let habitNotes: Record<string, string> = {};
         try {
           const parsed = JSON.parse(llmResp.choices[0].message.content as string);
           journalEntries = Array.isArray(parsed.journalEntries) ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
           gratitudeItems = Array.isArray(parsed.gratitudeItems) ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
-          if (parsed.habitNotes && typeof parsed.habitNotes === 'object') {
-            for (const [id, note] of Object.entries(parsed.habitNotes)) {
-              if (typeof note === 'string' && note.trim()) {
-                habitNotes[id] = note.trim();
-              }
-            }
-          }
         } catch {
           // If parsing fails, put everything in journal
           journalEntries = [transcript];
         }
 
-        return { transcript, journalEntries, gratitudeItems, habitNotes, audioUrl };
+        return { transcript, journalEntries, gratitudeItems, audioUrl };
       }),
   }),
 
