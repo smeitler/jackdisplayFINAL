@@ -869,3 +869,5 @@
 - [x] Journal record button: auto-show habit prompts (all habits + gratitude) when record is tapped, no template selection needed
 - [x] Bug: journal transcription not filling into note/body section after recording — audio saves/plays but text doesn't appear
 - [x] Journal: show AI-filled habit notes visibly in the journal editor after recording
+- [x] Bug: applying a template after transcription wipes the transcribed text — template should append/merge, not replace
+- [x] Journal habit notes: AI should produce short punchy phrases (e.g. "2-hour mountain workout") not full sentences

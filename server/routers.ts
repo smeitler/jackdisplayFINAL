@@ -658,8 +658,8 @@ export const appRouter = router({
 
         // 3. AI categorization — extract journal thoughts, gratitude items, AND per-habit notes
         const habitList = (input.habits ?? []).map((h) => `- ${h.id}: ${h.name}`).join('\n');
-        const habitSection = habitList ? `\n3. "habitNotes": an object mapping habit IDs to a short note (1-2 sentences) about that habit based on what the user said. Only include habits that were mentioned. Habit list:\n${habitList}` : '';
-        const habitJsonExample = habitList ? `, "habitNotes": {"habit_id": "note about this habit"}` : '';
+        const habitSection = habitList ? `\n3. "habitNotes": an object mapping habit IDs to a VERY SHORT punchy phrase (3-8 words max) capturing the key fact about that habit. Think like a bullet point note, not a sentence. Examples: "2-hour mountain hike", "skipped — no time", "8 glasses, hit goal", "30 min yoga flow". Only include habits clearly mentioned. Habit list:\n${habitList}` : '';
+        const habitJsonExample = habitList ? `, "habitNotes": {"habit_id": "punchy 3-8 word note"}` : '';
 
         const llmResp = await invokeLLM({
           messages: [

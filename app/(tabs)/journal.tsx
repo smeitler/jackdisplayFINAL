@@ -698,8 +698,10 @@ function EntryEditor({
   }, [habits]);
 
   function applyTemplateByKey(key: string) {
-    // Always apply the template — overwrite body if it's empty OR if user explicitly picks a template
+    // Preserve existing body — append template below transcription if body already has content
     setShowTemplates(false);
+    const existingBody = body.trim();
+    const separator = existingBody ? "\n\n---\n\n" : "";
     if (key === "habit-checkin") {
       setTemplate("blank" as JournalTemplate);
       const lines: string[] = ["\uD83D\uDCCB Daily Habit Notes", ""];
@@ -713,26 +715,30 @@ function EntryEditor({
         lines.push("No active habits found. Add habits in the Habits tab first.");
       }
       const newBody = lines.join("\n");
-      setBody(newBody);
-      setMergedText(title ? title + "\n" + newBody : newBody);
+      const merged = existingBody + separator + newBody;
+      setBody(merged);
+      setMergedText(title ? title + "\n" + merged : merged);
     } else if (key === "morning-pages") {
       setTemplate("free-write" as JournalTemplate);
-      const newBody = "\uD83C\uDF05 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n";
-      setBody(newBody);
-      setMergedText(title ? title + "\n" + newBody : newBody);
+      const templateContent = "\uD83C\uDF05 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n";
+      const merged = existingBody + separator + templateContent;
+      setBody(merged);
+      setMergedText(title ? title + "\n" + merged : merged);
     } else if (key === "weekly-review") {
       setTemplate("goal-review" as JournalTemplate);
-      const newBody = "\uD83D\uDCCA Weekly Review\n\n\u2705 This week's wins:\n\n\n\u26A0\uFE0F This week's challenges:\n\n\n\uD83D\uDCA1 Lessons learned:\n\n\n\uD83C\uDFAF Focus for next week:\n\n";
-      setBody(newBody);
-      setMergedText(title ? title + "\n" + newBody : newBody);
+      const templateContent = "\uD83D\uDCCA Weekly Review\n\n\u2705 This week's wins:\n\n\n\u26A0\uFE0F This week's challenges:\n\n\n\uD83D\uDCA1 Lessons learned:\n\n\n\uD83C\uDFAF Focus for next week:\n\n";
+      const merged = existingBody + separator + templateContent;
+      setBody(merged);
+      setMergedText(title ? title + "\n" + merged : merged);
     } else {
       // Built-in templates
       const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === key);
       if (tmpl) {
         setTemplate(tmpl.key);
         if (tmpl.prompt) {
-          setBody(tmpl.prompt);
-          setMergedText(title ? title + "\n" + tmpl.prompt : tmpl.prompt);
+          const merged = existingBody + separator + tmpl.prompt;
+          setBody(merged);
+          setMergedText(title ? title + "\n" + merged : merged);
         }
       }
     }
