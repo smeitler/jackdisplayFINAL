@@ -920,17 +920,20 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
 // ─── CALENDAR TAB — Infinite vertical scroll ─────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Generate an array of { year, month } going back `count` months from a given month */
-function generateMonths(endYear: number, endMonth: number, count: number): { year: number; month: number }[] {
+/** Generate an array of { year, month } from startYear/startMonth to endYear/endMonth inclusive */
+function generateMonths(
+  startYear: number, startMonth: number,
+  endYear: number, endMonth: number
+): { year: number; month: number }[] {
   const result: { year: number; month: number }[] = [];
-  let y = endYear;
-  let m = endMonth;
-  for (let i = 0; i < count; i++) {
+  let y = startYear;
+  let m = startMonth;
+  while (y < endYear || (y === endYear && m <= endMonth)) {
     result.push({ year: y, month: m });
-    m--;
-    if (m < 1) { m = 12; y--; }
+    m++;
+    if (m > 12) { m = 1; y++; }
   }
-  return result.reverse(); // oldest first
+  return result;
 }
 
 function CalendarTab({ entries, onDayPress, colors }: {
@@ -941,8 +944,23 @@ function CalendarTab({ entries, onDayPress, colors }: {
   const today = new Date();
   const todayStr = todayDateStr();
 
-  // Show 12 months: current + 11 past months
-  const months = useMemo(() => generateMonths(today.getFullYear(), today.getMonth() + 1, 12), []);
+  // Show 10 years back → 5 years forward
+  const START_YEARS_BACK = 10;
+  const END_YEARS_FORWARD = 5;
+  const startYear = today.getFullYear() - START_YEARS_BACK;
+  const endYear = today.getFullYear() + END_YEARS_FORWARD;
+  const months = useMemo(
+    () => generateMonths(startYear, 1, endYear, 12),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  // Index of the current month in the months array (used to scroll to it)
+  const todayMonthIndex = useMemo(() => {
+    const y = today.getFullYear();
+    const m = today.getMonth() + 1;
+    return months.findIndex((mo) => mo.year === y && mo.month === m);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Build a global map of date -> entries
   const entryMap = useMemo(() => {
@@ -966,16 +984,15 @@ function CalendarTab({ entries, onDayPress, colors }: {
   const scrollRef = useRef<ScrollView>(null);
   const [didScroll, setDidScroll] = useState(false);
 
-  // Scroll to bottom (current month) on mount
+  // Scroll to today's month on mount using measured offsets
+  const monthOffsets = useRef<number[]>([]);
+
   useEffect(() => {
-    if (!didScroll) {
-      const timer = setTimeout(() => {
-        scrollRef.current?.scrollToEnd({ animated: false });
-        setDidScroll(true);
-      }, 100);
-      return () => clearTimeout(timer);
+    if (!didScroll && todayMonthIndex >= 0 && monthOffsets.current[todayMonthIndex] != null) {
+      scrollRef.current?.scrollTo({ y: monthOffsets.current[todayMonthIndex], animated: false });
+      setDidScroll(true);
     }
-  }, [didScroll]);
+  }, [didScroll, todayMonthIndex]);
 
   return (
     <ScrollView
@@ -983,7 +1000,7 @@ function CalendarTab({ entries, onDayPress, colors }: {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 80 }}
     >
-      {months.map(({ year, month }) => {
+      {months.map(({ year, month }, monthIndex) => {
         const daysInMonth = getMonthDays(year, month);
         const firstDay = getFirstDayOfWeek(year, month);
 
@@ -996,11 +1013,21 @@ function CalendarTab({ entries, onDayPress, colors }: {
         for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
 
         return (
-          <View key={`${year}-${month}`} style={{
-            marginBottom: 0,
-            borderTopWidth: BORDER,
-            borderTopColor: colors.border,
-          }}>
+          <View
+            key={`${year}-${month}`}
+            onLayout={(e) => {
+              monthOffsets.current[monthIndex] = e.nativeEvent.layout.y;
+              // Once we have the today month offset, scroll to it
+              if (monthIndex === todayMonthIndex && !didScroll) {
+                scrollRef.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
+                setDidScroll(true);
+              }
+            }}
+            style={{
+              marginBottom: 0,
+              borderTopWidth: BORDER,
+              borderTopColor: colors.border,
+            }}>
             {/* Month + day-of-week header row */}
             <View style={{
               flexDirection: "row",
