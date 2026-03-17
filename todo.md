@@ -855,3 +855,6 @@
 - [x] Calendar: rebuild as true wall-calendar grid — large equal squares per day filling full screen width, like a physical monthly calendar
 - [x] Calendar: extend scroll range to 10 years back and 5 years forward, auto-scroll to current month
 - [x] Fix calendar: day cell borders disappeared after range expansion — restore visible grid boxes
+- [x] Calendar: ensure photos always show in cells immediately after being added (fix reactivity)
+- [x] Media tab: show each item with date, photo thumbnail preview, and entry context
+- [x] Media tab: audio entries show text preview snippet alongside the audio player

@@ -1202,45 +1202,66 @@ type MediaFilter = "all" | "photo" | "video" | "audio" | "pdf";
 function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
   const [filter, setFilter] = useState<MediaFilter>("all");
 
-  const allAttachments = useMemo(() => {
-    const list: (JournalAttachment & { entryDate: string })[] = [];
+  // Build rich items: attachment + parent entry context, sorted newest first
+  const allItems = useMemo(() => {
+    const list: (JournalAttachment & {
+      entryDate: string;
+      entryBody: string;
+      entryTitle: string;
+      entryCreatedAt: string;
+      transcriptionText?: string;
+    })[] = [];
     for (const e of entries) {
       for (const att of e.attachments) {
-        list.push({ ...att, entryDate: e.date });
+        list.push({
+          ...att,
+          entryDate: e.date,
+          entryBody: e.body || "",
+          entryTitle: e.title || "",
+          entryCreatedAt: e.createdAt,
+          transcriptionText: e.transcriptionText,
+        });
       }
     }
-    return list.sort((a, b) => b.entryDate.localeCompare(a.entryDate));
+    return list.sort((a, b) => b.entryCreatedAt.localeCompare(a.entryCreatedAt));
   }, [entries]);
 
-  const filtered = filter === "all" ? allAttachments : allAttachments.filter((a) => a.type === filter);
+  const filtered = filter === "all" ? allItems : allItems.filter((a) => a.type === filter);
 
-  const FILTERS: { key: MediaFilter; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "photo", label: "Photos" },
-    { key: "audio", label: "Audio" },
-    { key: "video", label: "Video" },
+  const FILTERS: { key: MediaFilter; label: string; icon: string }[] = [
+    { key: "all", label: "All", icon: "photo.stack.fill" },
+    { key: "photo", label: "Photos", icon: "photo.fill" },
+    { key: "audio", label: "Audio", icon: "mic.fill" },
+    { key: "video", label: "Video", icon: "video.fill" },
   ];
 
-  // Photo grid for photo items
-  const photoItems = filtered.filter((a) => a.type === "photo");
-  const otherItems = filtered.filter((a) => a.type !== "photo");
-  const photoSize = Math.floor((SCREEN_WIDTH - 32 - 8) / 3);
+  const photoSize = Math.floor((SCREEN_WIDTH - 32 - 4) / 3);
+
+  // Format date nicely
+  function niceDate(dateStr: string): string {
+    try {
+      const d = new Date(dateStr + "T00:00:00");
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    } catch { return dateStr; }
+  }
 
   return (
     <View>
-      {/* Filter tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+      {/* Filter pill bar */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
         <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
           {FILTERS.map((f) => (
             <Pressable
               key={f.key}
               onPress={() => setFilter(f.key)}
               style={[{
-                paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+                flexDirection: "row", alignItems: "center", gap: 6,
+                paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
                 backgroundColor: filter === f.key ? colors.primary : colors.surface,
                 borderWidth: 1, borderColor: filter === f.key ? colors.primary : colors.border,
               }]}
             >
+              <IconSymbol name={f.icon as any} size={13} color={filter === f.key ? "#fff" : colors.muted} />
               <Text style={{ fontSize: 13, fontWeight: "600", color: filter === f.key ? "#fff" : colors.foreground }}>
                 {f.label}
               </Text>
@@ -1254,46 +1275,103 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
           <IconSymbol name="photo.stack.fill" size={40} color={colors.muted} />
           <Text style={{ fontSize: 14, color: colors.muted }}>No media yet</Text>
         </View>
+      ) : filter === "photo" ? (
+        // ── Photo grid view ──────────────────────────────────────────────────────
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
+          {filtered.map((att) => (
+            <View key={att.id} style={{ width: photoSize, marginBottom: 2 }}>
+              <Image
+                source={{ uri: att.uri }}
+                style={{ width: photoSize, height: photoSize, borderRadius: 4 }}
+                resizeMode="cover"
+              />
+              <Text style={{ fontSize: 9, color: colors.muted, marginTop: 2, textAlign: "center" }} numberOfLines={1}>
+                {niceDate(att.entryDate)}
+              </Text>
+            </View>
+          ))}
+        </View>
       ) : (
-        <View>
-          {/* Photo grid */}
-          {photoItems.length > 0 && (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
-              {photoItems.map((att) => (
-                <Image
-                  key={att.id}
-                  source={{ uri: att.uri }}
-                  style={{ width: photoSize, height: photoSize, borderRadius: 6 }}
-                  resizeMode="cover"
-                />
-              ))}
-            </View>
-          )}
-          {/* Other items (audio, video, pdf) */}
-          {otherItems.length > 0 && (
-            <View style={{ gap: 8 }}>
-              {otherItems.map((att) => (
-                <View key={att.id} style={[{
-                  flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12,
-                  backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-                }]}>
-                  <IconSymbol
-                    name={att.type === "video" ? "video.fill" : att.type === "audio" ? "mic.fill" : "doc.fill"}
-                    size={20} color={colors.primary}
+        // ── Rich card list for all / audio / video ───────────────────────────────
+        <View style={{ gap: 12 }}>
+          {filtered.map((att) => {
+            const isPhoto = att.type === "photo";
+            const isAudio = att.type === "audio";
+            const isVideo = att.type === "video";
+            // Text to preview: transcription first, then entry body
+            const previewText = (att.transcriptionText || att.entryBody || "").trim();
+
+            return (
+              <View
+                key={att.id}
+                style={{
+                  borderRadius: 14, overflow: "hidden",
+                  backgroundColor: colors.surface,
+                  borderWidth: 1, borderColor: colors.border,
+                }}
+              >
+                {/* Photo thumbnail header */}
+                {isPhoto && (
+                  <Image
+                    source={{ uri: att.uri }}
+                    style={{ width: "100%", height: 180 }}
+                    resizeMode="cover"
                   />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }} numberOfLines={1}>
-                      {att.name || att.type.charAt(0).toUpperCase() + att.type.slice(1)}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colors.muted }}>{att.entryDate}</Text>
+                )}
+
+                <View style={{ padding: 12, gap: 8 }}>
+                  {/* Date + type badge row */}
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <IconSymbol
+                        name={isPhoto ? "photo.fill" : isAudio ? "mic.fill" : isVideo ? "video.fill" : "doc.fill"}
+                        size={14} color={colors.primary}
+                      />
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary }}>
+                        {isPhoto ? "Photo" : isAudio ? "Audio" : isVideo ? "Video" : "Document"}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.muted }}>{niceDate(att.entryDate)}</Text>
                   </View>
-                  {att.type === "audio" && att.durationMs && (
-                    <Text style={{ fontSize: 12, color: colors.muted }}>{fmtDuration(att.durationMs / 1000)}</Text>
+
+                  {/* Entry title if present */}
+                  {att.entryTitle ? (
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }} numberOfLines={1}>
+                      {att.entryTitle}
+                    </Text>
+                  ) : null}
+
+                  {/* Audio player */}
+                  {isAudio && (
+                    <AudioPlaybackRow
+                      uri={att.uri}
+                      duration={att.durationMs ? att.durationMs / 1000 : undefined}
+                    />
                   )}
+
+                  {/* Text preview — for audio: transcription or body; for photos: entry body */}
+                  {previewText ? (
+                    <View style={{
+                      backgroundColor: colors.background,
+                      borderRadius: 8, padding: 10,
+                      borderLeftWidth: 3, borderLeftColor: colors.primary + "80",
+                    }}>
+                      <Text style={{ fontSize: 13, color: colors.foreground, lineHeight: 18 }} numberOfLines={4}>
+                        {previewText}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Duration for audio/video */}
+                  {(isAudio || isVideo) && att.durationMs ? (
+                    <Text style={{ fontSize: 11, color: colors.muted }}>
+                      Duration: {fmtDuration(att.durationMs / 1000)}
+                    </Text>
+                  ) : null}
                 </View>
-              ))}
-            </View>
-          )}
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
