@@ -289,6 +289,19 @@ export default function CheckInScreen() {
   const vcTranscriptRef = useRef('');
   useEffect(() => { vcTranscriptRef.current = vcTranscript; }, [vcTranscript]);
 
+  // Load existing day notes for the current date into vcNotes on mount
+  useEffect(() => {
+    loadDayNotes().then((allNotes) => {
+      const notesForDate: Record<string, string> = {};
+      for (const habit of activeHabits) {
+        const key = `${habit.id}:${currentDate}`;
+        if (allNotes[key]) notesForDate[habit.id] = allNotes[key];
+      }
+      if (Object.keys(notesForDate).length > 0) setVcNotes(notesForDate);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount — date changes handled by navigateDate
+
   // Guard: skip delta if Whisper is still processing the previous chunk
   const vcWhisperInFlightRef = useRef(false);
   // Smart LLM debounce: track word count at last LLM call
@@ -565,6 +578,15 @@ export default function CheckInScreen() {
     setCurrentDate(newDate);
     setRatings(getRatingsForDate(newDate));
     setSubmitted(false);
+    // Reset voice notes and load existing notes for the new date
+    loadDayNotes().then((allNotes) => {
+      const notesForDate: Record<string, string> = {};
+      for (const habit of activeHabits) {
+        const key = `${habit.id}:${newDate}`;
+        if (allNotes[key]) notesForDate[habit.id] = allNotes[key];
+      }
+      setVcNotes(notesForDate);
+    });
   }
 
   const habitsByCategory = useMemo(() => {
