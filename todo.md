@@ -905,3 +905,11 @@
 
 - [x] Make voice check-in notes editable inline on check-in screen (tap to edit, color-coded)
 - [x] Reduce voice check-in chunk interval from 3s to 1s for near-real-time updates
+
+## Delta Pipeline Architecture (Mar 17 2026 - session 5)
+
+- [x] Server: add voiceCheckin.transcribeChunk endpoint (Whisper only, returns transcript delta)
+- [x] Server: add voiceCheckin.analyzeTranscript endpoint (LLM only, takes full text transcript)
+- [x] Client: send delta-only audio chunks (not cumulative blobs)
+- [x] Client: update transcript display immediately on Whisper response
+- [x] Client: run LLM analysis in parallel on accumulated transcript text

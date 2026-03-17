@@ -707,45 +707,54 @@ Return ONLY valid JSON: {"journalEntries": [...]${habitJsonExample}, "gratitudeI
   // ─── Voice Check-in ─────────────────────────────────────────────────────────────
   voiceCheckin: router({
     /**
-     * Accepts a base64-encoded audio blob, transcribes via Whisper,
-     * then uses the LLM to analyze the transcript against the user's habits
-     * and return a rating (green/yellow/red) + short note per habit.
-     * Completely isolated from the journal voice recording code.
+     * STEP 1 — Whisper only (fast path).
+     * Accepts a base64-encoded DELTA audio chunk (new audio only since last tick).
+     * Returns the transcript of just that chunk so the client can append it immediately.
+     * No LLM involved — this should return in ~300-600ms.
      */
-    analyze: publicProcedure
+    transcribeChunk: publicProcedure
       .input(z.object({
         audioBase64: z.string(),
         mimeType: z.string().default('audio/webm'),
+        previousTranscript: z.string().default(''), // context hint for Whisper
+      }))
+      .mutation(async ({ input }) => {
+        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+        const transcription = await transcribeAudioBuffer(audioBuffer, input.mimeType, {
+          language: 'en',
+          prompt: input.previousTranscript
+            ? `${input.previousTranscript.slice(-200)} [continuing]`
+            : 'Daily habit check-in, rating habits as crushed, okay, or missed',
+        });
+        if ('error' in transcription) {
+          return { delta: '', error: transcription.error };
+        }
+        return { delta: transcription.text?.trim() ?? '', error: null };
+      }),
+
+    /**
+     * STEP 2 — LLM only (analysis path).
+     * Accepts the full accumulated text transcript (no audio).
+     * Returns per-habit ratings and notes.
+     * Runs in parallel with the next transcribeChunk call — no blocking.
+     */
+    analyzeTranscript: publicProcedure
+      .input(z.object({
+        transcript: z.string(),
         habits: z.array(z.object({ id: z.string(), name: z.string() })),
       }))
       .mutation(async ({ input }) => {
         const { invokeLLM } = await import('./_core/llm.js');
-        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+        if (!input.transcript.trim()) return { results: {} as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> };
 
-        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
-
-        // Transcribe audio
-        const transcription = await transcribeAudioBuffer(audioBuffer, input.mimeType, {
-          language: 'en',
-          prompt: 'Daily habit check-in, rating habits as crushed, okay, or missed',
-        });
-
-        if ('error' in transcription) {
-          const details = (transcription as any).details ?? '';
-          throw new Error(`Transcription failed: ${transcription.error}${details ? ` (${details})` : ''}`);
-        }
-
-        const transcript = transcription.text?.trim() ?? '';
-        if (!transcript) return { transcript: '', results: {} as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> };
-
-        // Build habit list for AI analysis
         const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
 
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a habit coach analyzing a user's voice check-in. Given their speech and a list of habits, determine:
+              content: `You are a habit coach analyzing a user's voice check-in. Given their speech transcript and a list of habits, determine:
 1. Which habits they mentioned (directly or indirectly)
 2. How well they did on each mentioned habit: "green" (crushed it / did it / succeeded), "yellow" (partial / okay / tried), or "red" (missed / skipped / failed)
 3. A very short punchy note (3-8 words max) capturing the key fact
@@ -765,7 +774,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             },
             {
               role: 'user',
-              content: `Transcript:\n${transcript}`,
+              content: `Full transcript:\n${input.transcript}`,
             },
           ],
           response_format: { type: 'json_object' },
@@ -785,7 +794,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
           // parsing failed — return empty
         }
 
-        return { transcript, results };
+        return { results };
       }),
   }),
 

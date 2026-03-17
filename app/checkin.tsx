@@ -23,28 +23,31 @@ import {
   saveDayNotes,
 } from '@/lib/storage';
 
-// ─── Voice Check-in Chunked Streaming Recorder (isolated from journal code) ────
-// Sends audio to Whisper every CHUNK_INTERVAL_MS using cumulative blob approach.
-// Each chunk = all audio so far, giving Whisper full context for better accuracy.
-const CHUNK_INTERVAL_MS = 1000; // 1-second chunks for near-real-time rating updates
+// ─── Voice Check-in Delta Streaming Recorder (isolated from journal code) ────
+// Architecture: delta-only chunks → Whisper (fast) → transcript appended immediately
+//               accumulated transcript → LLM (parallel) → ratings/notes updated
+// This avoids re-processing growing audio on every tick (the old cumulative approach).
+const CHUNK_INTERVAL_MS = 1000; // 1-second delta chunks
 
-type ChunkCallback = (blob: Blob, mimeType: string) => void;
+// Callback receives only the NEW audio since the last tick (delta blob)
+type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
 
-function useCheckinWebRecorder(onChunk: ChunkCallback) {
+function useCheckinWebRecorder(onDeltaChunk: DeltaChunkCallback) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const allChunksRef = useRef<Blob[]>([]); // cumulative — all audio since start
+  // pendingChunks: raw MediaRecorder data since last tick — cleared on each tick
+  const pendingChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>('audio/webm');
   const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const onChunkRef = useRef(onChunk);
-  useEffect(() => { onChunkRef.current = onChunk; });
+  const onDeltaChunkRef = useRef(onDeltaChunk);
+  useEffect(() => { onDeltaChunkRef.current = onDeltaChunk; });
 
   const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
-    allChunksRef.current = [];
+    pendingChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -56,22 +59,23 @@ function useCheckinWebRecorder(onChunk: ChunkCallback) {
       }
       mimeTypeRef.current = mimeType || 'audio/webm';
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      // Collect all data chunks into cumulative array
+      // Accumulate raw data into pendingChunks — cleared on each tick
       mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) allChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) pendingChunksRef.current.push(e.data);
       };
-      mr.start(100); // collect data every 100ms
+      mr.start(100); // emit data every 100ms
       mediaRecorderRef.current = mr;
       isRecordingRef.current = true;
       setIsRecording(true);
 
-      // Every CHUNK_INTERVAL_MS, snapshot the cumulative blob and send to AI
+      // Every CHUNK_INTERVAL_MS: drain pendingChunks into a delta blob and fire callback
       chunkIntervalRef.current = setInterval(() => {
-        if (!isRecordingRef.current || allChunksRef.current.length === 0) return;
-        // Build cumulative blob from all chunks so far
-        const cumulativeBlob = new Blob([...allChunksRef.current], { type: mimeTypeRef.current });
-        if (cumulativeBlob.size > 1000) { // skip tiny/empty blobs
-          onChunkRef.current(cumulativeBlob, mimeTypeRef.current);
+        if (!isRecordingRef.current || pendingChunksRef.current.length === 0) return;
+        // Drain: take all pending chunks and clear the buffer
+        const deltaChunks = pendingChunksRef.current.splice(0);
+        const deltaBlob = new Blob(deltaChunks, { type: mimeTypeRef.current });
+        if (deltaBlob.size > 500) { // skip near-silent/empty deltas
+          onDeltaChunkRef.current(deltaBlob, mimeTypeRef.current);
         }
       }, CHUNK_INTERVAL_MS);
 
@@ -89,25 +93,24 @@ function useCheckinWebRecorder(onChunk: ChunkCallback) {
     }
   }, []);
 
-  const stop = useCallback((): Promise<{ blob: Blob; mimeType: string } | null> => {
-    // Stop the chunk interval
+  const stop = useCallback((): Promise<void> => {
+    // Stop the chunk interval — any remaining pending chunks are discarded (transcript is already up to date)
     if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null; }
     return new Promise((resolve) => {
       const mr = mediaRecorderRef.current;
       if (!mr || mr.state === 'inactive') {
         isRecordingRef.current = false;
         setIsRecording(false);
-        resolve(null);
+        resolve();
         return;
       }
-      const recordedMime = mr.mimeType || 'audio/webm';
       mr.addEventListener('stop', () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        const blob = new Blob(allChunksRef.current, { type: recordedMime });
+        pendingChunksRef.current = [];
         isRecordingRef.current = false;
         setIsRecording(false);
-        resolve(blob.size === 0 ? null : { blob, mimeType: recordedMime });
+        resolve();
       }, { once: true });
       mr.stop();
     });
@@ -203,51 +206,74 @@ export default function CheckInScreen() {
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  const analyzeCheckinMutation = trpc.voiceCheckin.analyze.useMutation();
-  // Refs for use inside the onChunk callback (avoids stale closures)
+  // Split pipeline: two separate mutations
+  const transcribeChunkMutation = trpc.voiceCheckin.transcribeChunk.useMutation();
+  const analyzeTranscriptMutation = trpc.voiceCheckin.analyzeTranscript.useMutation();
+  // Refs for use inside the onDeltaChunk callback (avoids stale closures)
   const activeHabitsRef = useRef(activeHabits);
   useEffect(() => { activeHabitsRef.current = activeHabits; }, [activeHabits]);
   const setRatingsRef = useRef(setRatings);
   useEffect(() => { setRatingsRef.current = setRatings; }, [setRatings]);
+  // Accumulated transcript ref (used by LLM analysis path without stale closure)
+  const vcTranscriptRef = useRef('');
+  useEffect(() => { vcTranscriptRef.current = vcTranscript; }, [vcTranscript]);
 
-  // Called every CHUNK_INTERVAL_MS with cumulative audio blob
-  const vcProcessingRef = useRef(false); // guard: skip chunk if previous still in flight
-  const handleVcChunk = useCallback(async (blob: Blob, mimeType: string) => {
-    if (vcProcessingRef.current) return; // previous chunk still processing — skip
-    vcProcessingRef.current = true;
+  // Guard: skip delta if Whisper is still processing the previous chunk
+  const vcWhisperInFlightRef = useRef(false);
+  // LLM analysis runs fire-and-forget in parallel — no blocking guard needed
+
+  // Called every CHUNK_INTERVAL_MS with a DELTA blob (only new audio since last tick)
+  const handleVcDeltaChunk = useCallback(async (deltaBlob: Blob, mimeType: string) => {
+    if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick
+    vcWhisperInFlightRef.current = true;
     setVcProcessing(true);
     try {
-      const audioBase64 = await blobToBase64(blob);
-      const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
-      const response = await analyzeCheckinMutation.mutateAsync({
+      // STEP 1: Whisper — transcribe delta only (fast, small input)
+      const audioBase64 = await blobToBase64(deltaBlob);
+      const result = await transcribeChunkMutation.mutateAsync({
         audioBase64,
         mimeType,
-        habits: habitList,
+        previousTranscript: vcTranscriptRef.current,
       });
-      // Update transcript (use latest cumulative transcript from server)
-      if (response.transcript) setVcTranscript(response.transcript);
-      // Merge AI-filled ratings and notes (later chunks override earlier ones)
-      const newRatings: Record<string, Rating> = {};
-      const newNotes: Record<string, string> = {};
-      for (const [habitId, data] of Object.entries(response.results)) {
-        if (data.rating) newRatings[habitId] = data.rating as Rating;
-        if (data.note) newNotes[habitId] = data.note;
-      }
-      if (Object.keys(newRatings).length > 0) {
-        setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
-      }
-      if (Object.keys(newNotes).length > 0) {
-        setVcNotes((prev) => ({ ...prev, ...newNotes }));
-      }
+      const delta = result.delta?.trim() ?? '';
+      if (!delta) return;
+
+      // Append delta to transcript immediately — user sees it right away
+      const newTranscript = vcTranscriptRef.current
+        ? vcTranscriptRef.current + ' ' + delta
+        : delta;
+      setVcTranscript(newTranscript);
+      vcTranscriptRef.current = newTranscript;
+
+      // STEP 2: LLM — analyze full accumulated transcript (fire-and-forget, no blocking)
+      const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
+      analyzeTranscriptMutation.mutateAsync({
+        transcript: newTranscript,
+        habits: habitList,
+      }).then((analysis) => {
+        const newRatings: Record<string, Rating> = {};
+        const newNotes: Record<string, string> = {};
+        for (const [habitId, data] of Object.entries(analysis.results) as [string, { rating: string | null; note: string }][]) {
+          if (data.rating) newRatings[habitId] = data.rating as Rating;
+          if (data.note) newNotes[habitId] = data.note;
+        }
+        if (Object.keys(newRatings).length > 0) {
+          setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
+        }
+        if (Object.keys(newNotes).length > 0) {
+          setVcNotes((prev) => ({ ...prev, ...newNotes }));
+        }
+      }).catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e));
+
     } catch (e) {
-      console.warn('[VoiceCheckin] Chunk error:', e);
+      console.warn('[VoiceCheckin] Whisper chunk error:', e);
     } finally {
-      vcProcessingRef.current = false;
+      vcWhisperInFlightRef.current = false;
       setVcProcessing(false);
     }
-  }, [analyzeCheckinMutation]);
+  }, [transcribeChunkMutation, analyzeTranscriptMutation]);
 
-  const checkinRecorder = useCheckinWebRecorder(handleVcChunk);
+  const checkinRecorder = useCheckinWebRecorder(handleVcDeltaChunk);
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -583,6 +609,8 @@ export default function CheckInScreen() {
       }
       // Reset transcript and notes for new session
       setVcTranscript('');
+      vcTranscriptRef.current = '';
+      vcWhisperInFlightRef.current = false;
       const ok = await checkinRecorder.start();
       if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
       setVcElapsed(0);
