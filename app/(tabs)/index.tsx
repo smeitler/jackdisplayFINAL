@@ -5,7 +5,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
@@ -15,7 +15,8 @@ import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
-const PROFILE_PIC_KEY = 'daycheck:profilePicUri';
+// Profile pic key is per-user — built dynamically once userId is known
+function profilePicKey(userId: string) { return `daycheck:profilePicUri:${userId}`; }
 
 // ── Daily motivational quotes (user-curated, rotates by day of year) ──────────
 const DAILY_QUOTES = [
@@ -532,11 +533,14 @@ export default function HomeScreen() {
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
 
-  // Load profile picture on mount
+  // Load profile picture — per-user key so switching accounts shows the right photo
   useEffect(() => {
-    AsyncStorage.getItem(PROFILE_PIC_KEY).then((uri) => {
+    (async () => {
+      const uid = await getLastUserId();
+      const key = profilePicKey(uid || 'default');
+      const uri = await AsyncStorage.getItem(key);
       if (uri) setProfilePicUri(uri);
-    });
+    })();
   }, []);
 
   // First-launch: show permissions setup screen once on mobile
@@ -583,7 +587,22 @@ export default function HomeScreen() {
       if (!result.canceled && result.assets[0]?.uri) {
         const uri = result.assets[0].uri;
         setProfilePicUri(uri);
-        await AsyncStorage.setItem(PROFILE_PIC_KEY, uri);
+        const uid = await getLastUserId();
+        await AsyncStorage.setItem(profilePicKey(uid || 'default'), uri);
+        // Also convert to base64 data URI for persistence across app restarts
+        try {
+          if (Platform.OS === 'web') {
+            const resp = await fetch(uri);
+            const blob = await resp.blob();
+            const dataUri = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            setProfilePicUri(dataUri);
+            await AsyncStorage.setItem(profilePicKey(uid || 'default'), dataUri);
+          }
+        } catch { /* keep original URI if conversion fails */ }
       }
     } catch {
       // ignore

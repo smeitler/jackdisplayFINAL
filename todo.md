@@ -862,3 +862,8 @@
 - [x] Fix templates not applying content when selected from dropdown
 - [x] Show template prompts/questions as an overlay during recording so user can see what to talk about
 - [x] Home screen: make habit rating circles much larger
+- [x] Profile picture: save per-user so it persists correctly across sessions
+- [x] Media tab: photos-only and audio-only filtered views; tap photo to expand and see which journal entry it belongs to
+- [x] Journal editor: remove template pill from top, move template picker to bottom toolbar next to mic
+- [x] Journal editor: merge title and body into one field — first line bold (title), Enter switches to normal body text
+- [x] Journal record button: auto-show habit prompts (all habits + gratitude) when record is tapped, no template selection needed
