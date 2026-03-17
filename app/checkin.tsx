@@ -159,39 +159,97 @@ export default function CheckInScreen() {
         });
       } else {
         audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        // iOS RecordingPresets.HIGH_QUALITY records AAC in an MPEG-4 container (.m4a)
         mimeType = 'audio/m4a';
+        console.log('[VoiceCheckIn] Native URI:', uri, 'mimeType:', mimeType);
       }
 
       // Send ALL habits to the server in one shot
+      console.log('[VoiceCheckIn] Sending to server, habits:', activeHabits.map(h => ({ id: h.id, name: h.name })));
+      console.log('[VoiceCheckIn] Audio base64 length:', audioBase64.length, 'mimeType:', mimeType);
       const result = await transcribeMutation.mutateAsync({
         audioBase64,
         mimeType,
         habits: activeHabits.map((h) => ({ id: h.id, name: h.name, emoji: h.emoji, description: h.description })),
       });
 
+      const habitRatingsRaw = result.habitRatings ?? {};
+      const habitNotesRaw = result.habitNotes ?? {};
+      const transcript = result.transcript ?? '';
+
+      console.log('[VoiceCheckIn] transcript:', transcript);
+      console.log('[VoiceCheckIn] habitRatingsRaw keys:', Object.keys(habitRatingsRaw));
+      console.log('[VoiceCheckIn] habitNotesRaw keys:', Object.keys(habitNotesRaw));
+      console.log('[VoiceCheckIn] activeHabit IDs:', activeHabits.map(h => h.id));
+
+      // Build a name→id lookup for fuzzy matching (AI might return habit name as key instead of ID)
+      const nameLookup: Record<string, string> = {};
+      for (const h of activeHabits) {
+        nameLookup[h.name.toLowerCase().trim()] = h.id;
+        // Also add without emoji prefix
+        const nameOnly = h.name.replace(/^[\p{Emoji}\s]+/u, '').toLowerCase().trim();
+        if (nameOnly) nameLookup[nameOnly] = h.id;
+      }
+
+      // Helper: resolve a key from the AI (could be habit ID or habit name) to a habit ID
+      function resolveHabitId(key: string): string | null {
+        // Direct ID match
+        if (activeHabits.some(h => h.id === key)) return key;
+        // Name match (case-insensitive)
+        const lower = key.toLowerCase().trim();
+        if (nameLookup[lower]) return nameLookup[lower];
+        // Partial match
+        for (const [name, id] of Object.entries(nameLookup)) {
+          if (lower.includes(name) || name.includes(lower)) return id;
+        }
+        return null;
+      }
+
       // Apply ratings + notes for every habit the AI detected
       let filled = 0;
       const newRatings: Record<string, Rating> = {};
       const newNotes: Record<string, string> = {};
 
-      for (const habit of activeHabits) {
-        const rating = result.habitRatings?.[habit.id];
-        const note = result.habitNotes?.[habit.id];
-        if (rating && (rating === 'green' || rating === 'yellow' || rating === 'red')) {
-          newRatings[habit.id] = rating as Rating;
+      // First pass: apply ratings from AI response (matching by ID or name)
+      for (const [key, rating] of Object.entries(habitRatingsRaw)) {
+        const habitId = resolveHabitId(key);
+        console.log(`[VoiceCheckIn] Rating key="${key}" resolved to habitId=${habitId}, rating=${rating}`);
+        if (habitId && (rating === 'green' || rating === 'yellow' || rating === 'red')) {
+          newRatings[habitId] = rating as Rating;
           filled++;
-        }
-        if (note?.trim()) {
-          newNotes[habit.id] = note.trim();
         }
       }
 
-      if (filled > 0) {
-        setRatings((prev) => ({ ...prev, ...newRatings }));
-        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Second pass: apply notes from AI response (matching by ID or name)
+      for (const [key, note] of Object.entries(habitNotesRaw)) {
+        const habitId = resolveHabitId(key);
+        if (habitId && typeof note === 'string' && note.trim()) {
+          newNotes[habitId] = note.trim();
+          // Fallback: if we got a note but no rating, default to green
+          if (!newRatings[habitId]) {
+            console.log(`[VoiceCheckIn] Fallback: "${key}" has note but no rating, defaulting to green`);
+            newRatings[habitId] = 'green';
+            filled++;
+          }
+        }
       }
-      if (Object.keys(newNotes).length > 0) {
-        setNotes((prev) => ({ ...prev, ...newNotes }));
+
+      console.log('[VoiceCheckIn] Final newRatings:', JSON.stringify(newRatings));
+      console.log('[VoiceCheckIn] Final newNotes:', JSON.stringify(newNotes));
+      console.log('[VoiceCheckIn] filled count:', filled);
+
+      // Always apply ratings (even if 0 filled, to clear any stale state)
+      setRatings((prev) => {
+        const merged = { ...prev, ...newRatings };
+        return merged;
+      });
+      setNotes((prev) => {
+        const merged = { ...prev, ...newNotes };
+        return merged;
+      });
+
+      if (filled > 0 && Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
       setVoiceFilledCount(filled);

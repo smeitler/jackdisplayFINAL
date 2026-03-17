@@ -659,7 +659,11 @@ export const appRouter = router({
           throw new Error(`Transcription failed: ${transcription.error}${details ? ` (${details})` : ''}`);
         }
         const transcript = transcription.text?.trim() ?? '';
-        if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], audioUrl };
+        console.log('[voiceJournal] Transcript:', transcript ? transcript.substring(0, 200) : '(empty)');
+        if (!transcript) {
+          console.log('[voiceJournal] Empty transcript, returning early');
+          return { transcript: '', journalEntries: [], gratitudeItems: [], habitNotes: {}, habitRatings: {}, audioUrl };
+        }
 
         // 3. AI categorization — extract journal thoughts, gratitude, and per-habit notes
         const habits = input.habits ?? [];
@@ -709,7 +713,10 @@ Return ONLY valid JSON: ${jsonShape}`,
         let habitNotes: Record<string, string> = {};
         let habitRatings: Record<string, 'green' | 'yellow' | 'red'> = {};
         try {
-          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+          const rawContent = llmResp.choices[0].message.content as string;
+          console.log('[voiceJournal] Raw LLM response:', rawContent);
+          const parsed = JSON.parse(rawContent);
+          console.log('[voiceJournal] Parsed keys:', Object.keys(parsed));
           journalEntries = Array.isArray(parsed.journalEntries) ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
           gratitudeItems = Array.isArray(parsed.gratitudeItems) ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
           if (parsed.habitNotes && typeof parsed.habitNotes === 'object') {
@@ -720,13 +727,26 @@ Return ONLY valid JSON: ${jsonShape}`,
             }
           }
           if (parsed.habitRatings && typeof parsed.habitRatings === 'object') {
+            console.log('[voiceJournal] habitRatings from LLM:', JSON.stringify(parsed.habitRatings));
             for (const [id, rating] of Object.entries(parsed.habitRatings)) {
               if (rating === 'green' || rating === 'yellow' || rating === 'red') {
                 habitRatings[id] = rating;
               }
             }
+          } else {
+            console.log('[voiceJournal] No habitRatings in LLM response');
           }
-        } catch {
+          // Fallback: if AI returned a note for a habit but no rating, default to green
+          for (const id of Object.keys(habitNotes)) {
+            if (!habitRatings[id]) {
+              console.log(`[voiceJournal] Fallback: habit ${id} has note but no rating, defaulting to green`);
+              habitRatings[id] = 'green';
+            }
+          }
+          console.log('[voiceJournal] Final habitRatings:', JSON.stringify(habitRatings));
+          console.log('[voiceJournal] Final habitNotes:', JSON.stringify(habitNotes));
+        } catch (parseErr) {
+          console.error('[voiceJournal] JSON parse error:', parseErr);
           // If parsing fails, put everything in journal
           journalEntries = [transcript];
         }

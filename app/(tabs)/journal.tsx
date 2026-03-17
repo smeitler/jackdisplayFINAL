@@ -303,7 +303,9 @@ function MicButton({ onRecordingComplete, colors, templatePrompt }: {
         const uri = recorder.uri;
         if (uri && duration >= 1) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          onRecordingComplete(uri, duration, "audio/m4a");
+          // iOS RecordingPresets.HIGH_QUALITY records AAC in MPEG-4 container (.m4a)
+          console.log('[JournalRecording] URI:', uri, 'mimeType: audio/m4a');
+          onRecordingComplete(uri, duration, 'audio/m4a');
         }
       }
     } catch (e) { console.warn("Recording stop error:", e); }

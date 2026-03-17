@@ -905,3 +905,6 @@
 - [x] Check-in screen: single hold-to-record session for ALL habits — hold mic, speak about everything, release, AI fills all ratings + descriptions at once
 - [x] Check-in screen: fix rating button selected state — selected must be fully solid/bright, unselected clearly dim
 - [x] Server: improve voice check-in AI prompt to infer ratings from natural/casual speech, not just explicit affirmative language
+- [x] Bug: voice check-in not checking rating boxes or filling descriptions after AI processes recording
+- [x] Bug: journal voice recording broken after habit voice check-in changes — need to restore journal recording to working state
+- [x] Bug: habit voice check-in still showing "filled 0 habits" — ratings not being applied
