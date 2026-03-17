@@ -894,3 +894,6 @@
 - [x] Check-in screen: move voice mic here — big red mic button at top; speaking auto-fills ratings and description slots per habit
 - [x] Check-in screen: add compact description/note text slot under each habit row (no extra space wasted)
 - [x] Home screen: remove voice mic button from Goals section header (moved to check-in screen)
+- [x] Check-in screen: hold-to-record mic (no modal) — hold to record, release to process, habits color green/yellow/red in real time inline
+- [x] Check-in screen: pulsing red dot + waveform indicator while recording (inline, no popup)
+- [x] Check-in screen: shrink note input font slightly

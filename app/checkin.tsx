@@ -14,7 +14,8 @@ import {
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { trpc } from "@/lib/trpc";
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync } from "expo-audio";
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   loadHabits,
   loadGratitudeEntries,
@@ -22,7 +23,6 @@ import {
   loadDayNotes,
   saveDayNotes,
 } from '@/lib/storage';
-import { VoiceCheckInModal } from '@/components/voice-checkin-modal';
 
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
@@ -82,7 +82,117 @@ export default function CheckInScreen() {
   const [shareToTeam, setShareToTeam] = useState(true);
   const [shared, setShared] = useState(false);
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [showVoiceMic, setShowVoiceMic] = useState(false);
+
+  // ── Inline voice check-in ──────────────────────────────────────────────────
+  type VoicePhase = 'idle' | 'recording' | 'processing' | 'done' | 'error';
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceStatusText, setVoiceStatusText] = useState('');
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
+
+  // Start pulse animation when recording
+  useEffect(() => {
+    if (voicePhase === 'recording') {
+      pulseLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.18, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.0, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      pulseLoopRef.current.start();
+    } else {
+      pulseLoopRef.current?.stop();
+      Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+    }
+  }, [voicePhase]);
+
+  const handleMicPressIn = useCallback(async () => {
+    if (voicePhase !== 'idle' && voicePhase !== 'done' && voicePhase !== 'error') return;
+    setVoiceError(null);
+    setVoiceStatusText('');
+    try {
+      if (Platform.OS !== 'web') {
+        const { granted } = await requestRecordingPermissionsAsync();
+        if (!granted) {
+          setVoiceError('Microphone permission required');
+          return;
+        }
+        await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      }
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setVoicePhase('recording');
+      setVoiceStatusText('Listening… speak about your habits');
+    } catch (e: any) {
+      setVoiceError('Could not start mic: ' + (e?.message ?? 'unknown'));
+    }
+  }, [voicePhase, audioRecorder]);
+
+  const handleMicPressOut = useCallback(async () => {
+    if (voicePhase !== 'recording') return;
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setVoicePhase('processing');
+    setVoiceStatusText('Analyzing your habits…');
+    try {
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
+      if (!uri) throw new Error('No recording found');
+
+      let audioBase64: string;
+      let mimeType: string;
+      if (Platform.OS === 'web') {
+        const resp = await fetch(uri);
+        const blob = await resp.blob();
+        mimeType = blob.type || 'audio/webm';
+        audioBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        mimeType = 'audio/m4a';
+      }
+
+      const habitPayload = activeHabits.map((h) => ({ id: h.id, name: h.name, emoji: h.emoji, description: h.description }));
+      const result = await transcribeMutation.mutateAsync({ audioBase64, mimeType, date: currentDate, habits: habitPayload });
+
+      const aiRatings = result.habitRatings ?? {};
+      const aiNotes = result.habitNotes ?? {};
+
+      // Apply ratings in real time
+      setRatings((prev) => {
+        const next = { ...prev };
+        for (const [habitId, rating] of Object.entries(aiRatings)) {
+          const r = String(rating);
+          if (r && r !== 'none') next[habitId] = r as Rating;
+        }
+        return next;
+      });
+      // Apply notes
+      setNotes((prev) => {
+        const next = { ...prev };
+        for (const [habitId, note] of Object.entries(aiNotes)) {
+          const n = String(note ?? '');
+          if (n.trim()) next[habitId] = n.trim();
+        }
+        return next;
+      });
+
+      const filled = Object.values(aiRatings).filter((r) => { const s = String(r); return s && s !== 'none'; }).length;
+      setVoiceStatusText(filled > 0 ? `✓ Filled ${filled} habit${filled !== 1 ? 's' : ''}` : '✓ Done — no habits detected');
+      setVoicePhase('done');
+    } catch (e: any) {
+      console.error('[VoiceCheckIn]', e);
+      setVoiceError(e?.message ?? 'Processing failed');
+      setVoicePhase('error');
+    }
+  }, [voicePhase, audioRecorder, activeHabits, currentDate, transcribeMutation]);
 
   // Load existing notes for this date on mount / date change
   useEffect(() => {
@@ -885,6 +995,69 @@ export default function CheckInScreen() {
           </Pressable>
         )}
 
+        {/* Inline voice status bar */}
+        {(voicePhase !== 'idle') && (
+          <View style={[
+            styles.voiceStatusBar,
+            {
+              backgroundColor:
+                voicePhase === 'recording' ? '#EF444418' :
+                voicePhase === 'processing' ? colors.surface :
+                voicePhase === 'done' ? '#22C55E18' : '#EF444418',
+              borderColor:
+                voicePhase === 'recording' ? '#EF444455' :
+                voicePhase === 'processing' ? colors.border :
+                voicePhase === 'done' ? '#22C55E55' : '#EF444455',
+            },
+          ]}>
+            {voicePhase === 'recording' && (
+              <View style={styles.voiceWaveRow}>
+                {[0.5, 0.9, 0.6, 1.0, 0.7, 0.85, 0.55].map((h, i) => (
+                  <Animated.View
+                    key={i}
+                    style={[
+                      styles.voiceBar,
+                      {
+                        height: 6 + h * 14,
+                        backgroundColor: '#EF4444',
+                        transform: [{ scaleY: pulseAnim }],
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+            {voicePhase === 'processing' && (
+              <View style={{ width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.primary, borderTopColor: 'transparent' }} />
+            )}
+            {voicePhase === 'done' && (
+              <IconSymbol name="checkmark.circle.fill" size={14} color="#22C55E" />
+            )}
+            {voicePhase === 'error' && (
+              <IconSymbol name="exclamationmark.circle.fill" size={14} color="#EF4444" />
+            )}
+            <Text style={[
+              styles.voiceStatusText,
+              {
+                color:
+                  voicePhase === 'recording' ? '#EF4444' :
+                  voicePhase === 'done' ? '#22C55E' :
+                  voicePhase === 'error' ? '#EF4444' : colors.muted,
+              },
+            ]}>
+              {voiceError ?? voiceStatusText}
+            </Text>
+            {(voicePhase === 'done' || voicePhase === 'error') && (
+              <Pressable
+                onPress={() => { setVoicePhase('idle'); setVoiceError(null); setVoiceStatusText(''); }}
+                style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 2 }]}
+              >
+                <IconSymbol name="xmark" size={12} color={colors.muted} />
+              </Pressable>
+            )}
+          </View>
+        )}
+
         {/* Save + Voice Mic row */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Pressable
@@ -908,56 +1081,40 @@ export default function CheckInScreen() {
             </Text>
           </Pressable>
 
-          {/* Big red mic button */}
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setShowVoiceMic(true);
-            }}
-            style={({ pressed }) => [
-              styles.voiceMicBigBtn,
-              {
-                backgroundColor: '#EF4444',
-                transform: [{ scale: pressed ? 0.93 : 1 }],
-                shadowColor: '#EF4444',
-                shadowOffset: { width: 0, height: 3 },
-                shadowOpacity: pressed ? 0.2 : 0.4,
-                shadowRadius: 6,
-                elevation: 5,
-              },
-            ]}
-          >
-            <IconSymbol name="mic.fill" size={24} color="#fff" />
-          </Pressable>
+          {/* Hold-to-record mic button */}
+          <Animated.View style={{ transform: [{ scale: voicePhase === 'recording' ? pulseAnim : 1 }] }}>
+            <Pressable
+              onPressIn={handleMicPressIn}
+              onPressOut={handleMicPressOut}
+              delayLongPress={99999}
+              style={[
+                styles.voiceMicBigBtn,
+                {
+                  backgroundColor:
+                    voicePhase === 'recording' ? '#EF4444' :
+                    voicePhase === 'processing' ? '#F59E0B' :
+                    voicePhase === 'done' ? '#22C55E' : '#EF4444',
+                  shadowColor: '#EF4444',
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 6,
+                  elevation: 5,
+                },
+              ]}
+            >
+              <IconSymbol
+                name={
+                  voicePhase === 'recording' ? 'stop.fill' :
+                  voicePhase === 'processing' ? 'ellipsis' :
+                  'mic.fill'
+                }
+                size={24}
+                color="#fff"
+              />
+            </Pressable>
+          </Animated.View>
         </View>
       </View>
-
-      {/* ── Voice Check-In Modal ── */}
-      <VoiceCheckInModal
-        visible={showVoiceMic}
-        habits={activeHabits}
-        date={currentDate}
-        onClose={() => setShowVoiceMic(false)}
-        onSave={async (results, notesMap) => {
-          // Apply AI-suggested ratings
-          setRatings((prev) => {
-            const next = { ...prev };
-            for (const r of results) {
-              if (r.rating !== 'none') next[r.habitId] = r.rating;
-            }
-            return next;
-          });
-          // Apply AI-suggested notes
-          setNotes((prev) => {
-            const next = { ...prev };
-            for (const [habitId, note] of Object.entries(notesMap)) {
-              if (note.trim()) next[habitId] = note;
-            }
-            return next;
-          });
-          // Don't auto-submit — let user review and tap Save
-        }}
-      />
     </ScreenContainer>
   );
 }
@@ -1130,13 +1287,13 @@ const styles = StyleSheet.create({
 
   // Compact note input under each habit name
   noteInput: {
-    fontSize: 12,
-    lineHeight: 16,
-    paddingVertical: 3,
+    fontSize: 11,
+    lineHeight: 15,
+    paddingVertical: 2,
     paddingHorizontal: 0,
-    marginTop: 4,
+    marginTop: 3,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 20,
+    minHeight: 18,
   },
 
   // Big red mic button in footer
@@ -1144,5 +1301,22 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 26,
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
+  },
+
+  // Inline voice status bar
+  voiceStatusBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 7,
+    marginBottom: 4,
+  },
+  voiceWaveRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 2, height: 20,
+  },
+  voiceBar: {
+    width: 3, borderRadius: 2,
+  },
+  voiceStatusText: {
+    flex: 1, fontSize: 12, fontWeight: '600',
   },
 });
