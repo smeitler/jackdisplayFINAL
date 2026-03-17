@@ -645,6 +645,14 @@ export default function HomeScreen() {
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
+              {/* Coach Button */}
+              <Pressable
+                onPress={() => router.push('/coach' as never)}
+                style={({ pressed }) => [styles.coachBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={styles.coachBtnEmoji}>🧠</Text>
+                <Text style={styles.coachBtnText}>Coach</Text>
+              </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
                 onPress={handlePickProfilePic}
@@ -1050,4 +1058,14 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8,
   },
   missedDaysCloseText: { fontSize: 15, fontWeight: '700' },
+  coachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  coachBtnEmoji: { fontSize: 15 },
+  coachBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 });

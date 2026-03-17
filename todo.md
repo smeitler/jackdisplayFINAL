@@ -883,3 +883,6 @@
 - [x] Habit detail screen: add a + / Log Today button to enter today's rating directly from the detail screen
 - [x] Bug: home screen shows "All caught up" incorrectly — fix to accurately reflect whether today/yesterday still need habit ratings
 - [x] Home screen: remove missed check-ins modal — tapping review banner goes straight to check-in screen
+- [x] AI Coach: add Coach button to home screen (replaces + button)
+- [x] AI Coach: server endpoint that accepts user question + full habit/check-in/journal context and returns personalized coaching response
+- [x] AI Coach: chat screen with "How can I help you today?" prompt, message history, and AI responses

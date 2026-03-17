@@ -788,6 +788,94 @@ Return ONLY valid JSON: ${jsonShape}`,
       }),
   }),
 
+  // ─── AI Coach ─────────────────────────────────────────────────────────────────────
+  coach: router({
+    /**
+     * Send a message to the AI coach with full user context.
+     * The coach analyzes habits, check-ins, and journal entries to give personalized advice.
+     */
+    chat: publicProcedure
+      .input(z.object({
+        message: z.string().min(1).max(2000),
+        // User's habits with names and categories
+        habits: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          category: z.string().optional(),
+          emoji: z.string().optional(),
+        })).optional().default([]),
+        // Recent check-in history: array of { date, habitId, rating }
+        checkIns: z.array(z.object({
+          date: z.string(),
+          habitId: z.string(),
+          rating: z.string(),
+        })).optional().default([]),
+        // Recent journal entries: array of { date, title, body }
+        journalEntries: z.array(z.object({
+          date: z.string(),
+          title: z.string().optional(),
+          body: z.string().optional(),
+        })).optional().default([]),
+        // Conversation history for multi-turn chat
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).optional().default([]),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+
+        // Build a rich context summary for the coach
+        const habitNames = input.habits.map(h => `${h.emoji ?? ''} ${h.name}${h.category ? ` (${h.category})` : ''}`).join(', ');
+
+        // Compute per-habit stats from check-ins (last 30 days)
+        const habitStats = input.habits.map(habit => {
+          const habitCheckIns = input.checkIns.filter(c => c.habitId === habit.id);
+          const total = habitCheckIns.length;
+          const green = habitCheckIns.filter(c => c.rating === 'green').length;
+          const yellow = habitCheckIns.filter(c => c.rating === 'yellow').length;
+          const red = habitCheckIns.filter(c => c.rating === 'red').length;
+          const pct = total > 0 ? Math.round((green / total) * 100) : 0;
+          return `- ${habit.emoji ?? ''} ${habit.name}: ${pct}% success (${green} great, ${yellow} ok, ${red} missed out of ${total} logged days)`;
+        }).join('\n');
+
+        // Recent journal snippets (last 5 entries)
+        const journalSnippets = input.journalEntries
+          .slice(-5)
+          .map(e => `[${e.date}] ${e.title ? e.title + ': ' : ''}${(e.body ?? '').slice(0, 300)}`)
+          .join('\n');
+
+        const systemPrompt = `You are a compassionate, data-driven personal development coach. You have access to the user's real habit tracking data, check-in history, and journal entries. Your job is to:
+1. Analyze their actual behavior patterns (not just what they say)
+2. Identify specific trends, streaks, and problem areas
+3. Give concrete, actionable advice tailored to their data
+4. Be encouraging but honest — don't sugarcoat if they're struggling
+5. Reference specific habits and dates when relevant
+6. Keep responses concise (2-4 paragraphs max) unless they ask for detail
+
+USER'S HABIT DATA:
+Active habits: ${habitNames || 'None tracked yet'}
+
+Habit performance (recent history):
+${habitStats || 'No check-ins recorded yet'}
+
+Recent journal entries:
+${journalSnippets || 'No journal entries yet'}
+
+Be specific, reference their actual data, and give advice they can act on today.`;
+
+        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          { role: 'system', content: systemPrompt },
+          ...input.history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+          { role: 'user', content: input.message },
+        ];
+
+        const response = await invokeLLM({ messages });
+        const reply = response.choices[0]?.message?.content ?? 'I had trouble generating a response. Please try again.';
+        return { reply };
+      }),
+  }),
+
   // ─── Community: Referrals ─────────────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>
