@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
+  Modal, FlatList, Dimensions,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -12,19 +13,24 @@ import {
   useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus,
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
 } from "expo-audio";
-import {
-  loadJournalEntries, saveJournalEntries, addJournalEntry, deleteJournalEntry,
-  JournalEntry, JournalHabitMapping, formatDisplayDate, toDateString, getLastUserId,
-} from "@/lib/storage";
-import { trpc } from "@/lib/trpc";
+import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import * as Location from "expo-location";
 import * as FileSystem from "expo-file-system/legacy";
+import { trpc } from "@/lib/trpc";
+import {
+  JournalEntry, JournalAttachment, JournalLocation, JournalTemplate,
+  JOURNAL_TEMPLATES, generateId, todayDateStr, formatDateLabel, formatTime,
+  loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
+} from "@/lib/journal-store";
+import { getLastUserId } from "@/lib/storage";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// ─── Sub-tab type ────────────────────────────────────────────────────────────
+type SubTab = "journal" | "calendar" | "media" | "map";
 
 // ─── Web MediaRecorder Hook ──────────────────────────────────────────────────
-/**
- * On web, expo-audio's recorder doesn't produce a usable URI.
- * This hook uses the browser's native MediaRecorder API instead.
- * Returns the Blob directly from stop() so callers can convert to data URI.
- */
 function useWebRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -39,32 +45,28 @@ function useWebRecorder() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      // Safari doesn't support webm — try webm first, then fall back to whatever browser supports
       let mimeType = "";
       if (typeof MediaRecorder.isTypeSupported === "function") {
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
         else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
         else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
-        // else let browser choose default
       }
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.start(100); // collect data every 100ms for reliability
+      mr.start(100);
       mediaRecorderRef.current = mr;
       isRecordingRef.current = true;
       setIsRecording(true);
-      console.log("[WebRecorder] Started recording, mimeType:", mr.mimeType);
       return true;
     } catch (e: any) {
       const name = e?.name ?? "";
       if (name === "NotFoundError" || name === "DevicesNotFoundError") {
         setMicError("No microphone found. Open this link on your phone to record.");
       } else if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setMicError("Microphone access denied. Allow mic in browser settings and try again.");
+        setMicError("Microphone access denied. Allow mic in browser settings.");
       } else {
         setMicError("Microphone unavailable: " + (e?.message ?? name));
       }
-      console.warn("[WebRecorder] getUserMedia failed:", e);
       return false;
     }
   }, []);
@@ -80,15 +82,12 @@ function useWebRecorder() {
       }
       const recordedMime = mr.mimeType || "audio/webm";
       mr.addEventListener("stop", () => {
-        // Stop all mic tracks
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         const blob = new Blob(chunksRef.current, { type: recordedMime });
-        console.log("[WebRecorder] Stopped. Blob size:", blob.size, "type:", blob.type);
         isRecordingRef.current = false;
         setIsRecording(false);
-        if (blob.size === 0) { resolve(null); return; }
-        resolve(blob);
+        resolve(blob.size === 0 ? null : blob);
       }, { once: true });
       mr.stop();
     });
@@ -97,8 +96,7 @@ function useWebRecorder() {
   return { start, stop, isRecording, isRecordingRef, micError };
 }
 
-// ─── Web Audio Helpers ────────────────────────────────────────────────────────
-/** Convert a Blob to a data:...;base64,... URI */
+// ─── Web Audio Helpers ───────────────────────────────────────────────────────
 function blobToDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -108,19 +106,13 @@ function blobToDataUri(blob: Blob): Promise<string> {
   });
 }
 
-/** Extract base64 and mimeType from a data URI */
 function parseDataUri(dataUri: string): { base64: string; mimeType: string } {
-  // data:audio/webm;base64,XXXX
   const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
   if (match) return { mimeType: match[1], base64: match[2] };
-  // fallback: strip prefix
-  const base64 = dataUri.split(",")[1] || "";
-  return { mimeType: "audio/webm", base64 };
+  return { mimeType: "audio/webm", base64: dataUri.split(",")[1] || "" };
 }
 
-/** Read a blob: or file URI as base64 on web using fetch */
 async function readUriAsBase64Web(uri: string): Promise<{ base64: string; mimeType: string }> {
-  // If it's already a data URI, just parse it
   if (uri.startsWith("data:")) return parseDataUri(uri);
   const response = await fetch(uri);
   const blob = await response.blob();
@@ -128,35 +120,28 @@ async function readUriAsBase64Web(uri: string): Promise<{ base64: string; mimeTy
   return parseDataUri(dataUri);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function groupByDate(entries: JournalEntry[]): { date: string; entries: JournalEntry[] }[] {
-  const map = new Map<string, JournalEntry[]>();
-  for (const e of entries) {
-    const list = map.get(e.date) ?? [];
-    list.push(e);
-    map.set(e.date, list);
-  }
-  return Array.from(map.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([date, entries]) => ({ date, entries }));
+function getMonthDays(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
 }
 
-// ─── Audio Playback Row ───────────────────────────────────────────────────────
+function getFirstDayOfWeek(year: number, month: number): number {
+  return new Date(year, month - 1, 1).getDay(); // 0=Sun
+}
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAY_HEADERS = ["S", "M", "T", "W", "T", "F", "S"];
+
+// ─── Audio Playback ──────────────────────────────────────────────────────────
 function AudioPlaybackRow({ uri, duration }: { uri: string; duration?: number }) {
   const colors = useColors();
-
-  // ── Web: use native HTML <audio> element ──
-  if (Platform.OS === "web") {
-    return <WebAudioPlayer uri={uri} duration={duration} colors={colors} />;
-  }
-
-  // ── Native: use expo-audio ──
+  if (Platform.OS === "web") return <WebAudioPlayer uri={uri} duration={duration} colors={colors} />;
   return <NativeAudioPlayer uri={uri} duration={duration} colors={colors} />;
 }
 
@@ -180,7 +165,7 @@ function WebAudioPlayer({ uri, duration, colors }: { uri: string; duration?: num
   function togglePlay() {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) { audio.pause(); } else { audio.play().catch(() => {}); }
+    if (isPlaying) audio.pause(); else audio.play().catch(() => {});
   }
 
   const pct = dur > 0 ? pos / dur : 0;
@@ -193,9 +178,7 @@ function WebAudioPlayer({ uri, duration, colors }: { uri: string; duration?: num
         <View style={[pbStyles.track, { backgroundColor: colors.border }]}>
           <View style={[pbStyles.fill, { width: `${pct * 100}%` as any, backgroundColor: colors.primary }]} />
         </View>
-        <Text style={[pbStyles.time, { color: colors.muted }]}>
-          {fmtDuration(pos)} / {fmtDuration(dur)}
-        </Text>
+        <Text style={[pbStyles.time, { color: colors.muted }]}>{fmtDuration(pos)} / {fmtDuration(dur)}</Text>
       </View>
     </View>
   );
@@ -210,8 +193,8 @@ function NativeAudioPlayer({ uri, duration, colors }: { uri: string; duration?: 
   const pct = dur > 0 ? pos / dur : 0;
 
   function togglePlay() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (isPlaying) { player.pause(); } else { player.play(); }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isPlaying) player.pause(); else player.play();
   }
 
   return (
@@ -223,9 +206,7 @@ function NativeAudioPlayer({ uri, duration, colors }: { uri: string; duration?: 
         <View style={[pbStyles.track, { backgroundColor: colors.border }]}>
           <View style={[pbStyles.fill, { width: `${pct * 100}%` as any, backgroundColor: colors.primary }]} />
         </View>
-        <Text style={[pbStyles.time, { color: colors.muted }]}>
-          {fmtDuration(pos)} / {fmtDuration(dur)}
-        </Text>
+        <Text style={[pbStyles.time, { color: colors.muted }]}>{fmtDuration(pos)} / {fmtDuration(dur)}</Text>
       </View>
     </View>
   );
@@ -240,264 +221,15 @@ const pbStyles = StyleSheet.create({
   time: { fontSize: 11 },
 });
 
-// ─── Habit Mapping Card ───────────────────────────────────────────────────────
-function HabitMappingCard({
-  mapping, onAccept, onEdit, onDismiss, colors,
-}: {
-  mapping: JournalHabitMapping;
-  onAccept: () => void;
-  onEdit: (note: string) => void;
-  onDismiss: () => void;
-  colors: ReturnType<typeof useColors>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(mapping.suggestedNote);
-  const isDismissed = mapping.accepted === false;
-  const isAccepted = mapping.accepted === true;
-
-  if (isDismissed) return null;
-
-  return (
-    <View style={[hmStyles.card, { borderColor: isAccepted ? colors.success : colors.border, backgroundColor: colors.surface }]}>
-      <View style={hmStyles.header}>
-        <Text style={[hmStyles.habitName, { color: colors.primary }]}>{mapping.habitName}</Text>
-        {isAccepted && <IconSymbol name="checkmark.circle.fill" size={16} color={colors.success} />}
-      </View>
-      {mapping.excerpt ? (
-        <Text style={[hmStyles.excerpt, { color: colors.muted }]}>"{mapping.excerpt}"</Text>
-      ) : null}
-      {editing ? (
-        <TextInput
-          style={[hmStyles.input, { color: colors.foreground, borderColor: colors.primary, backgroundColor: colors.background }]}
-          value={text}
-          onChangeText={setText}
-          multiline
-          autoFocus
-          returnKeyType="done"
-          onSubmitEditing={() => { onEdit(text); setEditing(false); }}
-          onBlur={() => { onEdit(text); setEditing(false); }}
-        />
-      ) : (
-        <Text style={[hmStyles.note, { color: colors.foreground }]}>{text}</Text>
-      )}
-      {!isAccepted && (
-        <View style={hmStyles.actions}>
-          <Pressable style={[hmStyles.btn, { backgroundColor: colors.success + "22", borderColor: colors.success }]} onPress={onAccept}>
-            <Text style={[hmStyles.btnText, { color: colors.success }]}>✓ Accept</Text>
-          </Pressable>
-          <Pressable style={[hmStyles.btn, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setEditing(true)}>
-            <Text style={[hmStyles.btnText, { color: colors.muted }]}>Edit</Text>
-          </Pressable>
-          <Pressable style={[hmStyles.btn, { backgroundColor: colors.error + "11", borderColor: colors.error + "44" }]} onPress={onDismiss}>
-            <Text style={[hmStyles.btnText, { color: colors.error }]}>✕</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-}
-
-const hmStyles = StyleSheet.create({
-  card: { borderRadius: 10, borderWidth: 1, padding: 12, gap: 6, marginBottom: 6 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  habitName: { fontSize: 13, fontWeight: "700" },
-  excerpt: { fontSize: 12, fontStyle: "italic", lineHeight: 16 },
-  note: { fontSize: 14, lineHeight: 20 },
-  input: { fontSize: 14, lineHeight: 20, borderWidth: 1.5, borderRadius: 8, padding: 8, minHeight: 60 },
-  actions: { flexDirection: "row", gap: 6, marginTop: 4 },
-  btn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  btnText: { fontSize: 13, fontWeight: "600" },
-});
-
-// ─── Day Group Row ────────────────────────────────────────────────────────────
-function DayGroupRow({
-  date, entries, onDelete, onUpdateMappings, colors, transcribingEntries,
-}: {
-  date: string;
-  entries: JournalEntry[];
-  onDelete: (id: string) => void;
-  onUpdateMappings: (entryId: string, mappings: JournalHabitMapping[]) => void;
-  colors: ReturnType<typeof useColors>;
-  transcribingEntries: Record<string, string>;
-}) {
-  const [expanded, setExpanded] = useState(date === toDateString());
-  const totalWords = entries.reduce((acc, e) => acc + (e.text?.split(" ").filter(Boolean).length ?? 0), 0);
-  const hasAudio = entries.some((e) => e.audioUri);
-  const hasMappings = entries.some((e) => e.habitMappings && e.habitMappings.some((m) => m.accepted === undefined));
-
-  return (
-    <View style={[dgStyles.group, { borderColor: colors.border }]}>
-      {/* Day header — tap to expand */}
-      <Pressable
-        style={[dgStyles.dayHeader, { backgroundColor: colors.surface }]}
-        onPress={() => {
-          if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setExpanded((v) => !v);
-        }}
-      >
-        <View style={dgStyles.dayLeft}>
-          <Text style={[dgStyles.dayLabel, { color: colors.foreground }]}>{formatDisplayDate(date)}</Text>
-          <Text style={[dgStyles.daySub, { color: colors.muted }]}>
-            {entries.length} {entries.length === 1 ? "entry" : "entries"}
-            {totalWords > 0 ? ` · ${totalWords} words` : ""}
-            {hasAudio ? " · 🎙️" : ""}
-          </Text>
-        </View>
-        <View style={dgStyles.dayRight}>
-          {hasMappings && (
-            <View style={[dgStyles.pendingBadge, { backgroundColor: colors.primary + "22" }]}>
-              <Text style={[dgStyles.pendingText, { color: colors.primary }]}>AI suggestions</Text>
-            </View>
-          )}
-          <IconSymbol name={expanded ? "chevron.up" : "chevron.down"} size={16} color={colors.muted} />
-        </View>
-      </Pressable>
-
-      {/* Expanded entries */}
-      {expanded && (
-        <View style={dgStyles.entriesWrap}>
-          {entries.map((entry, idx) => (
-            <View key={entry.id} style={[dgStyles.entryCard, { borderColor: colors.border, borderTopWidth: idx === 0 ? 1 : 0 }]}>
-              {/* Entry header */}
-              <View style={dgStyles.entryHeader}>
-                <Text style={[dgStyles.entryTime, { color: colors.muted }]}>
-                  {new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    if (Platform.OS === "web") {
-                      if ((window as any).confirm("Delete this journal entry?")) onDelete(entry.id);
-                    } else {
-                      Alert.alert("Delete Entry", "Delete this journal entry?", [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Delete", style: "destructive", onPress: () => onDelete(entry.id) },
-                      ]);
-                    }
-                  }}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
-                >
-                  <IconSymbol name="trash.fill" size={14} color={colors.muted} />
-                </Pressable>
-              </View>
-
-              {/* Transcript text or transcribing indicator */}
-              {transcribingEntries[entry.id] ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={{ fontSize: 13, color: colors.muted }}>Transcribing…</Text>
-                </View>
-              ) : entry.text ? (
-                <Text style={[dgStyles.entryText, { color: colors.foreground }]}>{entry.text}</Text>
-              ) : null}
-
-              {/* Audio playback */}
-              {entry.audioUri ? (
-                <AudioPlaybackRow uri={entry.audioUri} duration={entry.duration} />
-              ) : null}
-
-              {/* AI habit mappings */}
-              {entry.habitMappings && entry.habitMappings.length > 0 && (
-                <View style={dgStyles.mappingsSection}>
-                  <Text style={[dgStyles.mappingsLabel, { color: colors.muted }]}>AI HABIT SUGGESTIONS</Text>
-                  {entry.habitMappings.map((m, i) => (
-                    <HabitMappingCard
-                      key={`${entry.id}-${i}`}
-                      mapping={m}
-                      colors={colors}
-                      onAccept={() => {
-                        const updated = entry.habitMappings!.map((x, j) => j === i ? { ...x, accepted: true } : x);
-                        onUpdateMappings(entry.id, updated);
-                      }}
-                      onEdit={(note) => {
-                        const updated = entry.habitMappings!.map((x, j) => j === i ? { ...x, suggestedNote: note } : x);
-                        onUpdateMappings(entry.id, updated);
-                      }}
-                      onDismiss={() => {
-                        const updated = entry.habitMappings!.map((x, j) => j === i ? { ...x, accepted: false } : x);
-                        onUpdateMappings(entry.id, updated);
-                      }}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-const dgStyles = StyleSheet.create({
-  group: { borderRadius: 14, borderWidth: 1, marginBottom: 12, overflow: "hidden" },
-  dayHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, gap: 8 },
-  dayLeft: { flex: 1 },
-  dayLabel: { fontSize: 16, fontWeight: "700" },
-  daySub: { fontSize: 12, marginTop: 2 },
-  dayRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  pendingBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  pendingText: { fontSize: 11, fontWeight: "600" },
-  entriesWrap: {},
-  entryCard: { padding: 14, borderTopWidth: 1, gap: 8 },
-  entryHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  entryTime: { fontSize: 12, fontWeight: "500" },
-  entryText: { fontSize: 15, lineHeight: 22 },
-  mappingsSection: { marginTop: 4, gap: 2 },
-  mappingsLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, marginBottom: 4 },
-});
-
-// ─── Waveform Bars ───────────────────────────────────────────────────────────
-function WaveformBars({ metering }: { metering: number | undefined }) {
-  // metering is in dBFS: typically -160 (silence) to 0 (max). Map to 0..1 scale.
-  const NUM_BARS = 7;
-  const bars = useRef(Array.from({ length: NUM_BARS }, () => new Animated.Value(0.15))).current;
-  const prevMetering = useRef<number>(-160);
-
-  useEffect(() => {
-    const db = metering ?? -160;
-    // Smooth: blend toward new level
-    const blended = prevMetering.current * 0.4 + db * 0.6;
-    prevMetering.current = blended;
-    // Map dBFS -60..0 to 0.1..1.0
-    const normalized = Math.max(0.1, Math.min(1.0, (blended + 60) / 60));
-    // Each bar gets a slightly randomized height around the normalized level
-    bars.forEach((bar, i) => {
-      const variance = (Math.random() - 0.5) * 0.3;
-      const target = Math.max(0.1, Math.min(1.0, normalized + variance));
-      Animated.timing(bar, { toValue: target, duration: 80, useNativeDriver: true }).start();
-    });
-  }, [metering]);
-
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, height: 36 }}>
-      {bars.map((bar, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            width: 3,
-            height: 36,
-            borderRadius: 2,
-            backgroundColor: "#EF4444",
-            transform: [{ scaleY: bar }],
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-// ─── Mic Button ───────────────────────────────────────────────────────────────
+// ─── MicButton ───────────────────────────────────────────────────────────────
 function MicButton({ onRecordingComplete, colors }: {
-  onRecordingComplete: (uri: string, duration: number) => void;
-  colors: ReturnType<typeof useColors>;
+  onRecordingComplete: (uri: string, duration: number, mimeType: string) => void;
+  colors: any;
 }) {
-  // Native recorder (expo-audio) — iOS/Android
-  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
-  const recorderState = useAudioRecorderState(recorder);
-  // Web recorder (MediaRecorder API) — browser
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder, 100);
   const webRecorder = useWebRecorder();
-
-  const [permGranted, setPermGranted] = useState(false);
+  const [permGranted, setPermGranted] = useState(Platform.OS === "web");
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -507,7 +239,7 @@ function MicButton({ onRecordingComplete, colors }: {
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    if (Platform.OS === "web") { setPermGranted(true); return; }
+    if (Platform.OS === "web") return;
     (async () => {
       const status = await requestRecordingPermissionsAsync();
       setPermGranted(status.granted);
@@ -537,14 +269,12 @@ function MicButton({ onRecordingComplete, colors }: {
   const startRecording = useCallback(async () => {
     if (Platform.OS === "web") {
       const ok = await webRecorder.start();
-      if (ok) {
-        runStartAnimations();
-      }
+      if (ok) runStartAnimations();
       return;
     }
     if (!permGranted) {
       const status = await requestRecordingPermissionsAsync();
-      if (!status.granted) { Alert.alert("Microphone permission required", "Please allow microphone access in Settings."); return; }
+      if (!status.granted) { Alert.alert("Microphone permission required"); return; }
       setPermGranted(true);
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -562,12 +292,8 @@ function MicButton({ onRecordingComplete, colors }: {
       if (Platform.OS === "web") {
         const blob = await webRecorder.stop();
         if (blob && blob.size > 0) {
-          // Convert blob to persistent data URI so it survives page reloads
           const dataUri = await blobToDataUri(blob);
-          console.log("[MicButton] Web recording done. Blob size:", blob.size, "dataUri length:", dataUri.length);
-          onRecordingComplete(dataUri, duration);
-        } else {
-          console.warn("[MicButton] Web recording produced empty blob");
+          onRecordingComplete(dataUri, duration, blob.type || "audio/webm");
         }
       } else {
         if (!recorderState.isRecording) return;
@@ -575,7 +301,7 @@ function MicButton({ onRecordingComplete, colors }: {
         const uri = recorder.uri;
         if (uri && duration >= 1) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          onRecordingComplete(uri, duration);
+          onRecordingComplete(uri, duration, "audio/m4a");
         }
       }
     } catch (e) { console.warn("Recording stop error:", e); }
@@ -583,336 +309,971 @@ function MicButton({ onRecordingComplete, colors }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorderState.isRecording, recorder, webRecorder, onRecordingComplete]);
 
-  // Use ref for web to avoid stale closure in touch handlers
-  const startRecordingRef = useRef(startRecording);
-  startRecordingRef.current = startRecording;
-  const stopRecordingRef = useRef(stopRecording);
-  stopRecordingRef.current = stopRecording;
+  const startRef = useRef(startRecording);
+  startRef.current = startRecording;
+  const stopRef = useRef(stopRecording);
+  stopRef.current = stopRecording;
 
   const isRecording = Platform.OS === "web" ? webRecorder.isRecording : recorderState.isRecording;
 
-  // On web, use raw touch/mouse events because Pressable onPressIn/onPressOut
-  // is unreliable on mobile Safari/Chrome touch devices
   const webTouchProps = Platform.OS === "web" ? {
-    onTouchStart: (e: any) => { e.preventDefault(); startRecordingRef.current(); },
-    onTouchEnd: (e: any) => { e.preventDefault(); stopRecordingRef.current(); },
-    onTouchCancel: (e: any) => { e.preventDefault(); stopRecordingRef.current(); },
-    onMouseDown: (e: any) => { e.preventDefault(); startRecordingRef.current(); },
-    onMouseUp: (e: any) => { e.preventDefault(); stopRecordingRef.current(); },
-    onMouseLeave: (e: any) => { if (webRecorder.isRecordingRef.current) stopRecordingRef.current(); },
+    onTouchStart: (e: any) => { e.preventDefault(); startRef.current(); },
+    onTouchEnd: (e: any) => { e.preventDefault(); stopRef.current(); },
+    onTouchCancel: (e: any) => { e.preventDefault(); stopRef.current(); },
+    onMouseDown: (e: any) => { e.preventDefault(); startRef.current(); },
+    onMouseUp: (e: any) => { e.preventDefault(); stopRef.current(); },
+    onMouseLeave: (e: any) => { if (webRecorder.isRecordingRef.current) stopRef.current(); },
   } : {};
 
   return (
-    <View style={micStyles.wrap}>
-      {/* Recording active state — waveform + timer */}
+    <View style={{ alignItems: "center", gap: 8 }}>
       {isRecording && (
-        <View style={micStyles.recordingRow}>
-          {Platform.OS !== "web" && <WaveformBars metering={recorderState.metering} />}
-          <Text style={micStyles.timer}>{fmtDuration(elapsedSecs)}</Text>
-          <Text style={micStyles.releaseHint}>Release to stop</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#EF4444" }} />
+          <Text style={{ fontSize: 16, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any }}>
+            {fmtDuration(elapsedSecs)}
+          </Text>
+          <Text style={{ fontSize: 12, color: "#EF4444" }}>Release to stop</Text>
         </View>
       )}
-      {/* Processing state */}
-      {isProcessing && (
-        <View style={micStyles.recordingRow}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[micStyles.releaseHint, { color: colors.muted }]}>Saving…</Text>
-        </View>
-      )}
-      {/* Mic button with pulsing ring */}
-      <View style={micStyles.btnWrap}>
+      <View style={{ position: "relative", alignItems: "center", justifyContent: "center", width: 80, height: 80 }}>
         {isRecording && (
           <Animated.View
-            style={[
-              micStyles.pulseRing,
-              { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.6], outputRange: [0.5, 0] }) },
-            ]}
+            style={[{
+              position: "absolute", width: 56, height: 56, borderRadius: 28, backgroundColor: "#EF4444",
+              transform: [{ scale: pulseAnim }],
+              opacity: pulseAnim.interpolate({ inputRange: [1, 1.6], outputRange: [0.5, 0] }),
+            }]}
           />
         )}
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           {Platform.OS === "web" ? (
             <View
               {...webTouchProps}
-              style={[
-                micStyles.micBtn,
-                { backgroundColor: isRecording ? "#EF4444" : colors.primary, cursor: "pointer" } as any,
-              ]}
+              style={[{
+                width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
+                backgroundColor: isRecording ? "#EF4444" : colors.primary, cursor: "pointer",
+              } as any]}
             >
-              <IconSymbol name="mic.fill" size={28} color="#fff" />
+              <IconSymbol name="mic.fill" size={24} color="#fff" />
             </View>
           ) : (
             <Pressable
               onPressIn={startRecording}
               onPressOut={stopRecording}
-              style={[
-                micStyles.micBtn,
-                { backgroundColor: isRecording ? "#EF4444" : colors.primary },
-              ]}
+              style={[{
+                width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
+                backgroundColor: isRecording ? "#EF4444" : colors.primary,
+              }]}
             >
-              <IconSymbol name="mic.fill" size={28} color="#fff" />
+              <IconSymbol name="mic.fill" size={24} color="#fff" />
             </Pressable>
           )}
         </Animated.View>
       </View>
       {!isRecording && !isProcessing && webRecorder.micError ? (
-        <Text style={[micStyles.hint, { color: colors.error ?? "#EF4444", textAlign: "center", fontSize: 12, paddingHorizontal: 8 }]}>
-          {webRecorder.micError}
-        </Text>
+        <Text style={{ color: colors.error ?? "#EF4444", fontSize: 11, textAlign: "center" }}>{webRecorder.micError}</Text>
       ) : !isRecording && !isProcessing ? (
-        <Text style={[micStyles.hint, { color: colors.muted }]}>Hold to record</Text>
+        <Text style={{ fontSize: 11, color: colors.muted }}>Hold to record</Text>
+      ) : isProcessing ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={{ fontSize: 11, color: colors.muted }}>Saving…</Text>
+        </View>
       ) : null}
     </View>
   );
 }
 
-const micStyles = StyleSheet.create({
-  wrap: { alignItems: "center", paddingVertical: 20, gap: 10 },
-  btnWrap: { position: "relative", alignItems: "center", justifyContent: "center", width: 100, height: 100 },
-  micBtn: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", shadowColor: "#EF4444", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
-  pulseRing: { position: "absolute", width: 72, height: 72, borderRadius: 36, backgroundColor: "#EF4444" },
-  recordingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  timer: { fontSize: 18, fontWeight: "700", color: "#EF4444", fontVariant: ["tabular-nums"] as any },
-  releaseHint: { fontSize: 12, fontWeight: "500", color: "#EF4444" },
-  hint: { fontSize: 12, marginTop: 2 },
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── ENTRY EDITOR (Full-screen modal) ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+function EntryEditor({
+  visible, entry, initialDate, onSave, onClose, colors, userId,
+}: {
+  visible: boolean;
+  entry: JournalEntry | null; // null = new entry
+  initialDate: string;
+  onSave: (entry: JournalEntry) => void;
+  onClose: () => void;
+  colors: any;
+  userId: string;
+}) {
+  const [date, setDate] = useState(initialDate);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [template, setTemplate] = useState<JournalTemplate>("blank");
+  const [attachments, setAttachments] = useState<JournalAttachment[]>([]);
+  const [location, setLocation] = useState<JournalLocation | undefined>();
+  const [mood, setMood] = useState<string>("");
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
+  const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
+
+  // Reset form when opening
+  useEffect(() => {
+    if (visible) {
+      if (entry) {
+        setDate(entry.date);
+        setTitle(entry.title);
+        setBody(entry.body);
+        setTemplate(entry.template);
+        setAttachments(entry.attachments);
+        setLocation(entry.location);
+        setMood(entry.mood || "");
+      } else {
+        setDate(initialDate);
+        setTitle("");
+        setBody("");
+        setTemplate("blank");
+        setAttachments([]);
+        setLocation(undefined);
+        setMood("");
+      }
+    }
+  }, [visible, entry, initialDate]);
+
+  function applyTemplate(t: JournalTemplate) {
+    setTemplate(t);
+    const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === t);
+    if (tmpl && tmpl.prompt && !body.trim()) setBody(tmpl.prompt);
+    setShowTemplates(false);
+  }
+
+  async function handleAddLocation() {
+    try {
+      if (Platform.OS === "web") {
+        // Use browser geolocation API
+        if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const loc: JournalLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+            // Try reverse geocode
+            try {
+              const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${loc.latitude}&lon=${loc.longitude}&format=json`);
+              const data = await resp.json();
+              if (data.display_name) loc.address = data.display_name;
+            } catch {}
+            setLocation(loc);
+          },
+          (err) => { alert("Could not get location: " + err.message); },
+          { enableHighAccuracy: true }
+        );
+        return;
+      }
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") { Alert.alert("Location permission required"); return; }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const locData: JournalLocation = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      try {
+        const [addr] = await Location.reverseGeocodeAsync(loc.coords);
+        if (addr) {
+          locData.address = [addr.name, addr.street, addr.city, addr.region].filter(Boolean).join(", ");
+        }
+      } catch {}
+      setLocation(locData);
+    } catch (e: any) { console.warn("Location error:", e); }
+  }
+
+  async function handlePickPhoto() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images", "videos"],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+      if (result.canceled) return;
+      for (const asset of result.assets) {
+        const att: JournalAttachment = {
+          id: generateId(),
+          type: asset.type === "video" ? "video" : "photo",
+          uri: asset.uri,
+          mimeType: asset.mimeType || (asset.type === "video" ? "video/mp4" : "image/jpeg"),
+          durationMs: asset.duration ? asset.duration * 1000 : undefined,
+        };
+        setAttachments((prev) => [...prev, att]);
+      }
+    } catch (e) { console.warn("Image picker error:", e); }
+  }
+
+  async function handlePickDocument() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", multiple: true });
+      if (result.canceled) return;
+      for (const asset of result.assets) {
+        const att: JournalAttachment = {
+          id: generateId(),
+          type: "pdf",
+          uri: asset.uri,
+          mimeType: asset.mimeType || "application/pdf",
+          name: asset.name,
+        };
+        setAttachments((prev) => [...prev, att]);
+      }
+    } catch (e) { console.warn("Document picker error:", e); }
+  }
+
+  function handleRecordingComplete(uri: string, duration: number, mimeType: string) {
+    const att: JournalAttachment = {
+      id: generateId(),
+      type: "audio",
+      uri,
+      mimeType,
+      durationMs: duration * 1000,
+    };
+    setAttachments((prev) => [...prev, att]);
+    // Kick off transcription in background
+    transcribeAudio(att, uri, mimeType);
+  }
+
+  async function transcribeAudio(att: JournalAttachment, uri: string, mimeType: string) {
+    setTranscribingIds((prev) => new Set(prev).add(att.id));
+    try {
+      let audioBase64 = "";
+      if (Platform.OS === "web") {
+        const result = await readUriAsBase64Web(uri);
+        audioBase64 = result.base64;
+        mimeType = result.mimeType;
+      } else {
+        audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      }
+      if (!audioBase64) return;
+      const result = await transcribeMutation.mutateAsync({ audioBase64, mimeType, date });
+      const transcript = result.transcript?.trim() || "";
+      if (transcript) {
+        setBody((prev) => prev ? prev + "\n\n" + transcript : transcript);
+      }
+    } catch (e) { console.warn("Transcription error:", e); }
+    finally {
+      setTranscribingIds((prev) => { const n = new Set(prev); n.delete(att.id); return n; });
+    }
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  async function handleSave() {
+    if (!body.trim() && attachments.length === 0) return;
+    setIsSaving(true);
+    const now = new Date().toISOString();
+    const saved: JournalEntry = {
+      id: entry?.id || generateId(),
+      userId,
+      date,
+      createdAt: entry?.createdAt || now,
+      updatedAt: now,
+      title: title.trim(),
+      body: body.trim(),
+      template,
+      attachments,
+      location,
+      mood,
+      tags: [],
+    };
+    onSave(saved);
+    setIsSaving(false);
+    onClose();
+  }
+
+  const MOODS = ["😊", "😐", "😢", "😤", "🥳", "😴", "🤔", "💪", "🙏", "❤️"];
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+      <View style={[{ flex: 1, backgroundColor: colors.background }]}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          {/* Header */}
+          <View style={[editorStyles.header, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={onClose} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
+              <Text style={{ fontSize: 16, color: colors.primary }}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowDatePicker(!showDatePicker)}>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{formatDateLabel(date)}</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSave}
+              disabled={isSaving || (!body.trim() && attachments.length === 0)}
+              style={({ pressed }) => [{
+                opacity: (isSaving || (!body.trim() && attachments.length === 0)) ? 0.4 : pressed ? 0.7 : 1,
+                backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+              }]}
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>{isSaving ? "Saving…" : "Save"}</Text>
+            </Pressable>
+          </View>
+
+          {/* Date picker (simple month/day selector) */}
+          {showDatePicker && (
+            <View style={[editorStyles.datePicker, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+              <TextInput
+                value={date}
+                onChangeText={(t) => { if (/^\d{4}-\d{2}-\d{2}$/.test(t)) setDate(t); }}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.muted}
+                style={{ fontSize: 16, color: colors.foreground, textAlign: "center", padding: 12 }}
+                returnKeyType="done"
+                onSubmitEditing={() => setShowDatePicker(false)}
+              />
+              <Text style={{ fontSize: 11, color: colors.muted, textAlign: "center", paddingBottom: 8 }}>
+                Type a date in YYYY-MM-DD format
+              </Text>
+            </View>
+          )}
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
+            {/* Mood selector */}
+            <View style={editorStyles.moodRow}>
+              {MOODS.map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => setMood(mood === m ? "" : m)}
+                  style={[editorStyles.moodBtn, mood === m && { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}
+                >
+                  <Text style={{ fontSize: 20 }}>{m}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Template selector */}
+            <Pressable
+              onPress={() => setShowTemplates(!showTemplates)}
+              style={[editorStyles.templateToggle, { borderColor: colors.border }]}
+            >
+              <IconSymbol name="doc.fill" size={16} color={colors.muted} />
+              <Text style={{ fontSize: 13, color: colors.muted }}>
+                Template: {JOURNAL_TEMPLATES.find((t) => t.key === template)?.label || "Blank"}
+              </Text>
+              <IconSymbol name={showTemplates ? "chevron.up" : "chevron.down"} size={14} color={colors.muted} />
+            </Pressable>
+
+            {showTemplates && (
+              <View style={editorStyles.templateGrid}>
+                {JOURNAL_TEMPLATES.map((t) => (
+                  <Pressable
+                    key={t.key}
+                    onPress={() => applyTemplate(t.key)}
+                    style={[
+                      editorStyles.templateCard,
+                      { borderColor: template === t.key ? colors.primary : colors.border, backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>{t.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {/* Title */}
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Title (optional)"
+              placeholderTextColor={colors.muted}
+              style={[editorStyles.titleInput, { color: colors.foreground, borderBottomColor: colors.border }]}
+            />
+
+            {/* Body */}
+            <TextInput
+              value={body}
+              onChangeText={setBody}
+              placeholder="Write your thoughts…"
+              placeholderTextColor={colors.muted}
+              multiline
+              style={[editorStyles.bodyInput, { color: colors.foreground }]}
+              textAlignVertical="top"
+            />
+
+            {/* Transcription indicator */}
+            {transcribingIds.size > 0 && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ fontSize: 12, color: colors.muted }}>Transcribing audio…</Text>
+              </View>
+            )}
+
+            {/* Attachments */}
+            {attachments.length > 0 && (
+              <View style={{ gap: 8, marginTop: 12 }}>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: colors.muted, letterSpacing: 0.5 }}>ATTACHMENTS</Text>
+                {attachments.map((att) => (
+                  <View key={att.id} style={[editorStyles.attachRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <IconSymbol
+                      name={att.type === "photo" ? "photo.fill" : att.type === "video" ? "video.fill" : att.type === "audio" ? "mic.fill" : "doc.fill"}
+                      size={18} color={colors.primary}
+                    />
+                    <Text style={{ flex: 1, fontSize: 13, color: colors.foreground }} numberOfLines={1}>
+                      {att.name || att.type.charAt(0).toUpperCase() + att.type.slice(1)}
+                      {att.durationMs ? ` (${fmtDuration(att.durationMs / 1000)})` : ""}
+                    </Text>
+                    {att.type === "audio" && <AudioPlaybackRow uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />}
+                    <Pressable onPress={() => removeAttachment(att.id)} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                      <IconSymbol name="xmark.circle.fill" size={20} color={colors.muted} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Location */}
+            {location && (
+              <View style={[editorStyles.locationRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <IconSymbol name="location.fill" size={16} color={colors.primary} />
+                <Text style={{ flex: 1, fontSize: 12, color: colors.foreground }} numberOfLines={2}>
+                  {location.address || `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`}
+                </Text>
+                <Pressable onPress={() => setLocation(undefined)} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                  <IconSymbol name="xmark" size={14} color={colors.muted} />
+                </Pressable>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Bottom toolbar */}
+          <View style={[editorStyles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
+            <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
+              <Pressable onPress={handlePickPhoto} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                <IconSymbol name="photo.fill" size={24} color={colors.primary} />
+              </Pressable>
+              <Pressable onPress={handlePickDocument} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                <IconSymbol name="doc.fill" size={24} color={colors.primary} />
+              </Pressable>
+              {!location && (
+                <Pressable onPress={handleAddLocation} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                  <IconSymbol name="location.fill" size={24} color={colors.primary} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+const editorStyles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, paddingTop: 56 },
+  datePicker: { borderBottomWidth: 0.5, paddingVertical: 4 },
+  moodRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  moodBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "transparent" },
+  templateToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderRadius: 10, marginBottom: 12 },
+  templateGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  templateCard: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5 },
+  titleInput: { fontSize: 22, fontWeight: "700", paddingVertical: 12, borderBottomWidth: 0.5, marginBottom: 8 },
+  bodyInput: { fontSize: 16, lineHeight: 24, minHeight: 200, paddingVertical: 8 },
+  attachRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 10, borderWidth: 1 },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 12 },
+  toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
 });
 
-// ─── Main Journal Screen ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── JOURNAL LIST TAB ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+function JournalListTab({ entries, onDelete, onEdit, colors }: {
+  entries: JournalEntry[];
+  onDelete: (id: string) => void;
+  onEdit: (entry: JournalEntry) => void;
+  colors: any;
+}) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const e of entries) {
+      const list = map.get(e.date) ?? [];
+      list.push(e);
+      map.set(e.date, list);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, items]) => ({ date, items }));
+  }, [entries]);
+
+  if (entries.length === 0) {
+    return (
+      <View style={{ alignItems: "center", paddingVertical: 60, gap: 12 }}>
+        <Text style={{ fontSize: 40 }}>📔</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>No entries yet</Text>
+        <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
+          Tap the + button to create your first journal entry.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 16 }}>
+      {grouped.map(({ date, items }) => (
+        <View key={date}>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, marginBottom: 8 }}>
+            {formatDateLabel(date)}
+          </Text>
+          {items.map((entry) => (
+            <Pressable
+              key={entry.id}
+              onPress={() => onEdit(entry)}
+              style={({ pressed }) => [{
+                backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8,
+                borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.8 : 1,
+              }]}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  {entry.mood ? <Text style={{ fontSize: 20 }}>{entry.mood}</Text> : null}
+                  {entry.title ? (
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }} numberOfLines={1}>{entry.title}</Text>
+                  ) : null}
+                  <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }} numberOfLines={3}>
+                    {entry.body || "(audio entry)"}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                    <Text style={{ fontSize: 11, color: colors.muted }}>{formatTime(entry.createdAt)}</Text>
+                    {entry.attachments.length > 0 && (
+                      <View style={{ flexDirection: "row", gap: 4 }}>
+                        {entry.attachments.some((a) => a.type === "photo") && <IconSymbol name="photo.fill" size={12} color={colors.muted} />}
+                        {entry.attachments.some((a) => a.type === "audio") && <IconSymbol name="mic.fill" size={12} color={colors.muted} />}
+                        {entry.attachments.some((a) => a.type === "video") && <IconSymbol name="video.fill" size={12} color={colors.muted} />}
+                        {entry.attachments.some((a) => a.type === "pdf") && <IconSymbol name="doc.fill" size={12} color={colors.muted} />}
+                      </View>
+                    )}
+                    {entry.location && <IconSymbol name="location.fill" size={12} color={colors.muted} />}
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS === "web") {
+                      if (window.confirm("Delete this entry?")) onDelete(entry.id);
+                    } else {
+                      Alert.alert("Delete Entry", "Are you sure?", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: () => onDelete(entry.id) },
+                      ]);
+                    }
+                  }}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
+                >
+                  <IconSymbol name="trash" size={16} color={colors.muted} />
+                </Pressable>
+              </View>
+              {/* Audio attachments inline */}
+              {entry.attachments.filter((a) => a.type === "audio").map((att) => (
+                <AudioPlaybackRow key={att.id} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
+              ))}
+            </Pressable>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── CALENDAR TAB ────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+function CalendarTab({ entries, onDayPress, colors }: {
+  entries: JournalEntry[];
+  onDayPress: (date: string) => void;
+  colors: any;
+}) {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth() + 1);
+
+  // Build a map of date -> entries for the current month
+  const entryMap = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    const prefix = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
+    for (const e of entries) {
+      if (e.date.startsWith(prefix)) {
+        const list = map.get(e.date) ?? [];
+        list.push(e);
+        map.set(e.date, list);
+      }
+    }
+    return map;
+  }, [entries, viewYear, viewMonth]);
+
+  const daysInMonth = getMonthDays(viewYear, viewMonth);
+  const firstDay = getFirstDayOfWeek(viewYear, viewMonth);
+  const todayStr = todayDateStr();
+
+  function prevMonth() {
+    if (viewMonth === 1) { setViewMonth(12); setViewYear(viewYear - 1); }
+    else setViewMonth(viewMonth - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 12) { setViewMonth(1); setViewYear(viewYear + 1); }
+    else setViewMonth(viewMonth + 1);
+  }
+
+  const cellWidth = Math.floor((SCREEN_WIDTH - 32) / 7);
+
+  return (
+    <View>
+      {/* Month nav */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 }}>
+        <Pressable onPress={prevMonth} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 8 }]}>
+          <IconSymbol name="chevron.left" size={20} color={colors.primary} />
+        </Pressable>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>
+          {MONTH_NAMES[viewMonth - 1]} {viewYear}
+        </Text>
+        <Pressable onPress={nextMonth} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 8 }]}>
+          <IconSymbol name="chevron.right" size={20} color={colors.primary} />
+        </Pressable>
+      </View>
+
+      {/* Day headers */}
+      <View style={{ flexDirection: "row" }}>
+        {DAY_HEADERS.map((d, i) => (
+          <View key={i} style={{ width: cellWidth, alignItems: "center", paddingVertical: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: "600", color: colors.muted }}>{d}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Calendar grid */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+        {/* Empty cells for offset */}
+        {Array.from({ length: firstDay }).map((_, i) => (
+          <View key={`empty-${i}`} style={{ width: cellWidth, height: cellWidth + 20 }} />
+        ))}
+        {/* Day cells */}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1;
+          const dateStr = `${viewYear}-${String(viewMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const dayEntries = entryMap.get(dateStr) || [];
+          const isToday = dateStr === todayStr;
+          const hasEntries = dayEntries.length > 0;
+          const preview = dayEntries[0]?.body?.slice(0, 30) || "";
+
+          return (
+            <Pressable
+              key={day}
+              onPress={() => onDayPress(dateStr)}
+              style={({ pressed }) => [{
+                width: cellWidth, minHeight: cellWidth + 20, padding: 2,
+                borderWidth: 0.5, borderColor: colors.border,
+                backgroundColor: isToday ? colors.primary + "10" : hasEntries ? colors.surface : "transparent",
+                opacity: pressed ? 0.7 : 1,
+              }]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                <Text style={{
+                  fontSize: 11, fontWeight: isToday ? "800" : "500",
+                  color: isToday ? colors.primary : colors.foreground,
+                }}>
+                  {day}
+                </Text>
+                {hasEntries && (
+                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary }} />
+                )}
+              </View>
+              {preview ? (
+                <Text style={{ fontSize: 8, color: colors.muted, lineHeight: 10, marginTop: 1 }} numberOfLines={3}>
+                  {preview}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MEDIA TAB ───────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+type MediaFilter = "all" | "photo" | "video" | "audio" | "pdf";
+
+function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
+  const [filter, setFilter] = useState<MediaFilter>("all");
+
+  const allAttachments = useMemo(() => {
+    const list: (JournalAttachment & { entryDate: string })[] = [];
+    for (const e of entries) {
+      for (const att of e.attachments) {
+        list.push({ ...att, entryDate: e.date });
+      }
+    }
+    return list.sort((a, b) => b.entryDate.localeCompare(a.entryDate));
+  }, [entries]);
+
+  const filtered = filter === "all" ? allAttachments : allAttachments.filter((a) => a.type === filter);
+
+  const FILTERS: { key: MediaFilter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "photo", label: "Photo" },
+    { key: "video", label: "Video" },
+    { key: "audio", label: "Audio" },
+    { key: "pdf", label: "PDF" },
+  ];
+
+  return (
+    <View>
+      {/* Filter tabs */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+        <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
+          {FILTERS.map((f) => (
+            <Pressable
+              key={f.key}
+              onPress={() => setFilter(f.key)}
+              style={[{
+                paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+                backgroundColor: filter === f.key ? colors.primary : colors.surface,
+                borderWidth: 1, borderColor: filter === f.key ? colors.primary : colors.border,
+              }]}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: filter === f.key ? "#fff" : colors.foreground }}>
+                {f.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
+
+      {filtered.length === 0 ? (
+        <View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
+          <IconSymbol name="photo.stack.fill" size={40} color={colors.muted} />
+          <Text style={{ fontSize: 14, color: colors.muted }}>No media yet</Text>
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          {filtered.map((att) => (
+            <View key={att.id} style={[{
+              flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12,
+              backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+            }]}>
+              <IconSymbol
+                name={att.type === "photo" ? "photo.fill" : att.type === "video" ? "video.fill" : att.type === "audio" ? "mic.fill" : "doc.fill"}
+                size={20} color={colors.primary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }} numberOfLines={1}>
+                  {att.name || att.type.charAt(0).toUpperCase() + att.type.slice(1)}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.muted }}>{att.entryDate}</Text>
+              </View>
+              {att.type === "audio" && att.durationMs && (
+                <Text style={{ fontSize: 12, color: colors.muted }}>{fmtDuration(att.durationMs / 1000)}</Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MAP TAB ─────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+function MapTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
+  const locEntries = useMemo(() => entries.filter((e) => e.location), [entries]);
+
+  if (locEntries.length === 0) {
+    return (
+      <View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
+        <IconSymbol name="map.fill" size={40} color={colors.muted} />
+        <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
+          No locations yet.{"\n"}Add a location when creating a journal entry.
+        </Text>
+      </View>
+    );
+  }
+
+  // Web fallback: show a list of locations (react-native-maps doesn't work on web)
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, marginBottom: 4 }}>
+        {locEntries.length} ENTRIES WITH LOCATION
+      </Text>
+      {locEntries.map((entry) => (
+        <View key={entry.id} style={[{
+          padding: 12, borderRadius: 12, backgroundColor: colors.surface,
+          borderWidth: 1, borderColor: colors.border, gap: 4,
+        }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <IconSymbol name="location.fill" size={16} color={colors.primary} />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }} numberOfLines={1}>
+              {entry.location?.address || `${entry.location?.latitude.toFixed(4)}, ${entry.location?.longitude.toFixed(4)}`}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 12, color: colors.muted }}>{formatDateLabel(entry.date)}</Text>
+          {entry.body ? (
+            <Text style={{ fontSize: 12, color: colors.foreground, lineHeight: 16 }} numberOfLines={2}>{entry.body}</Text>
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MAIN JOURNAL SCREEN ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function JournalScreen() {
   const colors = useColors();
-  const { habits } = useApp();
+  const [activeTab, setActiveTab] = useState<SubTab>("journal");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [textInput, setTextInput] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  // Per-entry transcription state: entryId -> label
-  const [transcribingEntries, setTranscribingEntries] = useState<Record<string, string>>({});
-  const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
+  const [userId, setUserId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
+  const [editorDate, setEditorDate] = useState(todayDateStr());
 
   useEffect(() => {
     (async () => {
       const uid = await getLastUserId();
-      setUserId(uid);
-      const loaded = await loadJournalEntries(uid);
+      setUserId(uid || "default");
+      const loaded = await loadEntries(uid || "default");
+      loaded.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setEntries(loaded);
+      setLoading(false);
     })();
   }, []);
 
-  const grouped = groupByDate(entries);
-
-  // Save a new entry (text or audio)
-  async function saveEntry(partial: Partial<JournalEntry> & { text: string }) {
-    setIsSaving(true);
-    const entry: JournalEntry = {
-      id: Date.now().toString(),
-      date: toDateString(),
-      text: partial.text,
-      audioUri: partial.audioUri,
-      duration: partial.duration,
-      createdAt: new Date().toISOString(),
-    };
-    await addJournalEntry(entry, userId);
-    setEntries((prev) => [entry, ...prev]);
-    setIsSaving(false);
-    return entry;
-  }
-
-  // Handle text save
-  async function handleSaveText() {
-    const t = textInput.trim();
-    if (!t) return;
-    await saveEntry({ text: t });
-    setTextInput("");
-    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
-  // Handle voice recording complete — save immediately, transcribe in background
-  async function handleRecordingComplete(uri: string, duration: number) {
-    // 1. Save entry immediately with audio so user can play it right away
-    const entry = await saveEntry({ text: "", audioUri: uri, duration });
-
-    // 2. Kick off transcription in background (non-blocking)
-    transcribeInBackground(entry, uri);
-  }
-
-  async function transcribeInBackground(entry: JournalEntry, uri: string) {
-    setTranscribingEntries((prev) => ({ ...prev, [entry.id]: "Transcribing…" }));
-    try {
-      let audioBase64 = "";
-      let mimeType = "audio/m4a";
-      if (Platform.OS === "web") {
-        try {
-          const result = await readUriAsBase64Web(uri);
-          audioBase64 = result.base64;
-          mimeType = result.mimeType;
-        } catch (webErr) {
-          console.warn("[Journal] Web blob read error:", webErr);
-        }
-      } else {
-        try {
-          audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-          const ext = uri.split(".").pop()?.toLowerCase() ?? "m4a";
-          mimeType = ext === "webm" ? "audio/webm" : ext === "mp4" ? "audio/mp4" : "audio/m4a";
-        } catch (fsErr) {
-          console.warn("[Journal] FileSystem read error:", fsErr);
-        }
-      }
-
-      if (!audioBase64) {
-        // Could not read audio — leave text empty, audio is still playable
-        setTranscribingEntries((prev) => { const n = { ...prev }; delete n[entry.id]; return n; });
-        return;
-      }
-
-      setTranscribingEntries((prev) => ({ ...prev, [entry.id]: "Transcribing…" }));
-      const result = await transcribeMutation.mutateAsync({
-        audioBase64,
-        mimeType,
-        date: toDateString(),
-      });
-
-      // Build AI habit mappings
-      const habitMappings: JournalHabitMapping[] = [];
-      if (result.journalEntries && result.journalEntries.length > 0 && habits.length > 0) {
-        const transcript = result.transcript.toLowerCase();
-        for (const habit of habits) {
-          const habitWords = habit.name.toLowerCase().split(/\s+/);
-          const mentioned = habitWords.some((w) => w.length > 3 && transcript.includes(w));
-          if (mentioned) {
-            const relevantEntry = result.journalEntries.find((je) =>
-              habitWords.some((w) => w.length > 3 && je.toLowerCase().includes(w))
-            ) ?? result.journalEntries[0];
-            habitMappings.push({
-              habitId: habit.id,
-              habitName: habit.name,
-              suggestedNote: relevantEntry ?? result.transcript.slice(0, 120),
-              excerpt: relevantEntry ? relevantEntry.slice(0, 80) : "",
-              accepted: undefined,
-            });
-          }
-        }
-      }
-
-      // Update entry with transcript (leave empty string if no speech, not an error message)
-      const fullText = result.transcript?.trim() || "";
-      const updated: JournalEntry = { ...entry, text: fullText, habitMappings };
-      const all = await loadJournalEntries(userId);
-      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e), userId);
-      setEntries(all.map((e) => e.id === entry.id ? updated : e));
-
-      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err: any) {
-      console.warn("[Journal] Transcription error:", err);
-      // Leave audio playable, just mark transcript as failed
-      const updated = { ...entry, text: "" };
-      const all = await loadJournalEntries(userId);
-      await saveJournalEntries(all.map((e) => e.id === entry.id ? updated : e), userId);
-      setEntries(all.map((e) => e.id === entry.id ? updated : e));
-    } finally {
-      setTranscribingEntries((prev) => { const n = { ...prev }; delete n[entry.id]; return n; });
+  async function handleSaveEntry(entry: JournalEntry) {
+    const isNew = !entries.find((e) => e.id === entry.id);
+    if (isNew) {
+      const updated = await addEntry(userId, entry);
+      updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setEntries(updated);
+    } else {
+      const updated = await updateEntryInStore(userId, entry.id, entry);
+      updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setEntries(updated);
     }
   }
 
-  // Delete an entry
-  async function handleDelete(id: string) {
-    await deleteJournalEntry(id, userId);
-    setEntries((prev) => prev.filter((e) => e.id !== id));
-  }
-
-  // Update habit mappings for an entry
-  async function handleUpdateMappings(entryId: string, mappings: JournalHabitMapping[]) {
-    const all = await loadJournalEntries(userId);
-    const updated = all.map((e) => e.id === entryId ? { ...e, habitMappings: mappings } : e);
-    await saveJournalEntries(updated, userId);
+  async function handleDeleteEntry(id: string) {
+    const updated = await deleteEntryFromStore(userId, id);
+    updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setEntries(updated);
   }
 
+  function openNewEntry(date?: string) {
+    setEditingEntry(null);
+    setEditorDate(date || todayDateStr());
+    setEditorVisible(true);
+  }
+
+  function openEditEntry(entry: JournalEntry) {
+    setEditingEntry(entry);
+    setEditorDate(entry.date);
+    setEditorVisible(true);
+  }
+
+  function handleCalendarDayPress(date: string) {
+    // If there are entries for this day, show them in journal tab
+    // Otherwise open new entry for that date
+    const dayEntries = entries.filter((e) => e.date === date);
+    if (dayEntries.length > 0) {
+      setActiveTab("journal");
+    } else {
+      openNewEntry(date);
+    }
+  }
+
+  const SUB_TABS: { key: SubTab; label: string; icon: string }[] = [
+    { key: "journal", label: "Journal", icon: "book.fill" },
+    { key: "calendar", label: "Calendar", icon: "calendar" },
+    { key: "media", label: "Media", icon: "photo.stack.fill" },
+    { key: "map", label: "Map", icon: "map.fill" },
+  ];
+
   return (
     <ScreenContainer>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>
+      </View>
 
+      {/* Sub-tab bar */}
+      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
+        {SUB_TABS.map((tab) => (
+          <Pressable
+            key={tab.key}
+            onPress={() => setActiveTab(tab.key)}
+            style={[
+              styles.tabItem,
+              activeTab === tab.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
+            ]}
+          >
+            <IconSymbol name={tab.icon as any} size={18} color={activeTab === tab.key ? colors.primary : colors.muted} />
+            <Text style={{
+              fontSize: 12, fontWeight: activeTab === tab.key ? "700" : "500",
+              color: activeTab === tab.key ? colors.primary : colors.muted,
+            }}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Content */}
+      {loading ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* ── Record section ── */}
-          <View style={[styles.recordCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLabel, { color: colors.muted }]}>VOICE ENTRY</Text>
-            <MicButton onRecordingComplete={handleRecordingComplete} colors={colors} />
-          </View>
-
-          {/* ── Text entry ── */}
-          <View style={[styles.textCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLabel, { color: colors.muted }]}>TEXT ENTRY</Text>
-            <TextInput
-              value={textInput}
-              onChangeText={setTextInput}
-              placeholder="Write your thoughts for today…"
-              placeholderTextColor={colors.muted}
-              multiline
-              style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
-              returnKeyType="default"
-            />
-            <Pressable
-              style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: (!textInput.trim() || isSaving) ? 0.5 : 1 }]}
-              onPress={handleSaveText}
-              disabled={!textInput.trim() || isSaving}
-            >
-              <Text style={styles.saveBtnText}>{isSaving ? "Saving…" : "Save Entry"}</Text>
-            </Pressable>
-          </View>
-
-          {/* ── Past entries ── */}
-          <Text style={[styles.pastLabel, { color: colors.muted }]}>PAST ENTRIES</Text>
-
-          {grouped.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>📔</Text>
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No entries yet</Text>
-              <Text style={[styles.emptyDesc, { color: colors.muted }]}>Hold the mic button to record your first voice entry, or type below.</Text>
-            </View>
-          ) : (
-            grouped.map((group) => (
-              <DayGroupRow
-                key={group.date}
-                date={group.date}
-                entries={group.entries}
-                onDelete={handleDelete}
-                onUpdateMappings={handleUpdateMappings}
-                colors={colors}
-                transcribingEntries={transcribingEntries}
-              />
-            ))
+          {activeTab === "journal" && (
+            <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
           )}
-
-          <View style={{ height: 40 }} />
+          {activeTab === "calendar" && (
+            <CalendarTab entries={entries} onDayPress={handleCalendarDayPress} colors={colors} />
+          )}
+          {activeTab === "media" && (
+            <MediaTab entries={entries} colors={colors} />
+          )}
+          {activeTab === "map" && (
+            <MapTab entries={entries} colors={colors} />
+          )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      )}
+
+      {/* FAB — always visible */}
+      <Pressable
+        onPress={() => openNewEntry()}
+        style={({ pressed }) => [{
+          position: "absolute", bottom: 90, right: 20,
+          width: 56, height: 56, borderRadius: 28,
+          backgroundColor: colors.primary,
+          alignItems: "center", justifyContent: "center",
+          shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
+          opacity: pressed ? 0.8 : 1,
+        }]}
+      >
+        <IconSymbol name="plus" size={28} color="#fff" />
+      </Pressable>
+
+      {/* Entry Editor Modal */}
+      <EntryEditor
+        visible={editorVisible}
+        entry={editingEntry}
+        initialDate={editorDate}
+        onSave={handleSaveEntry}
+        onClose={() => setEditorVisible(false)}
+        colors={colors}
+        userId={userId}
+      />
     </ScreenContainer>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   headerTitle: { fontSize: 28, fontWeight: "700" },
-  scroll: { padding: 16, paddingTop: 8 },
-  recordCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
-  textCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
-  sectionLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, marginBottom: 8 },
-  textInput: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, lineHeight: 22, minHeight: 100, textAlignVertical: "top", marginBottom: 10 },
-  saveBtn: { borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  pastLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, marginBottom: 10, marginTop: 4 },
-  emptyState: { alignItems: "center", paddingVertical: 40, gap: 10 },
-  emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: "700" },
-  emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20, color: "#9BA1A6" },
-  processingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 28 },
-  processingText: { fontSize: 15, fontWeight: "600" },
+  tabBar: { flexDirection: "row", borderBottomWidth: 0.5, paddingHorizontal: 8 },
+  tabItem: { flex: 1, alignItems: "center", paddingVertical: 10, gap: 2 },
 });

@@ -2,6 +2,7 @@ import "@/global.css";
 import { useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { AppProvider, useApp } from "@/lib/app-context";
+import { JournalProvider } from "@/lib/journal-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -126,6 +127,7 @@ export default function RootLayout() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <AppProvider>
+            <JournalProvider>
             {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
             {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
             {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
@@ -147,6 +149,7 @@ export default function RootLayout() {
               <Stack.Screen name="permissions-setup" options={{ presentation: 'fullScreenModal' }} />
             </Stack>
             <StatusBar style="auto" />
+            </JournalProvider>
           </AppProvider>
         </QueryClientProvider>
       </trpc.Provider>

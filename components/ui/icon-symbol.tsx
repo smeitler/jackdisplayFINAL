@@ -1,14 +1,13 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { SymbolWeight, SymbolViewProps } from "expo-symbols";
+import { SymbolWeight } from "expo-symbols";
 import { ComponentProps } from "react";
 import { OpaqueColorValue, type StyleProp, type TextStyle } from "react-native";
 
-type IconMapping = Record<SymbolViewProps["name"], ComponentProps<typeof MaterialIcons>["name"]>;
-type IconSymbolName = keyof typeof MAPPING;
+type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
 
-const MAPPING = {
+const MAPPING: Record<string, MaterialIconName> = {
   // Navigation
   "house.fill": "home",
   "chart.bar.fill": "bar-chart",
@@ -106,7 +105,21 @@ const MAPPING = {
   "hands.and.sparkles.fill": "volunteer-activism",
   "sun.max.fill": "wb-sunny",
   "rosette": "workspace-premium",
-} as IconMapping;
+  // Journal section icons
+  "map.pin": "place",
+  "map.fill": "map",
+  "doc.fill": "description",
+  "doc.text.fill": "article",
+  "doc.on.doc": "content-copy",
+  "folder.fill": "folder",
+  "paperclip": "attach-file",
+  "video.fill": "videocam",
+  "location.fill": "location-on",
+  "tag.fill": "label",
+  "magnifyingglass": "search",
+};
+
+export type IconSymbolName = keyof typeof MAPPING;
 
 export function IconSymbol({
   name,
@@ -120,5 +133,6 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+  const iconName = MAPPING[name] ?? "help-outline";
+  return <MaterialIcons color={color} size={size} name={iconName} style={style} />;
 }

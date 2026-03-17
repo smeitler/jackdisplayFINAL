@@ -788,3 +788,46 @@
 - [x] Fix: WebAudioPlayer uses HTML <audio> with data: URI for reliable playback
 - [x] Fix: server getFileExtension() now strips codec suffixes (audio/webm;codecs=opus → webm) so Whisper accepts the file
 - [x] Fix: journal entries are now user-specific — storage key includes userId from getLastUserId()
+
+## Live Debug: Recording Still Not Working (Mar 16 2026)
+- [x] Confirmed: sandbox VM has no mic hardware — recording works correctly on user's phone browser
+- [x] User confirmed recording AND transcription work on phone
+
+## Journal Section Complete Redesign (Mar 16 2026)
+
+### Sub-Tab Navigation
+- [x] Add four sub-tabs within Journal: Journal, Calendar, Media, Map
+- [x] Sub-tabs should be persistent across navigation
+
+### Journal Sub-Tab (Entry List)
+- [x] Show chronological list of journal entries
+- [x] Each entry shows date, text preview, media thumbnails, audio indicator
+- [x] Floating "+" button in bottom-right corner to create new entry (visible across all sub-tabs)
+
+### Full-Screen Entry Editor
+- [x] Full-screen modal when creating/editing an entry
+- [x] Date shown at top — tappable to change the date
+- [x] Audio recording button (hold to record)
+- [x] Ability to add photos/videos/PDFs as attachments
+- [x] Template selector for structured entries
+- [x] Location field — auto-detect or manually add
+- [x] Rich text area for writing
+
+### Calendar Sub-Tab
+- [x] Boxy grid calendar view — scrollable through all months
+- [x] Day number is small
+- [x] Shows preview text from entry if one exists for that day
+- [x] Visual indicator for days with journal entries (green dot)
+- [x] Tapping a day opens that day's entry or creates a new one
+
+### Media Sub-Tab
+- [x] Grid view of all media from journal entries
+- [x] Filter tabs: All, Photo, Video, Audio, PDF
+- [x] Tapping media opens the associated journal entry
+
+### Map Sub-Tab
+- [x] Map placeholder with location list (react-native-maps not available on web)
+- [x] Each location shows entry date/preview
+- [x] Location captured at time of journal submission
+- [x] Data migration from old journal format to new format
+- [x] JournalProvider wired in app _layout.tsx

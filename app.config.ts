@@ -112,6 +112,12 @@ const config: ExpoConfig = {
         isAccessMediaLocationEnabled: true,
       },
     ],
+    [
+      "expo-location",
+      {
+        locationWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to tag journal entries.",
+      },
+    ],
     // expo-audio: no plugin entry needed (avoids UIBackgroundModes audio declaration)
     // expo-video: no background playback (avoids UIBackgroundModes audio declaration)
     [
