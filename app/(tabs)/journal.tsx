@@ -603,10 +603,59 @@ function EntryEditor({
         audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       }
       if (!audioBase64) return;
-      const result = await transcribeMutation.mutateAsync({ audioBase64, mimeType, date });
+
+      // Pass active habits so AI can route relevant content to each habit's note field
+      const habitPayload = habits.map((h) => ({
+        id: h.id,
+        name: h.name,
+        emoji: h.emoji,
+        description: h.description,
+      }));
+
+      const result = await transcribeMutation.mutateAsync({
+        audioBase64,
+        mimeType,
+        date,
+        habits: habitPayload,
+      });
+
       const transcript = result.transcript?.trim() || "";
-      if (transcript) {
-        setBody((prev) => prev ? prev + "\n\n" + transcript : transcript);
+
+      // Auto-fill journal body with general entries (not habit-specific)
+      const journalEntries: string[] = (result as any).journalEntries ?? [];
+      const gratitudeItems: string[] = (result as any).gratitudeItems ?? [];
+      const aiHabitNotes: Record<string, string> = (result as any).habitNotes ?? {};
+
+      // Build body text from journal entries + gratitude
+      const bodyParts: string[] = [];
+      if (journalEntries.length > 0) bodyParts.push(journalEntries.join("\n"));
+      if (gratitudeItems.length > 0) bodyParts.push("\uD83D\uDE4F Grateful for: " + gratitudeItems.join(", "));
+      // Fall back to raw transcript if AI categorization returned nothing
+      const newBodyText = bodyParts.length > 0 ? bodyParts.join("\n\n") : transcript;
+
+      if (newBodyText) {
+        setBody((prev) => prev ? prev + "\n\n" + newBodyText : newBodyText);
+        setMergedText((prev) => {
+          const currentTitle = prev.split("\n")[0] || "";
+          const currentBody = prev.includes("\n") ? prev.slice(prev.indexOf("\n") + 1) : "";
+          const updatedBody = currentBody ? currentBody + "\n\n" + newBodyText : newBodyText;
+          return currentTitle ? currentTitle + "\n" + updatedBody : updatedBody;
+        });
+      }
+
+      // Auto-fill per-habit notes from AI extraction — show habit notes section if any were found
+      if (Object.keys(aiHabitNotes).length > 0) {
+        setHabitNotes((prev) => {
+          const merged = { ...prev };
+          for (const [habitId, note] of Object.entries(aiHabitNotes)) {
+            // Append to existing note if there's already content, otherwise set
+            merged[habitId] = merged[habitId]?.trim()
+              ? merged[habitId].trim() + "\n" + note
+              : note;
+          }
+          return merged;
+        });
+        setShowHabitNotes(true);
       }
     } catch (e) { console.warn("Transcription error:", e); }
     finally {
