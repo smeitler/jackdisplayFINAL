@@ -379,10 +379,24 @@ export default function CheckInScreen() {
   // Called every CHUNK_INTERVAL_MS with a SLIDING WINDOW blob (last ~5s of audio)
   // Whisper returns the full window transcript; we deduplicate against what we already have.
   // Uses refs only — stable callback, never stale
+  //
+  // IMPORTANT: vcWhisperInFlightRef guards against concurrent calls.
+  // ALL exit paths (including early returns) MUST clear this flag via the finally block.
+  // Never use bare `return` inside the try — use a local variable to signal skip instead.
   const handleVcDeltaChunk = useCallback(async (windowBlob: Blob, mimeType: string) => {
-    if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick
+    if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick (guard NOT set yet)
     vcWhisperInFlightRef.current = true;
     setVcProcessing(true);
+
+    // Watchdog: auto-clear the guard after 8s in case Whisper hangs
+    const watchdog = setTimeout(() => {
+      if (vcWhisperInFlightRef.current) {
+        console.warn('[VoiceCheckin] Whisper watchdog fired — clearing in-flight guard');
+        vcWhisperInFlightRef.current = false;
+        setVcProcessing(false);
+      }
+    }, 8000);
+
     try {
       // STEP 1: Whisper — transcribe the full sliding window (gives Whisper enough context)
       const audioBase64 = await blobToBase64(windowBlob);
@@ -392,30 +406,32 @@ export default function CheckInScreen() {
         previousTranscript: vcTranscriptRef.current,
       });
       const windowText = result.delta?.trim() ?? '';
-      if (!windowText) return; // Whisper returned nothing — skip
 
       // Deduplicate: extract only NEW words not already in the accumulated transcript
-      const delta = deduplicateTranscript(vcTranscriptRef.current, windowText);
-      if (!delta) return; // nothing new — skip
+      // (windowText may be empty if Whisper found nothing — that's fine, delta will be '')
+      const delta = windowText ? deduplicateTranscript(vcTranscriptRef.current, windowText) : '';
 
-      // Append new words to transcript immediately — user sees it right away
-      const newTranscript = vcTranscriptRef.current
-        ? vcTranscriptRef.current + ' ' + delta
-        : delta;
-      setVcTranscript(newTranscript);
-      vcTranscriptRef.current = newTranscript;
+      if (delta) {
+        // Append new words to transcript immediately — user sees it right away
+        const newTranscript = vcTranscriptRef.current
+          ? vcTranscriptRef.current + ' ' + delta
+          : delta;
+        setVcTranscript(newTranscript);
+        vcTranscriptRef.current = newTranscript;
 
-      // STEP 2: Smart LLM debounce — fire if word delta >= WORD_DELTA_TRIGGER
-      const currentWordCount = newTranscript.split(/\s+/).filter(Boolean).length;
-      const wordDelta = currentWordCount - vcLastLlmWordCountRef.current;
-      if (wordDelta >= WORD_DELTA_TRIGGER) {
-        fireAnalyzeTranscript(newTranscript);
+        // STEP 2: Smart LLM debounce — fire if word delta >= WORD_DELTA_TRIGGER
+        const currentWordCount = newTranscript.split(/\s+/).filter(Boolean).length;
+        const wordDelta = currentWordCount - vcLastLlmWordCountRef.current;
+        if (wordDelta >= WORD_DELTA_TRIGGER) {
+          fireAnalyzeTranscript(newTranscript);
+        }
+        // (Silence path fires separately via handleVcSilence callback)
       }
-      // (Silence path fires separately via handleVcSilence callback)
 
     } catch (e) {
       console.warn('[VoiceCheckin] Whisper chunk error:', e);
     } finally {
+      clearTimeout(watchdog);
       vcWhisperInFlightRef.current = false;
       setVcProcessing(false);
     }

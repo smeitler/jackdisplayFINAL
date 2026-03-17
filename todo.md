@@ -937,3 +937,10 @@
 - [x] Redesign to sliding window: always send last 5s of audio to Whisper for reliable transcription
 - [x] Deduplicate transcript: detect overlapping words between consecutive Whisper results
 - [x] Keep LLM analysis on accumulated text (no change to analysis path)
+
+## Voice Check-in Freeze Fix (Mar 17 2026 - session 10)
+
+- [x] Fix: voice check-in stops recording after a short time regardless of audio level
+- [x] Root cause: vcWhisperInFlightRef guard permanently locks if Whisper hangs or early-return skips finally
+- [x] Add watchdog timeout (8s) to auto-clear the in-flight guard if Whisper takes too long
+- [x] Remove early-return paths that bypass the finally block (move guard clear into finally always)
