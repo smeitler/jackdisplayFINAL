@@ -901,3 +901,6 @@
 - [x] Check-in screen: add new server route for single-habit voice analysis (fast, per-habit)
 - [x] Check-in screen: pulsing glow on active habit row while recording (animated border/background)
 - [x] Check-in screen: remove green checkmark from number badge; keep plain number always
+- [ ] Check-in screen: fix rating button selected state — selected button must be fully bright/solid, unselected buttons clearly dim
+- [x] Check-in screen: single hold-to-record session for ALL habits — hold mic, speak about everything, release, AI fills all ratings + descriptions at once
+- [x] Check-in screen: fix rating button selected state — selected must be fully solid/bright, unselected clearly dim

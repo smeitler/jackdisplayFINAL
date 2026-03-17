@@ -84,60 +84,42 @@ export default function CheckInScreen() {
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   // ── Sequential habit-by-habit voice check-in ──────────────────────────────
-  // Phase lifecycle:
-  //   idle → (tap mic) → recording → (release) → processing → (result) → recording (next habit)
-  //   or → done (all habits covered) / error
+  // Voice check-in: single continuous recording for ALL habits at once
+  // Flow: idle → (tap mic) → recording → (tap mic again) → processing → done/error
   type VoicePhase = 'idle' | 'recording' | 'processing' | 'done' | 'error';
   const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle');
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  // Index into activeHabits of the habit currently being spoken about
-  const [voiceHabitIdx, setVoiceHabitIdx] = useState(0);
-  // Which habitIds have been processed by voice (for highlight ring)
-  const [voiceProcessed, setVoiceProcessed] = useState<Set<string>>(new Set());
+  // How many habits were filled by voice (for status display)
+  const [voiceFilledCount, setVoiceFilledCount] = useState(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  // Glow opacity for the active habit row (0 = dim, 1 = bright)
-  const glowAnim = useRef(new Animated.Value(0)).current;
-  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const analyzeForHabitMutation = trpc.voiceJournal.analyzeForHabit.useMutation();
+  const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   const voiceActive = voicePhase !== 'idle';
-  const currentVoiceHabit = activeHabits[voiceHabitIdx] ?? null;
 
-  // Pulse animation (mic button scale) while recording
+  // Pulse animation on the mic button while recording
   useEffect(() => {
     if (voicePhase === 'recording') {
       pulseLoopRef.current = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.22, duration: 450, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1.0, duration: 450, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.18, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.0, duration: 500, useNativeDriver: true }),
         ])
       );
       pulseLoopRef.current.start();
-      // Glow the active habit row
-      glowLoopRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      glowLoopRef.current.start();
     } else {
       pulseLoopRef.current?.stop();
-      glowLoopRef.current?.stop();
       Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-      Animated.timing(glowAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     }
   }, [voicePhase]);
 
-  // Start the sequential voice session (tap mic button)
+  // Tap mic to START recording all habits in one session
   const handleStartVoice = useCallback(async () => {
     if (voicePhase !== 'idle' && voicePhase !== 'done' && voicePhase !== 'error') return;
     if (activeHabits.length === 0) return;
     setVoiceError(null);
-    setVoiceHabitIdx(0);
-    setVoiceProcessed(new Set());
+    setVoiceFilledCount(0);
     try {
       if (Platform.OS !== 'web') {
         const { granted } = await requestRecordingPermissionsAsync();
@@ -153,8 +135,8 @@ export default function CheckInScreen() {
     }
   }, [voicePhase, activeHabits, audioRecorder]);
 
-  // Stop recording for current habit, analyze, apply, advance to next
-  const handleStopHabit = useCallback(async () => {
+  // Tap mic again to STOP and process all habits at once
+  const handleStopVoice = useCallback(async () => {
     if (voicePhase !== 'recording') return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setVoicePhase('processing');
@@ -180,61 +162,49 @@ export default function CheckInScreen() {
         mimeType = 'audio/m4a';
       }
 
-      const habit = activeHabits[voiceHabitIdx];
-      if (!habit) { setVoicePhase('done'); return; }
-
-      const result = await analyzeForHabitMutation.mutateAsync({
+      // Send ALL habits to the server in one shot
+      const result = await transcribeMutation.mutateAsync({
         audioBase64,
         mimeType,
-        habit: { id: habit.id, name: habit.name, emoji: habit.emoji, description: habit.description },
+        habits: activeHabits.map((h) => ({ id: h.id, name: h.name, emoji: h.emoji, description: h.description })),
       });
 
-      // Apply rating + note for this habit
-      if (result.rating && result.rating !== 'none') {
-        setRatings((prev) => ({ ...prev, [habit.id]: result.rating as Rating }));
+      // Apply ratings + notes for every habit the AI detected
+      let filled = 0;
+      const newRatings: Record<string, Rating> = {};
+      const newNotes: Record<string, string> = {};
+
+      for (const habit of activeHabits) {
+        const rating = result.habitRatings?.[habit.id];
+        const note = result.habitNotes?.[habit.id];
+        if (rating && (rating === 'green' || rating === 'yellow' || rating === 'red')) {
+          newRatings[habit.id] = rating as Rating;
+          filled++;
+        }
+        if (note?.trim()) {
+          newNotes[habit.id] = note.trim();
+        }
+      }
+
+      if (filled > 0) {
+        setRatings((prev) => ({ ...prev, ...newRatings }));
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      if (result.note.trim()) {
-        setNotes((prev) => ({ ...prev, [habit.id]: result.note.trim() }));
+      if (Object.keys(newNotes).length > 0) {
+        setNotes((prev) => ({ ...prev, ...newNotes }));
       }
-      setVoiceProcessed((prev) => new Set([...prev, habit.id]));
 
-      const nextIdx = voiceHabitIdx + 1;
-      if (nextIdx >= activeHabits.length) {
-        // All habits done
-        setVoicePhase('done');
-      } else {
-        // Advance to next habit and start recording immediately
-        setVoiceHabitIdx(nextIdx);
-        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await audioRecorder.prepareToRecordAsync();
-        audioRecorder.record();
-        setVoicePhase('recording');
-      }
+      setVoiceFilledCount(filled);
+      setVoicePhase('done');
     } catch (e: any) {
       console.error('[VoiceCheckIn]', e);
       setVoiceError(e?.message ?? 'Processing failed');
       setVoicePhase('error');
     }
-  }, [voicePhase, audioRecorder, activeHabits, voiceHabitIdx, analyzeForHabitMutation]);
+  }, [voicePhase, audioRecorder, activeHabits, transcribeMutation]);
 
-  // Skip current habit without recording
-  const handleSkipHabit = useCallback(async () => {
-    if (voicePhase !== 'recording' && voicePhase !== 'processing') return;
-    try { await audioRecorder.stop(); } catch {}
-    const nextIdx = voiceHabitIdx + 1;
-    if (nextIdx >= activeHabits.length) {
-      setVoicePhase('done');
-    } else {
-      setVoiceHabitIdx(nextIdx);
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-      setVoicePhase('recording');
-    }
-  }, [voicePhase, audioRecorder, voiceHabitIdx, activeHabits]);
-
-  // Stop the entire voice session
-  const handleStopVoiceSession = useCallback(async () => {
+  // Cancel recording
+  const handleCancelVoice = useCallback(async () => {
     try { await audioRecorder.stop(); } catch {}
     setVoicePhase('idle');
     setVoiceError(null);
@@ -932,8 +902,8 @@ export default function CheckInScreen() {
                   const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
                   const rank = idx + 1;
-                  const isVoiceActive = voiceActive && currentVoiceHabit?.id === habit.id;
-                  const isVoiceDone = voiceProcessed.has(habit.id);
+                  // While recording, all habit rows pulse slightly to show the mic is active
+                  const isRecording = voicePhase === 'recording';
 
                   return (
                     <Animated.View
@@ -941,18 +911,10 @@ export default function CheckInScreen() {
                       style={[
                         styles.habitRow,
                         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-                        isVoiceActive && {
-                          borderRadius: 10,
-                          borderWidth: 1.5,
-                          borderColor: '#EF4444',
-                          marginHorizontal: -2,
-                          paddingHorizontal: 14,
-                          // Animated background opacity handled via opacity on a child overlay
-                        },
-                        isVoiceActive && {
-                          opacity: glowAnim.interpolate({
-                            inputRange: [0.3, 1],
-                            outputRange: [0.85, 1],
+                        isRecording && {
+                          opacity: pulseAnim.interpolate({
+                            inputRange: [1, 1.18],
+                            outputRange: [1, 0.92],
                           }),
                         },
                       ]}
@@ -960,10 +922,10 @@ export default function CheckInScreen() {
                       {/* Habit name with number badge */}
                       <View style={styles.habitNameRow}>
                         <View style={[styles.habitNumBadge, {
-                          backgroundColor: isVoiceActive ? '#EF444422' : colors.primary + '22',
-                          borderColor: isVoiceActive ? '#EF4444' : colors.primary + '44',
+                          backgroundColor: colors.primary + '22',
+                          borderColor: colors.primary + '44',
                         }]}>
-                          <Text style={[styles.habitNumText, { color: isVoiceActive ? '#EF4444' : colors.primary }]}>{rank}</Text>
+                          <Text style={[styles.habitNumText, { color: colors.primary }]}>{rank}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
@@ -1011,8 +973,9 @@ export default function CheckInScreen() {
                                 isFirst && styles.segmentFirst,
                                 isLastSeg && styles.segmentLast,
                                 {
-                                  backgroundColor: isSelected ? col : col + '28',
-                                  opacity: pressed ? 0.75 : 1,
+                                  backgroundColor: isSelected ? col : col + '30',
+                                  opacity: isSelected ? (pressed ? 0.85 : 1) : (pressed ? 0.6 : 0.35),
+                                  transform: [{ scale: isSelected ? 1 : 0.92 }],
                                 },
                               ]}
                             />
@@ -1104,26 +1067,16 @@ export default function CheckInScreen() {
                   voicePhase === 'error' ? '#EF4444' : colors.muted,
               },
             ]}>
-              {voicePhase === 'recording' && currentVoiceHabit
-                ? `Listening for: ${currentVoiceHabit.name}`
-                : voicePhase === 'processing' && currentVoiceHabit
-                ? `Analyzing ${currentVoiceHabit.name}…`
+              {voicePhase === 'recording'
+                ? 'Listening… speak about all your habits'
+                : voicePhase === 'processing'
+                ? 'Analyzing your habits…'
                 : voicePhase === 'done'
-                ? `✓ All ${voiceProcessed.size} habit${voiceProcessed.size !== 1 ? 's' : ''} recorded`
+                ? `✓ Filled ${voiceFilledCount} habit${voiceFilledCount !== 1 ? 's' : ''}`
                 : voiceError ?? 'Voice check-in'}
             </Text>
 
-            {/* Skip habit button */}
-            {voicePhase === 'recording' && (
-              <Pressable
-                onPress={handleSkipHabit}
-                style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, paddingHorizontal: 6, paddingVertical: 2 }]}
-              >
-                <Text style={{ fontSize: 11, color: colors.muted, fontWeight: '600' }}>Skip</Text>
-              </Pressable>
-            )}
-
-            {/* Stop session / dismiss */}
+            {/* Dismiss when done or error */}
             {(voicePhase === 'done' || voicePhase === 'error') && (
               <Pressable
                 onPress={() => { setVoicePhase('idle'); setVoiceError(null); }}
@@ -1132,9 +1085,10 @@ export default function CheckInScreen() {
                 <IconSymbol name="xmark" size={12} color={colors.muted} />
               </Pressable>
             )}
+            {/* Cancel while recording or processing */}
             {(voicePhase === 'recording' || voicePhase === 'processing') && (
               <Pressable
-                onPress={handleStopVoiceSession}
+                onPress={handleCancelVoice}
                 style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 2 }]}
               >
                 <IconSymbol name="xmark" size={12} color={colors.muted} />
@@ -1166,10 +1120,10 @@ export default function CheckInScreen() {
             </Text>
           </Pressable>
 
-          {/* Sequential voice mic button */}
+          {/* Voice mic button — tap to start, tap again to stop */}
           <Animated.View style={{ transform: [{ scale: voicePhase === 'recording' ? pulseAnim : 1 }] }}>
             <Pressable
-              onPress={voicePhase === 'recording' ? handleStopHabit : handleStartVoice}
+              onPress={voicePhase === 'recording' ? handleStopVoice : handleStartVoice}
               style={[
                 styles.voiceMicBigBtn,
                 {
