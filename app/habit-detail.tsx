@@ -285,7 +285,20 @@ export default function HabitDetailScreen() {
     );
   }
 
-  const recentEntries = [...habitCheckIns].reverse().slice(0, 14);
+  // Build recentEntries: include check-in dates PLUS any dates that have a journal note for this habit
+  const recentEntries = useMemo(() => {
+    const checkinDates = new Set(habitCheckIns.map((e) => e.date));
+    // Find dates that have a journal note for this habit but no check-in
+    const journalOnlyDates = Object.keys(dayNotes)
+      .filter((key) => key.startsWith(habitId + ":"))
+      .map((key) => key.replace(habitId + ":", ""))
+      .filter((d) => !checkinDates.has(d));
+    // Combine: real check-ins + journal-only dates (as synthetic entries with rating 'none')
+    const journalEntries = journalOnlyDates.map((d) => ({ date: d, habitId, rating: "none" as const, loggedAt: d }));
+    const combined = [...habitCheckIns, ...journalEntries];
+    combined.sort((a, b) => b.date.localeCompare(a.date));
+    return combined.slice(0, 20);
+  }, [habitCheckIns, dayNotes, habitId]);
 
   return (
     <ScreenContainer>
@@ -495,8 +508,9 @@ export default function HabitDetailScreen() {
             recentEntries.map((entry) => {
               const d = new Date(entry.date + "T12:00:00");
               const label = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-              const rc = ratingColor(entry.rating);
-              const ratingLabel = entry.rating === "green" ? "Crushed it" : entry.rating === "yellow" ? "Okay" : "Missed";
+              const isJournalOnly = entry.rating === "none";
+              const rc = isJournalOnly ? colors.primary : ratingColor(entry.rating);
+              const ratingLabel = isJournalOnly ? "Journal note" : entry.rating === "green" ? "Crushed it" : entry.rating === "yellow" ? "Okay" : "Missed";
               const noteKey = `${habitId}:${entry.date}`;
               const note = dayNotes[noteKey];
 

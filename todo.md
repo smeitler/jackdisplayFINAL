@@ -873,3 +873,6 @@
 - [x] Journal Habit Notes template: show each active habit with a dedicated note field; saving the entry writes those notes back to the habit's daily log
 - [x] Habit notes written in journal must be saved to and visibly reflected in the individual habit's notes for that day
 - [x] Voice recording: AI extracts relevant content per habit from transcript and auto-fills each habit's note field
+- [x] Bug: habit history not showing in habit detail screen
+- [x] Bug: cannot enter/rate habits (broken input)
+- [x] Bug: journal habit notes not appearing in habit detail screen

@@ -611,7 +611,7 @@ export default function HomeScreen() {
 
   function handleCheckIn(date?: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push((`/checkin?date=${date ?? yesterday}`) as never);
+    router.push((`/checkin?date=${date ?? toDateString()}`) as never);
   }
 
   function formatAlarmTime(h: number, m: number): string {

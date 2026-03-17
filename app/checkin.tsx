@@ -73,7 +73,7 @@ export default function CheckInScreen() {
   const fromAlarm = params.fromAlarm === '1';
   const isPreview = params.preview === '1';
 
-  const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
+  const [currentDate, setCurrentDate] = useState(params.date ?? toDateString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
   const [submitted, setSubmitted] = useState(false);
   const [shareToTeam, setShareToTeam] = useState(true);
@@ -169,7 +169,7 @@ export default function CheckInScreen() {
   }, [myTeams]);
 
   const today = toDateString();
-  const canGoForward = currentDate < yesterdayString();
+  const canGoForward = currentDate < today;
 
   // Start after-alarm audio when submitted from alarm context
   useEffect(() => {
@@ -254,7 +254,7 @@ export default function CheckInScreen() {
     const d = new Date(currentDate + 'T12:00:00');
     d.setDate(d.getDate() + direction);
     const newDate = toDateString(d);
-    if (newDate >= today) return;
+    if (newDate > today) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCurrentDate(newDate);
     setRatings(getRatingsForDate(newDate));
