@@ -1,11 +1,11 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image } from "react-native";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId, loadDayNotes, saveDayNotes, Rating } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
@@ -13,7 +13,7 @@ import Svg, { Circle } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
-import { VoiceCheckInModal } from "@/components/voice-checkin-modal";
+
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 // Profile pic key is per-user — built dynamically once userId is known
@@ -522,12 +522,11 @@ export default function HomeScreen() {
   const {
     alarm, isPendingCheckIn, getCategoryRate,
     streak, categories, activeHabits, checkIns,
-    submitCheckIn,
   } = useApp();
   const [showLegend, setShowLegend] = useState(false);
   const [showMissedDays, setShowMissedDays] = useState(false);
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
-  const [showVoiceCheckIn, setShowVoiceCheckIn] = useState(false);
+
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
@@ -781,35 +780,15 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          {/* ── Section title + Voice Check-in mic ── */}
+          {/* ── Section title ── */}
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {/* Voice check-in mic button */}
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setShowVoiceCheckIn(true);
-                }}
-                style={({ pressed }) => [
-                  styles.voiceMicBtn,
-                  {
-                    backgroundColor: '#EF4444' + '18',
-                    borderColor: '#EF4444' + '44',
-                    opacity: pressed ? 0.75 : 1,
-                    transform: [{ scale: pressed ? 0.95 : 1 }],
-                  },
-                ]}
-              >
-                <IconSymbol name="mic.fill" size={16} color="#EF4444" />
-              </Pressable>
-              <Pressable
-                onPress={() => setShowLegend(true)}
-                style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-              >
-                <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() => setShowLegend(true)}
+              style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            >
+              <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
+            </Pressable>
           </View>
 
           {/* ── Legend modal ── */}
@@ -899,32 +878,6 @@ export default function HomeScreen() {
         colors={colors}
       />
 
-      {/* ── Voice Check-In Modal ── */}
-      <VoiceCheckInModal
-        visible={showVoiceCheckIn}
-        habits={activeHabits}
-        date={toDateString()}
-        onClose={() => setShowVoiceCheckIn(false)}
-        onSave={async (results, notesMap) => {
-          // Build ratings map (skip 'none')
-          const ratingsMap: Record<string, Rating> = {};
-          for (const r of results) {
-            if (r.rating !== 'none') ratingsMap[r.habitId] = r.rating;
-          }
-          // Save check-ins
-          await submitCheckIn(toDateString(), ratingsMap);
-          // Save notes
-          if (Object.keys(notesMap).length > 0) {
-            const existing = await loadDayNotes();
-            const today = toDateString();
-            const merged = { ...existing };
-            for (const [habitId, note] of Object.entries(notesMap)) {
-              merged[`${habitId}:${today}`] = note;
-            }
-            await saveDayNotes(merged);
-          }
-        }}
-      />
     </ScreenContainer>
   );
 }
@@ -1113,9 +1066,5 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  voiceMicBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1,
-  },
+
 });

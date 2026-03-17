@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -19,7 +19,10 @@ import {
   loadHabits,
   loadGratitudeEntries,
   yesterdayString as yesterdayStr,
+  loadDayNotes,
+  saveDayNotes,
 } from '@/lib/storage';
+import { VoiceCheckInModal } from '@/components/voice-checkin-modal';
 
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
@@ -78,6 +81,20 @@ export default function CheckInScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [shareToTeam, setShareToTeam] = useState(true);
   const [shared, setShared] = useState(false);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [showVoiceMic, setShowVoiceMic] = useState(false);
+
+  // Load existing notes for this date on mount / date change
+  useEffect(() => {
+    loadDayNotes().then((allNotes) => {
+      const forDate: Record<string, string> = {};
+      for (const [key, val] of Object.entries(allNotes)) {
+        const [habitId, noteDate] = key.split(':');
+        if (noteDate === currentDate && habitId && val) forDate[habitId] = val;
+      }
+      setNotes(forDate);
+    });
+  }, [currentDate]);
   const [practiceReady, setPracticeReady] = useState(false);
   const [practiceGenerating, setPracticeGenerating] = useState(false);
   const [practiceResult, setPracticeResult] = useState<{ chunkUrls: string[]; pausesBetweenChunks: number[]; totalDurationMinutes: number } | null>(null);
@@ -302,12 +319,28 @@ export default function CheckInScreen() {
     });
   }
 
+  function setNote(habitId: string, text: string) {
+    setNotes((prev) => ({ ...prev, [habitId]: text }));
+  }
+
   async function handleSubmit() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // Stop countdown before submitting
     if (countdownAnimRef.current) countdownAnimRef.current.stop();
     if (countdownRef.current) clearTimeout(countdownRef.current);
     await submitCheckIn(currentDate, ratings);
+    // Save notes
+    const hasNotes = Object.values(notes).some((n) => n.trim());
+    if (hasNotes) {
+      const existing = await loadDayNotes();
+      const merged = { ...existing };
+      for (const [habitId, note] of Object.entries(notes)) {
+        const key = `${habitId}:${currentDate}`;
+        if (note.trim()) merged[key] = note.trim();
+        else delete merged[key];
+      }
+      await saveDayNotes(merged);
+    }
     setSubmitted(true);
 
     // Auto-generate morning practice if enabled
@@ -769,6 +802,23 @@ export default function CheckInScreen() {
                               <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
                             </View>
                           )}
+                          {/* Compact note slot */}
+                          <TextInput
+                            value={notes[habit.id] ?? ''}
+                            onChangeText={(t) => setNote(habit.id, t)}
+                            placeholder="Add a note…"
+                            placeholderTextColor={colors.muted + '88'}
+                            style={[
+                              styles.noteInput,
+                              {
+                                color: colors.foreground,
+                                borderBottomColor: notes[habit.id] ? colors.primary + '55' : colors.border,
+                              },
+                            ]}
+                            returnKeyType="done"
+                            blurOnSubmit
+                            multiline={false}
+                          />
                         </View>
                       </View>
 
@@ -835,26 +885,79 @@ export default function CheckInScreen() {
           </Pressable>
         )}
 
-        <Pressable
-          onPress={anyRated ? handleSubmit : undefined}
-          style={({ pressed }) => [
-            styles.saveBtn,
-            {
-              backgroundColor: anyRated ? colors.primary : colors.border,
-              transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
-              opacity: anyRated ? 1 : 0.55,
-            },
-          ]}
-        >
-          <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
-            {allRated
-              ? 'Save Review'
-              : anyRated
-              ? `Save Partial Review (${ratedEntries.length}/${totalActive})`
-              : `Rate at least one habit to save`}
-          </Text>
-        </Pressable>
+        {/* Save + Voice Mic row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Pressable
+            onPress={anyRated ? handleSubmit : undefined}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              {
+                flex: 1,
+                backgroundColor: anyRated ? colors.primary : colors.border,
+                transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
+                opacity: anyRated ? 1 : 0.55,
+              },
+            ]}
+          >
+            <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
+              {allRated
+                ? 'Save Review'
+                : anyRated
+                ? `Save (${ratedEntries.length}/${totalActive})`
+                : `Rate at least one`}
+            </Text>
+          </Pressable>
+
+          {/* Big red mic button */}
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setShowVoiceMic(true);
+            }}
+            style={({ pressed }) => [
+              styles.voiceMicBigBtn,
+              {
+                backgroundColor: '#EF4444',
+                transform: [{ scale: pressed ? 0.93 : 1 }],
+                shadowColor: '#EF4444',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: pressed ? 0.2 : 0.4,
+                shadowRadius: 6,
+                elevation: 5,
+              },
+            ]}
+          >
+            <IconSymbol name="mic.fill" size={24} color="#fff" />
+          </Pressable>
+        </View>
       </View>
+
+      {/* ── Voice Check-In Modal ── */}
+      <VoiceCheckInModal
+        visible={showVoiceMic}
+        habits={activeHabits}
+        date={currentDate}
+        onClose={() => setShowVoiceMic(false)}
+        onSave={async (results, notesMap) => {
+          // Apply AI-suggested ratings
+          setRatings((prev) => {
+            const next = { ...prev };
+            for (const r of results) {
+              if (r.rating !== 'none') next[r.habitId] = r.rating;
+            }
+            return next;
+          });
+          // Apply AI-suggested notes
+          setNotes((prev) => {
+            const next = { ...prev };
+            for (const [habitId, note] of Object.entries(notesMap)) {
+              if (note.trim()) next[habitId] = note;
+            }
+            return next;
+          });
+          // Don't auto-submit — let user review and tap Save
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -1024,4 +1127,22 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   snoozeBtnText: { fontSize: 15, fontWeight: '700' },
+
+  // Compact note input under each habit name
+  noteInput: {
+    fontSize: 12,
+    lineHeight: 16,
+    paddingVertical: 3,
+    paddingHorizontal: 0,
+    marginTop: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 20,
+  },
+
+  // Big red mic button in footer
+  voiceMicBigBtn: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
 });
