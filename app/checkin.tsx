@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -26,7 +26,7 @@ import {
 // ─── Voice Check-in Chunked Streaming Recorder (isolated from journal code) ────
 // Sends audio to Whisper every CHUNK_INTERVAL_MS using cumulative blob approach.
 // Each chunk = all audio so far, giving Whisper full context for better accuracy.
-const CHUNK_INTERVAL_MS = 3000;
+const CHUNK_INTERVAL_MS = 1000; // 1-second chunks for near-real-time rating updates
 
 type ChunkCallback = (blob: Blob, mimeType: string) => void;
 
@@ -199,6 +199,7 @@ export default function CheckInScreen() {
   const [vcNotes, setVcNotes] = useState<Record<string, string>>({});
   const [vcElapsed, setVcElapsed] = useState(0);
   const [vcProcessing, setVcProcessing] = useState(false); // true while a chunk is being analyzed
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null); // habitId being edited inline
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -210,7 +211,10 @@ export default function CheckInScreen() {
   useEffect(() => { setRatingsRef.current = setRatings; }, [setRatings]);
 
   // Called every CHUNK_INTERVAL_MS with cumulative audio blob
+  const vcProcessingRef = useRef(false); // guard: skip chunk if previous still in flight
   const handleVcChunk = useCallback(async (blob: Blob, mimeType: string) => {
+    if (vcProcessingRef.current) return; // previous chunk still processing — skip
+    vcProcessingRef.current = true;
     setVcProcessing(true);
     try {
       const audioBase64 = await blobToBase64(blob);
@@ -238,6 +242,7 @@ export default function CheckInScreen() {
     } catch (e) {
       console.warn('[VoiceCheckin] Chunk error:', e);
     } finally {
+      vcProcessingRef.current = false;
       setVcProcessing(false);
     }
   }, [analyzeCheckinMutation]);
@@ -986,10 +991,29 @@ export default function CheckInScreen() {
                               <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
                             </View>
                           )}
-                          {vcNotes[habit.id] ? (
-                            <Text style={[styles.habitVcNote, { color: RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted }]} numberOfLines={2}>
-                              {vcNotes[habit.id]}
-                            </Text>
+                          {/* Show note area if: has a voice note, currently editing, or habit is rated (allow manual note) */}
+                          {(vcNotes[habit.id] !== undefined || editingNoteId === habit.id || (ratings[habit.id] && ratings[habit.id] !== 'none')) ? (
+                            editingNoteId === habit.id ? (
+                              <TextInput
+                                autoFocus
+                                value={vcNotes[habit.id] ?? ''}
+                                onChangeText={(t) => setVcNotes(prev => ({ ...prev, [habit.id]: t }))}
+                                onBlur={() => setEditingNoteId(null)}
+                                onSubmitEditing={() => setEditingNoteId(null)}
+                                returnKeyType="done"
+                                multiline
+                                style={[styles.habitVcNoteInput, { color: RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted, borderColor: (RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted) + '55' }]}
+                                placeholder="Add a note..."
+                                placeholderTextColor={colors.muted + '88'}
+                              />
+                            ) : (
+                              <Pressable onPress={() => setEditingNoteId(habit.id)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}>
+                                <Text style={[styles.habitVcNote, { color: RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted, flex: 1 }]} numberOfLines={3}>
+                                  {vcNotes[habit.id] || 'Tap to add note...'}
+                                </Text>
+                                <IconSymbol name="pencil" size={10} color={RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted} style={{ marginTop: 2, opacity: 0.7 }} />
+                              </Pressable>
+                            )
                           ) : null}
                         </View>
                       </View>
@@ -1253,6 +1277,11 @@ const styles = StyleSheet.create({
 
   // Voice check-in styles
   habitVcNote: { fontSize: 11, fontWeight: '600', marginTop: 3, letterSpacing: 0.1 },
+  habitVcNoteInput: {
+    fontSize: 11, fontWeight: '600', marginTop: 3, letterSpacing: 0.1,
+    borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3,
+    minHeight: 28,
+  },
   vcStatusBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     borderRadius: 10, borderWidth: 1,

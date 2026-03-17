@@ -900,3 +900,8 @@
 - [x] Add emoji picker popup to reward icon square in Edit Habit form
 - [x] Add photo upload option to reward icon in Edit Habit form
 - [x] Save voice check-in notes to habit history (shows in habit detail Recent History)
+
+## Voice Check-in UX (Mar 17 2026 - session 4)
+
+- [x] Make voice check-in notes editable inline on check-in screen (tap to edit, color-coded)
+- [x] Reduce voice check-in chunk interval from 3s to 1s for near-real-time updates
