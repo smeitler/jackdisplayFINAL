@@ -920,3 +920,7 @@
 - [x] Word delta debounce: only fire LLM if transcript grew by 8+ words since last analysis
 - [x] Combine: trigger LLM on EITHER silence OR word delta (whichever comes first)
 - [x] Final analysis on stop: mandatory analyzeTranscript call on complete transcript before done state
+
+## Bug Fix (Mar 17 2026 - session 7)
+
+- [x] Fix voice check-in: analyzing shows but ratings/notes not updating after pipeline refactor
