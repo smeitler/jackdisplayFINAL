@@ -861,3 +861,4 @@
 - [x] Fix photo preview disappearing in journal list after saving
 - [x] Fix templates not applying content when selected from dropdown
 - [x] Show template prompts/questions as an overlay during recording so user can see what to talk about
+- [x] Home screen: make habit rating circles much larger

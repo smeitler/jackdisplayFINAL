@@ -210,8 +210,8 @@ function monthBeforeRange(): string {
 
 // ── Circular Progress Ring ───────────────────────────────────────────────────
 
-const RING_SIZE = 30;      // all rings same size
-const RING_SIZE_SM = 30;   // same as RING_SIZE
+const RING_SIZE = 60;      // current period ring — large
+const RING_SIZE_SM = 48;   // older period rings — medium
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
@@ -231,7 +231,7 @@ function CircleRing({
   const ringColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
   const textColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#9BA1A6';
 
-  const strokeWidth = size <= 24 ? 2.5 : 3.5;
+  const strokeWidth = size <= 24 ? 2.5 : size <= 48 ? 4 : 5;
   const r = (size - strokeWidth) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -240,12 +240,12 @@ function CircleRing({
   const gap = circumference - dash;
 
   const fractionText = goal > 0 ? `${done}/${goal}` : '\u2014';
-  const fractionFontSize = size <= 24 ? 7 : size <= 30 ? 9 : 10;
+  const fractionFontSize = size <= 24 ? 7 : size <= 48 ? 12 : 14;
 
   return (
     <View style={{ alignItems: 'center', gap: 3 }}>
       {periodLabel && (
-        <Text style={[styles.ringPeriodLabel, { color: '#9BA1A6', fontSize: size <= 24 ? 8 : 9 }]}>{periodLabel}</Text>
+        <Text style={[styles.ringPeriodLabel, { color: '#9BA1A6', fontSize: size <= 24 ? 8 : size <= 48 ? 10 : 11 }]}>{periodLabel}</Text>
       )}
       <View style={{ width: size, height: size, position: 'relative' }}>
         <Svg width={size} height={size}>
@@ -946,11 +946,11 @@ const styles = StyleSheet.create({
   // Habit row
   ringWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
   ringPeriodLabel: { fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  ringTriple: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  ringDivider: { width: StyleSheet.hairlineWidth, height: 44, borderRadius: 1 },
+  ringTriple: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  ringDivider: { width: StyleSheet.hairlineWidth, height: 60, borderRadius: 1 },
   habitRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 10,
+    paddingHorizontal: 14, paddingVertical: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },
