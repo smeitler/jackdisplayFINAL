@@ -886,3 +886,4 @@
 - [x] AI Coach: add Coach button to home screen (replaces + button)
 - [x] AI Coach: server endpoint that accepts user question + full habit/check-in/journal context and returns personalized coaching response
 - [x] AI Coach: chat screen with "How can I help you today?" prompt, message history, and AI responses
+- [x] Habit detail screen: month calendar on top, 6-month heatmap below; tapping a day opens data entry modal (rating + note)
