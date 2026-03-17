@@ -871,3 +871,19 @@
 - [x] Journal: show AI-filled habit notes visibly in the journal editor after recording
 - [x] Bug: applying a template after transcription wipes the transcribed text — template should append/merge, not replace
 - [x] Journal habit notes: AI should produce short punchy phrases (e.g. "2-hour mountain workout") not full sentences
+- [x] AI Coach on homepage: isolated server route reads habit data, chat UI for personalized tips/insights (no crossover with journal)
+- [x] Habit voice check-in: mic button in check-in footer, tap to record/stop, AI fills ratings + notes
+
+## Voice Check-in & AI Coach (Mar 17 2026)
+
+- [x] Voice check-in: mic button in check-in footer, tap to record/stop, AI fills habit ratings + notes
+- [x] Voice check-in: add dedicated analyzeCheckin server route (isolated from journal code)
+- [x] Voice check-in: show recording status bar with pulsing animation while recording
+- [x] Voice check-in: show "Analyzing..." state while AI processes
+- [x] Voice check-in: AI fills green/yellow/red ratings and short description notes per habit
+- [x] Voice check-in: habit description notes show inline below each habit name
+- [x] AI Coach: brain icon button in home screen header opens coach chat screen
+- [x] AI Coach: isolated server route reads habit history + check-in data for context
+- [x] AI Coach: chat UI with suggested prompts on first open
+- [x] AI Coach: personalized tips based on per-habit success rates and patterns
+- [x] Fix mimeType normalization: strip codec suffix (audio/webm;codecs=opus → audio/webm) before Whisper

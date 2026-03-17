@@ -639,6 +639,20 @@ export default function HomeScreen() {
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
+              {/* AI Coach button */}
+              <Pressable
+                onPress={() => router.push('/ai-coach')}
+                style={({ pressed }) => [{
+                  width: 40, height: 40, borderRadius: 12,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: colors.surface,
+                  borderWidth: 1, borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                  transform: [{ scale: pressed ? 0.95 : 1 }],
+                }]}
+              >
+                <IconSymbol name="brain" size={20} color={colors.primary} />
+              </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
                 onPress={handlePickProfilePic}

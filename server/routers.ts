@@ -704,6 +704,91 @@ Return ONLY valid JSON: {"journalEntries": [...]${habitJsonExample}, "gratitudeI
       }),
   }),
 
+  // ─── Voice Check-in ─────────────────────────────────────────────────────────────
+  voiceCheckin: router({
+    /**
+     * Accepts a base64-encoded audio blob, transcribes via Whisper,
+     * then uses the LLM to analyze the transcript against the user's habits
+     * and return a rating (green/yellow/red) + short note per habit.
+     * Completely isolated from the journal voice recording code.
+     */
+    analyze: publicProcedure
+      .input(z.object({
+        audioBase64: z.string(),
+        mimeType: z.string().default('audio/webm'),
+        habits: z.array(z.object({ id: z.string(), name: z.string() })),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+
+        // Transcribe audio
+        const transcription = await transcribeAudioBuffer(audioBuffer, input.mimeType, {
+          language: 'en',
+          prompt: 'Daily habit check-in, rating habits as crushed, okay, or missed',
+        });
+
+        if ('error' in transcription) {
+          const details = (transcription as any).details ?? '';
+          throw new Error(`Transcription failed: ${transcription.error}${details ? ` (${details})` : ''}`);
+        }
+
+        const transcript = transcription.text?.trim() ?? '';
+        if (!transcript) return { transcript: '', results: {} as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> };
+
+        // Build habit list for AI analysis
+        const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
+
+        const llmResp = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a habit coach analyzing a user's voice check-in. Given their speech and a list of habits, determine:
+1. Which habits they mentioned (directly or indirectly)
+2. How well they did on each mentioned habit: "green" (crushed it / did it / succeeded), "yellow" (partial / okay / tried), or "red" (missed / skipped / failed)
+3. A very short punchy note (3-8 words max) capturing the key fact
+
+Rating guidelines:
+- GREEN: "crushed my workout", "hit the gym", "8 glasses of water", "called mom", "meditated", "read for an hour", "got 8 hours sleep", "finished the project"
+- YELLOW: "kinda worked out", "only 20 min", "tried but cut it short", "half the goal", "not my best", "could be better"
+- RED: "skipped", "didn't do it", "missed", "forgot", "no time", "zero", "nothing"
+
+Be generous with inference — if they clearly describe doing something related to a habit, rate it.
+Only include habits that were clearly mentioned or strongly implied.
+
+Habits:
+${habitList}
+
+Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"red"|null, "note": "short note"}, ...}}`,
+            },
+            {
+              role: 'user',
+              content: `Transcript:\n${transcript}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        });
+
+        let results: Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> = {};
+        try {
+          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+          if (parsed.results && typeof parsed.results === 'object') {
+            results = Object.fromEntries(
+              Object.entries(parsed.results)
+                .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
+                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '').slice(0, 60) }])
+            ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
+          }
+        } catch {
+          // parsing failed — return empty
+        }
+
+        return { transcript, results };
+      }),
+  }),
+
   // ─── Morning Practice ────────────────────────────────────────────────────────
   morningPractice: router({
     /**
@@ -767,6 +852,92 @@ Return ONLY valid JSON: {"journalEntries": [...]${habitJsonExample}, "gratitudeI
           pausesBetweenChunks: script.pausesBetweenChunks,
           totalDurationMinutes: script.totalDurationMinutes,
         };
+      }),
+  }),
+
+  // ─── AI Coach
+  aiCoach: router({
+    /**
+     * Chat with the AI Coach. Accepts a user message and optional habit context.
+     * Returns a coaching response grounded in the user's habit data.
+     */
+    chat: publicProcedure
+      .input(z.object({
+        message: z.string().min(1).max(2000),
+        habitContext: z.object({
+          habits: z.array(z.object({
+            id: z.string(),
+            name: z.string(),
+            category: z.string().optional(),
+          })),
+          recentRatings: z.array(z.object({
+            date: z.string(),
+            ratings: z.record(z.string(), z.enum(['none', 'red', 'yellow', 'green'])),
+          })).optional(),
+          streak: z.number().optional(),
+          totalDaysLogged: z.number().optional(),
+        }).optional(),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+
+        // Build context string from habit data
+        let contextStr = '';
+        if (input.habitContext) {
+          const { habits, recentRatings, streak, totalDaysLogged } = input.habitContext;
+          if (habits.length > 0) {
+            contextStr += `\nUser's habits:\n${habits.map((h) => `- ${h.name}${h.category ? ` (${h.category})` : ''}`).join('\n')}`;
+          }
+          if (streak !== undefined) contextStr += `\nCurrent streak: ${streak} days`;
+          if (totalDaysLogged !== undefined) contextStr += `\nTotal days logged: ${totalDaysLogged}`;
+          if (recentRatings && recentRatings.length > 0) {
+            // Compute per-habit success rates from recent data
+            const habitScores: Record<string, { green: number; yellow: number; red: number; total: number }> = {};
+            for (const day of recentRatings) {
+              for (const [habitId, rating] of Object.entries(day.ratings)) {
+                if (!habitScores[habitId]) habitScores[habitId] = { green: 0, yellow: 0, red: 0, total: 0 };
+                if (rating === 'green') habitScores[habitId].green++;
+                else if (rating === 'yellow') habitScores[habitId].yellow++;
+                else if (rating === 'red') habitScores[habitId].red++;
+                habitScores[habitId].total++;
+              }
+            }
+            const habitMap = Object.fromEntries(habits.map((h) => [h.id, h.name]));
+            const scoreLines = Object.entries(habitScores)
+              .filter(([id]) => habitMap[id])
+              .map(([id, s]) => {
+                const pct = s.total > 0 ? Math.round((s.green / s.total) * 100) : 0;
+                return `- ${habitMap[id]}: ${pct}% green (${s.green}/${s.total} days, ${s.yellow} yellow, ${s.red} red)`;
+              });
+            if (scoreLines.length > 0) {
+              contextStr += `\n\nRecent performance (last ${recentRatings.length} days):\n${scoreLines.join('\n')}`;
+            }
+          }
+        }
+
+        const systemPrompt = `You are a supportive, insightful habit coach. Your role is to help the user build better habits, stay consistent, and achieve their goals. You are direct, warm, and practical — like a knowledgeable friend, not a corporate chatbot.
+
+Guidelines:
+- Give specific, actionable advice based on the user's actual habit data
+- Celebrate wins and streaks genuinely
+- Be honest about patterns you see in the data
+- Keep responses concise (2-4 paragraphs max) unless the user asks for detail
+- Use the user's habit names directly when referencing their data
+- Don't be preachy or lecture-y; be conversational${contextStr ? `\n\nUser context:${contextStr}` : ''}`;
+
+        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          { role: 'system', content: systemPrompt },
+          ...(input.history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          { role: 'user', content: input.message },
+        ];
+
+        const resp = await invokeLLM({ messages });
+        const reply = (resp.choices[0].message.content as string)?.trim() ?? '';
+        return { reply };
       }),
   }),
 

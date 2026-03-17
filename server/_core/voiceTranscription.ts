@@ -216,9 +216,12 @@ export async function transcribeAudioBuffer(
     if (sizeMB > 16) {
       return { error: 'Audio file exceeds maximum size limit', code: 'FILE_TOO_LARGE', details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB` };
     }
+    // Normalize mimeType: strip codec suffixes (e.g. "audio/webm;codecs=opus" → "audio/webm")
+    // Whisper API rejects MIME types with codec parameters
+    const normalizedMimeType = mimeType.split(';')[0].trim().toLowerCase();
     const formData = new FormData();
-    const filename = `audio.${getFileExtension(mimeType)}`;
-    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
+    const filename = `audio.${getFileExtension(normalizedMimeType)}`;
+    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: normalizedMimeType });
     formData.append('file', audioBlob, filename);
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'verbose_json');

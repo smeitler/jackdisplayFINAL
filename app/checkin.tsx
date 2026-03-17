@@ -21,6 +21,87 @@ import {
   yesterdayString as yesterdayStr,
 } from '@/lib/storage';
 
+// ─── Voice Check-in Web Recorder (isolated from journal code) ────────────────
+function useCheckinWebRecorder() {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const isRecordingRef = useRef(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+
+  const start = useCallback(async (): Promise<boolean> => {
+    setMicError(null);
+    chunksRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      let mimeType = '';
+      if (typeof MediaRecorder.isTypeSupported === 'function') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+        else if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+        else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+      }
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      return true;
+    } catch (e: any) {
+      const name = e?.name ?? '';
+      if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setMicError('No microphone found.');
+      } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMicError('Microphone access denied.');
+      } else {
+        setMicError('Microphone unavailable: ' + (e?.message ?? name));
+      }
+      return false;
+    }
+  }, []);
+
+  const stop = useCallback((): Promise<{ blob: Blob; mimeType: string } | null> => {
+    return new Promise((resolve) => {
+      const mr = mediaRecorderRef.current;
+      if (!mr || mr.state === 'inactive') {
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        resolve(null);
+        return;
+      }
+      const recordedMime = mr.mimeType || 'audio/webm';
+      mr.addEventListener('stop', () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(chunksRef.current, { type: recordedMime });
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        resolve(blob.size === 0 ? null : { blob, mimeType: recordedMime });
+      }, { once: true });
+      mr.stop();
+    });
+  }, []);
+
+  return { start, stop, isRecording, isRecordingRef, micError };
+}
+
+// Convert Blob to base64 string
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip data URI prefix: "data:audio/webm;base64," -> just the base64 part
+      const base64 = result.split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
 
@@ -82,6 +163,17 @@ export default function CheckInScreen() {
   const [practiceGenerating, setPracticeGenerating] = useState(false);
   const [practiceResult, setPracticeResult] = useState<{ chunkUrls: string[]; pausesBetweenChunks: number[]; totalDurationMinutes: number } | null>(null);
   const generatePracticeMutation = trpc.morningPractice.generate.useMutation();
+
+  // ── Voice Check-in state (isolated from journal) ──
+  const checkinRecorder = useCheckinWebRecorder();
+  const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'analyzing' | 'done' | 'error'>('idle');
+  const [vcTranscript, setVcTranscript] = useState('');
+  const [vcNotes, setVcNotes] = useState<Record<string, string>>({});
+  const [vcElapsed, setVcElapsed] = useState(0);
+  const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const vcPulseAnim = useRef(new Animated.Value(1)).current;
+  const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const analyzeCheckinMutation = trpc.voiceCheckin.analyze.useMutation();
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -376,6 +468,70 @@ export default function CheckInScreen() {
       }
     }
     router.back();
+  }
+
+  // ── Voice Check-in handlers ──
+  async function handleVoiceMicPress() {
+    if (vcStatus === 'recording') {
+      // Stop recording
+      if (vcTimerRef.current) { clearInterval(vcTimerRef.current); vcTimerRef.current = null; }
+      vcPulseLoopRef.current?.stop();
+      Animated.spring(vcPulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
+      setVcStatus('analyzing');
+      const result = await checkinRecorder.stop();
+      if (!result) { setVcStatus('idle'); return; }
+      try {
+        const audioBase64 = await blobToBase64(result.blob);
+        const habitList = activeHabits.map((h) => ({ id: h.id, name: h.name }));
+        const response = await analyzeCheckinMutation.mutateAsync({
+          audioBase64,
+          mimeType: result.mimeType,
+          habits: habitList,
+        });
+        setVcTranscript(response.transcript);
+        // Apply AI-filled ratings and notes
+        const newRatings: Record<string, Rating> = {};
+        const newNotes: Record<string, string> = {};
+        for (const [habitId, data] of Object.entries(response.results)) {
+          if (data.rating) newRatings[habitId] = data.rating as Rating;
+          if (data.note) newNotes[habitId] = data.note;
+        }
+        if (Object.keys(newRatings).length > 0) {
+          setRatings((prev) => ({ ...prev, ...newRatings }));
+          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        setVcNotes((prev) => ({ ...prev, ...newNotes }));
+        setVcStatus(Object.keys(newRatings).length > 0 ? 'done' : 'error');
+        // Auto-clear status after 4 seconds
+        setTimeout(() => setVcStatus('idle'), 4000);
+      } catch (e) {
+        console.warn('[VoiceCheckin] Error:', e);
+        setVcStatus('error');
+        setTimeout(() => setVcStatus('idle'), 3000);
+      }
+    } else if (vcStatus === 'idle' || vcStatus === 'done' || vcStatus === 'error') {
+      // Start recording
+      if (Platform.OS !== 'web') {
+        // On native, show a message that web is required
+        setVcStatus('error');
+        setTimeout(() => setVcStatus('idle'), 2000);
+        return;
+      }
+      const ok = await checkinRecorder.start();
+      if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
+      setVcElapsed(0);
+      setVcStatus('recording');
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      // Start elapsed timer
+      const startTime = Date.now();
+      vcTimerRef.current = setInterval(() => setVcElapsed(Math.round((Date.now() - startTime) / 1000)), 500);
+      // Start pulse animation
+      vcPulseLoopRef.current = Animated.loop(Animated.sequence([
+        Animated.timing(vcPulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
+        Animated.timing(vcPulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]));
+      vcPulseLoopRef.current.start();
+    }
   }
 
   // Allow submission when at least 1 habit has been rated (partial check-in is valid)
@@ -769,6 +925,11 @@ export default function CheckInScreen() {
                               <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
                             </View>
                           )}
+                          {vcNotes[habit.id] ? (
+                            <Text style={[styles.habitVcNote, { color: RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted }]} numberOfLines={2}>
+                              {vcNotes[habit.id]}
+                            </Text>
+                          ) : null}
                         </View>
                       </View>
 
@@ -819,6 +980,33 @@ export default function CheckInScreen() {
           </View>
         )}
 
+        {/* ── Voice Check-in status bar ── */}
+        {vcStatus === 'recording' && (
+          <View style={[styles.vcStatusBar, { backgroundColor: '#EF444410', borderColor: '#EF444430' }]}>
+            <Animated.View style={[styles.vcDot, { backgroundColor: '#EF4444', transform: [{ scale: vcPulseAnim }] }]} />
+            <Text style={[styles.vcStatusText, { color: '#EF4444' }]}>Recording… {formatMMSS(vcElapsed)}</Text>
+            <Text style={[styles.vcStatusHint, { color: '#EF4444' }]}>Tap mic to stop</Text>
+          </View>
+        )}
+        {vcStatus === 'analyzing' && (
+          <View style={[styles.vcStatusBar, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
+            <Text style={[styles.vcStatusText, { color: colors.primary }]}>Analyzing your check-in…</Text>
+          </View>
+        )}
+        {vcStatus === 'done' && vcTranscript ? (
+          <View style={[styles.vcStatusBar, { backgroundColor: '#22C55E10', borderColor: '#22C55E30' }]}>
+            <IconSymbol name="checkmark.circle.fill" size={14} color="#22C55E" />
+            <Text style={[styles.vcStatusText, { color: '#22C55E', flex: 1 }]} numberOfLines={2}>{vcTranscript}</Text>
+          </View>
+        ) : null}
+        {vcStatus === 'error' && (
+          <View style={[styles.vcStatusBar, { backgroundColor: '#EF444410', borderColor: '#EF444430' }]}>
+            <Text style={[styles.vcStatusText, { color: '#EF4444' }]}>
+              {checkinRecorder.micError ?? 'Could not analyze. Try again.'}
+            </Text>
+          </View>
+        )}
+
         {/* Snooze button — only when opened from alarm and lockout is off */}
         {fromAlarm && !isPreview && !alarm.requireCheckin && (
           <Pressable
@@ -835,25 +1023,53 @@ export default function CheckInScreen() {
           </Pressable>
         )}
 
-        <Pressable
-          onPress={anyRated ? handleSubmit : undefined}
-          style={({ pressed }) => [
-            styles.saveBtn,
-            {
-              backgroundColor: anyRated ? colors.primary : colors.border,
-              transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
-              opacity: anyRated ? 1 : 0.55,
-            },
-          ]}
-        >
-          <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
-            {allRated
-              ? 'Save Review'
-              : anyRated
-              ? `Save Partial Review (${ratedEntries.length}/${totalActive})`
-              : `Rate at least one habit to save`}
-          </Text>
-        </Pressable>
+        {/* Mic + Save row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {/* Voice check-in mic button */}
+          {Platform.OS === 'web' && (
+            <Pressable
+              onPress={vcStatus !== 'analyzing' ? handleVoiceMicPress : undefined}
+              style={({ pressed }) => [
+                styles.vcMicBtn,
+                {
+                  backgroundColor: vcStatus === 'recording' ? '#EF4444' : colors.surface,
+                  borderColor: vcStatus === 'recording' ? '#EF4444' : colors.border,
+                  opacity: vcStatus === 'analyzing' ? 0.5 : pressed ? 0.8 : 1,
+                  transform: [{ scale: pressed ? 0.95 : 1 }],
+                },
+              ]}
+            >
+              <Animated.View style={{ transform: [{ scale: vcStatus === 'recording' ? vcPulseAnim : 1 }] }}>
+                <IconSymbol
+                  name={vcStatus === 'recording' ? 'stop.fill' : 'mic.fill'}
+                  size={20}
+                  color={vcStatus === 'recording' ? '#fff' : colors.muted}
+                />
+              </Animated.View>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={anyRated ? handleSubmit : undefined}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              { flex: 1 },
+              {
+                backgroundColor: anyRated ? colors.primary : colors.border,
+                transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
+                opacity: anyRated ? 1 : 0.55,
+              },
+            ]}
+          >
+            <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
+              {allRated
+                ? 'Save Review'
+                : anyRated
+                ? `Save Partial Review (${ratedEntries.length}/${totalActive})`
+                : `Rate at least one habit to save`}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </ScreenContainer>
   );
@@ -966,6 +1182,21 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+
+  // Voice check-in styles
+  habitVcNote: { fontSize: 11, fontWeight: '600', marginTop: 3, letterSpacing: 0.1 },
+  vcStatusBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  vcDot: { width: 8, height: 8, borderRadius: 4 },
+  vcStatusText: { fontSize: 13, fontWeight: '600', flex: 1 },
+  vcStatusHint: { fontSize: 11, opacity: 0.7 },
+  vcMicBtn: {
+    width: 52, height: 52, borderRadius: 14, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 },
   successTitle: { fontSize: 26, fontWeight: '700' },
