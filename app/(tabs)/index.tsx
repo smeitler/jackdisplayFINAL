@@ -714,23 +714,29 @@ export default function HomeScreen() {
               />
             </Pressable>
           ) : (
-            <View style={[styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => handleCheckIn(yesterday)}
+              style={({ pressed }) => [styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
+            >
               <View style={styles.allCaughtUpLeft}>
                 <View style={[styles.allCaughtUpIconWrap, { backgroundColor: '#22C55E20' }]}>
                   <IconSymbol name="checkmark.circle.fill" size={22} color="#22C55E" />
                 </View>
                 <View>
                   <Text style={[styles.allCaughtUpTitle, { color: colors.foreground }]}>All caught up</Text>
-                  <Text style={[styles.allCaughtUpSub, { color: colors.muted }]}>You're on top of your habits</Text>
+                  <Text style={[styles.allCaughtUpSub, { color: colors.muted }]}>Tap to edit yesterday's check-in</Text>
                 </View>
               </View>
-              {streak > 0 && (
-                <View style={styles.allCaughtUpStreak}>
-                  <IconSymbol name="flame.fill" size={14} color="#FF6B35" />
-                  <Text style={styles.allCaughtUpStreakNum}>{streak}</Text>
-                </View>
-              )}
-            </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {streak > 0 && (
+                  <View style={styles.allCaughtUpStreak}>
+                    <IconSymbol name="flame.fill" size={14} color="#FF6B35" />
+                    <Text style={styles.allCaughtUpStreakNum}>{streak}</Text>
+                  </View>
+                )}
+                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              </View>
+            </Pressable>
           )}
 
           {/* ── Alarm strip ── */}

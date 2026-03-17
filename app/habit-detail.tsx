@@ -463,6 +463,9 @@ export default function HabitDetailScreen() {
               checkIns={checkIns}
               containerWidth={cardWidth > 0 ? cardWidth : undefined}
               selectedHabitId={habit?.id}
+              onDayPress={(date) => {
+                router.push(`/checkin?date=${date}` as never);
+              }}
             />
           </View>
 

@@ -21,18 +21,28 @@ import {
   yesterdayString as yesterdayStr,
 } from '@/lib/storage';
 
-// ─── Voice Check-in Web Recorder (isolated from journal code) ────────────────
-function useCheckinWebRecorder() {
+// ─── Voice Check-in Chunked Streaming Recorder (isolated from journal code) ────
+// Sends audio to Whisper every CHUNK_INTERVAL_MS using cumulative blob approach.
+// Each chunk = all audio so far, giving Whisper full context for better accuracy.
+const CHUNK_INTERVAL_MS = 3000;
+
+type ChunkCallback = (blob: Blob, mimeType: string) => void;
+
+function useCheckinWebRecorder(onChunk: ChunkCallback) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const allChunksRef = useRef<Blob[]>([]); // cumulative — all audio since start
+  const mimeTypeRef = useRef<string>('audio/webm');
+  const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const onChunkRef = useRef(onChunk);
+  useEffect(() => { onChunkRef.current = onChunk; });
 
   const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
-    chunksRef.current = [];
+    allChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -42,12 +52,27 @@ function useCheckinWebRecorder() {
         else if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
         else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
       }
+      mimeTypeRef.current = mimeType || 'audio/webm';
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.start(100);
+      // Collect all data chunks into cumulative array
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) allChunksRef.current.push(e.data);
+      };
+      mr.start(100); // collect data every 100ms
       mediaRecorderRef.current = mr;
       isRecordingRef.current = true;
       setIsRecording(true);
+
+      // Every CHUNK_INTERVAL_MS, snapshot the cumulative blob and send to AI
+      chunkIntervalRef.current = setInterval(() => {
+        if (!isRecordingRef.current || allChunksRef.current.length === 0) return;
+        // Build cumulative blob from all chunks so far
+        const cumulativeBlob = new Blob([...allChunksRef.current], { type: mimeTypeRef.current });
+        if (cumulativeBlob.size > 1000) { // skip tiny/empty blobs
+          onChunkRef.current(cumulativeBlob, mimeTypeRef.current);
+        }
+      }, CHUNK_INTERVAL_MS);
+
       return true;
     } catch (e: any) {
       const name = e?.name ?? '';
@@ -63,6 +88,8 @@ function useCheckinWebRecorder() {
   }, []);
 
   const stop = useCallback((): Promise<{ blob: Blob; mimeType: string } | null> => {
+    // Stop the chunk interval
+    if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null; }
     return new Promise((resolve) => {
       const mr = mediaRecorderRef.current;
       if (!mr || mr.state === 'inactive') {
@@ -75,7 +102,7 @@ function useCheckinWebRecorder() {
       mr.addEventListener('stop', () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        const blob = new Blob(chunksRef.current, { type: recordedMime });
+        const blob = new Blob(allChunksRef.current, { type: recordedMime });
         isRecordingRef.current = false;
         setIsRecording(false);
         resolve(blob.size === 0 ? null : { blob, mimeType: recordedMime });
@@ -165,15 +192,55 @@ export default function CheckInScreen() {
   const generatePracticeMutation = trpc.morningPractice.generate.useMutation();
 
   // ── Voice Check-in state (isolated from journal) ──
-  const checkinRecorder = useCheckinWebRecorder();
-  const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'analyzing' | 'done' | 'error'>('idle');
-  const [vcTranscript, setVcTranscript] = useState('');
+  const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'done' | 'error'>('idle');
+  const [vcTranscript, setVcTranscript] = useState(''); // cumulative transcript shown live
   const [vcNotes, setVcNotes] = useState<Record<string, string>>({});
   const [vcElapsed, setVcElapsed] = useState(0);
+  const [vcProcessing, setVcProcessing] = useState(false); // true while a chunk is being analyzed
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const analyzeCheckinMutation = trpc.voiceCheckin.analyze.useMutation();
+  // Refs for use inside the onChunk callback (avoids stale closures)
+  const activeHabitsRef = useRef(activeHabits);
+  useEffect(() => { activeHabitsRef.current = activeHabits; }, [activeHabits]);
+  const setRatingsRef = useRef(setRatings);
+  useEffect(() => { setRatingsRef.current = setRatings; }, [setRatings]);
+
+  // Called every CHUNK_INTERVAL_MS with cumulative audio blob
+  const handleVcChunk = useCallback(async (blob: Blob, mimeType: string) => {
+    setVcProcessing(true);
+    try {
+      const audioBase64 = await blobToBase64(blob);
+      const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
+      const response = await analyzeCheckinMutation.mutateAsync({
+        audioBase64,
+        mimeType,
+        habits: habitList,
+      });
+      // Update transcript (use latest cumulative transcript from server)
+      if (response.transcript) setVcTranscript(response.transcript);
+      // Merge AI-filled ratings and notes (later chunks override earlier ones)
+      const newRatings: Record<string, Rating> = {};
+      const newNotes: Record<string, string> = {};
+      for (const [habitId, data] of Object.entries(response.results)) {
+        if (data.rating) newRatings[habitId] = data.rating as Rating;
+        if (data.note) newNotes[habitId] = data.note;
+      }
+      if (Object.keys(newRatings).length > 0) {
+        setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
+      }
+      if (Object.keys(newNotes).length > 0) {
+        setVcNotes((prev) => ({ ...prev, ...newNotes }));
+      }
+    } catch (e) {
+      console.warn('[VoiceCheckin] Chunk error:', e);
+    } finally {
+      setVcProcessing(false);
+    }
+  }, [analyzeCheckinMutation]);
+
+  const checkinRecorder = useCheckinWebRecorder(handleVcChunk);
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -473,50 +540,24 @@ export default function CheckInScreen() {
   // ── Voice Check-in handlers ──
   async function handleVoiceMicPress() {
     if (vcStatus === 'recording') {
-      // Stop recording
+      // Stop recording — chunks are already being processed in background
       if (vcTimerRef.current) { clearInterval(vcTimerRef.current); vcTimerRef.current = null; }
       vcPulseLoopRef.current?.stop();
       Animated.spring(vcPulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
-      setVcStatus('analyzing');
-      const result = await checkinRecorder.stop();
-      if (!result) { setVcStatus('idle'); return; }
-      try {
-        const audioBase64 = await blobToBase64(result.blob);
-        const habitList = activeHabits.map((h) => ({ id: h.id, name: h.name }));
-        const response = await analyzeCheckinMutation.mutateAsync({
-          audioBase64,
-          mimeType: result.mimeType,
-          habits: habitList,
-        });
-        setVcTranscript(response.transcript);
-        // Apply AI-filled ratings and notes
-        const newRatings: Record<string, Rating> = {};
-        const newNotes: Record<string, string> = {};
-        for (const [habitId, data] of Object.entries(response.results)) {
-          if (data.rating) newRatings[habitId] = data.rating as Rating;
-          if (data.note) newNotes[habitId] = data.note;
-        }
-        if (Object.keys(newRatings).length > 0) {
-          setRatings((prev) => ({ ...prev, ...newRatings }));
-          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-        setVcNotes((prev) => ({ ...prev, ...newNotes }));
-        setVcStatus(Object.keys(newRatings).length > 0 ? 'done' : 'error');
-        // Auto-clear status after 4 seconds
-        setTimeout(() => setVcStatus('idle'), 4000);
-      } catch (e) {
-        console.warn('[VoiceCheckin] Error:', e);
-        setVcStatus('error');
-        setTimeout(() => setVcStatus('idle'), 3000);
-      }
+      await checkinRecorder.stop();
+      // Show done state (ratings already updated live during recording)
+      setVcStatus('done');
+      // Auto-clear after 5 seconds
+      setTimeout(() => setVcStatus('idle'), 5000);
     } else if (vcStatus === 'idle' || vcStatus === 'done' || vcStatus === 'error') {
       // Start recording
       if (Platform.OS !== 'web') {
-        // On native, show a message that web is required
         setVcStatus('error');
         setTimeout(() => setVcStatus('idle'), 2000);
         return;
       }
+      // Reset transcript and notes for new session
+      setVcTranscript('');
       const ok = await checkinRecorder.start();
       if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
       setVcElapsed(0);
@@ -982,15 +1023,22 @@ export default function CheckInScreen() {
 
         {/* ── Voice Check-in status bar ── */}
         {vcStatus === 'recording' && (
-          <View style={[styles.vcStatusBar, { backgroundColor: '#EF444410', borderColor: '#EF444430' }]}>
-            <Animated.View style={[styles.vcDot, { backgroundColor: '#EF4444', transform: [{ scale: vcPulseAnim }] }]} />
-            <Text style={[styles.vcStatusText, { color: '#EF4444' }]}>Recording… {formatMMSS(vcElapsed)}</Text>
-            <Text style={[styles.vcStatusHint, { color: '#EF4444' }]}>Tap mic to stop</Text>
-          </View>
-        )}
-        {vcStatus === 'analyzing' && (
-          <View style={[styles.vcStatusBar, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
-            <Text style={[styles.vcStatusText, { color: colors.primary }]}>Analyzing your check-in…</Text>
+          <View style={[styles.vcStatusBar, { backgroundColor: '#EF444410', borderColor: '#EF444430', flexDirection: 'column', gap: 4 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Animated.View style={[styles.vcDot, { backgroundColor: '#EF4444', transform: [{ scale: vcPulseAnim }] }]} />
+              <Text style={[styles.vcStatusText, { color: '#EF4444', flex: 1 }]}>Recording… {formatMMSS(vcElapsed)}</Text>
+              {vcProcessing && (
+                <Text style={[styles.vcStatusHint, { color: colors.primary }]}>● Analyzing</Text>
+              )}
+              {!vcProcessing && (
+                <Text style={[styles.vcStatusHint, { color: '#EF4444' }]}>Tap ■ to stop</Text>
+              )}
+            </View>
+            {vcTranscript ? (
+              <Text style={[styles.vcStatusHint, { color: '#EF4444', opacity: 0.8, paddingLeft: 16 }]} numberOfLines={2}>
+                {vcTranscript}
+              </Text>
+            ) : null}
           </View>
         )}
         {vcStatus === 'done' && vcTranscript ? (
@@ -1028,13 +1076,13 @@ export default function CheckInScreen() {
           {/* Voice check-in mic button */}
           {Platform.OS === 'web' && (
             <Pressable
-              onPress={vcStatus !== 'analyzing' ? handleVoiceMicPress : undefined}
+              onPress={handleVoiceMicPress}
               style={({ pressed }) => [
                 styles.vcMicBtn,
                 {
                   backgroundColor: vcStatus === 'recording' ? '#EF4444' : colors.surface,
                   borderColor: vcStatus === 'recording' ? '#EF4444' : colors.border,
-                  opacity: vcStatus === 'analyzing' ? 0.5 : pressed ? 0.8 : 1,
+                  opacity: pressed ? 0.8 : 1,
                   transform: [{ scale: pressed ? 0.95 : 1 }],
                 },
               ]}

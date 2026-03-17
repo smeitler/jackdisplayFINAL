@@ -887,3 +887,9 @@
 - [x] AI Coach: chat UI with suggested prompts on first open
 - [x] AI Coach: personalized tips based on per-habit success rates and patterns
 - [x] Fix mimeType normalization: strip codec suffix (audio/webm;codecs=opus → audio/webm) before Whisper
+
+## Bug Fixes (Mar 17 2026 - session 2)
+
+- [x] Fix calendar day tap not working on habit detail screen (tapping a date cell should open check-in for that date)
+- [x] Fix "All caught up" banner on home screen — should be tappable to open check-in for today or yesterday
+- [x] Real-time chunked voice check-in: 3-second chunks sent to Whisper+AI, ratings update live as you speak (habits only, no journal code)
