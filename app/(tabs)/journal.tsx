@@ -955,11 +955,9 @@ function CalendarTab({ entries, onDayPress, colors }: {
     return map;
   }, [entries]);
 
-  // Cell size: 7 columns, fill full width with 2px gap
-  const GAP = 2;
-  const PADDING = 8;
-  const totalGaps = 6 * GAP;
-  const cellSize = Math.floor((SCREEN_WIDTH - PADDING * 2 - totalGaps) / 7);
+  // Cell size: edge-to-edge, 1px gap, perfectly square
+  const GAP = 1;
+  const cellSize = Math.floor((SCREEN_WIDTH - 6 * GAP) / 7);
 
   const scrollRef = useRef<ScrollView>(null);
   const [didScroll, setDidScroll] = useState(false);
@@ -979,13 +977,13 @@ function CalendarTab({ entries, onDayPress, colors }: {
     <ScrollView
       ref={scrollRef}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: PADDING, paddingBottom: 20 }}
+      contentContainerStyle={{ paddingBottom: 80 }}
     >
-      {/* Day-of-week headers (sticky-looking) */}
-      <View style={{ flexDirection: "row", gap: GAP, marginBottom: 8, paddingVertical: 6 }}>
+      {/* Day-of-week headers */}
+      <View style={{ flexDirection: "row", marginBottom: 4, paddingVertical: 8, backgroundColor: colors.background }}>
         {DAY_HEADERS.map((d, i) => (
-          <View key={i} style={{ width: cellSize, alignItems: "center" }}>
-            <Text style={{ fontSize: 11, fontWeight: "600", color: colors.muted }}>{d}</Text>
+          <View key={i} style={{ width: cellSize, alignItems: "center", marginRight: i < 6 ? GAP : 0 }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: colors.muted }}>{d}</Text>
           </View>
         ))}
       </View>
@@ -994,101 +992,113 @@ function CalendarTab({ entries, onDayPress, colors }: {
         const daysInMonth = getMonthDays(year, month);
         const firstDay = getFirstDayOfWeek(year, month);
 
+        // Build rows of 7 cells
+        const cells: (number | null)[] = [];
+        for (let i = 0; i < firstDay; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        // Pad last row to 7
+        while (cells.length % 7 !== 0) cells.push(null);
+        const rows: (number | null)[][] = [];
+        for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+
         return (
-          <View key={`${year}-${month}`} style={{ marginBottom: 24 }}>
+          <View key={`${year}-${month}`} style={{ marginBottom: 16 }}>
             {/* Month label */}
             <Text style={{
-              fontSize: 17, fontWeight: "700", color: colors.foreground,
-              marginBottom: 8, paddingLeft: 2,
+              fontSize: 20, fontWeight: "800", color: colors.foreground,
+              marginBottom: 6, marginTop: 8, paddingHorizontal: 12,
             }}>
               {MONTH_NAMES[month - 1]} {year}
             </Text>
 
-            {/* Grid */}
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-              {/* Empty cells for offset */}
-              {Array.from({ length: firstDay }).map((_, i) => (
-                <View key={`empty-${i}`} style={{ width: cellSize, height: cellSize }} />
-              ))}
-              {/* Day cells */}
-              {Array.from({ length: daysInMonth }).map((_, i) => {
-                const day = i + 1;
-                const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                const dayEntries = entryMap.get(dateStr) || [];
-                const isToday = dateStr === todayStr;
-                const hasEntries = dayEntries.length > 0;
+            {/* Week rows */}
+            {rows.map((row, rowIdx) => (
+              <View key={rowIdx} style={{ flexDirection: "row", marginBottom: GAP }}>
+                {row.map((day, colIdx) => {
+                  if (day === null) {
+                    return <View key={`e-${colIdx}`} style={{ width: cellSize, height: cellSize, marginRight: colIdx < 6 ? GAP : 0 }} />;
+                  }
 
-                // Find first photo attachment across all entries for this day
-                let photoUri: string | null = null;
-                for (const de of dayEntries) {
-                  const photo = de.attachments.find((a) => a.type === "photo");
-                  if (photo) { photoUri = photo.uri; break; }
-                }
+                  const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  const dayEntries = entryMap.get(dateStr) || [];
+                  const isToday = dateStr === todayStr;
+                  const hasEntries = dayEntries.length > 0;
 
-                // Text preview only if no photo
-                const textPreview = !photoUri && hasEntries
-                  ? (dayEntries[0]?.body?.slice(0, 40) || "")
-                  : "";
+                  // Find first photo
+                  let photoUri: string | null = null;
+                  for (const de of dayEntries) {
+                    const photo = de.attachments.find((a) => a.type === "photo");
+                    if (photo) { photoUri = photo.uri; break; }
+                  }
 
-                return (
-                  <Pressable
-                    key={day}
-                    onPress={() => onDayPress(dateStr)}
-                    style={({ pressed }) => [{
-                      width: cellSize, height: cellSize,
-                      borderRadius: 4, overflow: "hidden",
-                      backgroundColor: isToday ? colors.primary + "18" : hasEntries ? colors.surface : colors.background,
-                      borderWidth: isToday ? 2 : 0.5,
-                      borderColor: isToday ? colors.primary : hasEntries ? colors.border : colors.border + "60",
-                      opacity: pressed ? 0.7 : 1,
-                    }]}
-                  >
-                    {/* Photo background */}
-                    {photoUri && (
-                      <Image
-                        source={{ uri: photoUri }}
-                        style={StyleSheet.absoluteFill}
-                        resizeMode="cover"
-                      />
-                    )}
-                    {/* Overlay for readability when photo exists */}
-                    {photoUri && (
-                      <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.2)" }]} />
-                    )}
+                  // Text preview only when no photo
+                  const textPreview = !photoUri && hasEntries
+                    ? (dayEntries[0]?.body?.slice(0, 60) || "")
+                    : "";
 
-                    {/* Day number */}
-                    <View style={{ padding: 3, flex: 1 }}>
-                      <Text style={{
-                        fontSize: 12, fontWeight: isToday ? "800" : hasEntries ? "700" : "400",
-                        color: photoUri ? "#fff" : isToday ? colors.primary : colors.foreground,
-                        textShadowColor: photoUri ? "rgba(0,0,0,0.6)" : "transparent",
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: photoUri ? 2 : 0,
-                      }}>
-                        {day}
-                      </Text>
-
-                      {/* Text preview (only when no photo) */}
-                      {textPreview ? (
-                        <Text style={{
-                          fontSize: 7, color: colors.muted, lineHeight: 9, marginTop: 1,
-                        }} numberOfLines={3}>
-                          {textPreview}
-                        </Text>
-                      ) : null}
-
-                      {/* Entry dot indicator (when photo exists, show at bottom) */}
-                      {hasEntries && !photoUri && (
-                        <View style={{
-                          position: "absolute", bottom: 3, right: 3,
-                          width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary,
-                        }} />
+                  return (
+                    <Pressable
+                      key={day}
+                      onPress={() => onDayPress(dateStr)}
+                      style={({ pressed }) => [{
+                        width: cellSize, height: cellSize,
+                        marginRight: colIdx < 6 ? GAP : 0,
+                        overflow: "hidden",
+                        backgroundColor: isToday ? colors.primary + "15" : hasEntries ? colors.surface : colors.background,
+                        borderWidth: isToday ? 2 : hasEntries ? 0.5 : 0,
+                        borderColor: isToday ? colors.primary : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      {/* Photo fills entire cell */}
+                      {photoUri && (
+                        <Image
+                          source={{ uri: photoUri }}
+                          style={StyleSheet.absoluteFill}
+                          resizeMode="cover"
+                        />
                       )}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+                      {/* Dark overlay for text readability on photos */}
+                      {photoUri && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.15)" }]} />
+                      )}
+
+                      {/* Content layer */}
+                      <View style={{ flex: 1, padding: 4, justifyContent: "space-between" }}>
+                        {/* Day number — top left */}
+                        <Text style={{
+                          fontSize: 13, fontWeight: isToday ? "900" : hasEntries ? "700" : "500",
+                          color: photoUri ? "#fff" : isToday ? colors.primary : colors.foreground,
+                          textShadowColor: photoUri ? "rgba(0,0,0,0.7)" : "transparent",
+                          textShadowOffset: { width: 0, height: 1 },
+                          textShadowRadius: photoUri ? 3 : 0,
+                        }}>
+                          {day}
+                        </Text>
+
+                        {/* Text preview — fills remaining space (no photo) */}
+                        {textPreview ? (
+                          <Text style={{
+                            fontSize: 8, lineHeight: 10, color: colors.muted,
+                            marginTop: 2,
+                          }} numberOfLines={4}>
+                            {textPreview}
+                          </Text>
+                        ) : null}
+
+                        {/* Dot indicator for entries without photo */}
+                        {hasEntries && !photoUri && !textPreview && (
+                          <View style={{
+                            width: 6, height: 6, borderRadius: 3,
+                            backgroundColor: colors.primary, alignSelf: "center",
+                          }} />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         );
       })}
