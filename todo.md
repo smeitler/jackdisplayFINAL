@@ -852,3 +852,4 @@
 - [x] Any additional visual improvements to make the journal look cleaner and more professional
 
 - [x] Calendar: make day cells much larger full squares so photos and notes are clearly visible
+- [x] Calendar: rebuild as true wall-calendar grid — large equal squares per day filling full screen width, like a physical monthly calendar
