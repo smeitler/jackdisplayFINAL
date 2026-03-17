@@ -931,3 +931,9 @@
 ## Bug Fix (Mar 17 2026 - session 8)
 
 - [x] Fix day notes bleeding across all dates: reset vcNotes on date navigation + load existing notes on mount
+
+## Voice Check-in Transcription Fix (Mar 17 2026 - session 9)
+
+- [x] Redesign to sliding window: always send last 5s of audio to Whisper for reliable transcription
+- [x] Deduplicate transcript: detect overlapping words between consecutive Whisper results
+- [x] Keep LLM analysis on accumulated text (no change to analysis path)

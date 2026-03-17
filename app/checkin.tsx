@@ -23,18 +23,21 @@ import {
   saveDayNotes,
 } from '@/lib/storage';
 
-// ─── Voice Check-in Delta Streaming Recorder (isolated from journal code) ────
+// ─── Voice Check-in Sliding Window Recorder (isolated from journal code) ────
 // Architecture:
-//   1. delta-only chunks → Whisper (fast) → transcript appended immediately
-//   2. Smart LLM debounce: fire analyzeTranscript on EITHER:
+//   1. Sliding window: every 2s, send the last 5s of audio to Whisper
+//      → Whisper always gets enough context to transcribe reliably
+//   2. Deduplication: remove words already in the accumulated transcript
+//      (overlap detection using longest common suffix/prefix match)
+//   3. Smart LLM debounce: fire analyzeTranscript on EITHER:
 //      a) 1.5s of silence detected via Web Audio AnalyserNode RMS measurement
 //      b) transcript grew by 3+ words since last LLM call
-//   3. Mandatory final analysis on stop (complete transcript, awaited)
-const CHUNK_INTERVAL_MS = 2000;        // 2-second delta chunks for Whisper (1s was too short)
+//   4. Mandatory final analysis on stop (complete transcript, awaited)
+const CHUNK_INTERVAL_MS = 2000;        // send sliding window every 2s
+const WINDOW_CHUNKS = 3;               // keep last N chunks = ~5-6s of audio for Whisper
 const SILENCE_THRESHOLD_RMS = 0.02;    // RMS below this = silence
 const SILENCE_TRIGGER_MS = 1200;       // 1.2s of continuous silence → trigger LLM
 const WORD_DELTA_TRIGGER = 3;          // 3+ new words since last LLM → trigger LLM
-const MAX_ROLLING_CHUNKS = 5;          // keep last N chunks as rolling window fallback
 
 type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
 type SilenceCallback = () => void;
@@ -126,18 +129,20 @@ function useCheckinWebRecorder(
         // Web Audio not available — silence detection disabled, word-delta debounce still works
       }
 
-      // ── Delta chunk interval (Whisper feed) ─────────────────────────────
+      // ── Sliding window interval (Whisper feed) ──────────────────────────────────────
       chunkIntervalRef.current = setInterval(() => {
         if (!isRecordingRef.current || pendingChunksRef.current.length === 0) return;
-        const deltaChunks = pendingChunksRef.current.splice(0);
-        const deltaBlob = new Blob(deltaChunks, { type: mimeTypeRef.current });
-        if (deltaBlob.size < 500) return; // too small — skip
-        // Push to rolling window (keep last MAX_ROLLING_CHUNKS)
-        rollingWindowRef.current.push(deltaBlob);
-        if (rollingWindowRef.current.length > MAX_ROLLING_CHUNKS) {
+        // Drain pending chunks into rolling window
+        const newChunks = pendingChunksRef.current.splice(0);
+        const newBlob = new Blob(newChunks, { type: mimeTypeRef.current });
+        if (newBlob.size < 200) return; // too small — skip
+        rollingWindowRef.current.push(newBlob);
+        if (rollingWindowRef.current.length > WINDOW_CHUNKS) {
           rollingWindowRef.current.shift();
         }
-        onDeltaChunkRef.current(deltaBlob, mimeTypeRef.current);
+        // Always send the full sliding window to Whisper for reliable context
+        const windowBlob = new Blob(rollingWindowRef.current, { type: mimeTypeRef.current });
+        onDeltaChunkRef.current(windowBlob, mimeTypeRef.current);
       }, CHUNK_INTERVAL_MS);
 
       return true;
@@ -196,6 +201,40 @@ function blobToBase64(blob: Blob): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+/**
+ * Sliding window deduplication.
+ * Whisper returns the full transcript of the last N seconds of audio.
+ * We need to find what's NEW compared to what we already accumulated.
+ *
+ * Strategy: find the longest suffix of `accumulated` that appears as a
+ * prefix of `windowText`, then return everything after that overlap.
+ * Falls back to returning the full windowText if no overlap is found
+ * (e.g. first window, or Whisper rephrased things).
+ */
+function deduplicateTranscript(accumulated: string, windowText: string): string {
+  if (!accumulated.trim()) return windowText; // nothing accumulated yet — return all
+
+  const accWords = accumulated.trim().split(/\s+/);
+  const winWords = windowText.trim().split(/\s+/);
+
+  // Try to find the longest suffix of accumulated that is a prefix of windowText
+  // Search from longest possible overlap down to 1 word
+  const maxOverlap = Math.min(accWords.length, winWords.length);
+  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
+    const accSuffix = accWords.slice(accWords.length - overlap).join(' ').toLowerCase();
+    const winPrefix = winWords.slice(0, overlap).join(' ').toLowerCase();
+    if (accSuffix === winPrefix) {
+      // Found overlap — return the part of windowText after the overlap
+      const newWords = winWords.slice(overlap);
+      return newWords.join(' ');
+    }
+  }
+
+  // No overlap found — Whisper may have transcribed differently or this is fresh audio.
+  // Return the full windowText as new content (may cause slight duplication but avoids missing words).
+  return windowText;
 }
 
 type ActiveRating = 'red' | 'yellow' | 'green';
@@ -337,44 +376,29 @@ export default function CheckInScreen() {
     fireAnalyzeTranscript(t);
   }, [fireAnalyzeTranscript]);
 
-  // Called every CHUNK_INTERVAL_MS with a DELTA blob (only new audio since last tick)
+  // Called every CHUNK_INTERVAL_MS with a SLIDING WINDOW blob (last ~5s of audio)
+  // Whisper returns the full window transcript; we deduplicate against what we already have.
   // Uses refs only — stable callback, never stale
-  const handleVcDeltaChunk = useCallback(async (deltaBlob: Blob, mimeType: string) => {
+  const handleVcDeltaChunk = useCallback(async (windowBlob: Blob, mimeType: string) => {
     if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick
     vcWhisperInFlightRef.current = true;
     setVcProcessing(true);
     try {
-      // STEP 1: Whisper — transcribe delta only (fast, small input)
-      const audioBase64 = await blobToBase64(deltaBlob);
+      // STEP 1: Whisper — transcribe the full sliding window (gives Whisper enough context)
+      const audioBase64 = await blobToBase64(windowBlob);
       const result = await transcribeChunkMutationRef.current.mutateAsync({
         audioBase64,
         mimeType,
         previousTranscript: vcTranscriptRef.current,
       });
-      let delta = result.delta?.trim() ?? '';
-      if (!delta) {
-        // Whisper returned empty on this delta chunk — try rolling window as fallback
-        emptyDeltaCountRef.current = (emptyDeltaCountRef.current ?? 0) + 1;
-        if (emptyDeltaCountRef.current >= 2 && checkinRecorderRef.current?.rollingWindowRef?.current?.length > 0) {
-          // Build a rolling window blob (last few chunks combined) and retry
-          const rollingBlob = new Blob(checkinRecorderRef.current.rollingWindowRef.current, { type: mimeType });
-          const rollingBase64 = await blobToBase64(rollingBlob);
-          const retry = await transcribeChunkMutationRef.current.mutateAsync({
-            audioBase64: rollingBase64,
-            mimeType,
-            previousTranscript: vcTranscriptRef.current,
-          });
-          delta = retry.delta?.trim() ?? '';
-          if (!delta) return; // still empty — give up this tick
-          emptyDeltaCountRef.current = 0; // reset on success
-        } else {
-          return; // not enough consecutive empties yet — skip
-        }
-      } else {
-        emptyDeltaCountRef.current = 0; // reset on non-empty delta
-      }
+      const windowText = result.delta?.trim() ?? '';
+      if (!windowText) return; // Whisper returned nothing — skip
 
-      // Append delta to transcript immediately — user sees it right away
+      // Deduplicate: extract only NEW words not already in the accumulated transcript
+      const delta = deduplicateTranscript(vcTranscriptRef.current, windowText);
+      if (!delta) return; // nothing new — skip
+
+      // Append new words to transcript immediately — user sees it right away
       const newTranscript = vcTranscriptRef.current
         ? vcTranscriptRef.current + ' ' + delta
         : delta;
