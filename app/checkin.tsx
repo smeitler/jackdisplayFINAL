@@ -28,12 +28,12 @@ import {
 //   1. delta-only chunks → Whisper (fast) → transcript appended immediately
 //   2. Smart LLM debounce: fire analyzeTranscript on EITHER:
 //      a) 1.5s of silence detected via Web Audio AnalyserNode RMS measurement
-//      b) transcript grew by 8+ words since last LLM call
+//      b) transcript grew by 3+ words since last LLM call
 //   3. Mandatory final analysis on stop (complete transcript, awaited)
 const CHUNK_INTERVAL_MS = 2000;        // 2-second delta chunks for Whisper (1s was too short)
 const SILENCE_THRESHOLD_RMS = 0.02;    // RMS below this = silence
-const SILENCE_TRIGGER_MS = 1500;       // 1.5s of continuous silence → trigger LLM
-const WORD_DELTA_TRIGGER = 4;          // 4+ new words since last LLM → trigger LLM
+const SILENCE_TRIGGER_MS = 1200;       // 1.2s of continuous silence → trigger LLM
+const WORD_DELTA_TRIGGER = 3;          // 3+ new words since last LLM → trigger LLM
 const MAX_ROLLING_CHUNKS = 5;          // keep last N chunks as rolling window fallback
 
 type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
@@ -273,11 +273,18 @@ export default function CheckInScreen() {
   // Split pipeline: two separate mutations
   const transcribeChunkMutation = trpc.voiceCheckin.transcribeChunk.useMutation();
   const analyzeTranscriptMutation = trpc.voiceCheckin.analyzeTranscript.useMutation();
-  // Refs for use inside the onDeltaChunk callback (avoids stale closures)
+  // Refs for use inside callbacks (avoids stale closures — all callbacks use .current)
   const activeHabitsRef = useRef(activeHabits);
   useEffect(() => { activeHabitsRef.current = activeHabits; }, [activeHabits]);
   const setRatingsRef = useRef(setRatings);
   useEffect(() => { setRatingsRef.current = setRatings; }, [setRatings]);
+  const setVcNotesRef = useRef(setVcNotes);
+  useEffect(() => { setVcNotesRef.current = setVcNotes; }, [setVcNotes]);
+  // Keep mutation refs so callbacks never go stale
+  const transcribeChunkMutationRef = useRef(transcribeChunkMutation);
+  useEffect(() => { transcribeChunkMutationRef.current = transcribeChunkMutation; });
+  const analyzeTranscriptMutationRef = useRef(analyzeTranscriptMutation);
+  useEffect(() => { analyzeTranscriptMutationRef.current = analyzeTranscriptMutation; });
   // Accumulated transcript ref (used by LLM analysis path without stale closure)
   const vcTranscriptRef = useRef('');
   useEffect(() => { vcTranscriptRef.current = vcTranscript; }, [vcTranscript]);
@@ -288,12 +295,12 @@ export default function CheckInScreen() {
   const vcLastLlmWordCountRef = useRef(0);
   // Rolling window fallback: count consecutive empty Whisper responses
   const emptyDeltaCountRef = useRef(0);
-  // Shared LLM fire function (used by both word-delta path and silence path)
+  // Shared LLM fire function — uses refs only, never stale
   const fireAnalyzeTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return;
     const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
     vcLastLlmWordCountRef.current = transcript.split(/\s+/).filter(Boolean).length;
-    analyzeTranscriptMutation.mutateAsync({ transcript, habits: habitList })
+    analyzeTranscriptMutationRef.current.mutateAsync({ transcript, habits: habitList })
       .then((analysis) => {
         const newRatings: Record<string, Rating> = {};
         const newNotes: Record<string, string> = {};
@@ -302,10 +309,10 @@ export default function CheckInScreen() {
           if (data.note) newNotes[habitId] = data.note;
         }
         if (Object.keys(newRatings).length > 0) setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
-        if (Object.keys(newNotes).length > 0) setVcNotes((prev) => ({ ...prev, ...newNotes }));
+        if (Object.keys(newNotes).length > 0) setVcNotesRef.current((prev) => ({ ...prev, ...newNotes }));
       })
       .catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e));
-  }, [analyzeTranscriptMutation]);
+  }, []); // stable — all deps accessed via refs
 
   // Silence callback: fires when 1.5s of silence is detected mid-recording
   // Guard: only fire if we have at least 3 words of transcript (avoids firing on startup silence)
@@ -318,6 +325,7 @@ export default function CheckInScreen() {
   }, [fireAnalyzeTranscript]);
 
   // Called every CHUNK_INTERVAL_MS with a DELTA blob (only new audio since last tick)
+  // Uses refs only — stable callback, never stale
   const handleVcDeltaChunk = useCallback(async (deltaBlob: Blob, mimeType: string) => {
     if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick
     vcWhisperInFlightRef.current = true;
@@ -325,7 +333,7 @@ export default function CheckInScreen() {
     try {
       // STEP 1: Whisper — transcribe delta only (fast, small input)
       const audioBase64 = await blobToBase64(deltaBlob);
-      const result = await transcribeChunkMutation.mutateAsync({
+      const result = await transcribeChunkMutationRef.current.mutateAsync({
         audioBase64,
         mimeType,
         previousTranscript: vcTranscriptRef.current,
@@ -334,11 +342,11 @@ export default function CheckInScreen() {
       if (!delta) {
         // Whisper returned empty on this delta chunk — try rolling window as fallback
         emptyDeltaCountRef.current = (emptyDeltaCountRef.current ?? 0) + 1;
-        if (emptyDeltaCountRef.current >= 2 && checkinRecorder.rollingWindowRef?.current?.length > 0) {
+        if (emptyDeltaCountRef.current >= 2 && checkinRecorderRef.current?.rollingWindowRef?.current?.length > 0) {
           // Build a rolling window blob (last few chunks combined) and retry
-          const rollingBlob = new Blob(checkinRecorder.rollingWindowRef.current, { type: mimeType });
+          const rollingBlob = new Blob(checkinRecorderRef.current.rollingWindowRef.current, { type: mimeType });
           const rollingBase64 = await blobToBase64(rollingBlob);
-          const retry = await transcribeChunkMutation.mutateAsync({
+          const retry = await transcribeChunkMutationRef.current.mutateAsync({
             audioBase64: rollingBase64,
             mimeType,
             previousTranscript: vcTranscriptRef.current,
@@ -374,9 +382,12 @@ export default function CheckInScreen() {
       vcWhisperInFlightRef.current = false;
       setVcProcessing(false);
     }
-  }, [transcribeChunkMutation, fireAnalyzeTranscript]);
+  }, [fireAnalyzeTranscript]); // stable — all other deps via refs
 
   const checkinRecorder = useCheckinWebRecorder(handleVcDeltaChunk, handleVcSilence);
+  // Ref so handleVcDeltaChunk can access rollingWindowRef without stale closure
+  const checkinRecorderRef = useRef(checkinRecorder);
+  useEffect(() => { checkinRecorderRef.current = checkinRecorder; });
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;

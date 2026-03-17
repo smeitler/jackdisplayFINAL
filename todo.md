@@ -924,3 +924,6 @@
 ## Bug Fix (Mar 17 2026 - session 7)
 
 - [x] Fix voice check-in: analyzing shows but ratings/notes not updating after pipeline refactor
+- [x] Fix stale closure bugs: use refs for mutations, setVcNotes, and checkinRecorder in voice check-in callbacks
+- [x] Lower WORD_DELTA_TRIGGER to 3 words and SILENCE_TRIGGER_MS to 1200ms for more responsive triggering
+- [x] Fix only first habit getting rated: all habits now update via stable ref-based callbacks
