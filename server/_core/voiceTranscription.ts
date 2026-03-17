@@ -134,10 +134,8 @@ export async function transcribeAudio(
     const formData = new FormData();
 
     // Create a Blob from the buffer and append to form
-    // Use correct ArrayBuffer slice for Node.js Buffer (which may be a view into a larger ArrayBuffer)
     const filename = `audio.${getFileExtension(mimeType)}`;
-    const arrayBuf0 = audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength) as ArrayBuffer;
-    const audioBlob = new Blob([arrayBuf0], { type: mimeType });
+    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
     formData.append("file", audioBlob, filename);
 
     formData.append("model", "whisper-1");
@@ -202,30 +200,6 @@ export async function transcribeAudio(
  * Transcribe audio directly from a Buffer, bypassing the URL download step.
  * This is more efficient when you already have the audio data in memory.
  */
-/**
- * Detect actual audio format from magic bytes in the buffer.
- * Returns a corrected { mimeType, ext } or null if unknown.
- */
-function detectAudioFormat(buf: Buffer): { mimeType: string; ext: string } | null {
-  if (buf.length < 12) return null;
-  // RIFF/WAVE
-  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) return { mimeType: 'audio/wav', ext: 'wav' };
-  // OGG
-  if (buf[0] === 0x4F && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53) return { mimeType: 'audio/ogg', ext: 'ogg' };
-  // FLAC
-  if (buf[0] === 0x66 && buf[1] === 0x4C && buf[2] === 0x61 && buf[3] === 0x43) return { mimeType: 'audio/flac', ext: 'flac' };
-  // MP3 (ID3 tag or sync word)
-  if ((buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) || (buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0)) return { mimeType: 'audio/mp3', ext: 'mp3' };
-  // WebM/Matroska
-  if (buf[0] === 0x1A && buf[1] === 0x45 && buf[2] === 0xDF && buf[3] === 0xA3) return { mimeType: 'audio/webm', ext: 'webm' };
-  // MP4/M4A (ftyp box)
-  const ftypStr = buf.toString('ascii', 4, 8);
-  if (ftypStr === 'ftyp') return { mimeType: 'audio/mp4', ext: 'm4a' };
-  // CAF (Core Audio Format) — 'caff' magic
-  if (buf[0] === 0x63 && buf[1] === 0x61 && buf[2] === 0x66 && buf[3] === 0x66) return { mimeType: 'audio/x-caf', ext: 'caf' };
-  return null;
-}
-
 export async function transcribeAudioBuffer(
   audioBuffer: Buffer,
   mimeType: string,
@@ -242,28 +216,10 @@ export async function transcribeAudioBuffer(
     if (sizeMB > 16) {
       return { error: 'Audio file exceeds maximum size limit', code: 'FILE_TOO_LARGE', details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB` };
     }
-
-    // Detect actual format from magic bytes — client mimeType is often wrong (e.g. iOS sends .caf labeled as audio/m4a)
-    const detected = detectAudioFormat(audioBuffer);
-    console.log(`[transcribeAudioBuffer] Client mimeType=${mimeType}, detected=${detected ? `${detected.mimeType} (.${detected.ext})` : 'unknown'}, bufSize=${audioBuffer.length}`);
-
-    // If the file is CAF (iOS default), it's not supported by Whisper. We need to tell the user.
-    if (detected?.ext === 'caf') {
-      // CAF is not supported — but we can try sending it as m4a anyway (sometimes works if the codec inside is AAC)
-      console.warn('[transcribeAudioBuffer] Detected CAF format — attempting to send as m4a');
-      mimeType = 'audio/m4a';
-    } else if (detected) {
-      // Use the detected format for accuracy
-      mimeType = detected.mimeType;
-    }
-
     const formData = new FormData();
-    const filename = `audio.${detected?.ext && detected.ext !== 'caf' ? detected.ext : getFileExtension(mimeType)}`;
-    // Use correct ArrayBuffer slice for Node.js Buffer (which may be a view into a larger ArrayBuffer)
-    const arrayBuf = audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength) as ArrayBuffer;
-    const audioBlob = new Blob([arrayBuf], { type: mimeType });
+    const filename = `audio.${getFileExtension(mimeType)}`;
+    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
     formData.append('file', audioBlob, filename);
-    console.log(`[transcribeAudioBuffer] Sending file: ${filename}, size: ${audioBlob.size} bytes, type: ${mimeType}`);
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'verbose_json');
     const prompt = options?.prompt ||
@@ -312,8 +268,6 @@ function getFileExtension(mimeType: string): string {
     "audio/x-m4a": "m4a",
     "audio/aac": "m4a",
     "audio/flac": "flac",
-    "audio/x-caf": "m4a",  // CAF with AAC codec — send as m4a to Whisper
-    "audio/caf": "m4a",
   };
 
   return mimeToExt[baseMime] || "webm";

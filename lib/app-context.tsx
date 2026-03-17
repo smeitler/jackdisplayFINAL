@@ -700,12 +700,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ag !== bg) return ag - bg;
       return (a.order ?? 0) - (b.order ?? 0);
     });
-  // Show pending check-in banner if today OR yesterday has no check-in entries
-  const todayString = toDateString(new Date());
-  const isPendingCheckIn = activeHabits.length > 0 && (
-    !state.checkIns.some((e) => e.date === todayString) ||
-    !state.checkIns.some((e) => e.date === yesterdayString())
-  );
+  // Only show pending check-in banner/gate if there are active habits to rate
+  const isPendingCheckIn = activeHabits.length > 0 && !state.checkIns.some((e) => e.date === yesterdayString());
 
   const getEntriesForDate = useCallback((date: string) =>
     state.checkIns.filter((e) => e.date === date),

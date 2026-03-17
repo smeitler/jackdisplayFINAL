@@ -659,11 +659,7 @@ export const appRouter = router({
           throw new Error(`Transcription failed: ${transcription.error}${details ? ` (${details})` : ''}`);
         }
         const transcript = transcription.text?.trim() ?? '';
-        console.log('[voiceJournal] Transcript:', transcript ? transcript.substring(0, 200) : '(empty)');
-        if (!transcript) {
-          console.log('[voiceJournal] Empty transcript, returning early');
-          return { transcript: '', journalEntries: [], gratitudeItems: [], habitNotes: {}, habitRatings: {}, audioUrl };
-        }
+        if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], audioUrl };
 
         // 3. AI categorization — extract journal thoughts, gratitude, and per-habit notes
         const habits = input.habits ?? [];
@@ -672,29 +668,24 @@ export const appRouter = router({
           : '';
 
         const habitInstructions = habits.length > 0
-          ? `3. "habitNotes": an object mapping habit IDs to a short note capturing what the user said about that habit. Extract the relevant portion of the transcript for each habit. Keep the user's natural voice and phrasing. If nothing in the transcript relates to a habit, omit that habit's key entirely.\n4. "habitRatings": an object mapping habit IDs to a rating string ("green", "yellow", or "red"). Infer the rating from the MEANING and CONTEXT of what the user said — do NOT require explicit affirmative words. Use these guidelines:\n   - green = the user did it, completed it, succeeded, felt good about it, or describes a positive outcome. Examples: "crushed my workout", "hit the gym", "ran 5 miles", "slept 8 hours", "drank plenty of water", "got it done", "felt great", "nailed it", "went for a walk", "read before bed"\n   - yellow = the user partially did it, struggled, did less than intended, or had mixed results. Examples: "only drank 4 glasses", "did a short workout", "kind of meditated", "went to bed late but still slept okay", "ate pretty well but had a cheat meal", "managed to do a bit"\n   - red = the user skipped it, missed it, failed, or clearly did not do it. Examples: "skipped the gym", "didn't meditate", "forgot to drink water", "stayed up all night", "didn't read", "totally missed it", "no workout today"\n   Infer from context even when the habit is mentioned indirectly. If the user says "I was exhausted and just went straight to bed" for a Sleep habit, that could be green. If they say "I was so busy I didn't have time to eat well", that's red for a diet habit. Use judgment. Omit a habit's key only if the transcript gives absolutely no information about it.`
+          ? `3. "habitNotes": an object mapping habit IDs to relevant notes. For each habit, extract ONLY sentences/phrases from the transcript that are directly relevant to that specific habit. Use the habit's name and description to judge relevance. If nothing in the transcript relates to a habit, omit that habit's key entirely. Keep the user's natural language.`
           : '';
 
         const jsonShape = habits.length > 0
-          ? `{"journalEntries": [...], "gratitudeItems": [...], "habitNotes": {"<habitId>": "<relevant text>", ...}, "habitRatings": {"<habitId>": "green|yellow|red", ...}}`
-          : `{"journalEntries": [...], "gratitudeItems": []}`;
+          ? `{"journalEntries": [...], "gratitudeItems": [...], "habitNotes": {"<habitId>": "<relevant text>", ...}}`
+          : `{"journalEntries": [...], "gratitudeItems": [...]}`;
 
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a personal habit coach assistant. The user has just recorded a voice check-in talking about their day. Your job is to extract:
+              content: `You are a personal journal assistant. Given a voice journal transcript, extract:
 1. "journalEntries": an array of reflective thoughts, observations, plans, or general statements (each a concise sentence or short paragraph, preserving the user's voice)
 2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)${habitInstructions ? `\n${habitInstructions}` : ''}${habitListText}
 
-Critical rules for habit rating inference:
-- People speak CASUALLY about their habits. Do NOT require formal or explicit language.
-- Infer ratings from the overall meaning, tone, and context — not just specific trigger words.
-- "I hit the gym" = green for Exercise. "I didn't really work out" = red. "Did a quick 20 min walk" = yellow for a heavy workout habit, green for a general movement habit.
-- Match the habit name and description carefully to what was said. A mention of "water" maps to a hydration habit. "Went to bed at 10" maps to a sleep habit.
-- Be generous with inference: if the user clearly describes doing something related to a habit, rate it.
+Rules:
 - A sentence expressing gratitude ("I'm grateful for...", "I appreciate...", "thankful for...") → gratitudeItems
-- Content relevant to a specific habit → habitNotes for that habit
+- Content relevant to a specific habit → habitNotes for that habit (can also appear in journalEntries if it's a general reflection)
 - Everything else → journalEntries
 - Keep the user's natural language; don't rewrite or summarize
 - If nothing fits a category, return an empty array/object for it
@@ -711,12 +702,8 @@ Return ONLY valid JSON: ${jsonShape}`,
         let journalEntries: string[] = [];
         let gratitudeItems: string[] = [];
         let habitNotes: Record<string, string> = {};
-        let habitRatings: Record<string, 'green' | 'yellow' | 'red'> = {};
         try {
-          const rawContent = llmResp.choices[0].message.content as string;
-          console.log('[voiceJournal] Raw LLM response:', rawContent);
-          const parsed = JSON.parse(rawContent);
-          console.log('[voiceJournal] Parsed keys:', Object.keys(parsed));
+          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
           journalEntries = Array.isArray(parsed.journalEntries) ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
           gratitudeItems = Array.isArray(parsed.gratitudeItems) ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
           if (parsed.habitNotes && typeof parsed.habitNotes === 'object') {
@@ -726,96 +713,12 @@ Return ONLY valid JSON: ${jsonShape}`,
               }
             }
           }
-          if (parsed.habitRatings && typeof parsed.habitRatings === 'object') {
-            console.log('[voiceJournal] habitRatings from LLM:', JSON.stringify(parsed.habitRatings));
-            for (const [id, rating] of Object.entries(parsed.habitRatings)) {
-              if (rating === 'green' || rating === 'yellow' || rating === 'red') {
-                habitRatings[id] = rating;
-              }
-            }
-          } else {
-            console.log('[voiceJournal] No habitRatings in LLM response');
-          }
-          // Fallback: if AI returned a note for a habit but no rating, default to green
-          for (const id of Object.keys(habitNotes)) {
-            if (!habitRatings[id]) {
-              console.log(`[voiceJournal] Fallback: habit ${id} has note but no rating, defaulting to green`);
-              habitRatings[id] = 'green';
-            }
-          }
-          console.log('[voiceJournal] Final habitRatings:', JSON.stringify(habitRatings));
-          console.log('[voiceJournal] Final habitNotes:', JSON.stringify(habitNotes));
-        } catch (parseErr) {
-          console.error('[voiceJournal] JSON parse error:', parseErr);
+        } catch {
           // If parsing fails, put everything in journal
           journalEntries = [transcript];
         }
 
-        return { transcript, journalEntries, gratitudeItems, habitNotes, habitRatings, audioUrl };
-      }),
-
-    /**
-     * Fast single-habit analysis: transcribes a short audio clip and returns
-     * a rating (green/yellow/red/none) + extracted note for ONE specific habit.
-     * Used by the sequential habit-by-habit voice check-in.
-     */
-    analyzeForHabit: publicProcedure
-      .input(z.object({
-        audioBase64: z.string(),
-        mimeType: z.string().default('audio/m4a'),
-        habit: z.object({
-          id: z.string(),
-          name: z.string(),
-          emoji: z.string().optional(),
-          description: z.string().optional(),
-        }),
-      }))
-      .mutation(async ({ input }) => {
-        const { invokeLLM } = await import('./_core/llm.js');
-        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
-
-        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
-        const transcription = await transcribeAudioBuffer(audioBuffer, input.mimeType, {
-          language: 'en',
-          prompt: `Habit check-in for: ${input.habit.name}`,
-        });
-
-        if ('error' in transcription) {
-          throw new Error(`Transcription failed: ${transcription.error}`);
-        }
-        const transcript = transcription.text?.trim() ?? '';
-        if (!transcript) return { transcript: '', rating: 'none' as const, note: '' };
-
-        const habitDesc = input.habit.description ? ` (${input.habit.description})` : '';
-        const llmResp = await invokeLLM({
-          messages: [
-            {
-              role: 'system',
-              content: `You are a habit check-in assistant. The user just spoke about their habit: "${input.habit.name}"${habitDesc}.
-Analyze the transcript and return JSON with:
-- "rating": "green" (completed/did well), "yellow" (partial/okay/struggled), "red" (missed/skipped/failed), or "none" (not mentioned / unclear)
-- "note": a concise 1-2 sentence note in the user's own words capturing what they said about this habit. Empty string if nothing relevant.
-Return ONLY valid JSON: {"rating": "green|yellow|red|none", "note": "..."}`,
-            },
-            {
-              role: 'user',
-              content: `Transcript: ${transcript}`,
-            },
-          ],
-          response_format: { type: 'json_object' },
-        });
-
-        let rating: 'green' | 'yellow' | 'red' | 'none' = 'none';
-        let note = '';
-        try {
-          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
-          if (['green', 'yellow', 'red', 'none'].includes(parsed.rating)) rating = parsed.rating;
-          if (typeof parsed.note === 'string') note = parsed.note.trim();
-        } catch {
-          note = transcript;
-        }
-
-        return { transcript, rating, note };
+        return { transcript, journalEntries, gratitudeItems, habitNotes, audioUrl };
       }),
   }),
 
@@ -882,94 +785,6 @@ Return ONLY valid JSON: {"rating": "green|yellow|red|none", "note": "..."}`,
           pausesBetweenChunks: script.pausesBetweenChunks,
           totalDurationMinutes: script.totalDurationMinutes,
         };
-      }),
-  }),
-
-  // ─── AI Coach ─────────────────────────────────────────────────────────────────────
-  coach: router({
-    /**
-     * Send a message to the AI coach with full user context.
-     * The coach analyzes habits, check-ins, and journal entries to give personalized advice.
-     */
-    chat: publicProcedure
-      .input(z.object({
-        message: z.string().min(1).max(2000),
-        // User's habits with names and categories
-        habits: z.array(z.object({
-          id: z.string(),
-          name: z.string(),
-          category: z.string().optional(),
-          emoji: z.string().optional(),
-        })).optional().default([]),
-        // Recent check-in history: array of { date, habitId, rating }
-        checkIns: z.array(z.object({
-          date: z.string(),
-          habitId: z.string(),
-          rating: z.string(),
-        })).optional().default([]),
-        // Recent journal entries: array of { date, title, body }
-        journalEntries: z.array(z.object({
-          date: z.string(),
-          title: z.string().optional(),
-          body: z.string().optional(),
-        })).optional().default([]),
-        // Conversation history for multi-turn chat
-        history: z.array(z.object({
-          role: z.enum(['user', 'assistant']),
-          content: z.string(),
-        })).optional().default([]),
-      }))
-      .mutation(async ({ input }) => {
-        const { invokeLLM } = await import('./_core/llm.js');
-
-        // Build a rich context summary for the coach
-        const habitNames = input.habits.map(h => `${h.emoji ?? ''} ${h.name}${h.category ? ` (${h.category})` : ''}`).join(', ');
-
-        // Compute per-habit stats from check-ins (last 30 days)
-        const habitStats = input.habits.map(habit => {
-          const habitCheckIns = input.checkIns.filter(c => c.habitId === habit.id);
-          const total = habitCheckIns.length;
-          const green = habitCheckIns.filter(c => c.rating === 'green').length;
-          const yellow = habitCheckIns.filter(c => c.rating === 'yellow').length;
-          const red = habitCheckIns.filter(c => c.rating === 'red').length;
-          const pct = total > 0 ? Math.round((green / total) * 100) : 0;
-          return `- ${habit.emoji ?? ''} ${habit.name}: ${pct}% success (${green} great, ${yellow} ok, ${red} missed out of ${total} logged days)`;
-        }).join('\n');
-
-        // Recent journal snippets (last 5 entries)
-        const journalSnippets = input.journalEntries
-          .slice(-5)
-          .map(e => `[${e.date}] ${e.title ? e.title + ': ' : ''}${(e.body ?? '').slice(0, 300)}`)
-          .join('\n');
-
-        const systemPrompt = `You are a compassionate, data-driven personal development coach. You have access to the user's real habit tracking data, check-in history, and journal entries. Your job is to:
-1. Analyze their actual behavior patterns (not just what they say)
-2. Identify specific trends, streaks, and problem areas
-3. Give concrete, actionable advice tailored to their data
-4. Be encouraging but honest — don't sugarcoat if they're struggling
-5. Reference specific habits and dates when relevant
-6. Keep responses concise (2-4 paragraphs max) unless they ask for detail
-
-USER'S HABIT DATA:
-Active habits: ${habitNames || 'None tracked yet'}
-
-Habit performance (recent history):
-${habitStats || 'No check-ins recorded yet'}
-
-Recent journal entries:
-${journalSnippets || 'No journal entries yet'}
-
-Be specific, reference their actual data, and give advice they can act on today.`;
-
-        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-          { role: 'system', content: systemPrompt },
-          ...input.history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-          { role: 'user', content: input.message },
-        ];
-
-        const response = await invokeLLM({ messages });
-        const reply = response.choices[0]?.message?.content ?? 'I had trouble generating a response. Please try again.';
-        return { reply };
       }),
   }),
 

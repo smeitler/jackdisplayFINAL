@@ -14,7 +14,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
 
-
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 // Profile pic key is per-user — built dynamically once userId is known
 function profilePicKey(userId: string) { return `daycheck:profilePicUri:${userId}`; }
@@ -527,7 +526,6 @@ export default function HomeScreen() {
   const [showMissedDays, setShowMissedDays] = useState(false);
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
 
-
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
@@ -555,13 +553,13 @@ export default function HomeScreen() {
     });
   }, [router]);
 
-  // Calculate missed check-in dates: today + up to 7 days back
+  // Calculate missed check-in dates (up to last 30 days, excluding today)
   const missedDates = useMemo(() => {
     if (activeHabits.length === 0) return [];
     const checkedDates = new Set(checkIns.map((e) => e.date));
     const missed: string[] = [];
-    // Include today first, then look back up to 7 days
-    for (let i = 0; i <= 7; i++) {
+    // Look back up to 7 days, skip today
+    for (let i = 1; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = toDateString(d);
@@ -613,7 +611,7 @@ export default function HomeScreen() {
 
   function handleCheckIn(date?: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push((`/checkin?date=${date ?? toDateString()}`) as never);
+    router.push((`/checkin?date=${date ?? yesterday}`) as never);
   }
 
   function formatAlarmTime(h: number, m: number): string {
@@ -630,11 +628,8 @@ export default function HomeScreen() {
           {/* ── Header: date + streak pill + profile pic ── */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.dateDay, { color: colors.muted }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
-              </Text>
               <Text style={[styles.dateText, { color: colors.foreground }]}>
-                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -644,16 +639,6 @@ export default function HomeScreen() {
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
-              {/* Coach Button — flat circular brain icon */}
-              <Pressable
-                onPress={() => router.push('/coach' as never)}
-                style={({ pressed }) => [
-                  styles.coachBtn,
-                  { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44', opacity: pressed ? 0.75 : 1 },
-                ]}
-              >
-                <IconSymbol name="brain" size={22} color={colors.primary} />
-              </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
                 onPress={handlePickProfilePic}
@@ -679,7 +664,13 @@ export default function HomeScreen() {
           {/* ── Today's Focus Card ── */}
           {(isPendingCheckIn || missedDates.length > 0) ? (
             <Pressable
-              onPress={() => handleCheckIn()}
+              onPress={() => {
+                if (missedDates.length > 0) {
+                  setShowMissedDays(true);
+                } else {
+                  handleCheckIn(yesterday);
+                }
+              }}
               style={({ pressed }) => [
                 styles.focusCard,
                 {
@@ -698,14 +689,7 @@ export default function HomeScreen() {
                 </Text>
                 <Text style={[styles.focusCardSub, { color: isPendingCheckIn ? 'rgba(255,255,255,0.75)' : colors.muted }]}>
                   {isPendingCheckIn
-                    ? (() => {
-                        const todayStr = toDateString(new Date());
-                        const todayDone = checkIns.some((e) => e.date === todayStr);
-                        const yestDone = checkIns.some((e) => e.date === yesterday);
-                        if (!todayDone && !yestDone) return `Today & ${formatDisplayDate(yesterday)} · Tap to rate`;
-                        if (!todayDone) return `Today · Tap to rate`;
-                        return `${formatDisplayDate(yesterday)} · Tap to rate`;
-                      })()
+                    ? `${formatDisplayDate(yesterday)} · Tap to rate`
                     : 'Tap to review missed days'}
                 </Text>
               </View>
@@ -716,10 +700,7 @@ export default function HomeScreen() {
               />
             </Pressable>
           ) : (
-            <Pressable
-              onPress={() => handleCheckIn()}
-              style={({ pressed }) => [styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
-            >
+            <View style={[styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.allCaughtUpLeft}>
                 <View style={[styles.allCaughtUpIconWrap, { backgroundColor: '#22C55E20' }]}>
                   <IconSymbol name="checkmark.circle.fill" size={22} color="#22C55E" />
@@ -735,7 +716,7 @@ export default function HomeScreen() {
                   <Text style={styles.allCaughtUpStreakNum}>{streak}</Text>
                 </View>
               )}
-            </Pressable>
+            </View>
           )}
 
           {/* ── Alarm strip ── */}
@@ -877,7 +858,6 @@ export default function HomeScreen() {
         onSelectDate={handleCheckIn}
         colors={colors}
       />
-
     </ScreenContainer>
   );
 }
@@ -887,8 +867,7 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  dateDay: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 },
-  dateText: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  dateText: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   streakPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FF6B3520', borderRadius: 20,
@@ -1061,10 +1040,4 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8,
   },
   missedDaysCloseText: { fontSize: 15, fontWeight: '700' },
-  coachBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1,
-  },
-
 });

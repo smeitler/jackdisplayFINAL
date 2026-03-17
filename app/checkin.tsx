@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -14,14 +14,11 @@ import {
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { trpc } from "@/lib/trpc";
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync } from "expo-audio";
-import * as FileSystem from 'expo-file-system/legacy';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import {
   loadHabits,
   loadGratitudeEntries,
   yesterdayString as yesterdayStr,
-  loadDayNotes,
-  saveDayNotes,
 } from '@/lib/storage';
 
 type ActiveRating = 'red' | 'yellow' | 'green';
@@ -76,209 +73,11 @@ export default function CheckInScreen() {
   const fromAlarm = params.fromAlarm === '1';
   const isPreview = params.preview === '1';
 
-  const [currentDate, setCurrentDate] = useState(params.date ?? toDateString());
+  const [currentDate, setCurrentDate] = useState(params.date ?? yesterdayString());
   const [ratings, setRatings] = useState<Record<string, Rating>>(() => getRatingsForDate(currentDate));
   const [submitted, setSubmitted] = useState(false);
   const [shareToTeam, setShareToTeam] = useState(true);
   const [shared, setShared] = useState(false);
-  const [notes, setNotes] = useState<Record<string, string>>({});
-
-  // ── Sequential habit-by-habit voice check-in ──────────────────────────────
-  // Voice check-in: single continuous recording for ALL habits at once
-  // Flow: idle → (tap mic) → recording → (tap mic again) → processing → done/error
-  type VoicePhase = 'idle' | 'recording' | 'processing' | 'done' | 'error';
-  const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle');
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  // How many habits were filled by voice (for status display)
-  const [voiceFilledCount, setVoiceFilledCount] = useState(0);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
-
-  const voiceActive = voicePhase !== 'idle';
-
-  // Pulse animation on the mic button while recording
-  useEffect(() => {
-    if (voicePhase === 'recording') {
-      pulseLoopRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.18, duration: 500, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1.0, duration: 500, useNativeDriver: true }),
-        ])
-      );
-      pulseLoopRef.current.start();
-    } else {
-      pulseLoopRef.current?.stop();
-      Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-    }
-  }, [voicePhase]);
-
-  // Tap mic to START recording all habits in one session
-  const handleStartVoice = useCallback(async () => {
-    if (voicePhase !== 'idle' && voicePhase !== 'done' && voicePhase !== 'error') return;
-    if (activeHabits.length === 0) return;
-    setVoiceError(null);
-    setVoiceFilledCount(0);
-    try {
-      if (Platform.OS !== 'web') {
-        const { granted } = await requestRecordingPermissionsAsync();
-        if (!granted) { setVoiceError('Microphone permission required'); return; }
-        await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
-      }
-      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-      setVoicePhase('recording');
-    } catch (e: any) {
-      setVoiceError('Could not start mic: ' + (e?.message ?? 'unknown'));
-    }
-  }, [voicePhase, activeHabits, audioRecorder]);
-
-  // Tap mic again to STOP and process all habits at once
-  const handleStopVoice = useCallback(async () => {
-    if (voicePhase !== 'recording') return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setVoicePhase('processing');
-    try {
-      await audioRecorder.stop();
-      const uri = audioRecorder.uri;
-      if (!uri) throw new Error('No recording found');
-
-      let audioBase64: string;
-      let mimeType: string;
-      if (Platform.OS === 'web') {
-        const resp = await fetch(uri);
-        const blob = await resp.blob();
-        mimeType = blob.type || 'audio/webm';
-        audioBase64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        // iOS RecordingPresets.HIGH_QUALITY records AAC in an MPEG-4 container (.m4a)
-        mimeType = 'audio/m4a';
-        console.log('[VoiceCheckIn] Native URI:', uri, 'mimeType:', mimeType);
-      }
-
-      // Send ALL habits to the server in one shot
-      console.log('[VoiceCheckIn] Sending to server, habits:', activeHabits.map(h => ({ id: h.id, name: h.name })));
-      console.log('[VoiceCheckIn] Audio base64 length:', audioBase64.length, 'mimeType:', mimeType);
-      const result = await transcribeMutation.mutateAsync({
-        audioBase64,
-        mimeType,
-        habits: activeHabits.map((h) => ({ id: h.id, name: h.name, emoji: h.emoji, description: h.description })),
-      });
-
-      const habitRatingsRaw = result.habitRatings ?? {};
-      const habitNotesRaw = result.habitNotes ?? {};
-      const transcript = result.transcript ?? '';
-
-      console.log('[VoiceCheckIn] transcript:', transcript);
-      console.log('[VoiceCheckIn] habitRatingsRaw keys:', Object.keys(habitRatingsRaw));
-      console.log('[VoiceCheckIn] habitNotesRaw keys:', Object.keys(habitNotesRaw));
-      console.log('[VoiceCheckIn] activeHabit IDs:', activeHabits.map(h => h.id));
-
-      // Build a name→id lookup for fuzzy matching (AI might return habit name as key instead of ID)
-      const nameLookup: Record<string, string> = {};
-      for (const h of activeHabits) {
-        nameLookup[h.name.toLowerCase().trim()] = h.id;
-        // Also add without emoji prefix
-        const nameOnly = h.name.replace(/^[\p{Emoji}\s]+/u, '').toLowerCase().trim();
-        if (nameOnly) nameLookup[nameOnly] = h.id;
-      }
-
-      // Helper: resolve a key from the AI (could be habit ID or habit name) to a habit ID
-      function resolveHabitId(key: string): string | null {
-        // Direct ID match
-        if (activeHabits.some(h => h.id === key)) return key;
-        // Name match (case-insensitive)
-        const lower = key.toLowerCase().trim();
-        if (nameLookup[lower]) return nameLookup[lower];
-        // Partial match
-        for (const [name, id] of Object.entries(nameLookup)) {
-          if (lower.includes(name) || name.includes(lower)) return id;
-        }
-        return null;
-      }
-
-      // Apply ratings + notes for every habit the AI detected
-      let filled = 0;
-      const newRatings: Record<string, Rating> = {};
-      const newNotes: Record<string, string> = {};
-
-      // First pass: apply ratings from AI response (matching by ID or name)
-      for (const [key, rating] of Object.entries(habitRatingsRaw)) {
-        const habitId = resolveHabitId(key);
-        console.log(`[VoiceCheckIn] Rating key="${key}" resolved to habitId=${habitId}, rating=${rating}`);
-        if (habitId && (rating === 'green' || rating === 'yellow' || rating === 'red')) {
-          newRatings[habitId] = rating as Rating;
-          filled++;
-        }
-      }
-
-      // Second pass: apply notes from AI response (matching by ID or name)
-      for (const [key, note] of Object.entries(habitNotesRaw)) {
-        const habitId = resolveHabitId(key);
-        if (habitId && typeof note === 'string' && note.trim()) {
-          newNotes[habitId] = note.trim();
-          // Fallback: if we got a note but no rating, default to green
-          if (!newRatings[habitId]) {
-            console.log(`[VoiceCheckIn] Fallback: "${key}" has note but no rating, defaulting to green`);
-            newRatings[habitId] = 'green';
-            filled++;
-          }
-        }
-      }
-
-      console.log('[VoiceCheckIn] Final newRatings:', JSON.stringify(newRatings));
-      console.log('[VoiceCheckIn] Final newNotes:', JSON.stringify(newNotes));
-      console.log('[VoiceCheckIn] filled count:', filled);
-
-      // Always apply ratings (even if 0 filled, to clear any stale state)
-      setRatings((prev) => {
-        const merged = { ...prev, ...newRatings };
-        return merged;
-      });
-      setNotes((prev) => {
-        const merged = { ...prev, ...newNotes };
-        return merged;
-      });
-
-      if (filled > 0 && Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      setVoiceFilledCount(filled);
-      setVoicePhase('done');
-    } catch (e: any) {
-      console.error('[VoiceCheckIn]', e);
-      setVoiceError(e?.message ?? 'Processing failed');
-      setVoicePhase('error');
-    }
-  }, [voicePhase, audioRecorder, activeHabits, transcribeMutation]);
-
-  // Cancel recording
-  const handleCancelVoice = useCallback(async () => {
-    try { await audioRecorder.stop(); } catch {}
-    setVoicePhase('idle');
-    setVoiceError(null);
-  }, [audioRecorder]);
-
-  // Load existing notes for this date on mount / date change
-  useEffect(() => {
-    loadDayNotes().then((allNotes) => {
-      const forDate: Record<string, string> = {};
-      for (const [key, val] of Object.entries(allNotes)) {
-        const [habitId, noteDate] = key.split(':');
-        if (noteDate === currentDate && habitId && val) forDate[habitId] = val;
-      }
-      setNotes(forDate);
-    });
-  }, [currentDate]);
   const [practiceReady, setPracticeReady] = useState(false);
   const [practiceGenerating, setPracticeGenerating] = useState(false);
   const [practiceResult, setPracticeResult] = useState<{ chunkUrls: string[]; pausesBetweenChunks: number[]; totalDurationMinutes: number } | null>(null);
@@ -370,7 +169,7 @@ export default function CheckInScreen() {
   }, [myTeams]);
 
   const today = toDateString();
-  const canGoForward = currentDate < today;
+  const canGoForward = currentDate < yesterdayString();
 
   // Start after-alarm audio when submitted from alarm context
   useEffect(() => {
@@ -455,7 +254,7 @@ export default function CheckInScreen() {
     const d = new Date(currentDate + 'T12:00:00');
     d.setDate(d.getDate() + direction);
     const newDate = toDateString(d);
-    if (newDate > today) return;
+    if (newDate >= today) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCurrentDate(newDate);
     setRatings(getRatingsForDate(newDate));
@@ -503,28 +302,12 @@ export default function CheckInScreen() {
     });
   }
 
-  function setNote(habitId: string, text: string) {
-    setNotes((prev) => ({ ...prev, [habitId]: text }));
-  }
-
   async function handleSubmit() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // Stop countdown before submitting
     if (countdownAnimRef.current) countdownAnimRef.current.stop();
     if (countdownRef.current) clearTimeout(countdownRef.current);
     await submitCheckIn(currentDate, ratings);
-    // Save notes
-    const hasNotes = Object.values(notes).some((n) => n.trim());
-    if (hasNotes) {
-      const existing = await loadDayNotes();
-      const merged = { ...existing };
-      for (const [habitId, note] of Object.entries(notes)) {
-        const key = `${habitId}:${currentDate}`;
-        if (note.trim()) merged[key] = note.trim();
-        else delete merged[key];
-      }
-      await saveDayNotes(merged);
-    }
     setSubmitted(true);
 
     // Auto-generate morning practice if enabled
@@ -960,21 +743,13 @@ export default function CheckInScreen() {
                   const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
                   const rank = idx + 1;
-                  // While recording, all habit rows pulse slightly to show the mic is active
-                  const isRecording = voicePhase === 'recording';
 
                   return (
-                    <Animated.View
+                    <View
                       key={habit.id}
                       style={[
                         styles.habitRow,
                         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-                        isRecording && {
-                          opacity: pulseAnim.interpolate({
-                            inputRange: [1, 1.18],
-                            outputRange: [1, 0.92],
-                          }),
-                        },
                       ]}
                     >
                       {/* Habit name with number badge */}
@@ -994,23 +769,6 @@ export default function CheckInScreen() {
                               <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
                             </View>
                           )}
-                          {/* Compact note slot */}
-                          <TextInput
-                            value={notes[habit.id] ?? ''}
-                            onChangeText={(t) => setNote(habit.id, t)}
-                            placeholder="Add a note…"
-                            placeholderTextColor={colors.muted + '88'}
-                            style={[
-                              styles.noteInput,
-                              {
-                                color: colors.foreground,
-                                borderBottomColor: notes[habit.id] ? colors.primary + '55' : colors.border,
-                              },
-                            ]}
-                            returnKeyType="done"
-                            blurOnSubmit
-                            multiline={false}
-                          />
                         </View>
                       </View>
 
@@ -1031,16 +789,15 @@ export default function CheckInScreen() {
                                 isFirst && styles.segmentFirst,
                                 isLastSeg && styles.segmentLast,
                                 {
-                                  backgroundColor: isSelected ? col : col + '30',
-                                  opacity: isSelected ? (pressed ? 0.85 : 1) : (pressed ? 0.6 : 0.35),
-                                  transform: [{ scale: isSelected ? 1 : 0.92 }],
+                                  backgroundColor: isSelected ? col : col + '28',
+                                  opacity: pressed ? 0.75 : 1,
                                 },
                               ]}
                             />
                           );
                         })}
                       </View>
-                    </Animated.View>
+                    </View>
                   );
                 })}
               </View>
@@ -1078,137 +835,25 @@ export default function CheckInScreen() {
           </Pressable>
         )}
 
-        {/* Sequential voice status bar */}
-        {voiceActive && (
-          <View style={[
-            styles.voiceStatusBar,
+        <Pressable
+          onPress={anyRated ? handleSubmit : undefined}
+          style={({ pressed }) => [
+            styles.saveBtn,
             {
-              backgroundColor:
-                voicePhase === 'recording' ? '#EF444418' :
-                voicePhase === 'processing' ? colors.surface :
-                voicePhase === 'done' ? '#22C55E18' : '#EF444418',
-              borderColor:
-                voicePhase === 'recording' ? '#EF444455' :
-                voicePhase === 'processing' ? colors.border :
-                voicePhase === 'done' ? '#22C55E55' : '#EF444455',
+              backgroundColor: anyRated ? colors.primary : colors.border,
+              transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
+              opacity: anyRated ? 1 : 0.55,
             },
-          ]}>
-            {voicePhase === 'recording' && (
-              <View style={styles.voiceWaveRow}>
-                {[0.5, 0.9, 0.6, 1.0, 0.7, 0.85, 0.55].map((h, i) => (
-                  <Animated.View
-                    key={i}
-                    style={[
-                      styles.voiceBar,
-                      {
-                        height: 6 + h * 14,
-                        backgroundColor: '#EF4444',
-                        transform: [{ scaleY: pulseAnim }],
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
-            {voicePhase === 'processing' && (
-              <View style={{ width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.primary, borderTopColor: 'transparent' }} />
-            )}
-            {voicePhase === 'done' && <IconSymbol name="checkmark.circle.fill" size={14} color="#22C55E" />}
-            {voicePhase === 'error' && <IconSymbol name="exclamationmark.circle.fill" size={14} color="#EF4444" />}
-
-            <Text style={[
-              styles.voiceStatusText,
-              {
-                color:
-                  voicePhase === 'recording' ? '#EF4444' :
-                  voicePhase === 'done' ? '#22C55E' :
-                  voicePhase === 'error' ? '#EF4444' : colors.muted,
-              },
-            ]}>
-              {voicePhase === 'recording'
-                ? 'Listening… speak about all your habits'
-                : voicePhase === 'processing'
-                ? 'Analyzing your habits…'
-                : voicePhase === 'done'
-                ? `✓ Filled ${voiceFilledCount} habit${voiceFilledCount !== 1 ? 's' : ''}`
-                : voiceError ?? 'Voice check-in'}
-            </Text>
-
-            {/* Dismiss when done or error */}
-            {(voicePhase === 'done' || voicePhase === 'error') && (
-              <Pressable
-                onPress={() => { setVoicePhase('idle'); setVoiceError(null); }}
-                style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 2 }]}
-              >
-                <IconSymbol name="xmark" size={12} color={colors.muted} />
-              </Pressable>
-            )}
-            {/* Cancel while recording or processing */}
-            {(voicePhase === 'recording' || voicePhase === 'processing') && (
-              <Pressable
-                onPress={handleCancelVoice}
-                style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 2 }]}
-              >
-                <IconSymbol name="xmark" size={12} color={colors.muted} />
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* Save + Voice Mic row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Pressable
-            onPress={anyRated ? handleSubmit : undefined}
-            style={({ pressed }) => [
-              styles.saveBtn,
-              {
-                flex: 1,
-                backgroundColor: anyRated ? colors.primary : colors.border,
-                transform: [{ scale: anyRated && pressed ? 0.97 : 1 }],
-                opacity: anyRated ? 1 : 0.55,
-              },
-            ]}
-          >
-            <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
-              {allRated
-                ? 'Save Review'
-                : anyRated
-                ? `Save (${ratedEntries.length}/${totalActive})`
-                : `Rate at least one`}
-            </Text>
-          </Pressable>
-
-          {/* Voice mic button — tap to start, tap again to stop */}
-          <Animated.View style={{ transform: [{ scale: voicePhase === 'recording' ? pulseAnim : 1 }] }}>
-            <Pressable
-              onPress={voicePhase === 'recording' ? handleStopVoice : handleStartVoice}
-              style={[
-                styles.voiceMicBigBtn,
-                {
-                  backgroundColor:
-                    voicePhase === 'recording' ? '#EF4444' :
-                    voicePhase === 'processing' ? '#F59E0B' :
-                    voicePhase === 'done' ? '#22C55E' : '#EF4444',
-                  shadowColor: '#EF4444',
-                  shadowOffset: { width: 0, height: 3 },
-                  shadowOpacity: 0.4,
-                  shadowRadius: 6,
-                  elevation: 5,
-                },
-              ]}
-            >
-              <IconSymbol
-                name={
-                  voicePhase === 'recording' ? 'stop.fill' :
-                  voicePhase === 'processing' ? 'ellipsis' :
-                  'mic.fill'
-                }
-                size={24}
-                color="#fff"
-              />
-            </Pressable>
-          </Animated.View>
-        </View>
+          ]}
+        >
+          <Text style={[styles.saveBtnText, { color: anyRated ? '#fff' : colors.muted }]}>
+            {allRated
+              ? 'Save Review'
+              : anyRated
+              ? `Save Partial Review (${ratedEntries.length}/${totalActive})`
+              : `Rate at least one habit to save`}
+          </Text>
+        </Pressable>
       </View>
     </ScreenContainer>
   );
@@ -1379,39 +1024,4 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   snoozeBtnText: { fontSize: 15, fontWeight: '700' },
-
-  // Compact note input under each habit name
-  noteInput: {
-    fontSize: 11,
-    lineHeight: 15,
-    paddingVertical: 2,
-    paddingHorizontal: 0,
-    marginTop: 3,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 18,
-  },
-
-  // Big red mic button in footer
-  voiceMicBigBtn: {
-    width: 52, height: 52, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-
-  // Inline voice status bar
-  voiceStatusBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: 10, borderWidth: 1,
-    paddingHorizontal: 12, paddingVertical: 7,
-    marginBottom: 4,
-  },
-  voiceWaveRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 2, height: 20,
-  },
-  voiceBar: {
-    width: 3, borderRadius: 2,
-  },
-  voiceStatusText: {
-    flex: 1, fontSize: 12, fontWeight: '600',
-  },
 });
