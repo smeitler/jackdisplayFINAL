@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
-  Modal, FlatList, Dimensions, Image, useWindowDimensions,
+  Modal, FlatList, Dimensions, Image, useWindowDimensions, PanResponder,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -921,6 +921,113 @@ const editorStyles = StyleSheet.create({
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── SWIPEABLE ENTRY CARD ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+const DELETE_THRESHOLD = -80;
+
+function SwipeableEntryCard({ entry, onDelete, onEdit, colors }: {
+  entry: JournalEntry;
+  onDelete: (id: string) => void;
+  onEdit: (entry: JournalEntry) => void;
+  colors: any;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [revealed, setRevealed] = useState(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e: any, g: any) => Math.abs(g.dx) > 8 && Math.abs(g.dy) < 20,
+      onPanResponderMove: (_e: any, g: any) => {
+        if (g.dx < 0) translateX.setValue(Math.max(g.dx, DELETE_THRESHOLD - 20));
+      },
+      onPanResponderRelease: (_e: any, g: any) => {
+        if (g.dx < DELETE_THRESHOLD / 2) {
+          // Snap open to reveal delete button
+          Animated.spring(translateX, { toValue: DELETE_THRESHOLD, useNativeDriver: true, speed: 20 }).start();
+          setRevealed(true);
+        } else {
+          // Snap closed
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true, speed: 20 }).start();
+          setRevealed(false);
+        }
+      },
+    })
+  ).current;
+
+  function close() {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, speed: 20 }).start();
+    setRevealed(false);
+  }
+
+  const firstPhoto = entry.attachments.find((a) => a.type === "photo");
+
+  return (
+    <View style={{ marginBottom: 8, overflow: "hidden", borderRadius: 12 }}>
+      {/* Delete button revealed behind card */}
+      <View style={[
+        { position: "absolute", right: 0, top: 0, bottom: 0, width: 80,
+          backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center", borderRadius: 12 }
+      ]}>
+        <Pressable
+          onPress={() => { close(); onDelete(entry.id); }}
+          style={({ pressed }) => [{ alignItems: "center", justifyContent: "center", flex: 1, width: "100%", opacity: pressed ? 0.7 : 1 }]}
+        >
+          <IconSymbol name="trash.fill" size={22} color="#fff" />
+          <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700", marginTop: 2 }}>Delete</Text>
+        </Pressable>
+      </View>
+
+      {/* Card — slides left to reveal delete */}
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        <Pressable
+          onPress={() => { if (revealed) { close(); } else { onEdit(entry); } }}
+          style={({ pressed }) => [{
+            backgroundColor: colors.surface, borderRadius: 12, padding: 14,
+            borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.9 : 1,
+          }]}
+        >
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              {entry.title ? (
+                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }} numberOfLines={1}>{entry.title}</Text>
+              ) : null}
+              <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }} numberOfLines={3}>
+                {entry.body || "(audio entry)"}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <Text style={{ fontSize: 11, color: colors.muted }}>{formatTime(entry.createdAt)}</Text>
+                {entry.attachments.length > 0 && (
+                  <View style={{ flexDirection: "row", gap: 4 }}>
+                    {entry.attachments.some((a) => a.type === "photo") && <IconSymbol name="photo.fill" size={12} color={colors.muted} />}
+                    {entry.attachments.some((a) => a.type === "audio") && <IconSymbol name="mic.fill" size={12} color={colors.muted} />}
+                    {entry.attachments.some((a) => a.type === "video") && <IconSymbol name="video.fill" size={12} color={colors.muted} />}
+                    {entry.attachments.some((a) => a.type === "pdf") && <IconSymbol name="doc.fill" size={12} color={colors.muted} />}
+                  </View>
+                )}
+                {entry.location && <IconSymbol name="location.fill" size={12} color={colors.muted} />}
+              </View>
+            </View>
+            {firstPhoto && (
+              <Image
+                source={{ uri: firstPhoto.uri }}
+                style={{ width: 56, height: 56, borderRadius: 8, marginLeft: 10 }}
+                resizeMode="cover"
+              />
+            )}
+          </View>
+          {entry.attachments.filter((a) => a.type === "audio").map((att) => (
+            <AudioPlaybackRow key={att.id} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
+          ))}
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ─── JOURNAL LIST TAB ────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 function JournalListTab({ entries, onDelete, onEdit, colors }: {
@@ -960,53 +1067,15 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
           <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, marginBottom: 8 }}>
             {formatDateLabel(date)}
           </Text>
-          {items.map((entry) => {
-            const firstPhoto = entry.attachments.find((a) => a.type === "photo");
-            return (
-              <Pressable
-                key={entry.id}
-                onPress={() => onEdit(entry)}
-                style={({ pressed }) => [{
-                  backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8,
-                  borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.8 : 1,
-                }]}
-              >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    {entry.title ? (
-                      <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }} numberOfLines={1}>{entry.title}</Text>
-                    ) : null}
-                    <Text style={{ fontSize: 14, color: colors.foreground, lineHeight: 20 }} numberOfLines={3}>
-                      {entry.body || "(audio entry)"}
-                    </Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
-                      <Text style={{ fontSize: 11, color: colors.muted }}>{formatTime(entry.createdAt)}</Text>
-                      {entry.attachments.length > 0 && (
-                        <View style={{ flexDirection: "row", gap: 4 }}>
-                          {entry.attachments.some((a) => a.type === "photo") && <IconSymbol name="photo.fill" size={12} color={colors.muted} />}
-                          {entry.attachments.some((a) => a.type === "audio") && <IconSymbol name="mic.fill" size={12} color={colors.muted} />}
-                          {entry.attachments.some((a) => a.type === "video") && <IconSymbol name="video.fill" size={12} color={colors.muted} />}
-                          {entry.attachments.some((a) => a.type === "pdf") && <IconSymbol name="doc.fill" size={12} color={colors.muted} />}
-                        </View>
-                      )}
-                      {entry.location && <IconSymbol name="location.fill" size={12} color={colors.muted} />}
-                    </View>
-                  </View>
-                  {firstPhoto && (
-                    <Image
-                      source={{ uri: firstPhoto.uri }}
-                      style={{ width: 56, height: 56, borderRadius: 8, marginLeft: 10 }}
-                      resizeMode="cover"
-                    />
-                  )}
-                </View>
-                {/* Audio attachments inline */}
-                {entry.attachments.filter((a) => a.type === "audio").map((att) => (
-                  <AudioPlaybackRow key={att.id} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
-                ))}
-              </Pressable>
-            );
-          })}
+          {items.map((entry) => (
+            <SwipeableEntryCard
+              key={entry.id}
+              entry={entry}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              colors={colors}
+            />
+          ))}
         </View>
       ))}
     </View>
@@ -1632,6 +1701,29 @@ function MapTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── MAIN JOURNAL SCREEN ─────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
+/** Compute consecutive journaling streak (days with at least one entry ending today or yesterday) */
+function computeStreak(entries: JournalEntry[]): number {
+  if (entries.length === 0) return 0;
+  const datesWithEntries = new Set(entries.map((e) => e.date));
+  let streak = 0;
+  const today = new Date();
+  // Check from today backward
+  for (let i = 0; i < 3650; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    if (datesWithEntries.has(ds)) {
+      streak++;
+    } else if (i === 0) {
+      // Today has no entry — check if yesterday does (streak still alive)
+      continue;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 export default function JournalScreen() {
   const colors = useColors();
   const [activeTab, setActiveTab] = useState<SubTab>("journal");
@@ -1641,6 +1733,10 @@ export default function JournalScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [editorDate, setEditorDate] = useState(todayDateStr());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const streak = useMemo(() => computeStreak(entries), [entries]);
 
   useEffect(() => {
     (async () => {
@@ -1701,12 +1797,59 @@ export default function JournalScreen() {
     { key: "map", label: "Map", icon: "map.fill" },
   ];
 
+  // Filter entries by search query
+  const filteredEntries = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter((e) =>
+      e.title.toLowerCase().includes(q) ||
+      e.body.toLowerCase().includes(q) ||
+      e.date.includes(q)
+    );
+  }, [entries, searchQuery]);
+
   return (
     <ScreenContainer>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>
+        </View>
+        {streak > 0 && (
+          <View style={[
+            styles.streakBadge,
+            { backgroundColor: streak >= 7 ? "#F59E0B" : colors.primary + "20", borderColor: streak >= 7 ? "#F59E0B" : colors.primary }
+          ]}>
+            <Text style={{ fontSize: 16 }}>{streak >= 7 ? "🔥" : "✍️"}</Text>
+            <Text style={{ fontSize: 13, fontWeight: "700", color: streak >= 7 ? "#92400E" : colors.primary }}>
+              {streak} day{streak !== 1 ? "s" : ""}
+            </Text>
+          </View>
+        )}
       </View>
+
+      {/* Search bar — visible on journal tab */}
+      {activeTab === "journal" && (
+        <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: searchFocused ? colors.primary : colors.border }]}>
+          <IconSymbol name="magnifyingglass" size={16} color={colors.muted} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search entries…"
+            placeholderTextColor={colors.muted}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            style={{ flex: 1, fontSize: 15, color: colors.foreground, paddingVertical: 0 }}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery("")} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+              <IconSymbol name="xmark.circle.fill" size={16} color={colors.muted} />
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {/* Sub-tab bar */}
       <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
@@ -1748,7 +1891,7 @@ export default function JournalScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {activeTab === "journal" && (
-            <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
+            <JournalListTab entries={filteredEntries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
           )}
           {activeTab === "media" && (
             <MediaTab entries={entries} colors={colors} />
@@ -1792,6 +1935,15 @@ export default function JournalScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   headerTitle: { fontSize: 28, fontWeight: "700" },
+  streakBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+  },
+  searchBar: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: 12, borderWidth: 1,
+  },
   tabBar: { flexDirection: "row", borderBottomWidth: 0.5, paddingHorizontal: 8 },
   tabItem: { flex: 1, alignItems: "center", paddingVertical: 10, gap: 2 },
 });

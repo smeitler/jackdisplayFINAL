@@ -867,3 +867,6 @@
 - [x] Journal editor: remove template pill from top, move template picker to bottom toolbar next to mic
 - [x] Journal editor: merge title and body into one field — first line bold (title), Enter switches to normal body text
 - [x] Journal record button: auto-show habit prompts (all habits + gratitude) when record is tapped, no template selection needed
+- [x] Journal list: swipe left on entry to reveal quick-delete button
+- [x] Journal tab: search bar at top to filter entries by keyword or date
+- [x] Journal header: show consecutive-days journaling streak
