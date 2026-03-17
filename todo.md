@@ -882,3 +882,4 @@
 - [x] Home screen: restore habit card tap to open habit analytics/detail screen (not check-in)
 - [x] Habit detail screen: add a + / Log Today button to enter today's rating directly from the detail screen
 - [x] Bug: home screen shows "All caught up" incorrectly — fix to accurately reflect whether today/yesterday still need habit ratings
+- [x] Home screen: remove missed check-ins modal — tapping review banner goes straight to check-in screen

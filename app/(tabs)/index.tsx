@@ -670,13 +670,7 @@ export default function HomeScreen() {
           {/* ── Today's Focus Card ── */}
           {(isPendingCheckIn || missedDates.length > 0) ? (
             <Pressable
-              onPress={() => {
-                if (missedDates.length > 0) {
-                  setShowMissedDays(true);
-                } else {
-                  handleCheckIn();
-                }
-              }}
+              onPress={() => handleCheckIn()}
               style={({ pressed }) => [
                 styles.focusCard,
                 {
