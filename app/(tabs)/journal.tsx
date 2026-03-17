@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
-  Modal, FlatList, Dimensions, Image,
+  Modal, FlatList, Dimensions, Image, useWindowDimensions,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -25,7 +25,8 @@ import {
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, type Habit } from "@/lib/storage";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
+const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
 
 // ─── Sub-tab type ────────────────────────────────────────────────────────────
 type SubTab = "journal" | "calendar" | "media" | "map";
@@ -975,9 +976,10 @@ function CalendarTab({ entries, onDayPress, colors }: {
 
   // True wall-calendar layout:
   // 7 equal columns, 1px border between cells, cells are perfectly square.
-  // Cell width = full screen width / 7 (no padding on sides).
+  // Use useWindowDimensions so it reacts to screen size changes.
+  const { width: winWidth } = useWindowDimensions();
   const BORDER = 1;
-  const cellWidth = Math.floor(SCREEN_WIDTH / 7);
+  const cellWidth = Math.floor((winWidth > 0 ? winWidth : 390) / 7);
   // Height matches width for a perfect square
   const cellHeight = cellWidth;
 
@@ -1061,28 +1063,32 @@ function CalendarTab({ entries, onDayPress, colors }: {
               ))}
             </View>
 
-            {/* Week rows */}
+            {/* Week rows — borders are on each individual cell (collapsed) */}
             {rows.map((row, rowIdx) => (
-              <View key={rowIdx} style={{
-                flexDirection: "row",
-                borderBottomWidth: BORDER,
-                borderBottomColor: colors.border,
-              }}>
+              <View key={rowIdx} style={{ flexDirection: "row", zIndex: 0 }}>
                 {row.map((day, colIdx) => {
-                  const isLastCol = colIdx === 6;
+                  // Every cell gets a full border on all sides for a clean grid look
+                  const cellBorderStyle = {
+                    borderWidth: BORDER,
+                    borderColor: colors.border,
+                    // Collapse borders: shift left by 1 for all but first column
+                    marginLeft: colIdx > 0 ? -BORDER : 0,
+                    // Collapse borders: shift up by 1 for all but first row
+                    marginTop: rowIdx > 0 ? -BORDER : 0,
+                  };
 
                   if (day === null) {
                     return (
                       <View
                         key={`e-${colIdx}`}
-                        style={{
-                          width: cellWidth,
-                          height: cellHeight,
-                          borderRightWidth: isLastCol ? 0 : BORDER,
-                          borderRightColor: colors.border,
-                          backgroundColor: colors.background,
-                          opacity: 0.4,
-                        }}
+                        style={[
+                          cellBorderStyle,
+                          {
+                            width: cellWidth,
+                            height: cellHeight,
+                            backgroundColor: colors.background,
+                          },
+                        ]}
                       />
                     );
                   }
@@ -1107,19 +1113,20 @@ function CalendarTab({ entries, onDayPress, colors }: {
                     <Pressable
                       key={day}
                       onPress={() => onDayPress(dateStr)}
-                      style={({ pressed }) => [{
-                        width: cellWidth,
-                        height: cellHeight,
-                        overflow: "hidden",
-                        borderRightWidth: isLastCol ? 0 : BORDER,
-                        borderRightColor: colors.border,
-                        backgroundColor: isToday
-                          ? colors.primary + "18"
-                          : hasEntries
-                          ? colors.surface
-                          : colors.background,
-                        opacity: pressed ? 0.75 : 1,
-                      }]}
+                      style={({ pressed }) => [
+                        cellBorderStyle,
+                        {
+                          width: cellWidth,
+                          height: cellHeight,
+                          overflow: "hidden",
+                          backgroundColor: isToday
+                            ? colors.primary + "18"
+                            : hasEntries
+                            ? colors.surface
+                            : colors.background,
+                          opacity: pressed ? 0.75 : 1,
+                        },
+                      ]}
                     >
                       {/* Photo fills entire cell */}
                       {photoUri && (

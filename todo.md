@@ -854,3 +854,4 @@
 - [x] Calendar: make day cells much larger full squares so photos and notes are clearly visible
 - [x] Calendar: rebuild as true wall-calendar grid — large equal squares per day filling full screen width, like a physical monthly calendar
 - [x] Calendar: extend scroll range to 10 years back and 5 years forward, auto-scroll to current month
+- [x] Fix calendar: day cell borders disappeared after range expansion — restore visible grid boxes
