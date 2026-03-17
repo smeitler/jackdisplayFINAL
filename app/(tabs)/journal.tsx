@@ -23,7 +23,7 @@ import {
   JOURNAL_TEMPLATES, generateId, todayDateStr, formatDateLabel, formatTime,
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
-import { getLastUserId, loadHabits, type Habit } from "@/lib/storage";
+import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit } from "@/lib/storage";
 
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
@@ -440,6 +440,8 @@ function EntryEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
+  const [showHabitNotes, setShowHabitNotes] = useState(false);
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   // Load habits for template
@@ -450,6 +452,18 @@ function EntryEditor({
   // Reset form when opening
   useEffect(() => {
     if (visible) {
+      // Load existing habit notes for this date
+      loadDayNotes().then((allNotes) => {
+        const d = entry?.date || initialDate;
+        const existing: Record<string, string> = {};
+        for (const key of Object.keys(allNotes)) {
+          if (key.endsWith(":" + d)) {
+            const habitId = key.replace(":" + d, "");
+            existing[habitId] = allNotes[key];
+          }
+        }
+        setHabitNotes(existing);
+      });
       if (entry) {
         setDate(entry.date);
         setTitle(entry.title);
@@ -458,6 +472,8 @@ function EntryEditor({
         setAttachments(entry.attachments);
         setLocation(entry.location);
         setMood(entry.mood || "");
+        setHabitNotes(entry.habitNotes || {});
+        setShowHabitNotes(Object.keys(entry.habitNotes || {}).some((k) => (entry.habitNotes || {})[k].trim().length > 0));
         // Build merged text: title on first line, then body
         const merged = entry.title ? entry.title + (entry.body ? "\n" + entry.body : "") : entry.body;
         setMergedText(merged);
@@ -470,6 +486,8 @@ function EntryEditor({
         setAttachments([]);
         setLocation(undefined);
         setMood("");
+        setHabitNotes({});
+        setShowHabitNotes(false);
       }
     }
   }, [visible, entry, initialDate]);
@@ -601,31 +619,38 @@ function EntryEditor({
   }
 
   async function handleSave() {
-    if (!body.trim() && attachments.length === 0) return;
+    const hasContent = mergedText.trim() || attachments.length > 0 || Object.values(habitNotes).some((n) => n.trim());
+    if (!hasContent) return;
     setIsSaving(true);
     try {
       const now = new Date().toISOString();
 
+      // Save habit notes to DayNotes storage so they appear in the habit view
+      const nonEmptyNotes = Object.entries(habitNotes).filter(([, v]) => v.trim());
+      if (nonEmptyNotes.length > 0) {
+        const allNotes = await loadDayNotes();
+        for (const [habitId, note] of nonEmptyNotes) {
+          allNotes[`${habitId}:${date}`] = note.trim();
+        }
+        await saveDayNotes(allNotes);
+      }
+
       // Convert photo/video file URIs to base64 data URIs so they persist across app restarts.
-      // Audio URIs are already data URIs from the recorder, so skip those.
       const persistedAttachments: JournalAttachment[] = await Promise.all(
         attachments.map(async (att) => {
           if ((att.type === "photo" || att.type === "video") && att.uri && !att.uri.startsWith("data:")) {
             try {
               if (Platform.OS === "web") {
-                // On web, fetch the blob and convert to data URI
                 const resp = await fetch(att.uri);
                 const blob = await resp.blob();
                 const dataUri = await blobToDataUri(blob);
                 return { ...att, uri: dataUri };
               } else {
-                // On native, read as base64 and build data URI
                 const base64 = await FileSystem.readAsStringAsync(att.uri, { encoding: FileSystem.EncodingType.Base64 });
                 const mime = att.mimeType || "image/jpeg";
                 return { ...att, uri: `data:${mime};base64,${base64}` };
               }
             } catch {
-              // If conversion fails, keep original URI
               return att;
             }
           }
@@ -646,6 +671,7 @@ function EntryEditor({
         location,
         mood,
         tags: [],
+        habitNotes: nonEmptyNotes.length > 0 ? Object.fromEntries(nonEmptyNotes) : undefined,
       };
       onSave(saved);
       onClose();
@@ -688,17 +714,12 @@ function EntryEditor({
     setShowTemplates(false);
     if (key === "habit-checkin") {
       setTemplate("blank" as JournalTemplate);
-      const lines: string[] = ["\uD83D\uDCCB Daily Habit Notes", ""];
-      if (habits.length > 0) {
-        for (const h of habits) {
-          lines.push(`${h.emoji} ${h.name}`);
-          lines.push("Notes: ");
-          lines.push("");
-        }
-      } else {
-        lines.push("No active habits found. Add habits in the Habits tab first.");
-      }
-      const newBody = lines.join("\n");
+      // Show the structured habit notes section instead of plain text
+      setShowHabitNotes(true);
+      // Also set a simple body prompt
+      const newBody = habits.length > 0
+        ? "📋 Daily Habit Notes — fill in each habit below"
+        : "No active habits yet. Add habits in the Habits tab first.";
       setBody(newBody);
       setMergedText(title ? title + "\n" + newBody : newBody);
     } else if (key === "morning-pages") {
@@ -812,6 +833,69 @@ function EntryEditor({
               ]}
               textAlignVertical="top"
             />
+
+            {/* ── Habit Notes Section ─────────────────────────────────────── */}
+            {showHabitNotes && habits.length > 0 && (
+              <View style={{ marginTop: 16, gap: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, letterSpacing: 0.5 }}>HABIT NOTES</Text>
+                  <Pressable onPress={() => setShowHabitNotes(false)} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                    <IconSymbol name="xmark" size={14} color={colors.muted} />
+                  </Pressable>
+                </View>
+                {habits.map((h) => (
+                  <View key={h.id} style={[
+                    { borderRadius: 12, padding: 12, borderWidth: 1 },
+                    { backgroundColor: colors.surface, borderColor: colors.border }
+                  ]}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <Text style={{ fontSize: 20 }}>{h.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>{h.name}</Text>
+                        {h.description ? (
+                          <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>{h.description}</Text>
+                        ) : null}
+                      </View>
+                      {habitNotes[h.id]?.trim() ? (
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success ?? "#22C55E" }} />
+                      ) : null}
+                    </View>
+                    <TextInput
+                      value={habitNotes[h.id] || ""}
+                      onChangeText={(text) => setHabitNotes((prev) => ({ ...prev, [h.id]: text }))}
+                      placeholder={`Notes for ${h.name}\u2026`}
+                      placeholderTextColor={colors.muted}
+                      multiline
+                      style={[
+                        { fontSize: 14, color: colors.foreground, lineHeight: 20,
+                          minHeight: 60, paddingTop: 4, paddingBottom: 4,
+                          borderTopWidth: 0.5, borderTopColor: colors.border },
+                      ]}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                ))}
+                <Text style={{ fontSize: 11, color: colors.muted, textAlign: "center", paddingBottom: 4 }}>
+                  Notes saved here will appear in your habit view for this day.
+                </Text>
+              </View>
+            )}
+
+            {/* Toggle to show habit notes if not already shown */}
+            {!showHabitNotes && habits.length > 0 && (
+              <Pressable
+                onPress={() => setShowHabitNotes(true)}
+                style={({ pressed }) => [{
+                  flexDirection: "row", alignItems: "center", gap: 8,
+                  paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10,
+                  borderWidth: 1, borderColor: colors.border, borderStyle: "dashed",
+                  marginTop: 12, opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                <IconSymbol name="checkmark.circle" size={16} color={colors.muted} />
+                <Text style={{ fontSize: 13, color: colors.muted }}>Add habit notes for this entry</Text>
+              </Pressable>
+            )}
 
             {/* Transcription indicator */}
             {transcribingIds.size > 0 && (
