@@ -887,3 +887,7 @@
 - [x] AI Coach: server endpoint that accepts user question + full habit/check-in/journal context and returns personalized coaching response
 - [x] AI Coach: chat screen with "How can I help you today?" prompt, message history, and AI responses
 - [x] Habit detail screen: month calendar on top, 6-month heatmap below; tapping a day opens data entry modal (rating + note)
+- [x] Home screen habits section: voice check-in mic button — speak about what you did, AI fills ratings and notes per habit in real-time
+- [x] Home screen: remove pencil/edit icon from date header
+- [x] Home screen: clean up date display formatting
+- [x] Home screen: replace Coach emoji button with flat circular brain icon

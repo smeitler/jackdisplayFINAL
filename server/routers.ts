@@ -668,12 +668,12 @@ export const appRouter = router({
           : '';
 
         const habitInstructions = habits.length > 0
-          ? `3. "habitNotes": an object mapping habit IDs to relevant notes. For each habit, extract ONLY sentences/phrases from the transcript that are directly relevant to that specific habit. Use the habit's name and description to judge relevance. If nothing in the transcript relates to a habit, omit that habit's key entirely. Keep the user's natural language.`
+          ? `3. "habitNotes": an object mapping habit IDs to relevant notes. For each habit, extract ONLY sentences/phrases from the transcript that are directly relevant to that specific habit. Use the habit's name and description to judge relevance. If nothing in the transcript relates to a habit, omit that habit's key entirely. Keep the user's natural language.\n4. "habitRatings": an object mapping habit IDs to a rating string (\"green\", \"yellow\", or \"red\"). Rate each habit ONLY if the transcript clearly mentions it. green = completed/did well, yellow = partial/okay/struggled a bit, red = missed/skipped/failed. Omit a habit's key if it is not mentioned at all.`
           : '';
 
         const jsonShape = habits.length > 0
-          ? `{"journalEntries": [...], "gratitudeItems": [...], "habitNotes": {"<habitId>": "<relevant text>", ...}}`
-          : `{"journalEntries": [...], "gratitudeItems": [...]}`;
+          ? `{"journalEntries": [...], "gratitudeItems": [...], "habitNotes": {"<habitId>": "<relevant text>", ...}, "habitRatings": {"<habitId>": "green|yellow|red", ...}}`
+          : `{"journalEntries": [...], "gratitudeItems": []}`;
 
         const llmResp = await invokeLLM({
           messages: [
@@ -702,6 +702,7 @@ Return ONLY valid JSON: ${jsonShape}`,
         let journalEntries: string[] = [];
         let gratitudeItems: string[] = [];
         let habitNotes: Record<string, string> = {};
+        let habitRatings: Record<string, 'green' | 'yellow' | 'red'> = {};
         try {
           const parsed = JSON.parse(llmResp.choices[0].message.content as string);
           journalEntries = Array.isArray(parsed.journalEntries) ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
@@ -713,12 +714,19 @@ Return ONLY valid JSON: ${jsonShape}`,
               }
             }
           }
+          if (parsed.habitRatings && typeof parsed.habitRatings === 'object') {
+            for (const [id, rating] of Object.entries(parsed.habitRatings)) {
+              if (rating === 'green' || rating === 'yellow' || rating === 'red') {
+                habitRatings[id] = rating;
+              }
+            }
+          }
         } catch {
           // If parsing fails, put everything in journal
           journalEntries = [transcript];
         }
 
-        return { transcript, journalEntries, gratitudeItems, habitNotes, audioUrl };
+        return { transcript, journalEntries, gratitudeItems, habitNotes, habitRatings, audioUrl };
       }),
   }),
 

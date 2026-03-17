@@ -1,11 +1,11 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image } from "react-native";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId, loadDayNotes, saveDayNotes, Rating } from "@/lib/storage";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
@@ -13,6 +13,7 @@ import Svg, { Circle } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
+import { VoiceCheckInModal } from "@/components/voice-checkin-modal";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 // Profile pic key is per-user — built dynamically once userId is known
@@ -521,10 +522,12 @@ export default function HomeScreen() {
   const {
     alarm, isPendingCheckIn, getCategoryRate,
     streak, categories, activeHabits, checkIns,
+    submitCheckIn,
   } = useApp();
   const [showLegend, setShowLegend] = useState(false);
   const [showMissedDays, setShowMissedDays] = useState(false);
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
+  const [showVoiceCheckIn, setShowVoiceCheckIn] = useState(false);
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
@@ -627,17 +630,14 @@ export default function HomeScreen() {
 
           {/* ── Header: date + streak pill + profile pic ── */}
           <View style={styles.header}>
-            <Pressable
-              onPress={() => handleCheckIn()}
-              style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.7 : 1 })}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.dateText, { color: colors.foreground }]}>
-                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                </Text>
-                <IconSymbol name="pencil" size={14} color={colors.muted} />
-              </View>
-            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateDay, { color: colors.muted }]}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
+              </Text>
+              <Text style={[styles.dateText, { color: colors.foreground }]}>
+                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+              </Text>
+            </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               {streak > 0 && (
                 <View style={styles.streakPill}>
@@ -645,13 +645,15 @@ export default function HomeScreen() {
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
-              {/* Coach Button */}
+              {/* Coach Button — flat circular brain icon */}
               <Pressable
                 onPress={() => router.push('/coach' as never)}
-                style={({ pressed }) => [styles.coachBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+                style={({ pressed }) => [
+                  styles.coachBtn,
+                  { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44', opacity: pressed ? 0.75 : 1 },
+                ]}
               >
-                <Text style={styles.coachBtnEmoji}>🧠</Text>
-                <Text style={styles.coachBtnText}>Coach</Text>
+                <IconSymbol name="brain" size={22} color={colors.primary} />
               </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
@@ -779,15 +781,35 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          {/* ── Section title ── */}
+          {/* ── Section title + Voice Check-in mic ── */}
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
-            <Pressable
-              onPress={() => setShowLegend(true)}
-              style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            >
-              <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Voice check-in mic button */}
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setShowVoiceCheckIn(true);
+                }}
+                style={({ pressed }) => [
+                  styles.voiceMicBtn,
+                  {
+                    backgroundColor: '#EF4444' + '18',
+                    borderColor: '#EF4444' + '44',
+                    opacity: pressed ? 0.75 : 1,
+                    transform: [{ scale: pressed ? 0.95 : 1 }],
+                  },
+                ]}
+              >
+                <IconSymbol name="mic.fill" size={16} color="#EF4444" />
+              </Pressable>
+              <Pressable
+                onPress={() => setShowLegend(true)}
+                style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              >
+                <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
+              </Pressable>
+            </View>
           </View>
 
           {/* ── Legend modal ── */}
@@ -876,6 +898,33 @@ export default function HomeScreen() {
         onSelectDate={handleCheckIn}
         colors={colors}
       />
+
+      {/* ── Voice Check-In Modal ── */}
+      <VoiceCheckInModal
+        visible={showVoiceCheckIn}
+        habits={activeHabits}
+        date={toDateString()}
+        onClose={() => setShowVoiceCheckIn(false)}
+        onSave={async (results, notesMap) => {
+          // Build ratings map (skip 'none')
+          const ratingsMap: Record<string, Rating> = {};
+          for (const r of results) {
+            if (r.rating !== 'none') ratingsMap[r.habitId] = r.rating;
+          }
+          // Save check-ins
+          await submitCheckIn(toDateString(), ratingsMap);
+          // Save notes
+          if (Object.keys(notesMap).length > 0) {
+            const existing = await loadDayNotes();
+            const today = toDateString();
+            const merged = { ...existing };
+            for (const [habitId, note] of Object.entries(notesMap)) {
+              merged[`${habitId}:${today}`] = note;
+            }
+            await saveDayNotes(merged);
+          }
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -885,7 +934,8 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  dateText: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  dateDay: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 },
+  dateText: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   streakPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FF6B3520', borderRadius: 20,
@@ -1059,13 +1109,13 @@ const styles = StyleSheet.create({
   },
   missedDaysCloseText: { fontSize: 15, fontWeight: '700' },
   coachBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
   },
-  coachBtnEmoji: { fontSize: 15 },
-  coachBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  voiceMicBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
+  },
 });
