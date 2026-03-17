@@ -627,11 +627,17 @@ export default function HomeScreen() {
 
           {/* ── Header: date + streak pill + profile pic ── */}
           <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.dateText, { color: colors.foreground }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </Text>
-            </View>
+            <Pressable
+              onPress={() => handleCheckIn()}
+              style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.7 : 1 })}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.dateText, { color: colors.foreground }]}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </Text>
+                <IconSymbol name="pencil" size={14} color={colors.muted} />
+              </View>
+            </Pressable>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               {streak > 0 && (
                 <View style={styles.streakPill}>
@@ -668,7 +674,7 @@ export default function HomeScreen() {
                 if (missedDates.length > 0) {
                   setShowMissedDays(true);
                 } else {
-                  handleCheckIn(yesterday);
+                  handleCheckIn();
                 }
               }}
               style={({ pressed }) => [
@@ -700,7 +706,10 @@ export default function HomeScreen() {
               />
             </Pressable>
           ) : (
-            <View style={[styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => handleCheckIn()}
+              style={({ pressed }) => [styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
+            >
               <View style={styles.allCaughtUpLeft}>
                 <View style={[styles.allCaughtUpIconWrap, { backgroundColor: '#22C55E20' }]}>
                   <IconSymbol name="checkmark.circle.fill" size={22} color="#22C55E" />
@@ -716,7 +725,7 @@ export default function HomeScreen() {
                   <Text style={styles.allCaughtUpStreakNum}>{streak}</Text>
                 </View>
               )}
-            </View>
+            </Pressable>
           )}
 
           {/* ── Alarm strip ── */}
@@ -818,7 +827,7 @@ export default function HomeScreen() {
                     }}
                     onPressHabit={(habitId) => {
                       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push((`/habit-detail?habitId=${habitId}`) as never);
+                      handleCheckIn();
                     }}
                   />
                 );
