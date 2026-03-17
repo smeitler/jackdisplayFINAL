@@ -944,3 +944,10 @@
 - [x] Root cause: vcWhisperInFlightRef guard permanently locks if Whisper hangs or early-return skips finally
 - [x] Add watchdog timeout (8s) to auto-clear the in-flight guard if Whisper takes too long
 - [x] Remove early-return paths that bypass the finally block (move guard clear into finally always)
+
+## Voice Check-in Stops After First Habit (Mar 17 2026 - session 11)
+
+- [x] Fix: voice check-in stops transcribing after rating the first habit
+- [x] Root cause: deduplicateTranscript over-matched after first habit, returning empty string for all subsequent windows
+- [x] Root cause 2: rollingWindowRef not reset on new session, old audio poisoned first window
+- [x] Fix: switched to cumulative audio approach — send ALL audio since start to Whisper each tick, replace transcript with full result (no deduplication)

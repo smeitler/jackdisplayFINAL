@@ -25,16 +25,15 @@ import {
 
 // ─── Voice Check-in Sliding Window Recorder (isolated from journal code) ────
 // Architecture:
-//   1. Sliding window: every 2s, send the last 5s of audio to Whisper
-//      → Whisper always gets enough context to transcribe reliably
-//   2. Deduplication: remove words already in the accumulated transcript
-//      (overlap detection using longest common suffix/prefix match)
-//   3. Smart LLM debounce: fire analyzeTranscript on EITHER:
-//      a) 1.5s of silence detected via Web Audio AnalyserNode RMS measurement
+//   1. Cumulative audio: every 3s, send ALL audio since recording started to Whisper
+//      → Whisper gets the full context and returns the complete transcript so far
+//      → No deduplication needed — we just REPLACE the transcript with Whisper's result
+//      → Whisper's `prompt` parameter is set to the previous transcript so it continues naturally
+//   2. Smart LLM debounce: fire analyzeTranscript on EITHER:
+//      a) 1.2s of silence detected via Web Audio AnalyserNode RMS measurement
 //      b) transcript grew by 3+ words since last LLM call
-//   4. Mandatory final analysis on stop (complete transcript, awaited)
-const CHUNK_INTERVAL_MS = 2000;        // send sliding window every 2s
-const WINDOW_CHUNKS = 3;               // keep last N chunks = ~5-6s of audio for Whisper
+//   3. Mandatory final analysis on stop (complete transcript, awaited)
+const CHUNK_INTERVAL_MS = 3000;        // send cumulative audio every 3s
 const SILENCE_THRESHOLD_RMS = 0.02;    // RMS below this = silence
 const SILENCE_TRIGGER_MS = 1200;       // 1.2s of continuous silence → trigger LLM
 const WORD_DELTA_TRIGGER = 3;          // 3+ new words since last LLM → trigger LLM
@@ -48,9 +47,8 @@ function useCheckinWebRecorder(
 ) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const pendingChunksRef = useRef<Blob[]>([]); // accumulates since last tick
-  const rollingWindowRef = useRef<Blob[]>([]); // last N delta blobs for fallback
-  const emptyDeltaCountRef = useRef(0); // consecutive empty Whisper responses
+  const allChunksRef = useRef<Blob[]>([]); // ALL audio blobs since recording started
+  const rollingWindowRef = useRef<Blob[]>([]); // exposed for external access (unused internally now)
   const mimeTypeRef = useRef<string>('audio/webm');
   const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Silence detection via Web Audio API
@@ -69,7 +67,8 @@ function useCheckinWebRecorder(
 
   const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
-    pendingChunksRef.current = [];
+    allChunksRef.current = [];   // reset cumulative audio on each new session
+    rollingWindowRef.current = [];
     silenceSinceRef.current = null;
     silenceFiredRef.current = false;
     try {
@@ -84,14 +83,15 @@ function useCheckinWebRecorder(
       mimeTypeRef.current = mimeType || 'audio/webm';
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) pendingChunksRef.current.push(e.data);
+        // Accumulate ALL audio since recording started
+        if (e.data && e.data.size > 0) allChunksRef.current.push(e.data);
       };
       mr.start(100);
       mediaRecorderRef.current = mr;
       isRecordingRef.current = true;
       setIsRecording(true);
 
-      // ── Web Audio silence detection ──────────────────────────────────────
+      // ── Web Audio silence detection ───────────────────────────────────────────────────────────────────────────────────────
       try {
         const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
         const ctx = new AudioCtx();
@@ -129,20 +129,13 @@ function useCheckinWebRecorder(
         // Web Audio not available — silence detection disabled, word-delta debounce still works
       }
 
-      // ── Sliding window interval (Whisper feed) ──────────────────────────────────────
+      // ── Cumulative audio interval (Whisper feed) ──────────────────────────────────────────────────────────────────────────────────
       chunkIntervalRef.current = setInterval(() => {
-        if (!isRecordingRef.current || pendingChunksRef.current.length === 0) return;
-        // Drain pending chunks into rolling window
-        const newChunks = pendingChunksRef.current.splice(0);
-        const newBlob = new Blob(newChunks, { type: mimeTypeRef.current });
-        if (newBlob.size < 200) return; // too small — skip
-        rollingWindowRef.current.push(newBlob);
-        if (rollingWindowRef.current.length > WINDOW_CHUNKS) {
-          rollingWindowRef.current.shift();
-        }
-        // Always send the full sliding window to Whisper for reliable context
-        const windowBlob = new Blob(rollingWindowRef.current, { type: mimeTypeRef.current });
-        onDeltaChunkRef.current(windowBlob, mimeTypeRef.current);
+        if (!isRecordingRef.current || allChunksRef.current.length === 0) return;
+        // Send ALL audio accumulated so far — Whisper gets full context every time
+        const cumulativeBlob = new Blob(allChunksRef.current, { type: mimeTypeRef.current });
+        if (cumulativeBlob.size < 500) return; // too small — skip
+        onDeltaChunkRef.current(cumulativeBlob, mimeTypeRef.current);
       }, CHUNK_INTERVAL_MS);
 
       return true;
@@ -176,7 +169,7 @@ function useCheckinWebRecorder(
       mr.addEventListener('stop', () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        pendingChunksRef.current = [];
+        allChunksRef.current = [];
         isRecordingRef.current = false;
         setIsRecording(false);
         resolve();
@@ -203,39 +196,6 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Sliding window deduplication.
- * Whisper returns the full transcript of the last N seconds of audio.
- * We need to find what's NEW compared to what we already accumulated.
- *
- * Strategy: find the longest suffix of `accumulated` that appears as a
- * prefix of `windowText`, then return everything after that overlap.
- * Falls back to returning the full windowText if no overlap is found
- * (e.g. first window, or Whisper rephrased things).
- */
-function deduplicateTranscript(accumulated: string, windowText: string): string {
-  if (!accumulated.trim()) return windowText; // nothing accumulated yet — return all
-
-  const accWords = accumulated.trim().split(/\s+/);
-  const winWords = windowText.trim().split(/\s+/);
-
-  // Try to find the longest suffix of accumulated that is a prefix of windowText
-  // Search from longest possible overlap down to 1 word
-  const maxOverlap = Math.min(accWords.length, winWords.length);
-  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
-    const accSuffix = accWords.slice(accWords.length - overlap).join(' ').toLowerCase();
-    const winPrefix = winWords.slice(0, overlap).join(' ').toLowerCase();
-    if (accSuffix === winPrefix) {
-      // Found overlap — return the part of windowText after the overlap
-      const newWords = winWords.slice(overlap);
-      return newWords.join(' ');
-    }
-  }
-
-  // No overlap found — Whisper may have transcribed differently or this is fresh audio.
-  // Return the full windowText as new content (may cause slight duplication but avoids missing words).
-  return windowText;
-}
 
 type ActiveRating = 'red' | 'yellow' | 'green';
 const RATINGS: ActiveRating[] = ['red', 'yellow', 'green'];
@@ -345,8 +305,6 @@ export default function CheckInScreen() {
   const vcWhisperInFlightRef = useRef(false);
   // Smart LLM debounce: track word count at last LLM call
   const vcLastLlmWordCountRef = useRef(0);
-  // Rolling window fallback: count consecutive empty Whisper responses
-  const emptyDeltaCountRef = useRef(0);
   // Shared LLM fire function — uses refs only, never stale
   const fireAnalyzeTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return;
@@ -376,56 +334,62 @@ export default function CheckInScreen() {
     fireAnalyzeTranscript(t);
   }, [fireAnalyzeTranscript]);
 
-  // Called every CHUNK_INTERVAL_MS with a SLIDING WINDOW blob (last ~5s of audio)
-  // Whisper returns the full window transcript; we deduplicate against what we already have.
+  // Called every CHUNK_INTERVAL_MS with ALL audio since recording started (cumulative blob)
+  // Whisper returns the FULL transcript of everything spoken so far.
+  // We REPLACE vcTranscriptRef with Whisper's result — no deduplication needed.
   // Uses refs only — stable callback, never stale
   //
   // IMPORTANT: vcWhisperInFlightRef guards against concurrent calls.
-  // ALL exit paths (including early returns) MUST clear this flag via the finally block.
-  // Never use bare `return` inside the try — use a local variable to signal skip instead.
-  const handleVcDeltaChunk = useCallback(async (windowBlob: Blob, mimeType: string) => {
+  // ALL exit paths MUST clear this flag via the finally block — never use bare return inside try.
+  //
+  // CUMULATIVE APPROACH: we send ALL audio since recording started to Whisper each tick.
+  // Whisper returns the FULL transcript of everything spoken so far.
+  // We REPLACE vcTranscriptRef with Whisper's result (no deduplication needed).
+  // Whisper's `previousTranscript` prompt hint helps it continue naturally.
+  const handleVcDeltaChunk = useCallback(async (cumulativeBlob: Blob, mimeType: string) => {
     if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick (guard NOT set yet)
     vcWhisperInFlightRef.current = true;
     setVcProcessing(true);
 
-    // Watchdog: auto-clear the guard after 8s in case Whisper hangs
+    // Watchdog: auto-clear the guard after 12s in case Whisper hangs on longer audio
     const watchdog = setTimeout(() => {
       if (vcWhisperInFlightRef.current) {
         console.warn('[VoiceCheckin] Whisper watchdog fired — clearing in-flight guard');
         vcWhisperInFlightRef.current = false;
         setVcProcessing(false);
       }
-    }, 8000);
+    }, 12000);
 
     try {
-      // STEP 1: Whisper — transcribe the full sliding window (gives Whisper enough context)
-      const audioBase64 = await blobToBase64(windowBlob);
+      // STEP 1: Whisper — transcribe ALL audio since recording started
+      // Pass previousTranscript as a prompt hint so Whisper continues naturally
+      const audioBase64 = await blobToBase64(cumulativeBlob);
       const result = await transcribeChunkMutationRef.current.mutateAsync({
         audioBase64,
         mimeType,
         previousTranscript: vcTranscriptRef.current,
       });
-      const windowText = result.delta?.trim() ?? '';
+      const fullText = result.delta?.trim() ?? '';
 
-      // Deduplicate: extract only NEW words not already in the accumulated transcript
-      // (windowText may be empty if Whisper found nothing — that's fine, delta will be '')
-      const delta = windowText ? deduplicateTranscript(vcTranscriptRef.current, windowText) : '';
+      if (fullText) {
+        // REPLACE the transcript with Whisper's full result (it transcribed all audio so far)
+        // Only update if Whisper returned something longer / different than what we have
+        const prevWordCount = vcTranscriptRef.current.split(/\s+/).filter(Boolean).length;
+        const newWordCount = fullText.split(/\s+/).filter(Boolean).length;
 
-      if (delta) {
-        // Append new words to transcript immediately — user sees it right away
-        const newTranscript = vcTranscriptRef.current
-          ? vcTranscriptRef.current + ' ' + delta
-          : delta;
-        setVcTranscript(newTranscript);
-        vcTranscriptRef.current = newTranscript;
+        if (newWordCount >= prevWordCount) {
+          // Whisper's result is at least as long — trust it and replace
+          setVcTranscript(fullText);
+          vcTranscriptRef.current = fullText;
 
-        // STEP 2: Smart LLM debounce — fire if word delta >= WORD_DELTA_TRIGGER
-        const currentWordCount = newTranscript.split(/\s+/).filter(Boolean).length;
-        const wordDelta = currentWordCount - vcLastLlmWordCountRef.current;
-        if (wordDelta >= WORD_DELTA_TRIGGER) {
-          fireAnalyzeTranscript(newTranscript);
+          // STEP 2: Smart LLM debounce — fire if word delta >= WORD_DELTA_TRIGGER
+          const wordDelta = newWordCount - vcLastLlmWordCountRef.current;
+          if (wordDelta >= WORD_DELTA_TRIGGER) {
+            fireAnalyzeTranscript(fullText);
+          }
+          // (Silence path fires separately via handleVcSilence callback)
         }
-        // (Silence path fires separately via handleVcSilence callback)
+        // If Whisper returned fewer words (e.g. hallucination on silence), keep existing transcript
       }
 
     } catch (e) {
@@ -438,7 +402,6 @@ export default function CheckInScreen() {
   }, [fireAnalyzeTranscript]); // stable — all other deps via refs
 
   const checkinRecorder = useCheckinWebRecorder(handleVcDeltaChunk, handleVcSilence);
-  // Ref so handleVcDeltaChunk can access rollingWindowRef without stale closure
   const checkinRecorderRef = useRef(checkinRecorder);
   useEffect(() => { checkinRecorderRef.current = checkinRecorder; });
 
@@ -813,7 +776,6 @@ export default function CheckInScreen() {
       vcTranscriptRef.current = '';
       vcWhisperInFlightRef.current = false;
       vcLastLlmWordCountRef.current = 0;
-      emptyDeltaCountRef.current = 0;
       const ok = await checkinRecorder.start();
       if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
       setVcElapsed(0);
