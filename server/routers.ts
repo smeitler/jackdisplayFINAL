@@ -728,6 +728,70 @@ Return ONLY valid JSON: ${jsonShape}`,
 
         return { transcript, journalEntries, gratitudeItems, habitNotes, habitRatings, audioUrl };
       }),
+
+    /**
+     * Fast single-habit analysis: transcribes a short audio clip and returns
+     * a rating (green/yellow/red/none) + extracted note for ONE specific habit.
+     * Used by the sequential habit-by-habit voice check-in.
+     */
+    analyzeForHabit: publicProcedure
+      .input(z.object({
+        audioBase64: z.string(),
+        mimeType: z.string().default('audio/m4a'),
+        habit: z.object({
+          id: z.string(),
+          name: z.string(),
+          emoji: z.string().optional(),
+          description: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+        const transcription = await transcribeAudioBuffer(audioBuffer, input.mimeType, {
+          language: 'en',
+          prompt: `Habit check-in for: ${input.habit.name}`,
+        });
+
+        if ('error' in transcription) {
+          throw new Error(`Transcription failed: ${transcription.error}`);
+        }
+        const transcript = transcription.text?.trim() ?? '';
+        if (!transcript) return { transcript: '', rating: 'none' as const, note: '' };
+
+        const habitDesc = input.habit.description ? ` (${input.habit.description})` : '';
+        const llmResp = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a habit check-in assistant. The user just spoke about their habit: "${input.habit.name}"${habitDesc}.
+Analyze the transcript and return JSON with:
+- "rating": "green" (completed/did well), "yellow" (partial/okay/struggled), "red" (missed/skipped/failed), or "none" (not mentioned / unclear)
+- "note": a concise 1-2 sentence note in the user's own words capturing what they said about this habit. Empty string if nothing relevant.
+Return ONLY valid JSON: {"rating": "green|yellow|red|none", "note": "..."}`,
+            },
+            {
+              role: 'user',
+              content: `Transcript: ${transcript}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        });
+
+        let rating: 'green' | 'yellow' | 'red' | 'none' = 'none';
+        let note = '';
+        try {
+          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+          if (['green', 'yellow', 'red', 'none'].includes(parsed.rating)) rating = parsed.rating;
+          if (typeof parsed.note === 'string') note = parsed.note.trim();
+        } catch {
+          note = transcript;
+        }
+
+        return { transcript, rating, note };
+      }),
   }),
 
   // ─── Morning Practice ────────────────────────────────────────────────────────

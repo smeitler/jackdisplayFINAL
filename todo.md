@@ -897,3 +897,5 @@
 - [x] Check-in screen: hold-to-record mic (no modal) — hold to record, release to process, habits color green/yellow/red in real time inline
 - [x] Check-in screen: pulsing red dot + waveform indicator while recording (inline, no popup)
 - [x] Check-in screen: shrink note input font slightly
+- [x] Check-in screen: sequential habit-by-habit voice check-in — tap mic, first habit highlights, speak, AI detects rating+note in real time and marks it, auto-advances to next habit
+- [x] Check-in screen: add new server route for single-habit voice analysis (fast, per-habit)
