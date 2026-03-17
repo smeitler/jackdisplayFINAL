@@ -24,30 +24,48 @@ import {
 } from '@/lib/storage';
 
 // ─── Voice Check-in Delta Streaming Recorder (isolated from journal code) ────
-// Architecture: delta-only chunks → Whisper (fast) → transcript appended immediately
-//               accumulated transcript → LLM (parallel) → ratings/notes updated
-// This avoids re-processing growing audio on every tick (the old cumulative approach).
-const CHUNK_INTERVAL_MS = 1000; // 1-second delta chunks
+// Architecture:
+//   1. delta-only chunks → Whisper (fast) → transcript appended immediately
+//   2. Smart LLM debounce: fire analyzeTranscript on EITHER:
+//      a) 1.5s of silence detected via Web Audio AnalyserNode RMS measurement
+//      b) transcript grew by 8+ words since last LLM call
+//   3. Mandatory final analysis on stop (complete transcript, awaited)
+const CHUNK_INTERVAL_MS = 1000;        // 1-second delta chunks for Whisper
+const SILENCE_THRESHOLD_RMS = 0.015;   // RMS below this = silence
+const SILENCE_TRIGGER_MS = 1500;       // 1.5s of continuous silence → trigger LLM
+const WORD_DELTA_TRIGGER = 8;          // 8+ new words since last LLM → trigger LLM
 
-// Callback receives only the NEW audio since the last tick (delta blob)
 type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
+type SilenceCallback = () => void;
 
-function useCheckinWebRecorder(onDeltaChunk: DeltaChunkCallback) {
+function useCheckinWebRecorder(
+  onDeltaChunk: DeltaChunkCallback,
+  onSilenceDetected: SilenceCallback,
+) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  // pendingChunks: raw MediaRecorder data since last tick — cleared on each tick
   const pendingChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>('audio/webm');
   const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Silence detection via Web Audio API
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceSinceRef = useRef<number | null>(null); // timestamp when silence started
+  const silenceFiredRef = useRef(false); // prevent multiple fires per silence window
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const onDeltaChunkRef = useRef(onDeltaChunk);
+  const onSilenceRef = useRef(onSilenceDetected);
   useEffect(() => { onDeltaChunkRef.current = onDeltaChunk; });
+  useEffect(() => { onSilenceRef.current = onSilenceDetected; });
 
   const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
     pendingChunksRef.current = [];
+    silenceSinceRef.current = null;
+    silenceFiredRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -59,22 +77,58 @@ function useCheckinWebRecorder(onDeltaChunk: DeltaChunkCallback) {
       }
       mimeTypeRef.current = mimeType || 'audio/webm';
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      // Accumulate raw data into pendingChunks — cleared on each tick
       mr.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) pendingChunksRef.current.push(e.data);
       };
-      mr.start(100); // emit data every 100ms
+      mr.start(100);
       mediaRecorderRef.current = mr;
       isRecordingRef.current = true;
       setIsRecording(true);
 
-      // Every CHUNK_INTERVAL_MS: drain pendingChunks into a delta blob and fire callback
+      // ── Web Audio silence detection ──────────────────────────────────────
+      try {
+        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
+        const ctx = new AudioCtx();
+        audioCtxRef.current = ctx;
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+        const buf = new Float32Array(analyser.fftSize);
+
+        silenceIntervalRef.current = setInterval(() => {
+          if (!isRecordingRef.current) return;
+          analyser.getFloatTimeDomainData(buf);
+          // RMS amplitude
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          const rms = Math.sqrt(sum / buf.length);
+
+          if (rms < SILENCE_THRESHOLD_RMS) {
+            // Silence detected
+            if (silenceSinceRef.current === null) silenceSinceRef.current = Date.now();
+            const silenceDuration = Date.now() - silenceSinceRef.current;
+            if (silenceDuration >= SILENCE_TRIGGER_MS && !silenceFiredRef.current) {
+              silenceFiredRef.current = true; // prevent re-firing until speech resumes
+              onSilenceRef.current();
+            }
+          } else {
+            // Speech detected — reset silence window and allow next silence trigger
+            silenceSinceRef.current = null;
+            silenceFiredRef.current = false;
+          }
+        }, 100); // check every 100ms
+      } catch {
+        // Web Audio not available — silence detection disabled, word-delta debounce still works
+      }
+
+      // ── Delta chunk interval (Whisper feed) ─────────────────────────────
       chunkIntervalRef.current = setInterval(() => {
         if (!isRecordingRef.current || pendingChunksRef.current.length === 0) return;
-        // Drain: take all pending chunks and clear the buffer
         const deltaChunks = pendingChunksRef.current.splice(0);
         const deltaBlob = new Blob(deltaChunks, { type: mimeTypeRef.current });
-        if (deltaBlob.size > 500) { // skip near-silent/empty deltas
+        if (deltaBlob.size > 500) {
           onDeltaChunkRef.current(deltaBlob, mimeTypeRef.current);
         }
       }, CHUNK_INTERVAL_MS);
@@ -94,8 +148,11 @@ function useCheckinWebRecorder(onDeltaChunk: DeltaChunkCallback) {
   }, []);
 
   const stop = useCallback((): Promise<void> => {
-    // Stop the chunk interval — any remaining pending chunks are discarded (transcript is already up to date)
     if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null; }
+    if (silenceIntervalRef.current) { clearInterval(silenceIntervalRef.current); silenceIntervalRef.current = null; }
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    analyserRef.current = null;
     return new Promise((resolve) => {
       const mr = mediaRecorderRef.current;
       if (!mr || mr.state === 'inactive') {
@@ -220,7 +277,34 @@ export default function CheckInScreen() {
 
   // Guard: skip delta if Whisper is still processing the previous chunk
   const vcWhisperInFlightRef = useRef(false);
-  // LLM analysis runs fire-and-forget in parallel — no blocking guard needed
+  // Smart LLM debounce: track word count at last LLM call
+  const vcLastLlmWordCountRef = useRef(0);
+  // Shared LLM fire function (used by both word-delta path and silence path)
+  const fireAnalyzeTranscript = useCallback((transcript: string) => {
+    if (!transcript.trim()) return;
+    const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
+    vcLastLlmWordCountRef.current = transcript.split(/\s+/).filter(Boolean).length;
+    analyzeTranscriptMutation.mutateAsync({ transcript, habits: habitList })
+      .then((analysis) => {
+        const newRatings: Record<string, Rating> = {};
+        const newNotes: Record<string, string> = {};
+        for (const [habitId, data] of Object.entries(analysis.results) as [string, { rating: string | null; note: string }][]) {
+          if (data.rating) newRatings[habitId] = data.rating as Rating;
+          if (data.note) newNotes[habitId] = data.note;
+        }
+        if (Object.keys(newRatings).length > 0) setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
+        if (Object.keys(newNotes).length > 0) setVcNotes((prev) => ({ ...prev, ...newNotes }));
+      })
+      .catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e));
+  }, [analyzeTranscriptMutation]);
+
+  // Silence callback: fires when 1.5s of silence is detected mid-recording
+  const handleVcSilence = useCallback(() => {
+    const t = vcTranscriptRef.current;
+    if (!t.trim()) return;
+    console.log('[VoiceCheckin] Silence detected — firing LLM analysis');
+    fireAnalyzeTranscript(t);
+  }, [fireAnalyzeTranscript]);
 
   // Called every CHUNK_INTERVAL_MS with a DELTA blob (only new audio since last tick)
   const handleVcDeltaChunk = useCallback(async (deltaBlob: Blob, mimeType: string) => {
@@ -245,25 +329,13 @@ export default function CheckInScreen() {
       setVcTranscript(newTranscript);
       vcTranscriptRef.current = newTranscript;
 
-      // STEP 2: LLM — analyze full accumulated transcript (fire-and-forget, no blocking)
-      const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
-      analyzeTranscriptMutation.mutateAsync({
-        transcript: newTranscript,
-        habits: habitList,
-      }).then((analysis) => {
-        const newRatings: Record<string, Rating> = {};
-        const newNotes: Record<string, string> = {};
-        for (const [habitId, data] of Object.entries(analysis.results) as [string, { rating: string | null; note: string }][]) {
-          if (data.rating) newRatings[habitId] = data.rating as Rating;
-          if (data.note) newNotes[habitId] = data.note;
-        }
-        if (Object.keys(newRatings).length > 0) {
-          setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
-        }
-        if (Object.keys(newNotes).length > 0) {
-          setVcNotes((prev) => ({ ...prev, ...newNotes }));
-        }
-      }).catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e));
+      // STEP 2: Smart LLM debounce — fire if word delta >= WORD_DELTA_TRIGGER
+      const currentWordCount = newTranscript.split(/\s+/).filter(Boolean).length;
+      const wordDelta = currentWordCount - vcLastLlmWordCountRef.current;
+      if (wordDelta >= WORD_DELTA_TRIGGER) {
+        fireAnalyzeTranscript(newTranscript);
+      }
+      // (Silence path fires separately via handleVcSilence callback)
 
     } catch (e) {
       console.warn('[VoiceCheckin] Whisper chunk error:', e);
@@ -271,9 +343,9 @@ export default function CheckInScreen() {
       vcWhisperInFlightRef.current = false;
       setVcProcessing(false);
     }
-  }, [transcribeChunkMutation, analyzeTranscriptMutation]);
+  }, [transcribeChunkMutation, fireAnalyzeTranscript]);
 
-  const checkinRecorder = useCheckinWebRecorder(handleVcDeltaChunk);
+  const checkinRecorder = useCheckinWebRecorder(handleVcDeltaChunk, handleVcSilence);
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -596,7 +668,32 @@ export default function CheckInScreen() {
       vcPulseLoopRef.current?.stop();
       Animated.spring(vcPulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
       await checkinRecorder.stop();
-      // Show done state (ratings already updated live during recording)
+      // MANDATORY FINAL ANALYSIS: fire one last LLM call on the complete transcript
+      // This is the polished result — mid-stream analysis is always partial/noisy
+      const finalTranscript = vcTranscriptRef.current;
+      if (finalTranscript.trim()) {
+        setVcProcessing(true);
+        try {
+          const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
+          const finalAnalysis = await analyzeTranscriptMutation.mutateAsync({
+            transcript: finalTranscript,
+            habits: habitList,
+          });
+          const finalRatings: Record<string, Rating> = {};
+          const finalNotes: Record<string, string> = {};
+          for (const [habitId, data] of Object.entries(finalAnalysis.results) as [string, { rating: string | null; note: string }][]) {
+            if (data.rating) finalRatings[habitId] = data.rating as Rating;
+            if (data.note) finalNotes[habitId] = data.note;
+          }
+          if (Object.keys(finalRatings).length > 0) setRatings((prev) => ({ ...prev, ...finalRatings }));
+          if (Object.keys(finalNotes).length > 0) setVcNotes((prev) => ({ ...prev, ...finalNotes }));
+        } catch (e) {
+          console.warn('[VoiceCheckin] Final analysis error:', e);
+        } finally {
+          setVcProcessing(false);
+        }
+      }
+      // Show done state
       setVcStatus('done');
       // Auto-clear after 5 seconds
       setTimeout(() => setVcStatus('idle'), 5000);
@@ -611,6 +708,7 @@ export default function CheckInScreen() {
       setVcTranscript('');
       vcTranscriptRef.current = '';
       vcWhisperInFlightRef.current = false;
+      vcLastLlmWordCountRef.current = 0;
       const ok = await checkinRecorder.start();
       if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
       setVcElapsed(0);

@@ -913,3 +913,10 @@
 - [x] Client: send delta-only audio chunks (not cumulative blobs)
 - [x] Client: update transcript display immediately on Whisper response
 - [x] Client: run LLM analysis in parallel on accumulated transcript text
+
+## Smart LLM Debounce + Final Analysis (Mar 17 2026 - session 6)
+
+- [x] Silence detection: Web Audio AnalyserNode measures RMS every 100ms, fires LLM when 1.5s silence detected
+- [x] Word delta debounce: only fire LLM if transcript grew by 8+ words since last analysis
+- [x] Combine: trigger LLM on EITHER silence OR word delta (whichever comes first)
+- [x] Final analysis on stop: mandatory analyzeTranscript call on complete transcript before done state
