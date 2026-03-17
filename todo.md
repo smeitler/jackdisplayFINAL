@@ -958,3 +958,29 @@
 - [x] Reduce SILENCE_TRIGGER_MS from 1200ms to 600ms so LLM fires sooner after speech ends
 - [x] Reduce WORD_DELTA_TRIGGER from 3 to 2 words so LLM fires more eagerly
 - [x] Overlap Whisper and LLM calls: fire LLM on previous transcript while Whisper processes new audio
+
+## Voice Check-in Audio Cap Fix (Mar 17 2026 - session 13)
+
+- [ ] Fix: Whisper slows down after several habits because cumulative blob grows unboundedly
+- [ ] Implement rolling audio cap: keep only last ~15s of blobs for Whisper (drop older blobs)
+- [ ] Pass full accumulated transcript as Whisper prompt so it knows what was already said
+- [ ] Result: Whisper always processes a short fixed-length window regardless of session length
+
+## Voice Check-in Segment-Based Processing (Mar 17 2026 - session 14)
+
+- [ ] Redesign: process audio in segments — each silence boundary commits segment and resets audio buffer
+- [ ] Whisper only ever sees new audio since last silence (not full growing session)
+- [ ] LLM analyzes only the new segment transcript appended to the full accumulated transcript
+- [ ] On silence: finalize current segment → commit its transcript → reset audio buffer for next segment
+- [ ] On tick: send only current segment's audio (small, fast) to Whisper for live preview
+- [ ] Result: Whisper always processes a short constant-size chunk regardless of session length
+
+## Voice Check-in Incremental LLM Analysis (Mar 17 2026 - session 15)
+
+- [x] Track vcConsumedTranscriptRef: character offset of transcript already analyzed by LLM
+- [x] Track vcLockedHabitsRef: set of habit IDs already rated with confidence (never re-analyzed)
+- [x] On each LLM call: only send transcript[consumedOffset..] (new unanalyzed portion) to LLM
+- [x] LLM only receives unrated habits list (locked habits excluded from prompt)
+- [x] On LLM result: lock any newly rated habits, advance consumedOffset to current transcript length
+- [x] Result: LLM calls get faster and cheaper as more habits are locked in
+- [x] Rolling audio cap at ~20s (200 chunks) to also bound Whisper cost

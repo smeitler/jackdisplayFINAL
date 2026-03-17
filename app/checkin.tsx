@@ -23,21 +23,25 @@ import {
   saveDayNotes,
 } from '@/lib/storage';
 
-// ─── Voice Check-in Sliding Window Recorder (isolated from journal code) ────
+// ─── Voice Check-in Segment-Based Recorder ────────────────────────────────────
 // Architecture:
-//   1. Cumulative audio: every 1.5s, send ALL audio since recording started to Whisper
-//      → Whisper gets the full context and returns the complete transcript so far
-//      → No deduplication needed — we just REPLACE the transcript with Whisper's result
-//      → Whisper's `prompt` parameter is set to the previous transcript so it continues naturally
-//   2. Smart LLM debounce: fire analyzeTranscript on EITHER:
-//      a) 0.6s of silence detected via Web Audio AnalyserNode RMS measurement
-//      b) transcript grew by 2+ words since last LLM call
-//      c) Parallel path: LLM fires on previous transcript WHILE Whisper processes new audio
-//   3. Mandatory final analysis on stop (complete transcript, awaited)
-const CHUNK_INTERVAL_MS = 1500;        // send cumulative audio every 1.5s (was 3s)
+//   SEGMENT MODEL — audio is split into segments at each silence boundary:
+//   • currentSegmentChunks: audio blobs since the last silence (always small/fast for Whisper)
+//   • committedTranscript: full text of all finalized segments (grows across session)
+//
+//   Each 1.5s tick: send currentSegmentChunks to Whisper → live preview of current speech
+//     Display: committedTranscript + " " + segmentPreview
+//
+//   On silence: finalize current segment → commit its Whisper result to committedTranscript
+//     → send full committedTranscript to LLM for habit rating
+//     → reset currentSegmentChunks for the next segment
+//
+//   Result: Whisper always processes ≤15s of audio regardless of session length.
+//   LLM analyzes the full accumulated transcript but only re-runs when a segment commits.
+const CHUNK_INTERVAL_MS = 1500;        // live preview tick: send current segment every 1.5s
 const SILENCE_THRESHOLD_RMS = 0.02;    // RMS below this = silence
-const SILENCE_TRIGGER_MS = 600;        // 0.6s of continuous silence → trigger LLM (was 1.2s)
-const WORD_DELTA_TRIGGER = 2;          // 2+ new words since last LLM → trigger LLM (was 3)
+const SILENCE_TRIGGER_MS = 700;        // 0.7s of continuous silence → commit segment + fire LLM
+const WORD_DELTA_TRIGGER = 2;          // fallback: 2+ new words → fire LLM even without silence
 
 type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
 type SilenceCallback = () => void;
@@ -130,15 +134,20 @@ function useCheckinWebRecorder(
         // Web Audio not available — silence detection disabled, word-delta debounce still works
       }
 
-      // ── Cumulative audio interval (Whisper feed) ──────────────────────────────────────────────────────────────────────────────────
+      // ── Rolling audio interval (Whisper feed) ────────────────────────────────────────────────────────────────────────────────────────
+      // Cap: keep only the last ~20s of audio blobs so Whisper processes a constant-size window.
+      // MediaRecorder fires ondataavailable every 100ms, so 20s ≈ 200 chunks.
+      const MAX_AUDIO_CHUNKS = 200; // ~20s at 100ms per chunk
       chunkIntervalRef.current = setInterval(() => {
         if (!isRecordingRef.current || allChunksRef.current.length === 0) return;
-        // Send ALL audio accumulated so far — Whisper gets full context every time
-        const cumulativeBlob = new Blob(allChunksRef.current, { type: mimeTypeRef.current });
-        if (cumulativeBlob.size < 500) return; // too small — skip
-        onDeltaChunkRef.current(cumulativeBlob, mimeTypeRef.current);
+        // Trim old chunks: keep only the last MAX_AUDIO_CHUNKS blobs
+        if (allChunksRef.current.length > MAX_AUDIO_CHUNKS) {
+          allChunksRef.current = allChunksRef.current.slice(-MAX_AUDIO_CHUNKS);
+        }
+        const windowBlob = new Blob(allChunksRef.current, { type: mimeTypeRef.current });
+        if (windowBlob.size < 500) return; // too small — skip
+        onDeltaChunkRef.current(windowBlob, mimeTypeRef.current);
       }, CHUNK_INTERVAL_MS);
-
       return true;
     } catch (e: any) {
       const name = e?.name ?? '';
@@ -306,23 +315,51 @@ export default function CheckInScreen() {
   const vcWhisperInFlightRef = useRef(false);
   // Smart LLM debounce: track word count at last LLM call
   const vcLastLlmWordCountRef = useRef(0);
-  // Shared LLM fire function — uses refs only, never stale
+  // Incremental LLM tracking:
+  //   vcLockedHabitsRef — habit IDs already rated with confidence; excluded from future LLM calls
+  //   vcConsumedOffsetRef — char offset in vcTranscriptRef already sent to LLM; next call sends only new text
+  const vcLockedHabitsRef = useRef<Set<string>>(new Set());
+  const vcConsumedOffsetRef = useRef(0);
+  const vcLlmInFlightRef = useRef(false); // guard: only one LLM call at a time
+
+  // Shared LLM fire function — INCREMENTAL: only sends new (unanalyzed) transcript to LLM
+  // and only asks about habits not yet locked in.
   const fireAnalyzeTranscript = useCallback((transcript: string) => {
     if (!transcript.trim()) return;
-    const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
+    if (vcLlmInFlightRef.current) return; // LLM already running — skip
+
+    // Only send the NEW portion of the transcript since the last LLM call
+    const newText = transcript.slice(vcConsumedOffsetRef.current).trim();
+    if (!newText) return; // nothing new to analyze
+
+    // Only ask about habits not yet locked in
+    const unlockedHabits = activeHabitsRef.current
+      .filter((h) => !vcLockedHabitsRef.current.has(h.id))
+      .map((h) => ({ id: h.id, name: h.name }));
+    if (unlockedHabits.length === 0) return; // all habits already rated — nothing to do
+
+    vcLlmInFlightRef.current = true;
     vcLastLlmWordCountRef.current = transcript.split(/\s+/).filter(Boolean).length;
-    analyzeTranscriptMutationRef.current.mutateAsync({ transcript, habits: habitList })
+    // Advance consumed offset NOW so parallel calls don't re-send the same text
+    vcConsumedOffsetRef.current = transcript.length;
+
+    analyzeTranscriptMutationRef.current.mutateAsync({ transcript: newText, habits: unlockedHabits })
       .then((analysis) => {
         const newRatings: Record<string, Rating> = {};
         const newNotes: Record<string, string> = {};
         for (const [habitId, data] of Object.entries(analysis.results) as [string, { rating: string | null; note: string }][]) {
-          if (data.rating) newRatings[habitId] = data.rating as Rating;
+          if (data.rating) {
+            newRatings[habitId] = data.rating as Rating;
+            // Lock this habit — it won't be re-analyzed in future LLM calls
+            vcLockedHabitsRef.current.add(habitId);
+          }
           if (data.note) newNotes[habitId] = data.note;
         }
         if (Object.keys(newRatings).length > 0) setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
         if (Object.keys(newNotes).length > 0) setVcNotesRef.current((prev) => ({ ...prev, ...newNotes }));
       })
-      .catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e));
+      .catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e))
+      .finally(() => { vcLlmInFlightRef.current = false; });
   }, []); // stable — all deps accessed via refs
 
   // Silence callback: fires when 1.5s of silence is detected mid-recording
@@ -746,16 +783,19 @@ export default function CheckInScreen() {
       vcPulseLoopRef.current?.stop();
       Animated.spring(vcPulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
       await checkinRecorder.stop();
-      // MANDATORY FINAL ANALYSIS: fire one last LLM call on the complete transcript
-      // This is the polished result — mid-stream analysis is always partial/noisy
+      // MANDATORY FINAL ANALYSIS: fire one last LLM call on any remaining unanalyzed transcript
+      // Only sends the NEW portion since the last LLM call, and only for unlocked habits.
       const finalTranscript = vcTranscriptRef.current;
-      if (finalTranscript.trim()) {
+      const finalNewText = finalTranscript.slice(vcConsumedOffsetRef.current).trim();
+      const finalUnlockedHabits = activeHabitsRef.current
+        .filter((h) => !vcLockedHabitsRef.current.has(h.id))
+        .map((h) => ({ id: h.id, name: h.name }));
+      if (finalNewText && finalUnlockedHabits.length > 0) {
         setVcProcessing(true);
         try {
-          const habitList = activeHabitsRef.current.map((h) => ({ id: h.id, name: h.name }));
           const finalAnalysis = await analyzeTranscriptMutation.mutateAsync({
-            transcript: finalTranscript,
-            habits: habitList,
+            transcript: finalNewText,
+            habits: finalUnlockedHabits,
           });
           const finalRatings: Record<string, Rating> = {};
           const finalNotes: Record<string, string> = {};
@@ -787,6 +827,9 @@ export default function CheckInScreen() {
       vcTranscriptRef.current = '';
       vcWhisperInFlightRef.current = false;
       vcLastLlmWordCountRef.current = 0;
+      vcLockedHabitsRef.current = new Set();
+      vcConsumedOffsetRef.current = 0;
+      vcLlmInFlightRef.current = false;
       const ok = await checkinRecorder.start();
       if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
       setVcElapsed(0);
