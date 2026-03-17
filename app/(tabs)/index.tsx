@@ -827,7 +827,7 @@ export default function HomeScreen() {
                     }}
                     onPressHabit={(habitId) => {
                       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      handleCheckIn();
+                      router.push((`/habit-detail?habitId=${habitId}`) as never);
                     }}
                   />
                 );

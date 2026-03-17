@@ -879,3 +879,5 @@
 - [x] Home screen: tap the date header to open today's check-in
 - [x] Home screen: tap any habit card/row to open check-in for that day
 - [x] Home screen: add a prominent "Log Today" / check-in button that's always visible
+- [x] Home screen: restore habit card tap to open habit analytics/detail screen (not check-in)
+- [x] Habit detail screen: add a + / Log Today button to enter today's rating directly from the detail screen

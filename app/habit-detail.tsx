@@ -314,7 +314,16 @@ export default function HabitDetailScreen() {
         <Text style={[styles.navTitle, { color: colors.foreground }]} numberOfLines={1}>
           {globalRank != null ? `#${globalRank} ` : ''}{habit.name}
         </Text>
-        <View style={{ width: 80 }} />
+        <Pressable
+          onPress={() => router.push(`/checkin?date=${toDateString(today)}` as never)}
+          style={({ pressed }) => ([
+            styles.logTodayBtn,
+            { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+          ])}
+        >
+          <IconSymbol name="plus" size={14} color="#fff" />
+          <Text style={styles.logTodayText}>Log</Text>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -575,6 +584,12 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: "row", alignItems: "center", gap: 4, width: 80 },
   backText: { fontSize: 15, fontWeight: "600" },
   navTitle: { flex: 1, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  logTodayBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    width: 80, justifyContent: "center",
+  },
+  logTodayText: { fontSize: 13, fontWeight: "700", color: "#fff" },
 
   heroCard: {
     flexDirection: "row", alignItems: "flex-start", gap: 12,
