@@ -871,3 +871,4 @@
 - [x] Journal tab: search bar at top to filter entries by keyword or date
 - [x] Journal header: show consecutive-days journaling streak
 - [x] Journal Habit Notes template: show each active habit with a dedicated note field; saving the entry writes those notes back to the habit's daily log
+- [x] Habit notes written in journal must be saved to and visibly reflected in the individual habit's notes for that day

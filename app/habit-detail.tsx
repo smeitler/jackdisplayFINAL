@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { CategoryCalendar } from "@/components/category-calendar";
 import { SixMonthHeatmap } from "@/components/six-month-heatmap";
@@ -121,9 +121,12 @@ export default function HabitDetailScreen() {
   const [noteModalDate, setNoteModalDate] = useState<string | null>(null);
   const [noteModalLabel, setNoteModalLabel] = useState("");
 
-  useEffect(() => {
-    loadDayNotes().then(setDayNotes);
-  }, []);
+  // Reload day notes every time this screen comes into focus so journal-written notes appear immediately
+  useFocusEffect(
+    useCallback(() => {
+      loadDayNotes().then(setDayNotes);
+    }, [])
+  );
 
   const saveNote = useCallback(async (date: string, text: string) => {
     const key = `${habitId}:${date}`;
