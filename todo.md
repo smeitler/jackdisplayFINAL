@@ -867,3 +867,5 @@
 - [x] Journal editor: remove template pill from top, move template picker to bottom toolbar next to mic
 - [x] Journal editor: merge title and body into one field — first line bold (title), Enter switches to normal body text
 - [x] Journal record button: auto-show habit prompts (all habits + gratitude) when record is tapped, no template selection needed
+- [x] Bug: journal transcription not filling into note/body section after recording — audio saves/plays but text doesn't appear
+- [x] Journal: show AI-filled habit notes visibly in the journal editor after recording

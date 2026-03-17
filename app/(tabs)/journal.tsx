@@ -440,6 +440,7 @@ function EntryEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   // Load habits for template
@@ -585,10 +586,23 @@ function EntryEditor({
         audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       }
       if (!audioBase64) return;
-      const result = await transcribeMutation.mutateAsync({ audioBase64, mimeType, date });
+      const habitList = habits.map((h) => ({ id: h.id, name: h.name }));
+      const result = await transcribeMutation.mutateAsync({ audioBase64, mimeType, date, habits: habitList });
       const transcript = result.transcript?.trim() || "";
       if (transcript) {
-        setBody((prev) => prev ? prev + "\n\n" + transcript : transcript);
+        setBody((prev) => {
+          const newBody = prev ? prev + "\n\n" + transcript : transcript;
+          // Also update mergedText so the editor shows the new content
+          setMergedText((prevMerged) => {
+            const currentTitle = prevMerged.indexOf("\n") === -1 ? prevMerged : prevMerged.slice(0, prevMerged.indexOf("\n"));
+            return currentTitle ? currentTitle + "\n" + newBody : newBody;
+          });
+          return newBody;
+        });
+      }
+      // Apply habit notes from AI
+      if (result.habitNotes && Object.keys(result.habitNotes).length > 0) {
+        setHabitNotes((prev) => ({ ...prev, ...result.habitNotes }));
       }
     } catch (e) { console.warn("Transcription error:", e); }
     finally {
@@ -818,6 +832,33 @@ function EntryEditor({
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 }}>
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={{ fontSize: 12, color: colors.muted }}>Transcribing audio…</Text>
+              </View>
+            )}
+
+            {/* Habit Notes from voice recording */}
+            {Object.keys(habitNotes).length > 0 && (
+              <View style={{ gap: 8, marginTop: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: colors.primary, letterSpacing: 0.5 }}>HABIT NOTES (from recording)</Text>
+                  <Pressable onPress={() => setHabitNotes({})} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                    <Text style={{ fontSize: 11, color: colors.muted }}>Clear</Text>
+                  </Pressable>
+                </View>
+                {habits
+                  .filter((h) => habitNotes[h.id])
+                  .map((h) => (
+                    <View key={h.id} style={{ backgroundColor: colors.surface, borderRadius: 10, padding: 10, borderLeftWidth: 3, borderLeftColor: colors.primary, gap: 2 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground }}>{h.name}</Text>
+                      <TextInput
+                        value={habitNotes[h.id]}
+                        onChangeText={(text) => setHabitNotes((prev) => ({ ...prev, [h.id]: text }))}
+                        style={{ fontSize: 12, color: colors.muted, lineHeight: 18 }}
+                        multiline
+                        returnKeyType="done"
+                      />
+                    </View>
+                  ))
+                }
               </View>
             )}
 

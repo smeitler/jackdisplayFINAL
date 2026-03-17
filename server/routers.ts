@@ -621,6 +621,7 @@ export const appRouter = router({
         audioBase64: z.string(),          // base64-encoded audio data
         mimeType: z.string().default('audio/m4a'), // e.g. audio/m4a, audio/webm
         date: z.string().optional(),      // YYYY-MM-DD, defaults to today
+        habits: z.array(z.object({ id: z.string(), name: z.string() })).optional(), // active habits for note extraction
       }))
         .mutation(async ({ ctx, input }) => {
         const { invokeLLM } = await import('./_core/llm.js');
@@ -653,23 +654,26 @@ export const appRouter = router({
           throw new Error(`Transcription failed: ${transcription.error}${details ? ` (${details})` : ''}`);
         }
         const transcript = transcription.text?.trim() ?? '';
-        if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], audioUrl };
+        if (!transcript) return { transcript: '', journalEntries: [], gratitudeItems: [], habitNotes: {} as Record<string, string>, audioUrl };
 
-        // 3. AI categorization — extract journal thoughts vs gratitude items
+        // 3. AI categorization — extract journal thoughts, gratitude items, AND per-habit notes
+        const habitList = (input.habits ?? []).map((h) => `- ${h.id}: ${h.name}`).join('\n');
+        const habitSection = habitList ? `\n3. "habitNotes": an object mapping habit IDs to a short note (1-2 sentences) about that habit based on what the user said. Only include habits that were mentioned. Habit list:\n${habitList}` : '';
+        const habitJsonExample = habitList ? `, "habitNotes": {"habit_id": "note about this habit"}` : '';
+
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal assistant. Given a voice journal transcript, extract:
-1. "journalEntries": an array of reflective thoughts, observations, plans, or general statements (each a concise sentence or short paragraph, preserving the user's voice)
-2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)
+              content: `You are a personal journal assistant. Given a voice journal transcript, extract:${habitSection ? `\n` : ''}1. "journalEntries": an array of reflective thoughts, observations, plans, or general statements (each a concise sentence or short paragraph, preserving the user's voice)\n2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)${habitSection}
 
 Rules:
 - A sentence expressing gratitude ("I'm grateful for...", "I appreciate...", "thankful for...") → gratitudeItems
 - Everything else → journalEntries
 - Keep the user's natural language; don't rewrite or summarize
-- If nothing fits a category, return an empty array for it
-Return ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...]}`,
+- For habitNotes: match by context (e.g. "gym" → Exercise/Workout habit). Only include habits clearly mentioned.
+- If nothing fits a category, return an empty array/object for it
+Return ONLY valid JSON: {"journalEntries": [...]${habitJsonExample}, "gratitudeItems": [...]}`,
             },
             {
               role: 'user',
@@ -681,16 +685,22 @@ Return ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...]}`,
 
         let journalEntries: string[] = [];
         let gratitudeItems: string[] = [];
+        let habitNotes: Record<string, string> = {};
         try {
           const parsed = JSON.parse(llmResp.choices[0].message.content as string);
           journalEntries = Array.isArray(parsed.journalEntries) ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
           gratitudeItems = Array.isArray(parsed.gratitudeItems) ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
+          if (parsed.habitNotes && typeof parsed.habitNotes === 'object') {
+            habitNotes = Object.fromEntries(
+              Object.entries(parsed.habitNotes).filter(([, v]) => typeof v === 'string' && (v as string).trim())
+            ) as Record<string, string>;
+          }
         } catch {
           // If parsing fails, put everything in journal
           journalEntries = [transcript];
         }
 
-        return { transcript, journalEntries, gratitudeItems, audioUrl };
+        return { transcript, journalEntries, gratitudeItems, habitNotes, audioUrl };
       }),
   }),
 
