@@ -899,3 +899,5 @@
 - [x] Check-in screen: shrink note input font slightly
 - [x] Check-in screen: sequential habit-by-habit voice check-in — tap mic, first habit highlights, speak, AI detects rating+note in real time and marks it, auto-advances to next habit
 - [x] Check-in screen: add new server route for single-habit voice analysis (fast, per-habit)
+- [x] Check-in screen: pulsing glow on active habit row while recording (animated border/background)
+- [x] Check-in screen: remove green checkmark from number badge; keep plain number always

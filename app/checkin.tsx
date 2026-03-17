@@ -96,13 +96,16 @@ export default function CheckInScreen() {
   const [voiceProcessed, setVoiceProcessed] = useState<Set<string>>(new Set());
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  // Glow opacity for the active habit row (0 = dim, 1 = bright)
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const analyzeForHabitMutation = trpc.voiceJournal.analyzeForHabit.useMutation();
 
   const voiceActive = voicePhase !== 'idle';
   const currentVoiceHabit = activeHabits[voiceHabitIdx] ?? null;
 
-  // Pulse animation while recording
+  // Pulse animation (mic button scale) while recording
   useEffect(() => {
     if (voicePhase === 'recording') {
       pulseLoopRef.current = Animated.loop(
@@ -112,9 +115,19 @@ export default function CheckInScreen() {
         ])
       );
       pulseLoopRef.current.start();
+      // Glow the active habit row
+      glowLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+        ])
+      );
+      glowLoopRef.current.start();
     } else {
       pulseLoopRef.current?.stop();
+      glowLoopRef.current?.stop();
       Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+      Animated.timing(glowAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     }
   }, [voicePhase]);
 
@@ -923,31 +936,34 @@ export default function CheckInScreen() {
                   const isVoiceDone = voiceProcessed.has(habit.id);
 
                   return (
-                    <View
+                    <Animated.View
                       key={habit.id}
                       style={[
                         styles.habitRow,
                         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                         isVoiceActive && {
-                          backgroundColor: '#EF444410',
                           borderRadius: 10,
                           borderWidth: 1.5,
-                          borderColor: '#EF444488',
+                          borderColor: '#EF4444',
                           marginHorizontal: -2,
                           paddingHorizontal: 14,
+                          // Animated background opacity handled via opacity on a child overlay
+                        },
+                        isVoiceActive && {
+                          opacity: glowAnim.interpolate({
+                            inputRange: [0.3, 1],
+                            outputRange: [0.85, 1],
+                          }),
                         },
                       ]}
                     >
                       {/* Habit name with number badge */}
                       <View style={styles.habitNameRow}>
                         <View style={[styles.habitNumBadge, {
-                          backgroundColor: isVoiceActive ? '#EF444422' : isVoiceDone ? '#22C55E22' : colors.primary + '22',
-                          borderColor: isVoiceActive ? '#EF4444' : isVoiceDone ? '#22C55E' : colors.primary + '44',
+                          backgroundColor: isVoiceActive ? '#EF444422' : colors.primary + '22',
+                          borderColor: isVoiceActive ? '#EF4444' : colors.primary + '44',
                         }]}>
-                          {isVoiceDone && ratings[habit.id] && ratings[habit.id] !== 'none'
-                            ? <IconSymbol name="checkmark" size={10} color="#22C55E" />
-                            : <Text style={[styles.habitNumText, { color: isVoiceActive ? '#EF4444' : colors.primary }]}>{rank}</Text>
-                          }
+                          <Text style={[styles.habitNumText, { color: isVoiceActive ? '#EF4444' : colors.primary }]}>{rank}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
@@ -1003,7 +1019,7 @@ export default function CheckInScreen() {
                           );
                         })}
                       </View>
-                    </View>
+                    </Animated.View>
                   );
                 })}
               </View>
