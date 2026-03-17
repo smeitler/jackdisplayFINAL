@@ -668,7 +668,7 @@ export const appRouter = router({
           : '';
 
         const habitInstructions = habits.length > 0
-          ? `3. "habitNotes": an object mapping habit IDs to relevant notes. For each habit, extract ONLY sentences/phrases from the transcript that are directly relevant to that specific habit. Use the habit's name and description to judge relevance. If nothing in the transcript relates to a habit, omit that habit's key entirely. Keep the user's natural language.\n4. "habitRatings": an object mapping habit IDs to a rating string (\"green\", \"yellow\", or \"red\"). Rate each habit ONLY if the transcript clearly mentions it. green = completed/did well, yellow = partial/okay/struggled a bit, red = missed/skipped/failed. Omit a habit's key if it is not mentioned at all.`
+          ? `3. "habitNotes": an object mapping habit IDs to a short note capturing what the user said about that habit. Extract the relevant portion of the transcript for each habit. Keep the user's natural voice and phrasing. If nothing in the transcript relates to a habit, omit that habit's key entirely.\n4. "habitRatings": an object mapping habit IDs to a rating string ("green", "yellow", or "red"). Infer the rating from the MEANING and CONTEXT of what the user said — do NOT require explicit affirmative words. Use these guidelines:\n   - green = the user did it, completed it, succeeded, felt good about it, or describes a positive outcome. Examples: "crushed my workout", "hit the gym", "ran 5 miles", "slept 8 hours", "drank plenty of water", "got it done", "felt great", "nailed it", "went for a walk", "read before bed"\n   - yellow = the user partially did it, struggled, did less than intended, or had mixed results. Examples: "only drank 4 glasses", "did a short workout", "kind of meditated", "went to bed late but still slept okay", "ate pretty well but had a cheat meal", "managed to do a bit"\n   - red = the user skipped it, missed it, failed, or clearly did not do it. Examples: "skipped the gym", "didn't meditate", "forgot to drink water", "stayed up all night", "didn't read", "totally missed it", "no workout today"\n   Infer from context even when the habit is mentioned indirectly. If the user says "I was exhausted and just went straight to bed" for a Sleep habit, that could be green. If they say "I was so busy I didn't have time to eat well", that's red for a diet habit. Use judgment. Omit a habit's key only if the transcript gives absolutely no information about it.`
           : '';
 
         const jsonShape = habits.length > 0
@@ -679,13 +679,18 @@ export const appRouter = router({
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal assistant. Given a voice journal transcript, extract:
+              content: `You are a personal habit coach assistant. The user has just recorded a voice check-in talking about their day. Your job is to extract:
 1. "journalEntries": an array of reflective thoughts, observations, plans, or general statements (each a concise sentence or short paragraph, preserving the user's voice)
 2. "gratitudeItems": an array of specific things the user is grateful for (short phrases, 3-10 words each)${habitInstructions ? `\n${habitInstructions}` : ''}${habitListText}
 
-Rules:
+Critical rules for habit rating inference:
+- People speak CASUALLY about their habits. Do NOT require formal or explicit language.
+- Infer ratings from the overall meaning, tone, and context — not just specific trigger words.
+- "I hit the gym" = green for Exercise. "I didn't really work out" = red. "Did a quick 20 min walk" = yellow for a heavy workout habit, green for a general movement habit.
+- Match the habit name and description carefully to what was said. A mention of "water" maps to a hydration habit. "Went to bed at 10" maps to a sleep habit.
+- Be generous with inference: if the user clearly describes doing something related to a habit, rate it.
 - A sentence expressing gratitude ("I'm grateful for...", "I appreciate...", "thankful for...") → gratitudeItems
-- Content relevant to a specific habit → habitNotes for that habit (can also appear in journalEntries if it's a general reflection)
+- Content relevant to a specific habit → habitNotes for that habit
 - Everything else → journalEntries
 - Keep the user's natural language; don't rewrite or summarize
 - If nothing fits a category, return an empty array/object for it
