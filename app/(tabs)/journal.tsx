@@ -428,6 +428,9 @@ function EntryEditor({
   const [date, setDate] = useState(initialDate);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  // Merged editor: first line is title (bold), rest is body
+  const [mergedText, setMergedText] = useState("");
+  const mergedInputRef = useRef<any>(null);
   const [template, setTemplate] = useState<JournalTemplate>("blank");
   const [attachments, setAttachments] = useState<JournalAttachment[]>([]);
   const [location, setLocation] = useState<JournalLocation | undefined>();
@@ -455,10 +458,14 @@ function EntryEditor({
         setAttachments(entry.attachments);
         setLocation(entry.location);
         setMood(entry.mood || "");
+        // Build merged text: title on first line, then body
+        const merged = entry.title ? entry.title + (entry.body ? "\n" + entry.body : "") : entry.body;
+        setMergedText(merged);
       } else {
         setDate(initialDate);
         setTitle("");
         setBody("");
+        setMergedText("");
         setTemplate("blank");
         setAttachments([]);
         setLocation(undefined);
@@ -469,6 +476,19 @@ function EntryEditor({
 
   // applyTemplate is replaced by applyTemplateByKey below — kept as no-op for safety
   function applyTemplate(_t: JournalTemplate) {}
+
+  // Parse merged text: first line = title, rest = body
+  function handleMergedChange(text: string) {
+    setMergedText(text);
+    const newlineIdx = text.indexOf("\n");
+    if (newlineIdx === -1) {
+      setTitle(text);
+      setBody("");
+    } else {
+      setTitle(text.slice(0, newlineIdx));
+      setBody(text.slice(newlineIdx + 1));
+    }
+  }
 
   async function handleAddLocation() {
     try {
@@ -668,7 +688,7 @@ function EntryEditor({
     setShowTemplates(false);
     if (key === "habit-checkin") {
       setTemplate("blank" as JournalTemplate);
-      const lines: string[] = ["📋 Daily Habit Notes", ""];
+      const lines: string[] = ["\uD83D\uDCCB Daily Habit Notes", ""];
       if (habits.length > 0) {
         for (const h of habits) {
           lines.push(`${h.emoji} ${h.name}`);
@@ -678,22 +698,40 @@ function EntryEditor({
       } else {
         lines.push("No active habits found. Add habits in the Habits tab first.");
       }
-      setBody(lines.join("\n"));
+      const newBody = lines.join("\n");
+      setBody(newBody);
+      setMergedText(title ? title + "\n" + newBody : newBody);
     } else if (key === "morning-pages") {
       setTemplate("free-write" as JournalTemplate);
-      setBody("🌅 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n");
+      const newBody = "\uD83C\uDF05 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n";
+      setBody(newBody);
+      setMergedText(title ? title + "\n" + newBody : newBody);
     } else if (key === "weekly-review") {
       setTemplate("goal-review" as JournalTemplate);
-      setBody("📊 Weekly Review\n\n✅ This week's wins:\n\n\n⚠️ This week's challenges:\n\n\n💡 Lessons learned:\n\n\n🎯 Focus for next week:\n\n");
+      const newBody = "\uD83D\uDCCA Weekly Review\n\n\u2705 This week's wins:\n\n\n\u26A0\uFE0F This week's challenges:\n\n\n\uD83D\uDCA1 Lessons learned:\n\n\n\uD83C\uDFAF Focus for next week:\n\n";
+      setBody(newBody);
+      setMergedText(title ? title + "\n" + newBody : newBody);
     } else {
       // Built-in templates
       const tmpl = JOURNAL_TEMPLATES.find((x) => x.key === key);
       if (tmpl) {
         setTemplate(tmpl.key);
-        if (tmpl.prompt) setBody(tmpl.prompt);
+        if (tmpl.prompt) {
+          setBody(tmpl.prompt);
+          setMergedText(title ? title + "\n" + tmpl.prompt : tmpl.prompt);
+        }
       }
     }
   }
+
+  // Build habit prompt for recording — always show habits if available
+  const habitRecordPrompt = useMemo(() => {
+    if (habits.length > 0) {
+      const habitLines = habits.map((h) => `${h.emoji} ${h.name}`).join("\n");
+      return `Your habits to reflect on:\n${habitLines}\n\n\uD83D\uDE4F Gratitude: What are you grateful for today?`;
+    }
+    return "\uD83D\uDE4F Gratitude: What are you grateful for today?\n\uD83C\uDFAF Goals: What did you work toward?\n\uD83D\uDCA1 Insight: What did you learn?";
+  }, [habits]);
 
   if (!visible) return null;
 
@@ -711,13 +749,13 @@ function EntryEditor({
             </Pressable>
             <Pressable
               onPress={handleSave}
-              disabled={isSaving || (!body.trim() && attachments.length === 0)}
+              disabled={isSaving || (!mergedText.trim() && attachments.length === 0)}
               style={({ pressed }) => [{
-                opacity: (isSaving || (!body.trim() && attachments.length === 0)) ? 0.4 : pressed ? 0.7 : 1,
+                opacity: (isSaving || (!mergedText.trim() && attachments.length === 0)) ? 0.4 : pressed ? 0.7 : 1,
                 backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
               }]}
             >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>{isSaving ? "Saving…" : "Save"}</Text>
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>{isSaving ? "Saving\u2026" : "Save"}</Text>
             </Pressable>
           </View>
 
@@ -739,55 +777,39 @@ function EntryEditor({
             </View>
           )}
 
+          {/* Template picker dropdown — shown when open */}
+          {showTemplates && (
+            <View style={[editorStyles.templateGrid, { paddingHorizontal: 16, paddingTop: 12, borderBottomWidth: 0.5, borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+              {allTemplates.map((t) => (
+                <Pressable
+                  key={t.key}
+                  onPress={() => applyTemplateByKey(t.key)}
+                  style={({ pressed }) => [{
+                    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5,
+                    borderColor: template === t.key ? colors.primary : colors.border,
+                    backgroundColor: pressed ? colors.primary + "10" : colors.background,
+                  }]}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>{t.label}</Text>
+                  <Text style={{ fontSize: 10, color: colors.muted, marginTop: 2 }} numberOfLines={1}>{t.description}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
-            {/* Template selector — compact pill */}
-            <Pressable
-              onPress={() => setShowTemplates(!showTemplates)}
-              style={[editorStyles.templateToggle, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            >
-              <IconSymbol name="doc.fill" size={14} color={colors.muted} />
-              <Text style={{ fontSize: 13, color: colors.muted, flex: 1 }}>
-                {allTemplates.find((t) => t.key === template)?.label || "Choose template"}
-              </Text>
-              <IconSymbol name={showTemplates ? "chevron.up" : "chevron.down"} size={14} color={colors.muted} />
-            </Pressable>
-
-            {showTemplates && (
-              <View style={editorStyles.templateGrid}>
-                {allTemplates.map((t) => (
-                  <Pressable
-                    key={t.key}
-                    onPress={() => applyTemplateByKey(t.key)}
-                    style={({ pressed }) => [{
-                      paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5,
-                      borderColor: template === t.key ? colors.primary : colors.border,
-                      backgroundColor: pressed ? colors.primary + "10" : colors.surface,
-                    }]}
-                  >
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground }}>{t.label}</Text>
-                    <Text style={{ fontSize: 10, color: colors.muted, marginTop: 2 }} numberOfLines={1}>{t.description}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-
-            {/* Title */}
+            {/* Merged title + body input: first line bold = title, rest = body */}
             <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Title (optional)"
-              placeholderTextColor={colors.muted}
-              style={[editorStyles.titleInput, { color: colors.foreground, borderBottomColor: colors.border }]}
-            />
-
-            {/* Body */}
-            <TextInput
-              value={body}
-              onChangeText={setBody}
-              placeholder="Write your thoughts…"
+              ref={mergedInputRef}
+              value={mergedText}
+              onChangeText={handleMergedChange}
+              placeholder="Title your entry, then press Enter to write\u2026"
               placeholderTextColor={colors.muted}
               multiline
-              style={[editorStyles.bodyInput, { color: colors.foreground }]}
+              style={[
+                editorStyles.mergedInput,
+                { color: colors.foreground },
+              ]}
               textAlignVertical="top"
             />
 
@@ -836,33 +858,39 @@ function EntryEditor({
             )}
           </ScrollView>
 
-          {/* Bottom toolbar — mic CENTERED, actions on right */}
+          {/* Bottom toolbar — photo | paperclip | template | [MIC CENTER] | location | spacer */}
           <View style={[editorStyles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-            <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
+            <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
               <Pressable onPress={handlePickPhoto} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
                 <IconSymbol name="photo.fill" size={22} color={colors.muted} />
               </Pressable>
               <Pressable onPress={handlePickDocument} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
                 <IconSymbol name="paperclip" size={22} color={colors.muted} />
               </Pressable>
+              {/* Template picker button — shows active template name */}
+              <Pressable
+                onPress={() => setShowTemplates(!showTemplates)}
+                style={({ pressed }) => [{
+                  flexDirection: "row", alignItems: "center", gap: 4,
+                  paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14,
+                  backgroundColor: showTemplates ? colors.primary + "20" : colors.surface,
+                  borderWidth: 1, borderColor: showTemplates ? colors.primary : colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                <IconSymbol name="doc.fill" size={13} color={showTemplates ? colors.primary : colors.muted} />
+                <Text style={{ fontSize: 11, fontWeight: "600", color: showTemplates ? colors.primary : colors.muted }}>
+                  {allTemplates.find((t) => t.key === template)?.label || "Template"}
+                </Text>
+              </Pressable>
             </View>
+            {/* MicButton always passes habit prompts so they show on record */}
             <MicButton
               onRecordingComplete={handleRecordingComplete}
               colors={colors}
-              templatePrompt={(() => {
-                // Build the prompt to show during recording based on current template
-                if (template === "habit-checkin" as any) {
-                  return habits.length > 0
-                    ? habits.map((h) => `${h.emoji} ${h.name}`).join("  ·  ")
-                    : "Talk about your habits today";
-                }
-                const tmpl = allTemplates.find((t) => t.key === template);
-                if (tmpl && tmpl.description && tmpl.description !== "Start from scratch") return tmpl.description;
-                const baseTmpl = JOURNAL_TEMPLATES.find((t) => t.key === template);
-                return baseTmpl?.prompt || undefined;
-              })()}
+              templatePrompt={habitRecordPrompt}
             />
-            <View style={{ flexDirection: "row", gap: 16, alignItems: "center" }}>
+            <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
               {!location ? (
                 <Pressable onPress={handleAddLocation} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
                   <IconSymbol name="location.fill" size={22} color={colors.muted} />
@@ -886,6 +914,7 @@ const editorStyles = StyleSheet.create({
   templateGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
   titleInput: { fontSize: 22, fontWeight: "700", paddingVertical: 12, borderBottomWidth: 0.5, marginBottom: 8 },
   bodyInput: { fontSize: 16, lineHeight: 24, minHeight: 200, paddingVertical: 8 },
+  mergedInput: { fontSize: 16, lineHeight: 26, minHeight: 240, paddingVertical: 8 },
   attachRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 10, borderWidth: 1 },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 12 },
   toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 6, paddingBottom: 16, borderTopWidth: 0.5 },
@@ -1262,22 +1291,26 @@ function CalendarTab({ entries, onDayPress, colors }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── MEDIA TAB ───────────────────────────────────────────────────────────────
+// ─── MEDIA TAB ─────────────────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 type MediaFilter = "all" | "photo" | "video" | "audio" | "pdf";
 
+type RichMediaItem = JournalAttachment & {
+  entryDate: string;
+  entryBody: string;
+  entryTitle: string;
+  entryCreatedAt: string;
+  transcriptionText?: string;
+};
+
 function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
   const [filter, setFilter] = useState<MediaFilter>("all");
+  const [expandedPhoto, setExpandedPhoto] = useState<RichMediaItem | null>(null);
+  const { width: screenW } = useWindowDimensions();
 
   // Build rich items: attachment + parent entry context, sorted newest first
   const allItems = useMemo(() => {
-    const list: (JournalAttachment & {
-      entryDate: string;
-      entryBody: string;
-      entryTitle: string;
-      entryCreatedAt: string;
-      transcriptionText?: string;
-    })[] = [];
+    const list: RichMediaItem[] = [];
     for (const e of entries) {
       for (const att of e.attachments) {
         list.push({
@@ -1302,7 +1335,7 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
     { key: "video", label: "Video", icon: "video.fill" },
   ];
 
-  const photoSize = Math.floor((SCREEN_WIDTH - 32 - 4) / 3);
+  const photoSize = Math.floor((screenW - 32 - 4) / 3);
 
   // Format date nicely
   function niceDate(dateStr: string): string {
@@ -1314,6 +1347,55 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
 
   return (
     <View>
+      {/* ─── Photo lightbox modal */}
+      <Modal visible={!!expandedPhoto} animationType="fade" transparent>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center" }}>
+          {/* Close button */}
+          <Pressable
+            onPress={() => setExpandedPhoto(null)}
+            style={({ pressed }) => [{
+              position: "absolute", top: 56, right: 20, zIndex: 10,
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: "rgba(255,255,255,0.15)",
+              alignItems: "center", justifyContent: "center",
+              opacity: pressed ? 0.6 : 1,
+            }]}
+          >
+            <IconSymbol name="xmark" size={18} color="#fff" />
+          </Pressable>
+
+          {expandedPhoto && (
+            <>
+              {/* Full photo */}
+              <Image
+                source={{ uri: expandedPhoto.uri }}
+                style={{ width: screenW, height: screenW, alignSelf: "center" }}
+                resizeMode="contain"
+              />
+              {/* Entry info below photo */}
+              <View style={{
+                marginTop: 20, marginHorizontal: 24,
+                backgroundColor: "rgba(255,255,255,0.08)",
+                borderRadius: 14, padding: 16, gap: 6,
+              }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <IconSymbol name="calendar" size={14} color="#9BA1A6" />
+                  <Text style={{ fontSize: 13, color: "#9BA1A6" }}>{niceDate(expandedPhoto.entryDate)}</Text>
+                </View>
+                {expandedPhoto.entryTitle ? (
+                  <Text style={{ fontSize: 17, fontWeight: "700", color: "#fff" }}>{expandedPhoto.entryTitle}</Text>
+                ) : null}
+                {expandedPhoto.entryBody ? (
+                  <Text style={{ fontSize: 14, color: "#ECEDEE", lineHeight: 20 }} numberOfLines={6}>
+                    {expandedPhoto.entryBody}
+                  </Text>
+                ) : null}
+              </View>
+            </>
+          )}
+        </View>
+      </Modal>
+
       {/* Filter pill bar */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
         <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
@@ -1343,10 +1425,14 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
           <Text style={{ fontSize: 14, color: colors.muted }}>No media yet</Text>
         </View>
       ) : filter === "photo" ? (
-        // ── Photo grid view ──────────────────────────────────────────────────────
+        // ── Photo grid view — tap to expand
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
           {filtered.map((att) => (
-            <View key={att.id} style={{ width: photoSize, marginBottom: 2 }}>
+            <Pressable
+              key={att.id}
+              onPress={() => setExpandedPhoto(att)}
+              style={({ pressed }) => [{ width: photoSize, marginBottom: 2, opacity: pressed ? 0.8 : 1 }]}
+            >
               <Image
                 source={{ uri: att.uri }}
                 style={{ width: photoSize, height: photoSize, borderRadius: 4 }}
@@ -1355,11 +1441,64 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
               <Text style={{ fontSize: 9, color: colors.muted, marginTop: 2, textAlign: "center" }} numberOfLines={1}>
                 {niceDate(att.entryDate)}
               </Text>
-            </View>
+            </Pressable>
           ))}
         </View>
+      ) : filter === "audio" ? (
+        // ── Audio-only view: player + transcript
+        <View style={{ gap: 12 }}>
+          {filtered.map((att) => {
+            const transcript = (att.transcriptionText || att.entryBody || "").trim();
+            return (
+              <View
+                key={att.id}
+                style={{
+                  borderRadius: 14, overflow: "hidden",
+                  backgroundColor: colors.surface,
+                  borderWidth: 1, borderColor: colors.border,
+                  padding: 14, gap: 10,
+                }}
+              >
+                {/* Date + label */}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <IconSymbol name="mic.fill" size={14} color={colors.primary} />
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary }}>Voice Recording</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: colors.muted }}>{niceDate(att.entryDate)}</Text>
+                </View>
+                {/* Audio player */}
+                <AudioPlaybackRow
+                  uri={att.uri}
+                  duration={att.durationMs ? att.durationMs / 1000 : undefined}
+                />
+                {/* Transcript / text preview */}
+                {transcript ? (
+                  <View style={{
+                    backgroundColor: colors.background,
+                    borderRadius: 8, padding: 10,
+                    borderLeftWidth: 3, borderLeftColor: colors.primary + "80",
+                  }}>
+                    <Text style={{ fontSize: 11, fontWeight: "600", color: colors.muted, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Transcript
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.foreground, lineHeight: 19 }} numberOfLines={8}>
+                      {transcript}
+                    </Text>
+                  </View>
+                ) : null}
+                {/* Entry title */}
+                {att.entryTitle ? (
+                  <Text style={{ fontSize: 13, color: colors.muted }} numberOfLines={1}>
+                    From: “{att.entryTitle}”
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
       ) : (
-        // ── Rich card list for all / audio / video ───────────────────────────────
+        // ── Rich card list for all / video ───────────────────────────────────────────
         <View style={{ gap: 12 }}>
           {filtered.map((att) => {
             const isPhoto = att.type === "photo";
@@ -1369,19 +1508,21 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
             const previewText = (att.transcriptionText || att.entryBody || "").trim();
 
             return (
-              <View
+              <Pressable
                 key={att.id}
-                style={{
+                onPress={() => isPhoto ? setExpandedPhoto(att) : undefined}
+                style={({ pressed }) => [{
                   borderRadius: 14, overflow: "hidden",
                   backgroundColor: colors.surface,
                   borderWidth: 1, borderColor: colors.border,
-                }}
+                  opacity: (isPhoto && pressed) ? 0.85 : 1,
+                }]}
               >
-                {/* Photo thumbnail header */}
+                {/* Photo thumbnail header — tappable */}
                 {isPhoto && (
                   <Image
                     source={{ uri: att.uri }}
-                    style={{ width: "100%", height: 180 }}
+                    style={{ width: "100%", height: 200 }}
                     resizeMode="cover"
                   />
                 )}
@@ -1436,7 +1577,7 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
                     </Text>
                   ) : null}
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </View>
