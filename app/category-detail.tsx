@@ -267,13 +267,9 @@ export default function CategoryDetailScreen() {
               habits={habits}
               checkIns={checkIns}
               onDayPress={(date) => {
-                const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
-                if (!hasEntry) {
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/checkin?date=${date}` as never);
-                } else {
-                  setSelectedDate(date);
-                }
+                // Always go directly to check-in edit — skip the summary sheet
+                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push(`/checkin?date=${date}` as never);
               }}
               containerWidth={cardWidth > 0 ? cardWidth : undefined}
               selectedHabitId={null}

@@ -22,8 +22,8 @@ import { toDateString, CheckInEntry, Habit } from "@/lib/storage";
 const CELL_GAP = 3;
 const COLS = 7;
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
-const DATE_FONT = 8;
-const DATE_H = 11; // height reserved for the date number row
+const DATE_FONT = 10;
+const DATE_H = 13; // height reserved for the date number row
 
 interface CategoryCalendarProps {
   year: number;
@@ -205,5 +205,5 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", marginBottom: CELL_GAP },
   headerText: { fontSize: 9, fontWeight: "600" },
   row: { flexDirection: "row", marginBottom: CELL_GAP },
-  dateNum: { fontSize: DATE_FONT, fontWeight: "600", lineHeight: DATE_H },
+  dateNum: { fontSize: DATE_FONT, fontWeight: "700", lineHeight: DATE_H },
 });

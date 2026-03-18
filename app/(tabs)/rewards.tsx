@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, Pressable, StyleSheet, FlatList, Alert, Platform,
-  Image, Dimensions, Modal, TextInput, KeyboardAvoidingView, TouchableOpacity,
+  Image, Dimensions, Modal, TextInput, KeyboardAvoidingView, TouchableOpacity, Animated,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -456,11 +456,17 @@ function getPeriodKey(frequencyType: "weekly" | "monthly"): string {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
+// ── Confetti particle type ──────────────────────────────────────────────────
+type Particle = { id: number; x: Animated.Value; y: Animated.Value; rot: Animated.Value; color: string; size: number };
+const CONFETTI_COLORS = ["#22C55E", "#F59E0B", "#3B82F6", "#EC4899", "#A855F7", "#EF4444", "#FBBF24"];
+
 function RewardsTab() {
   const colors = useColors();
   const { habits, checkIns } = useApp();
   const [claims, setClaims] = React.useState<ClaimRecord[]>([]);
   const [filter, setFilter] = React.useState<"all" | "unlocked" | "claimed">("all");
+  const [particles, setParticles] = React.useState<Particle[]>([]);
+  const particleIdRef = React.useRef(0);
 
   React.useEffect(() => {
     AsyncStorage.getItem(CLAIMED_KEY).then((raw) => {
@@ -512,8 +518,27 @@ function RewardsTab() {
   const unlockedCount = rewardItems.filter((r) => r.isUnlocked && !r.claimedAt).length;
   const claimedCount = rewardItems.filter((r) => !!r.claimedAt).length;
 
+  function launchConfetti() {
+    const { width: W, height: H } = Dimensions.get("window");
+    const newParticles: Particle[] = Array.from({ length: 40 }, (_, i) => {
+      const id = ++particleIdRef.current;
+      const x = new Animated.Value(Math.random() * W);
+      const y = new Animated.Value(-20);
+      const rot = new Animated.Value(0);
+      const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+      const size = 8 + Math.random() * 8;
+      Animated.parallel([
+        Animated.timing(y, { toValue: H + 40, duration: 1500 + Math.random() * 1000, useNativeDriver: true }),
+        Animated.timing(rot, { toValue: 720 + Math.random() * 360, duration: 1500 + Math.random() * 1000, useNativeDriver: true }),
+      ]).start(() => setParticles((prev) => prev.filter((p) => p.id !== id)));
+      return { id, x, y, rot, color, size };
+    });
+    setParticles((prev) => [...prev, ...newParticles]);
+  }
+
   async function handleClaim(item: HabitReward) {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    launchConfetti();
     const updated = [...claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey)), { habitId: item.habitId, periodKey: item.periodKey, claimedAt: new Date().toISOString() }];
     await saveClaims(updated);
   }
@@ -527,6 +552,26 @@ function RewardsTab() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Confetti overlay */}
+      {particles.map((p) => (
+        <Animated.View
+          key={p.id}
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: p.x,
+            width: p.size,
+            height: p.size,
+            borderRadius: 2,
+            backgroundColor: p.color,
+            zIndex: 9999,
+            transform: [
+              { translateY: p.y },
+              { rotate: p.rot.interpolate({ inputRange: [0, 720], outputRange: ["0deg", "720deg"] }) },
+            ],
+          }}
+        />
+      ))}
       {rewardItems.length > 0 && (
         <View style={[rStyles.filterRow, { borderBottomColor: colors.border }]}>
           {(["all", "unlocked", "claimed"] as const).map((f) => (

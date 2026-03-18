@@ -147,6 +147,8 @@ export default function RootLayout() {
               <Stack.Screen name="team/[id]" options={{ presentation: 'modal' }} />
               <Stack.Screen name="team/chat/[id]" options={{ presentation: 'modal' }} />
               <Stack.Screen name="permissions-setup" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="practice-player" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="morning-practice-catalog" options={{ presentation: 'modal' }} />
             </Stack>
             <StatusBar style="auto" />
             </JournalProvider>

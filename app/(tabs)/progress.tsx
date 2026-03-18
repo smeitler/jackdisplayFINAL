@@ -184,13 +184,9 @@ export default function ProgressScreen() {
                     habits={catHabits}
                     checkIns={checkIns}
                     onDayPress={(date) => {
-                      // If the day has no check-in data, go straight to check-in
-                      const hasEntry = checkIns.some((e) => e.date === date && e.rating !== "none");
-                      if (!hasEntry) {
-                        router.push(`/checkin?date=${date}` as never);
-                      } else {
-                        setSelectedDate(date);
-                      }
+                      // Always go directly to check-in edit — skip the summary sheet
+                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push(`/checkin?date=${date}` as never);
                     }}
                     containerWidth={cardWidth > 0 ? cardWidth : undefined}
                     selectedHabitId={null}

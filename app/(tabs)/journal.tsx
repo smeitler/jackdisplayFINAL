@@ -1244,13 +1244,13 @@ function CalendarTab({ entries, onDayPress, colors }: {
                             resizeMode="cover"
                           />
                         ) : null}
-                        {/* Tiny date number */}
+                        {/* Date number */}
                         <Text style={{
-                          fontSize: 8,
-                          fontWeight: "600",
-                          lineHeight: 11,
-                          color: photoUri ? "#fff" : isToday ? colors.primary : colors.muted,
-                          opacity: photoUri ? 0.85 : 1,
+                          fontSize: 10,
+                          fontWeight: "700",
+                          lineHeight: 13,
+                          color: photoUri ? "#fff" : isToday ? colors.primary : colors.foreground,
+                          opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85,
                           paddingLeft: 3,
                           paddingTop: 2,
                           textShadowColor: photoUri ? "rgba(0,0,0,0.8)" : "transparent",

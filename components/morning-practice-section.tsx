@@ -301,6 +301,12 @@ export function MorningPracticeSection() {
                 Generating your personalized session with your voice...
               </Text>
             )}
+            <Pressable
+              style={({ pressed }) => [styles.catalogBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => router.push('/morning-practice-catalog' as never)}
+            >
+              <Text style={[styles.catalogBtnTxt, { color: colors.muted }]}>Browse All Sessions →</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -441,5 +447,16 @@ const styles = StyleSheet.create({
   generatingNote: {
     fontSize: 12,
     textAlign: 'center',
+  },
+  catalogBtn: {
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  catalogBtnTxt: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

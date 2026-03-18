@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image, Alert,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -268,6 +268,12 @@ export default function CheckInScreen() {
   const [practiceGenerating, setPracticeGenerating] = useState(false);
   const [practiceResult, setPracticeResult] = useState<{ chunkUrls: string[]; pausesBetweenChunks: number[]; totalDurationMinutes: number } | null>(null);
   const generatePracticeMutation = trpc.morningPractice.generate.useMutation();
+  // Inline morning practice picker (shown after check-in submission)
+  const [mpPickerVisible, setMpPickerVisible] = useState(false);
+  const [mpSelectedType, setMpSelectedType] = useState<'priming' | 'meditation' | 'breathwork' | 'visualization'>('priming');
+  const [mpSelectedDuration, setMpSelectedDuration] = useState<number>(10);
+  const [mpCustomDuration, setMpCustomDuration] = useState('');
+  const [mpGenerating, setMpGenerating] = useState(false);
 
   // ── Voice Check-in state (isolated from journal) ──
   const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'done' | 'error'>('idle');
@@ -733,6 +739,58 @@ export default function CheckInScreen() {
     });
   }
 
+  // ── Morning Practice inline launcher ────────────────────────────────────────
+  async function handleMpLaunch() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setMpGenerating(true);
+    try {
+      const allHabits = await loadHabits();
+      const activeHabitNames = allHabits.filter(h => h.isActive).map(h => h.name).slice(0, 8);
+      const goalList = categories.map(c => c.label);
+      const gratitudeEntries = await loadGratitudeEntries();
+      const yd = yesterdayStr();
+      const ydEntry = gratitudeEntries.find(e => e.date === yd);
+      const gratitudes = ydEntry?.items ?? [];
+      const voiceKey = alarm?.elevenLabsVoice ?? 'rachel';
+      const VOICE_IDS: Record<string, string> = {
+        rachel: '21m00Tcm4TlvDq8ikWAM',
+        aria:   '9BWtsMINqrJLrRacOk9x',
+        adam:   'pNInz6obpgDQGcFmaJgB',
+        josh:   'TxGEqnHWrfWFTfGW9XjX',
+        bella:  'EXAVITQu4vr4xnSDxMaL',
+      };
+      const voiceId = VOICE_IDS[voiceKey] ?? VOICE_IDS.rachel;
+      const customMins = parseInt(mpCustomDuration, 10);
+      const durationMins = (!isNaN(customMins) && customMins > 0) ? customMins : mpSelectedDuration;
+      const result = await generatePracticeMutation.mutateAsync({
+        type: mpSelectedType,
+        voiceId,
+        lengthMinutes: durationMins,
+        breathworkStyle: alarm?.morningBreathworkStyle ?? 'box',
+        name: 'Friend',
+        goals: goalList,
+        rewards: [],
+        habits: activeHabitNames,
+        gratitudes,
+      });
+      stopAfterAlarm();
+      router.push({
+        pathname: '/practice-player',
+        params: {
+          type: mpSelectedType,
+          chunkUrls: JSON.stringify(result.chunkUrls),
+          pausesBetweenChunks: JSON.stringify(result.pausesBetweenChunks),
+          totalDurationMinutes: String(result.totalDurationMinutes),
+          breathworkStyle: alarm?.morningBreathworkStyle ?? 'box',
+        },
+      } as never);
+    } catch (err: any) {
+      Alert.alert('Could not generate session', err?.message ?? 'Something went wrong. Please try again.');
+    } finally {
+      setMpGenerating(false);
+    }
+  }
+
   async function handleSubmit() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // Stop countdown before submitting
@@ -1083,42 +1141,107 @@ export default function CheckInScreen() {
             </View>
           )}
 
-          {/* Morning Practice auto-launch card */}
-          {(practiceReady || practiceGenerating) && (
+          {/* Morning Practice inline picker — always shown after alarm check-in */}
+          {fromAlarm && !isPreview && (
             <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>
-                🌅  Morning Practice Ready
-              </Text>
-              <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>
-                {practiceGenerating
-                  ? 'Generating your personalized session...'
-                  : 'Your session has been prepared with your voice.'}
-              </Text>
-              {!practiceGenerating && practiceResult && (
-                <View style={styles.sessionBtns}>
+              <Pressable
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                onPress={() => setMpPickerVisible(v => !v)}
+              >
+                <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>🌅  Morning Practice</Text>
+                <Text style={{ color: colors.muted, fontSize: 13 }}>{mpPickerVisible ? '▲' : '▼'}</Text>
+              </Pressable>
+              {!mpPickerVisible && (
+                <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>Tap to choose a practice session</Text>
+              )}
+              {mpPickerVisible && (
+                <View style={{ marginTop: 12, gap: 10 }}>
+                  {/* Practice type selector */}
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, letterSpacing: 0.5 }}>PRACTICE TYPE</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {([{ id: 'priming', emoji: '⚡', label: 'Priming' }, { id: 'meditation', emoji: '🧘', label: 'Meditation' }, { id: 'breathwork', emoji: '💨', label: 'Breathwork' }, { id: 'visualization', emoji: '🎯', label: 'Visualization' }] as const).map(opt => (
+                      <Pressable
+                        key={opt.id}
+                        onPress={() => setMpSelectedType(opt.id)}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 20,
+                          borderWidth: 1.5,
+                          borderColor: mpSelectedType === opt.id ? '#7C3AED' : colors.border,
+                          backgroundColor: mpSelectedType === opt.id ? '#7C3AED18' : 'transparent',
+                          opacity: pressed ? 0.7 : 1,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                        })}
+                      >
+                        <Text style={{ fontSize: 14 }}>{opt.emoji}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedType === opt.id ? '#7C3AED' : colors.foreground }}>{opt.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {/* Duration selector */}
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, letterSpacing: 0.5, marginTop: 4 }}>DURATION</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {[5, 10, 15, 20].map(min => (
+                      <Pressable
+                        key={min}
+                        onPress={() => { setMpSelectedDuration(min); setMpCustomDuration(''); }}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 14,
+                          paddingVertical: 7,
+                          borderRadius: 20,
+                          borderWidth: 1.5,
+                          borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.border,
+                          backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED18' : 'transparent',
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.foreground }}>{min} min</Text>
+                      </Pressable>
+                    ))}
+                    {/* Custom duration input */}
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      borderWidth: 1.5,
+                      borderColor: mpCustomDuration ? '#7C3AED' : colors.border,
+                      borderRadius: 20,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      backgroundColor: mpCustomDuration ? '#7C3AED18' : 'transparent',
+                    }}>
+                      <TextInput
+                        value={mpCustomDuration}
+                        onChangeText={setMpCustomDuration}
+                        placeholder="Custom"
+                        placeholderTextColor={colors.muted}
+                        keyboardType="number-pad"
+                        style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#7C3AED' : colors.foreground, minWidth: 50, textAlign: 'center' }}
+                        returnKeyType="done"
+                      />
+                      {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#7C3AED', marginLeft: 2 }}>min</Text> : null}
+                    </View>
+                  </View>
+
+                  {/* Launch button */}
                   <Pressable
-                    style={({ pressed }) => [styles.sessionSkipBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-                    onPress={() => setPracticeReady(false)}
+                    style={({ pressed }) => ({
+                      backgroundColor: mpGenerating ? colors.border : '#7C3AED',
+                      borderRadius: 12,
+                      paddingVertical: 13,
+                      alignItems: 'center',
+                      marginTop: 4,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                    onPress={handleMpLaunch}
+                    disabled={mpGenerating}
                   >
-                    <Text style={[styles.sessionSkipText, { color: colors.muted }]}>✕  Skip</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.sessionStartBtn, { backgroundColor: '#7C3AED', opacity: pressed ? 0.85 : 1 }]}
-                    onPress={() => {
-                      stopAfterAlarm();
-                      router.push({
-                        pathname: '/practice-player',
-                        params: {
-                          type: alarm?.morningPracticeType ?? 'meditation',
-                          chunkUrls: JSON.stringify(practiceResult.chunkUrls),
-                          pausesBetweenChunks: JSON.stringify(practiceResult.pausesBetweenChunks),
-                          totalDurationMinutes: String(practiceResult.totalDurationMinutes),
-                          breathworkStyle: alarm?.morningBreathworkStyle ?? 'box',
-                        },
-                      } as never);
-                    }}
-                  >
-                    <Text style={styles.sessionStartText}>▶  Begin</Text>
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+                      {mpGenerating ? 'Generating...' : '▶  Begin Session'}
+                    </Text>
                   </Pressable>
                 </View>
               )}

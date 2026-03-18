@@ -97,12 +97,20 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
                   {
                     backgroundColor: cellBg(score, dateStr),
                     opacity: pressed ? 0.7 : cellOpacity(score, dateStr),
-                    // Today: subtle ring using a slightly larger border radius trick via shadow
                     borderWidth: isToday ? 1.5 : 0,
                     borderColor: isToday ? colors.primary : "transparent",
+                    padding: 2,
                   },
                 ]}
-              />
+              >
+                <Text style={[
+                  styles.dateNum,
+                  {
+                    color: isToday ? colors.primary : "#fff",
+                    opacity: isFuture ? 0.5 : 0.85,
+                  },
+                ]}>{cell.day}</Text>
+              </Pressable>
             );
           })}
           {/* Pad last row to keep grid width consistent */}
@@ -156,6 +164,11 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     borderRadius: 4,
+  },
+  dateNum: {
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 13,
   },
   legend: {
     flexDirection: "row",

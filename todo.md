@@ -1039,3 +1039,21 @@
 - [x] Each template in applyTemplateByKey auto-inserts a "🙏 Grateful for:" section in the body
 - [x] Add parseGratitudes(body) helper: extracts lines under "🙏 Grateful for:" section
 - [x] Update priming screen to use parseGratitudes() from recent journal entries
+
+## PDF Feedback Improvements (Mar 18 2026)
+
+- [ ] Fix calendar day tap: go directly to habit editing, remove redundant "Body" bottom sheet step
+- [ ] Make calendar date numbers more visible (lighter color, higher contrast)
+- [ ] Reward claiming: play sound + show confetti/fireworks animation on claim
+- [ ] Morning practice: integrate into alarm flow with duration options (5/10/15/20 min + pick at time)
+- [ ] Morning practice alarm: Priming, Guided Meditation, Breathwork, Visualization each get duration picker
+- [ ] On-demand session catalog: media player view to browse and play all sessions outside of alarm
+
+## Features Implemented (Mar 18 2026)
+
+- [x] Fix calendar day tap: go directly to habit editing, remove redundant "Body" bottom sheet step
+- [x] Make calendar date numbers more visible (larger font, higher contrast)
+- [x] Reward claiming: play sound + show confetti/fireworks animation on claim
+- [x] Morning practice: integrate into alarm flow with duration options (5/10/15/20 min + custom, pick at time)
+- [x] Morning practice alarm: Priming, Guided Meditation, Breathwork, Visualization each get duration picker
+- [x] On-demand session catalog: MorningPracticeCatalog screen to browse and launch all 4 session types
