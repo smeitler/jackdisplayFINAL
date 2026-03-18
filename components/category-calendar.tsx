@@ -1,18 +1,17 @@
 /**
  * CategoryCalendar
  *
- * A full-month heatmap calendar for journal entries.
+ * A full-month heatmap calendar for a category/goal.
  *
- * Cell style (matches CalendarHeatmap):
- *  - Clean square filled box, no text, no borders
- *  - Past day with entries: solid color fill based on overall score
- *    (green = mostly crushed, amber = okay, red = mostly missed)
- *  - Past day with no entries: dim red (skipped)
- *  - Future days: very dim surface color placeholder
- *  - Today: subtle primary-color border ring
+ * All-habits mode (selectedHabitId = null):
+ *  - Each day cell shows one horizontal strip per habit in the goal
+ *  - Strip color = that habit's individual rating (green/amber/red)
+ *  - Unrated strips = very dim surface placeholder
+ *  - Future days = all strips very dim
+ *  - Today = subtle primary-color border ring
  *
  * Filter mode (selectedHabitId set):
- *  - Cell fills with that specific habit's rating color
+ *  - Entire cell fills with that specific habit's rating color (single solid box)
  */
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useMemo } from "react";
@@ -20,6 +19,7 @@ import { useColors } from "@/hooks/use-colors";
 import { toDateString, CheckInEntry, Habit } from "@/lib/storage";
 
 const CELL_GAP = 3;
+const STRIP_GAP = 2;
 const COLS = 7;
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -31,7 +31,7 @@ interface CategoryCalendarProps {
   onDayPress?: (date: string) => void;
   /** Available width inside the parent card. */
   containerWidth?: number;
-  /** When set, only show this habit's rating color. */
+  /** When set, only show this habit's rating color as a single solid fill. */
   selectedHabitId?: string | null;
 }
 
@@ -40,32 +40,6 @@ function ratingColor(rating: string): string {
   if (rating === "yellow") return "#F59E0B";
   if (rating === "red")    return "#EF4444";
   return "transparent";
-}
-
-/** Compute an overall score (0–1) for a day given all habit ratings. */
-function dayScore(ratingMap: Record<string, string>, habitIds: string[]): number | null {
-  const rated = habitIds.filter((id) => ratingMap[id]);
-  if (rated.length === 0) return null;
-  const total = rated.reduce((sum, id) => {
-    const r = ratingMap[id];
-    if (r === "green")  return sum + 1;
-    if (r === "yellow") return sum + 0.5;
-    return sum;
-  }, 0);
-  return total / rated.length;
-}
-
-function scoreColor(score: number | null): string {
-  if (score === null) return "#EF4444";
-  if (score >= 0.75)  return "#22C55E";
-  if (score >= 0.4)   return "#F59E0B";
-  return "#EF4444";
-}
-
-function scoreOpacity(score: number | null, isPast: boolean): number {
-  if (!isPast) return 0.18;
-  if (score === null) return 0.30;
-  return 0.45 + score * 0.55;
 }
 
 export function CategoryCalendar({
@@ -78,20 +52,22 @@ export function CategoryCalendar({
   const availableWidth = containerWidth ?? 320;
   const CELL_SIZE = Math.floor((availableWidth - CELL_GAP * (COLS - 1)) / COLS);
 
+  // In all-habits mode, compute strip height so all strips + gaps fit in CELL_SIZE
+  const n = habits.length || 1;
+  const STRIP_H = Math.max(4, Math.floor((CELL_SIZE - STRIP_GAP * (n - 1)) / n));
+
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
 
   // Map: date → habitId → rating string
-  const { dayHabitRatings, datesWithEntries } = useMemo(() => {
+  const dayHabitRatings = useMemo(() => {
     const map: Record<string, Record<string, string>> = {};
-    const withEntries = new Set<string>();
     for (const entry of checkIns) {
       if (!habitIds.includes(entry.habitId)) continue;
       if (entry.rating === "none") continue;
-      withEntries.add(entry.date);
       if (!map[entry.date]) map[entry.date] = {};
       map[entry.date][entry.habitId] = entry.rating;
     }
-    return { dayHabitRatings: map, datesWithEntries: withEntries };
+    return map;
   }, [checkIns, habitIds]);
 
   const firstDow = new Date(year, month, 1).getDay();
@@ -131,37 +107,36 @@ export function CategoryCalendar({
             const isPast   = dateStr < today;
             const ratingMap = dayHabitRatings[dateStr] ?? {};
 
-            // Determine fill color and opacity
-            let bg: string;
-            let opacity: number;
-
             if (selectedHabitId) {
-              // Filter mode: show only the selected habit's rating
+              // ── Filter mode: single solid fill ──
               const filterRating = ratingMap[selectedHabitId] ?? null;
+              let bg: string;
+              let opacity: number;
               if (isFuture) {
-                bg = colors.surface;
-                opacity = 0.18;
+                bg = colors.surface; opacity = 0.18;
               } else if (!filterRating) {
-                bg = "#EF4444";
-                opacity = isPast ? 0.30 : 0;
+                bg = "#EF4444"; opacity = isPast ? 0.30 : 0;
               } else {
-                bg = ratingColor(filterRating);
-                opacity = 0.85;
+                bg = ratingColor(filterRating); opacity = 0.85;
               }
-            } else {
-              // All-habits mode: overall score color
-              if (isFuture) {
-                bg = colors.surface;
-                opacity = 0.18;
-              } else {
-                const score = datesWithEntries.has(dateStr)
-                  ? dayScore(ratingMap, habitIds)
-                  : null;
-                bg = scoreColor(score);
-                opacity = scoreOpacity(score, isPast || isToday);
-              }
+              return (
+                <Pressable
+                  key={dateStr}
+                  onPress={() => (isPast || isToday) && onDayPress?.(dateStr)}
+                  style={({ pressed }) => ({
+                    width: CELL_SIZE,
+                    height: CELL_SIZE,
+                    borderRadius: 4,
+                    backgroundColor: bg,
+                    opacity: pressed ? 0.7 : opacity,
+                    borderWidth: isToday ? 1.5 : 0,
+                    borderColor: isToday ? colors.primary : "transparent",
+                  })}
+                />
+              );
             }
 
+            // ── All-habits mode: one strip per habit ──
             return (
               <Pressable
                 key={dateStr}
@@ -170,12 +145,36 @@ export function CategoryCalendar({
                   width: CELL_SIZE,
                   height: CELL_SIZE,
                   borderRadius: 4,
-                  backgroundColor: bg,
-                  opacity: pressed ? 0.7 : opacity,
+                  overflow: "hidden",
+                  opacity: pressed ? 0.7 : isFuture ? 0.18 : 1,
                   borderWidth: isToday ? 1.5 : 0,
                   borderColor: isToday ? colors.primary : "transparent",
+                  flexDirection: "column",
+                  gap: STRIP_GAP,
+                  backgroundColor: colors.surface,
+                  padding: 1,
                 })}
-              />
+              >
+                {habits.map((h) => {
+                  const rating = ratingMap[h.id] ?? null;
+                  const stripColor = rating && (isPast || isToday)
+                    ? ratingColor(rating)
+                    : colors.surface;
+                  const stripOpacity = rating && (isPast || isToday) ? 0.85 : 0.25;
+
+                  return (
+                    <View
+                      key={h.id}
+                      style={{
+                        flex: 1,
+                        borderRadius: 2,
+                        backgroundColor: stripColor,
+                        opacity: stripOpacity,
+                      }}
+                    />
+                  );
+                })}
+              </Pressable>
             );
           })}
           {/* Fill trailing empty cells */}

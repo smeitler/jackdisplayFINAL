@@ -1002,3 +1002,10 @@
 - [x] Replace image thumbnails and text with clean square filled boxes
 - [x] Darker solid fill = journal entry exists that day, dim = no entry
 - [x] No text, no borders, no thumbnails in boxes
+
+## Goal Calendar Per-Habit Segments (Mar 18 2026)
+
+- [x] Goal detail calendar: show one colored segment per habit per day cell (stacked strips)
+- [x] Each strip colored by that habit's individual rating (green/amber/red)
+- [x] No text in strips, just solid color fills
+- [x] Empty/unrated habit strips shown as very dim
