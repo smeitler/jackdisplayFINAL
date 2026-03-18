@@ -1092,3 +1092,13 @@
 - [x] Practice player: show vision board goals below gratitudes
 - [x] Practice player: photo slideshow dots indicator
 - [x] Practice player: scrollable layout so all content is accessible
+
+## Practice Player Redesign (Mar 18 2026 v7)
+
+- [x] Practice player: horizontal sliding photo carousel (top half of screen, continuous smooth scroll)
+- [x] Practice player: tap a photo to expand it briefly then return to carousel flow
+- [x] Practice player: gratitude text cycles one item at a time with fade-in animation (bottom section)
+- [x] Practice player: tap a gratitude to highlight/pulse it
+- [x] Practice player: fixed play/pause button at bottom center (always visible)
+- [x] Practice player: X close button stays top-right
+- [x] Practice player: remove breathwork circle animation (replaced by photo carousel)
