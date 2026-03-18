@@ -995,3 +995,10 @@
 ## Journal Calendar Redesign (Mar 18 2026)
 
 - [x] Apply same clean square filled box style to journal calendar (no text, no borders, darker fill = entry)
+
+## Journal Tab Calendar Redesign (Mar 18 2026)
+
+- [x] Find the journal tab Calendar view (shows image thumbnails on month grid)
+- [x] Replace image thumbnails and text with clean square filled boxes
+- [x] Darker solid fill = journal entry exists that day, dim = no entry
+- [x] No text, no borders, no thumbnails in boxes

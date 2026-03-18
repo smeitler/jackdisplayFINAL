@@ -1121,9 +1121,8 @@ function CalendarTab({ entries, onDayPress, colors }: {
   // 7 equal columns, 1px border between cells, cells are perfectly square.
   // Use useWindowDimensions so it reacts to screen size changes.
   const { width: winWidth } = useWindowDimensions();
-  const BORDER = 1;
-  const cellWidth = Math.floor((winWidth > 0 ? winWidth : 390) / 7);
-  // Height matches width for a perfect square
+  const CELL_GAP = 3;
+  const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - 32 - CELL_GAP * 6) / 7);
   const cellHeight = cellWidth;
 
   const scrollRef = useRef<ScrollView>(null);
@@ -1168,168 +1167,69 @@ function CalendarTab({ entries, onDayPress, colors }: {
                 setDidScroll(true);
               }
             }}
-            style={{
-              marginBottom: 0,
-              borderTopWidth: BORDER,
-              borderTopColor: colors.border,
-            }}>
-            {/* Month + day-of-week header row */}
+            style={{ marginBottom: 8 }}>
+            {/* Month header */}
             <View style={{
               flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              borderBottomWidth: BORDER,
-              borderBottomColor: colors.border,
+              alignItems: "baseline",
+              gap: 6,
+              paddingHorizontal: 16,
+              paddingTop: 16,
+              paddingBottom: 8,
             }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground }}>
-                {MONTH_NAMES[month - 1]} {year}
+              <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>
+                {MONTH_NAMES[month - 1]}
               </Text>
+              <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted }}>{year}</Text>
             </View>
 
             {/* Day-of-week header */}
-            <View style={{
-              flexDirection: "row",
-              borderBottomWidth: BORDER,
-              borderBottomColor: colors.border,
-            }}>
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
-                <View key={i} style={{
-                  width: cellWidth,
-                  paddingVertical: 6,
-                  alignItems: "center",
-                  borderRightWidth: i < 6 ? BORDER : 0,
-                  borderRightColor: colors.border,
-                }}>
-                  <Text style={{ fontSize: 10, fontWeight: "600", color: colors.muted }}>{d}</Text>
+            <View style={{ flexDirection: "row", gap: CELL_GAP, paddingHorizontal: 16, marginBottom: CELL_GAP }}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                <View key={i} style={{ width: cellWidth, alignItems: "center" }}>
+                  <Text style={{ fontSize: 9, fontWeight: "600", color: colors.muted }}>{d}</Text>
                 </View>
               ))}
             </View>
 
-            {/* Week rows — borders are on each individual cell (collapsed) */}
-            {rows.map((row, rowIdx) => (
-              <View key={rowIdx} style={{ flexDirection: "row", zIndex: 0 }}>
-                {row.map((day, colIdx) => {
-                  // Every cell gets a full border on all sides for a clean grid look
-                  const cellBorderStyle = {
-                    borderWidth: BORDER,
-                    borderColor: colors.border,
-                    // Collapse borders: shift left by 1 for all but first column
-                    marginLeft: colIdx > 0 ? -BORDER : 0,
-                    // Collapse borders: shift up by 1 for all but first row
-                    marginTop: rowIdx > 0 ? -BORDER : 0,
-                  };
+            {/* Week rows — clean square filled boxes */}
+            <View style={{ paddingHorizontal: 16 }}>
+              {rows.map((row, rowIdx) => (
+                <View key={rowIdx} style={{ flexDirection: "row", gap: CELL_GAP, marginBottom: CELL_GAP }}>
+                  {row.map((day, colIdx) => {
+                    if (day === null) {
+                      return <View key={`e-${colIdx}`} style={{ width: cellWidth, height: cellHeight }} />;
+                    }
 
-                  if (day === null) {
+                    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const dayEntries = entryMap.get(dateStr) || [];
+                    const isToday = dateStr === todayStr;
+                    const isFuture = dateStr > todayStr;
+                    const hasEntries = dayEntries.length > 0;
+
+                    // Fill color: entry = primary accent, no entry = dim surface
+                    const bgColor = hasEntries ? colors.primary : colors.surface;
+                    const opacity = isFuture ? 0.18 : hasEntries ? 0.85 : 0.25;
+
                     return (
-                      <View
-                        key={`e-${colIdx}`}
-                        style={[
-                          cellBorderStyle,
-                          {
-                            width: cellWidth,
-                            height: cellHeight,
-                            backgroundColor: colors.background,
-                          },
-                        ]}
-                      />
-                    );
-                  }
-
-                  const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                  const dayEntries = entryMap.get(dateStr) || [];
-                  const isToday = dateStr === todayStr;
-                  const hasEntries = dayEntries.length > 0;
-
-                  // First photo across all entries for this day
-                  let photoUri: string | null = null;
-                  for (const de of dayEntries) {
-                    const photo = de.attachments.find((a) => a.type === "photo");
-                    if (photo) { photoUri = photo.uri; break; }
-                  }
-
-                  // Text preview only when no photo
-                  const rawText = !photoUri && hasEntries ? (dayEntries[0]?.body || "") : "";
-                  const textPreview = rawText.slice(0, 80);
-
-                  return (
-                    <Pressable
-                      key={day}
-                      onPress={() => onDayPress(dateStr)}
-                      style={({ pressed }) => [
-                        cellBorderStyle,
-                        {
+                      <Pressable
+                        key={day}
+                        onPress={() => onDayPress(dateStr)}
+                        style={({ pressed }) => ({
                           width: cellWidth,
                           height: cellHeight,
-                          overflow: "hidden",
-                          backgroundColor: isToday
-                            ? colors.primary + "18"
-                            : hasEntries
-                            ? colors.surface
-                            : colors.background,
-                          opacity: pressed ? 0.75 : 1,
-                        },
-                      ]}
-                    >
-                      {/* Photo fills entire cell */}
-                      {photoUri && (
-                        <Image
-                          source={{ uri: photoUri }}
-                          style={StyleSheet.absoluteFill}
-                          resizeMode="cover"
-                        />
-                      )}
-                      {/* Subtle scrim over photo for text readability */}
-                      {photoUri && (
-                        <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.18)" }]} />
-                      )}
-
-                      {/* Today highlight ring */}
-                      {isToday && (
-                        <View style={[StyleSheet.absoluteFill, {
-                          borderWidth: 2.5,
-                          borderColor: colors.primary,
-                        }]} />
-                      )}
-
-                      {/* Content */}
-                      <View style={{ flex: 1, padding: 5 }}>
-                        {/* Day number */}
-                        <Text style={{
-                          fontSize: 14,
-                          fontWeight: isToday ? "900" : hasEntries ? "700" : "400",
-                          color: photoUri
-                            ? "#fff"
-                            : isToday
-                            ? colors.primary
-                            : colors.foreground,
-                          textShadowColor: photoUri ? "rgba(0,0,0,0.8)" : "transparent",
-                          textShadowOffset: { width: 0, height: 1 },
-                          textShadowRadius: photoUri ? 3 : 0,
-                        }}>
-                          {day}
-                        </Text>
-
-                        {/* Text preview — shown when no photo */}
-                        {textPreview ? (
-                          <Text
-                            style={{
-                              fontSize: 8,
-                              lineHeight: 10,
-                              color: colors.muted,
-                              marginTop: 3,
-                            }}
-                            numberOfLines={5}
-                          >
-                            {textPreview}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ))}
+                          borderRadius: 4,
+                          backgroundColor: bgColor,
+                          opacity: pressed ? 0.6 : opacity,
+                          borderWidth: isToday ? 1.5 : 0,
+                          borderColor: isToday ? colors.primary : "transparent",
+                        })}
+                      />
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
           </View>
         );
       })}
