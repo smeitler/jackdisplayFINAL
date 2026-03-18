@@ -991,3 +991,7 @@
 - [x] Remove bordered/lined box style — use solid filled squares instead
 - [x] Darker filled color = entry exists for that day, dim/empty = no entry
 - [x] Fix alignment so grid is straight and feels like a tight box grid
+
+## Journal Calendar Redesign (Mar 18 2026)
+
+- [x] Apply same clean square filled box style to journal calendar (no text, no borders, darker fill = entry)
