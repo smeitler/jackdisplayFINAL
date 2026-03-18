@@ -1017,3 +1017,14 @@
 - [x] Journal calendar: show photo thumbnail if entry has one (photo takes priority)
 - [x] Journal calendar: darker solid fill for text-only entries (no photo)
 - [x] Journal calendar: add tiny date number top-left of each cell
+
+## Journal & Homepage Improvements (Mar 18 2026)
+
+- [x] Journal tab: reorder sub-tabs to Calendar → List → Media → Map
+- [x] Journal tab: add sticky collapsing stats bar (Streak, Entries, Media count)
+- [x] Journal tab: stats bar collapses on scroll down, reappears on scroll up
+- [x] Journal entry: add gratitudes field ("What are you grateful for?")
+- [x] Homepage: replace brain/head AI icon with pulsing gradient AI coach button
+- [x] Priming screen: show photo highlights slideshow while audio plays
+- [x] Priming screen: show recent gratitudes list while audio plays
+- [x] Priming screen: show vision board goals while audio plays

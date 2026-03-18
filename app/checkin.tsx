@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -530,6 +530,49 @@ export default function CheckInScreen() {
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const afterAlarmPlayerRef = useRef<AudioPlayer | null>(null);
 
+  // Priming screen data: photo highlights, gratitudes, vision board goals
+  const [primingPhotos, setPrimingPhotos] = useState<string[]>([]);
+  const [primingGratitudes, setPrimingGratitudes] = useState<string[]>([]);
+  const [primingGoals, setPrimingGoals] = useState<string[]>([]);
+  const [primingPhotoIdx, setPrimingPhotoIdx] = useState(0);
+  const primingSlideTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load priming data from local storage when priming session starts
+  async function loadPrimingData() {
+    try {
+      const { loadEntries } = await import('@/lib/journal-store');
+      const uid = await import('@/lib/storage').then((m) => m.getLastUserId());
+      const journalEntries = await loadEntries(uid || 'default');
+      // Collect recent photo attachments (last 30 entries)
+      const photos: string[] = [];
+      const gratitudes: string[] = [];
+      for (const e of journalEntries.slice(0, 30)) {
+        for (const att of e.attachments ?? []) {
+          if ((att.type === 'photo') && att.uri && photos.length < 12) photos.push(att.uri);
+        }
+        for (const g of e.gratitudes ?? []) {
+          if (g.trim() && gratitudes.length < 10) gratitudes.push(g.trim());
+        }
+      }
+      // Load vision board goals from storage
+      const goalsRaw = await import('@react-native-async-storage/async-storage').then((m) => m.default.getItem('daycheck:visionGoals'));
+      const goals: string[] = goalsRaw ? JSON.parse(goalsRaw) : [];
+      setPrimingPhotos(photos);
+      setPrimingGratitudes(gratitudes);
+      setPrimingGoals(goals);
+      setPrimingPhotoIdx(0);
+      // Auto-advance slideshow every 4s
+      if (primingSlideTimer.current) clearInterval(primingSlideTimer.current);
+      if (photos.length > 1) {
+        primingSlideTimer.current = setInterval(() => {
+          setPrimingPhotoIdx((i) => (i + 1) % photos.length);
+        }, 4000);
+      }
+    } catch (e) {
+      console.warn('[Priming] Failed to load priming data:', e);
+    }
+  }
+
   const { data: myTeams } = trpc.teams.list.useQuery();
   const createPost = trpc.teamFeed.createPost.useMutation();
   const teamNameMap = useMemo(() => {
@@ -596,6 +639,8 @@ export default function CheckInScreen() {
     const source = AFTER_ALARM_SOURCES[meditationId];
     setAfterAlarmStarted(true);
     setSessionElapsed(0);
+    // Load photo highlights, gratitudes, and vision board goals for priming display
+    loadPrimingData();
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     sessionTimerRef.current = setInterval(() => {
       setSessionElapsed((prev) => {
@@ -936,9 +981,54 @@ export default function CheckInScreen() {
                     <Text style={[styles.sessionTime, { color: colors.muted }]}>
                       {elapsed} / {totalLabel}
                     </Text>
+
+                    {/* Photo highlights slideshow */}
+                    {primingPhotos.length > 0 && (
+                      <View style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', width: '100%', aspectRatio: 1.5 }}>
+                        <Image
+                          source={{ uri: primingPhotos[primingPhotoIdx] }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                        />
+                        {primingPhotos.length > 1 && (
+                          <View style={{ position: 'absolute', bottom: 8, alignSelf: 'center', flexDirection: 'row', gap: 4 }}>
+                            {primingPhotos.map((_, i) => (
+                              <View key={i} style={{ width: i === primingPhotoIdx ? 14 : 6, height: 6, borderRadius: 3, backgroundColor: i === primingPhotoIdx ? '#fff' : 'rgba(255,255,255,0.4)' }} />
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Recent gratitudes */}
+                    {primingGratitudes.length > 0 && (
+                      <View style={{ marginTop: 14, gap: 6, width: '100%' }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary, letterSpacing: 0.5 }}>GRATEFUL FOR</Text>
+                        {primingGratitudes.slice(0, 5).map((g, i) => (
+                          <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                            <Text style={{ fontSize: 13 }}>🙏</Text>
+                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 18 }}>{g}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Vision board goals */}
+                    {primingGoals.length > 0 && (
+                      <View style={{ marginTop: 14, gap: 6, width: '100%' }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary, letterSpacing: 0.5 }}>YOUR GOALS</Text>
+                        {primingGoals.slice(0, 5).map((g, i) => (
+                          <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                            <Text style={{ fontSize: 13 }}>🎯</Text>
+                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 18 }}>{g}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
                     {/* Stop button */}
                     <Pressable
-                      style={({ pressed }) => [styles.afterAlarmStopBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                      style={({ pressed }) => [styles.afterAlarmStopBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1, marginTop: 16 }]}
                       onPress={stopAfterAlarm}
                     >
                       <Text style={[styles.afterAlarmStopText, { color: colors.muted }]}>Stop</Text>

@@ -441,6 +441,8 @@ function EntryEditor({
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
+  const [gratitudes, setGratitudes] = useState<string[]>([]);
+  const [newGratitude, setNewGratitude] = useState("");
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   // Load habits for template
@@ -459,6 +461,7 @@ function EntryEditor({
         setAttachments(entry.attachments);
         setLocation(entry.location);
         setMood(entry.mood || "");
+        setGratitudes(entry.gratitudes ?? []);
         // Build merged text: title on first line, then body
         const merged = entry.title ? entry.title + (entry.body ? "\n" + entry.body : "") : entry.body;
         setMergedText(merged);
@@ -471,6 +474,7 @@ function EntryEditor({
         setAttachments([]);
         setLocation(undefined);
         setMood("");
+        setGratitudes([]);
       }
     }
   }, [visible, entry, initialDate]);
@@ -660,6 +664,7 @@ function EntryEditor({
         location,
         mood,
         tags: [],
+        gratitudes: gratitudes.filter((g) => g.trim().length > 0),
       };
       onSave(saved);
       onClose();
@@ -890,6 +895,49 @@ function EntryEditor({
                 ))}
               </View>
             )}
+
+            {/* Gratitudes */}
+            <View style={{ gap: 8, marginTop: 16 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: colors.primary, letterSpacing: 0.5 }}>GRATEFUL FOR</Text>
+              {gratitudes.map((g, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 0.5, borderColor: colors.border }}>
+                  <Text style={{ fontSize: 14 }}>🙏</Text>
+                  <TextInput
+                    value={g}
+                    onChangeText={(text) => setGratitudes((prev) => prev.map((x, j) => j === i ? text : x))}
+                    style={{ flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 18 }}
+                    multiline
+                    returnKeyType="done"
+                    placeholderTextColor={colors.muted}
+                  />
+                  <Pressable onPress={() => setGratitudes((prev) => prev.filter((_, j) => j !== i))} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                    <IconSymbol name="xmark" size={14} color={colors.muted} />
+                  </Pressable>
+                </View>
+              ))}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 0.5, borderColor: colors.border }}>
+                <Text style={{ fontSize: 14 }}>🙏</Text>
+                <TextInput
+                  value={newGratitude}
+                  onChangeText={setNewGratitude}
+                  placeholder="Add something you're grateful for…"
+                  placeholderTextColor={colors.muted}
+                  style={{ flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 18 }}
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (newGratitude.trim()) {
+                      setGratitudes((prev) => [...prev, newGratitude.trim()]);
+                      setNewGratitude("");
+                    }
+                  }}
+                />
+                {newGratitude.trim().length > 0 && (
+                  <Pressable onPress={() => { setGratitudes((prev) => [...prev, newGratitude.trim()]); setNewGratitude(""); }} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                    <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
 
             {/* Location */}
             {location && (
@@ -1612,13 +1660,54 @@ function MapTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function JournalScreen() {
   const colors = useColors();
-  const [activeTab, setActiveTab] = useState<SubTab>("journal");
+  const [activeTab, setActiveTab] = useState<SubTab>("calendar");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [editorDate, setEditorDate] = useState(todayDateStr());
+
+  // ── Sticky stats bar ──────────────────────────────────────────────────────
+  const statsBarAnim = useRef(new Animated.Value(1)).current;
+  const lastScrollY = useRef(0);
+  const statsBarVisible = useRef(true);
+
+  function handleStatsScroll(e: { nativeEvent: { contentOffset: { y: number } } }) {
+    const y = e.nativeEvent.contentOffset.y;
+    const delta = y - lastScrollY.current;
+    lastScrollY.current = y;
+    if (delta > 5 && statsBarVisible.current) {
+      statsBarVisible.current = false;
+      Animated.timing(statsBarAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    } else if (delta < -5 && !statsBarVisible.current) {
+      statsBarVisible.current = true;
+      Animated.timing(statsBarAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    }
+  }
+
+  // ── Computed stats ────────────────────────────────────────────────────────
+  const journalStats = useMemo(() => {
+    const totalEntries = entries.length;
+    const mediaCount = entries.reduce((n, e) => n + (e.attachments?.filter((a) => a.type === "photo" || a.type === "video").length ?? 0), 0);
+    // Streak: consecutive days with at least one entry ending today or yesterday
+    const dateSet = new Set(entries.map((e) => e.date));
+    let streak = 0;
+    const d = new Date();
+    // Allow today or yesterday as streak anchor
+    const todayStr = todayDateStr();
+    const ystStr = (() => { const y = new Date(); y.setDate(y.getDate() - 1); return `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,"0")}-${String(y.getDate()).padStart(2,"0")}`; })();
+    if (!dateSet.has(todayStr) && !dateSet.has(ystStr)) return { totalEntries, mediaCount, streak: 0 };
+    const anchor = dateSet.has(todayStr) ? new Date() : new Date(ystStr + "T12:00:00");
+    const check = new Date(anchor);
+    while (true) {
+      const s = `${check.getFullYear()}-${String(check.getMonth()+1).padStart(2,"0")}-${String(check.getDate()).padStart(2,"0")}`;
+      if (!dateSet.has(s)) break;
+      streak++;
+      check.setDate(check.getDate() - 1);
+    }
+    return { totalEntries, mediaCount, streak };
+  }, [entries]);
 
   useEffect(() => {
     (async () => {
@@ -1673,8 +1762,8 @@ export default function JournalScreen() {
   }
 
   const SUB_TABS: { key: SubTab; label: string; icon: string }[] = [
-    { key: "journal", label: "Journal", icon: "book.fill" },
     { key: "calendar", label: "Calendar", icon: "calendar" },
+    { key: "journal", label: "List", icon: "list.bullet" },
     { key: "media", label: "Media", icon: "photo.stack.fill" },
     { key: "map", label: "Map", icon: "map.fill" },
   ];
@@ -1685,6 +1774,37 @@ export default function JournalScreen() {
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>
       </View>
+
+      {/* Sticky stats bar — collapses on scroll down, reappears on scroll up */}
+      <Animated.View style={{
+        overflow: "hidden",
+        opacity: statsBarAnim,
+        maxHeight: statsBarAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 52] }),
+      }}>
+        <View style={[{
+          flexDirection: "row", paddingHorizontal: 16, paddingVertical: 8, gap: 10,
+          borderBottomWidth: 0.5, borderBottomColor: colors.border,
+        }]}>
+          {/* Streak */}
+          <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={{ fontSize: 14 }}>🔥</Text>
+            <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.streak}</Text>
+            <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Streak</Text>
+          </View>
+          {/* Entries */}
+          <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <IconSymbol name="book.fill" size={14} color={colors.primary} />
+            <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.totalEntries}</Text>
+            <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Entries</Text>
+          </View>
+          {/* Media */}
+          <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <IconSymbol name="photo.fill" size={14} color={colors.primary} />
+            <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.mediaCount}</Text>
+            <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Media</Text>
+          </View>
+        </View>
+      </Animated.View>
 
       {/* Sub-tab bar */}
       <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
@@ -1724,6 +1844,8 @@ export default function JournalScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          onScroll={handleStatsScroll}
+          scrollEventThrottle={16}
         >
           {activeTab === "journal" && (
             <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
@@ -1772,4 +1894,13 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: "700" },
   tabBar: { flexDirection: "row", borderBottomWidth: 0.5, paddingHorizontal: 8 },
   tabItem: { flex: 1, alignItems: "center", paddingVertical: 10, gap: 2 },
+});
+
+const journalStatStyles = StyleSheet.create({
+  pill: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 0.5,
+  },
+  val: { fontSize: 15, fontWeight: "700" },
+  lbl: { fontSize: 11, fontWeight: "500" },
 });

@@ -46,6 +46,8 @@ export interface JournalEntry {
   /** Transcription status for audio entries */
   transcriptionStatus?: "pending" | "done" | "failed";
   transcriptionText?: string;
+  /** Gratitude items — auto-extracted from voice or manually entered */
+  gratitudes?: string[];
 }
 
 // ── Templates ──────────────────────────────────────────────────────────────────

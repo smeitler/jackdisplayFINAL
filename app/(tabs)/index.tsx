@@ -1,5 +1,6 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image } from "react-native";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Animated } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
@@ -533,6 +534,19 @@ export default function HomeScreen() {
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
 
+  // AI Coach button pulse animation
+  const coachPulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(coachPulse, { toValue: 1.18, duration: 900, useNativeDriver: true }),
+        Animated.timing(coachPulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [coachPulse]);
+
   // Load profile picture — per-user key so switching accounts shows the right photo
   useEffect(() => {
     (async () => {
@@ -639,19 +653,32 @@ export default function HomeScreen() {
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
-              {/* AI Coach button */}
+              {/* AI Coach button — pulsing gradient ring */}
               <Pressable
-                onPress={() => router.push('/ai-coach')}
-                style={({ pressed }) => [{
-                  width: 40, height: 40, borderRadius: 12,
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: colors.surface,
-                  borderWidth: 1, borderColor: colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                  transform: [{ scale: pressed ? 0.95 : 1 }],
-                }]}
+                onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/ai-coach'); }}
+                style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
               >
-                <IconSymbol name="brain" size={20} color={colors.primary} />
+                {/* Outer pulse ring */}
+                <Animated.View style={{
+                  width: 44, height: 44, borderRadius: 22,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: colors.primary + '22',
+                  transform: [{ scale: coachPulse }],
+                }}>
+                  {/* Inner gradient-style circle */}
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: colors.primary,
+                    shadowColor: colors.primary,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.6,
+                    shadowRadius: 8,
+                    elevation: 6,
+                  }}>
+                    <Text style={{ fontSize: 17 }}>✦</Text>
+                  </View>
+                </Animated.View>
               </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
