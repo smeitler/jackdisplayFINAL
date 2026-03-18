@@ -4,7 +4,7 @@
  * A full-month heatmap calendar for a category/goal.
  *
  * All-habits mode (selectedHabitId = null):
- *  - Each day cell shows one horizontal strip per habit in the goal
+ *  - Each day cell shows a tiny date number top-left + one horizontal strip per habit
  *  - Strip color = that habit's individual rating (green/amber/red)
  *  - Unrated strips = very dim surface placeholder
  *  - Future days = all strips very dim
@@ -12,6 +12,7 @@
  *
  * Filter mode (selectedHabitId set):
  *  - Entire cell fills with that specific habit's rating color (single solid box)
+ *  - Tiny date number shown top-left
  */
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useMemo } from "react";
@@ -19,9 +20,10 @@ import { useColors } from "@/hooks/use-colors";
 import { toDateString, CheckInEntry, Habit } from "@/lib/storage";
 
 const CELL_GAP = 3;
-const STRIP_GAP = 2;
 const COLS = 7;
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+const DATE_FONT = 8;
+const DATE_H = 11; // height reserved for the date number row
 
 interface CategoryCalendarProps {
   year: number;
@@ -52,9 +54,11 @@ export function CategoryCalendar({
   const availableWidth = containerWidth ?? 320;
   const CELL_SIZE = Math.floor((availableWidth - CELL_GAP * (COLS - 1)) / COLS);
 
-  // In all-habits mode, compute strip height so all strips + gaps fit in CELL_SIZE
+  // Strip area = cell height minus date row minus 2px padding top/bottom
   const n = habits.length || 1;
-  const STRIP_H = Math.max(4, Math.floor((CELL_SIZE - STRIP_GAP * (n - 1)) / n));
+  const STRIP_AREA = CELL_SIZE - DATE_H - 3;
+  const STRIP_GAP = n > 1 ? 2 : 0;
+  const STRIP_H = Math.max(3, Math.floor((STRIP_AREA - STRIP_GAP * (n - 1)) / n));
 
   const habitIds = useMemo(() => habits.map((h) => h.id), [habits]);
 
@@ -101,14 +105,14 @@ export function CategoryCalendar({
               return <View key={`b-${ci}`} style={{ width: CELL_SIZE, height: CELL_SIZE }} />;
             }
 
-            const { dateStr } = cell;
+            const { dateStr, day } = cell;
             const isToday  = dateStr === today;
             const isFuture = dateStr > today;
             const isPast   = dateStr < today;
             const ratingMap = dayHabitRatings[dateStr] ?? {};
 
             if (selectedHabitId) {
-              // ── Filter mode: single solid fill ──
+              // ── Filter mode: single solid fill + date number ──
               const filterRating = ratingMap[selectedHabitId] ?? null;
               let bg: string;
               let opacity: number;
@@ -131,12 +135,15 @@ export function CategoryCalendar({
                     opacity: pressed ? 0.7 : opacity,
                     borderWidth: isToday ? 1.5 : 0,
                     borderColor: isToday ? colors.primary : "transparent",
+                    padding: 2,
                   })}
-                />
+                >
+                  <Text style={[styles.dateNum, { color: "#fff", opacity: 0.7 }]}>{day}</Text>
+                </Pressable>
               );
             }
 
-            // ── All-habits mode: one strip per habit ──
+            // ── All-habits mode: date number + strips ──
             return (
               <Pressable
                 key={dateStr}
@@ -146,34 +153,40 @@ export function CategoryCalendar({
                   height: CELL_SIZE,
                   borderRadius: 4,
                   overflow: "hidden",
-                  opacity: pressed ? 0.7 : isFuture ? 0.18 : 1,
+                  opacity: pressed ? 0.7 : isFuture ? 0.25 : 1,
                   borderWidth: isToday ? 1.5 : 0,
                   borderColor: isToday ? colors.primary : "transparent",
-                  flexDirection: "column",
-                  gap: STRIP_GAP,
                   backgroundColor: colors.surface,
-                  padding: 1,
+                  padding: 2,
                 })}
               >
-                {habits.map((h) => {
-                  const rating = ratingMap[h.id] ?? null;
-                  const stripColor = rating && (isPast || isToday)
-                    ? ratingColor(rating)
-                    : colors.surface;
-                  const stripOpacity = rating && (isPast || isToday) ? 0.85 : 0.25;
+                {/* Tiny date number */}
+                <Text style={[styles.dateNum, { color: isToday ? colors.primary : colors.muted }]}>
+                  {day}
+                </Text>
 
-                  return (
-                    <View
-                      key={h.id}
-                      style={{
-                        flex: 1,
-                        borderRadius: 2,
-                        backgroundColor: stripColor,
-                        opacity: stripOpacity,
-                      }}
-                    />
-                  );
-                })}
+                {/* Habit strips */}
+                <View style={{ flex: 1, flexDirection: "column", gap: STRIP_GAP, marginTop: 1 }}>
+                  {habits.map((h) => {
+                    const rating = ratingMap[h.id] ?? null;
+                    const stripColor = rating && (isPast || isToday)
+                      ? ratingColor(rating)
+                      : colors.border;
+                    const stripOpacity = rating && (isPast || isToday) ? 0.9 : 0.3;
+
+                    return (
+                      <View
+                        key={h.id}
+                        style={{
+                          height: STRIP_H,
+                          borderRadius: 1,
+                          backgroundColor: stripColor,
+                          opacity: stripOpacity,
+                        }}
+                      />
+                    );
+                  })}
+                </View>
               </Pressable>
             );
           })}
@@ -192,4 +205,5 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", marginBottom: CELL_GAP },
   headerText: { fontSize: 9, fontWeight: "600" },
   row: { flexDirection: "row", marginBottom: CELL_GAP },
+  dateNum: { fontSize: DATE_FONT, fontWeight: "600", lineHeight: DATE_H },
 });

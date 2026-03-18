@@ -1205,11 +1205,19 @@ function CalendarTab({ entries, onDayPress, colors }: {
                     const dayEntries = entryMap.get(dateStr) || [];
                     const isToday = dateStr === todayStr;
                     const isFuture = dateStr > todayStr;
+                    const isPast = dateStr < todayStr;
                     const hasEntries = dayEntries.length > 0;
 
-                    // Fill color: entry = primary accent, no entry = dim surface
-                    const bgColor = hasEntries ? colors.primary : colors.surface;
-                    const opacity = isFuture ? 0.18 : hasEntries ? 0.85 : 0.25;
+                    // Find first photo across all entries for this day
+                    let photoUri: string | null = null;
+                    for (const de of dayEntries) {
+                      const photo = de.attachments?.find((a: { type: string }) => a.type === "photo");
+                      if (photo) { photoUri = (photo as { uri: string }).uri; break; }
+                    }
+
+                    // Fill: photo > text entry (darker) > no entry (dim)
+                    const bgColor = photoUri ? "#000" : hasEntries ? colors.primary : colors.surface;
+                    const cellOpacity = isFuture ? 0.18 : photoUri ? 1 : hasEntries ? 0.75 : 0.22;
 
                     return (
                       <Pressable
@@ -1219,12 +1227,35 @@ function CalendarTab({ entries, onDayPress, colors }: {
                           width: cellWidth,
                           height: cellHeight,
                           borderRadius: 4,
+                          overflow: "hidden",
                           backgroundColor: bgColor,
-                          opacity: pressed ? 0.6 : opacity,
+                          opacity: pressed ? 0.6 : cellOpacity,
                           borderWidth: isToday ? 1.5 : 0,
                           borderColor: isToday ? colors.primary : "transparent",
                         })}
-                      />
+                      >
+                        {/* Photo fills entire cell */}
+                        {photoUri ? (
+                          <Image
+                            source={{ uri: photoUri }}
+                            style={StyleSheet.absoluteFill}
+                            resizeMode="cover"
+                          />
+                        ) : null}
+                        {/* Tiny date number */}
+                        <Text style={{
+                          fontSize: 8,
+                          fontWeight: "600",
+                          lineHeight: 11,
+                          color: photoUri ? "#fff" : isToday ? colors.primary : colors.muted,
+                          opacity: photoUri ? 0.85 : 1,
+                          paddingLeft: 3,
+                          paddingTop: 2,
+                          textShadowColor: photoUri ? "rgba(0,0,0,0.8)" : "transparent",
+                          textShadowOffset: { width: 0, height: 1 },
+                          textShadowRadius: photoUri ? 2 : 0,
+                        }}>{day}</Text>
+                      </Pressable>
                     );
                   })}
                 </View>

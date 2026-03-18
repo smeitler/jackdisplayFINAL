@@ -1009,3 +1009,11 @@
 - [x] Each strip colored by that habit's individual rating (green/amber/red)
 - [x] No text in strips, just solid color fills
 - [x] Empty/unrated habit strips shown as very dim
+
+## Calendar Improvements (Mar 18 2026)
+
+- [x] Goal/category calendar: add tiny date number top-left of each cell
+- [x] Goal/category calendar: fix strip spacing so strips fill cell evenly
+- [x] Journal calendar: show photo thumbnail if entry has one (photo takes priority)
+- [x] Journal calendar: darker solid fill for text-only entries (no photo)
+- [x] Journal calendar: add tiny date number top-left of each cell
