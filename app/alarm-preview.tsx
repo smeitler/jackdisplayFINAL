@@ -107,7 +107,7 @@ const MP_META: Record<string, { emoji: string; label: string }> = {
 };
 
 // Test audio URL for Priming 5-min
-const PRIMING_5MIN_TEST_URL = "https://static.manus.space/uploads/priming-5min-test.mp3";
+const PRIMING_5MIN_TEST_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663287248938/lYxzlZcwkYrgInjh.mp3";
 
 function MorningPracticeCard({ alarm, colors }: { alarm: ReturnType<typeof useApp>['alarm']; colors: ReturnType<typeof useColors> }) {
   const router = useExpoRouter();
@@ -139,9 +139,10 @@ function MorningPracticeCard({ alarm, colors }: { alarm: ReturnType<typeof useAp
         pathname: '/practice-player',
         params: {
           type: 'priming',
-          title: 'Priming',
           chunkUrls: JSON.stringify([PRIMING_5MIN_TEST_URL]),
-          totalMinutes: '5',
+          pausesBetweenChunks: JSON.stringify([0]),
+          totalDurationMinutes: '5',
+          breathworkStyle: 'box',
         },
       } as never);
       return;
@@ -164,9 +165,10 @@ function MorningPracticeCard({ alarm, colors }: { alarm: ReturnType<typeof useAp
         pathname: '/practice-player',
         params: {
           type: mpSelectedType,
-          title: meta.label,
           chunkUrls: JSON.stringify(result.chunkUrls),
-          totalMinutes: String(effectiveDuration),
+          pausesBetweenChunks: JSON.stringify(result.pausesBetweenChunks ?? []),
+          totalDurationMinutes: String(effectiveDuration),
+          breathworkStyle: 'box',
         },
       } as never);
     } catch {

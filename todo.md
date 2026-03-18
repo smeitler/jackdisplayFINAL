@@ -1082,3 +1082,13 @@
 
 - [x] Fix "Save Review (Preview)": stay on screen, show submitted UI (celebration + morning practice card) instead of navigating back immediately
 - [x] Preview submit must NOT call submitCheckIn or router.back() — just set submitted=true
+
+## Practice Player Visual Enhancements (Mar 18 2026 v6)
+
+- [x] Practice player: load and display user's gratitude entries from journal entries
+- [x] Practice player: load and display journal highlight photos (uploaded by user)
+- [x] Practice player: show gratitude items as text cards while audio plays
+- [x] Practice player: show journal photos as a slow-fade slideshow backdrop behind the player controls
+- [x] Practice player: show vision board goals below gratitudes
+- [x] Practice player: photo slideshow dots indicator
+- [x] Practice player: scrollable layout so all content is accessible
