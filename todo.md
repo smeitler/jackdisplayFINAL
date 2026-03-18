@@ -1057,3 +1057,12 @@
 - [x] Morning practice: integrate into alarm flow with duration options (5/10/15/20 min + custom, pick at time)
 - [x] Morning practice alarm: Priming, Guided Meditation, Breathwork, Visualization each get duration picker
 - [x] On-demand session catalog: MorningPracticeCatalog screen to browse and launch all 4 session types
+
+## Alarm & Check-in Flow Improvements (Mar 18 2026 v2)
+
+- [x] Alarm settings: add 5/10/15/20 min duration chips under each After Alarm option (Priming, Meditation, Breathwork, Visualizations)
+- [x] Alarm settings: save selected duration per practice type (practiceDurations field per type)
+- [x] Check-in submission: add fireworks/confetti celebration overlay after submitting
+- [x] Morning practice card: green button = pre-selected time (default), yellow = pick custom time, red = skip
+- [x] Morning practice card: show the pre-selected time prominently on the green button
+- [x] Fix preview mode: show the after-alarm celebration and morning practice card in preview

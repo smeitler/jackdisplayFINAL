@@ -250,6 +250,70 @@ function formatMMSS(secs: number): string {
 
 const COUNTDOWN_SECONDS = 15;
 
+// ─── Celebration Overlay ─────────────────────────────────────────────────────
+// Shows fireworks/confetti animation for 3 seconds after check-in submission.
+// Uses pure React Native Animated API (no native modules needed).
+
+const CONFETTI_COLORS = ['#22C55E', '#F59E0B', '#7C3AED', '#EF4444', '#60A5FA', '#F472B6', '#34D399', '#FBBF24'];
+const NUM_PARTICLES = 40;
+
+function CelebrationOverlay({ score }: { score: number }) {
+  const [visible, setVisible] = useState(true);
+  const particles = useRef(
+    Array.from({ length: NUM_PARTICLES }, (_, i) => ({
+      x: new Animated.Value(0),
+      y: new Animated.Value(0),
+      opacity: new Animated.Value(1),
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      size: 6 + Math.random() * 8,
+      startX: 0.1 + Math.random() * 0.8, // fraction of screen width
+    }))
+  ).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    const animations = particles.map((p) => {
+      const endX = (Math.random() - 0.5) * 300;
+      const endY = 200 + Math.random() * 400;
+      return Animated.parallel([
+        Animated.timing(p.x, { toValue: endX, duration: 1800 + Math.random() * 800, useNativeDriver: true }),
+        Animated.timing(p.y, { toValue: endY, duration: 1800 + Math.random() * 800, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.delay(800),
+          Animated.timing(p.opacity, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ]),
+      ]);
+    });
+    Animated.parallel(animations).start();
+    const timer = setTimeout(() => setVisible(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!visible || score < 40) return null;
+
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      {particles.map((p, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            {
+              position: 'absolute',
+              top: 80,
+              left: `${Math.round(p.startX * 100)}%` as `${number}%`,
+              width: p.size,
+              height: p.size,
+              borderRadius: p.size / 4,
+              backgroundColor: p.color,
+            },
+            { transform: [{ translateX: p.x }, { translateY: p.y }], opacity: p.opacity },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 export default function CheckInScreen() {
   const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm, isPendingCheckIn } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
@@ -269,11 +333,18 @@ export default function CheckInScreen() {
   const [practiceResult, setPracticeResult] = useState<{ chunkUrls: string[]; pausesBetweenChunks: number[]; totalDurationMinutes: number } | null>(null);
   const generatePracticeMutation = trpc.morningPractice.generate.useMutation();
   // Inline morning practice picker (shown after check-in submission)
+  // Default type = alarm's selected after-alarm type; default duration = saved per-type duration
+  const defaultMpType = (alarm?.meditationId && alarm.meditationId !== 'journaling'
+    ? alarm.meditationId
+    : 'priming') as 'priming' | 'meditation' | 'breathwork' | 'visualization';
+  const defaultMpDuration = alarm?.practiceDurations?.[defaultMpType] ?? 10;
   const [mpPickerVisible, setMpPickerVisible] = useState(false);
-  const [mpSelectedType, setMpSelectedType] = useState<'priming' | 'meditation' | 'breathwork' | 'visualization'>('priming');
-  const [mpSelectedDuration, setMpSelectedDuration] = useState<number>(10);
+  const [mpCustomPickerVisible, setMpCustomPickerVisible] = useState(false);
+  const [mpSelectedType, setMpSelectedType] = useState<'priming' | 'meditation' | 'breathwork' | 'visualization'>(defaultMpType);
+  const [mpSelectedDuration, setMpSelectedDuration] = useState<number>(defaultMpDuration);
   const [mpCustomDuration, setMpCustomDuration] = useState('');
   const [mpGenerating, setMpGenerating] = useState(false);
+  const [mpDismissed, setMpDismissed] = useState(false);
 
   // ── Voice Check-in state (isolated from journal) ──
   const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'done' | 'error'>('idle');
@@ -986,7 +1057,7 @@ export default function CheckInScreen() {
     // After-alarm meditation info
     const meditationId = alarm.meditationId;
     const meditationMeta = meditationId ? AFTER_ALARM_META[meditationId] : null;
-    const showAfterAlarm = fromAlarm && !isPreview && meditationMeta;
+    const showAfterAlarm = fromAlarm && meditationMeta;
 
     const handleShareToTeams = async () => {
       if (!myTeams) return;
@@ -1006,9 +1077,11 @@ export default function CheckInScreen() {
 
     return (
       <ScreenContainer>
+        {/* ── Celebration confetti overlay ── */}
+        <CelebrationOverlay score={score} />
         <View style={styles.successContainer}>
           <Text style={[styles.successTitle, { color: colors.foreground }]}>
-            {score >= 70 ? 'Crushed it!' : score >= 40 ? 'Good effort!' : 'Keep going!'}
+            {score >= 70 ? '🎉 Crushed it!' : score >= 40 ? '✨ Good effort!' : '💪 Keep going!'}
           </Text>
           <Text style={[styles.successDate, { color: colors.muted }]}>
             {formatDisplayDate(currentDate)}
@@ -1141,112 +1214,142 @@ export default function CheckInScreen() {
             </View>
           )}
 
-          {/* Morning Practice inline picker — always shown after alarm check-in */}
-          {fromAlarm && !isPreview && (
-            <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Pressable
-                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-                onPress={() => setMpPickerVisible(v => !v)}
-              >
+          {/* Morning Practice card — shown after alarm check-in (and in preview mode), not dismissed */}
+          {fromAlarm && !mpDismissed && (() => {
+            const MP_META: Record<string, { emoji: string; label: string }> = {
+              priming: { emoji: '⚡', label: 'Priming' },
+              meditation: { emoji: '🧘', label: 'Guided Meditation' },
+              breathwork: { emoji: '💨', label: 'Breathwork' },
+              visualization: { emoji: '🎯', label: 'Visualization' },
+            };
+            const meta = MP_META[mpSelectedType] ?? MP_META.priming;
+            const customMins = parseInt(mpCustomDuration, 10);
+            const effectiveDuration = (!isNaN(customMins) && customMins > 0) ? customMins : mpSelectedDuration;
+            return (
+              <View style={[styles.afterAlarmBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <Text style={[styles.afterAlarmTitle, { color: colors.foreground }]}>🌅  Morning Practice</Text>
-                <Text style={{ color: colors.muted, fontSize: 13 }}>{mpPickerVisible ? '▲' : '▼'}</Text>
-              </Pressable>
-              {!mpPickerVisible && (
-                <Text style={[styles.afterAlarmDesc, { color: colors.muted }]}>Tap to choose a practice session</Text>
-              )}
-              {mpPickerVisible && (
-                <View style={{ marginTop: 12, gap: 10 }}>
-                  {/* Practice type selector */}
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, letterSpacing: 0.5 }}>PRACTICE TYPE</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                    {([{ id: 'priming', emoji: '⚡', label: 'Priming' }, { id: 'meditation', emoji: '🧘', label: 'Meditation' }, { id: 'breathwork', emoji: '💨', label: 'Breathwork' }, { id: 'visualization', emoji: '🎯', label: 'Visualization' }] as const).map(opt => (
-                      <Pressable
-                        key={opt.id}
-                        onPress={() => setMpSelectedType(opt.id)}
-                        style={({ pressed }) => ({
-                          paddingHorizontal: 12,
-                          paddingVertical: 7,
-                          borderRadius: 20,
-                          borderWidth: 1.5,
-                          borderColor: mpSelectedType === opt.id ? '#7C3AED' : colors.border,
-                          backgroundColor: mpSelectedType === opt.id ? '#7C3AED18' : 'transparent',
-                          opacity: pressed ? 0.7 : 1,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 4,
-                        })}
-                      >
-                        <Text style={{ fontSize: 14 }}>{opt.emoji}</Text>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedType === opt.id ? '#7C3AED' : colors.foreground }}>{opt.label}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                <Text style={[styles.afterAlarmDesc, { color: colors.muted, marginBottom: 12 }]}>
+                  {meta.emoji} {meta.label} · {effectiveDuration} min
+                </Text>
 
-                  {/* Duration selector */}
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, letterSpacing: 0.5, marginTop: 4 }}>DURATION</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    {[5, 10, 15, 20].map(min => (
-                      <Pressable
-                        key={min}
-                        onPress={() => { setMpSelectedDuration(min); setMpCustomDuration(''); }}
-                        style={({ pressed }) => ({
-                          paddingHorizontal: 14,
-                          paddingVertical: 7,
-                          borderRadius: 20,
-                          borderWidth: 1.5,
-                          borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.border,
-                          backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED18' : 'transparent',
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.foreground }}>{min} min</Text>
-                      </Pressable>
-                    ))}
-                    {/* Custom duration input */}
-                    <View style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      borderWidth: 1.5,
-                      borderColor: mpCustomDuration ? '#7C3AED' : colors.border,
-                      borderRadius: 20,
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                      backgroundColor: mpCustomDuration ? '#7C3AED18' : 'transparent',
-                    }}>
-                      <TextInput
-                        value={mpCustomDuration}
-                        onChangeText={setMpCustomDuration}
-                        placeholder="Custom"
-                        placeholderTextColor={colors.muted}
-                        keyboardType="number-pad"
-                        style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#7C3AED' : colors.foreground, minWidth: 50, textAlign: 'center' }}
-                        returnKeyType="done"
-                      />
-                      {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#7C3AED', marginLeft: 2 }}>min</Text> : null}
+                {/* Practice type chips */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 14 }}>
+                  {([{ id: 'priming', emoji: '⚡', label: 'Priming' }, { id: 'meditation', emoji: '🧘', label: 'Meditation' }, { id: 'breathwork', emoji: '💨', label: 'Breathwork' }, { id: 'visualization', emoji: '🎯', label: 'Visualization' }] as const).map(opt => (
+                    <Pressable
+                      key={opt.id}
+                      onPress={() => {
+                        setMpSelectedType(opt.id);
+                        setMpSelectedDuration(alarm?.practiceDurations?.[opt.id] ?? 10);
+                        setMpCustomDuration('');
+                        setMpCustomPickerVisible(false);
+                      }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 11,
+                        paddingVertical: 6,
+                        borderRadius: 16,
+                        borderWidth: 1.5,
+                        borderColor: mpSelectedType === opt.id ? '#7C3AED' : colors.border,
+                        backgroundColor: mpSelectedType === opt.id ? '#7C3AED18' : 'transparent',
+                        opacity: pressed ? 0.7 : 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                      })}
+                    >
+                      <Text style={{ fontSize: 13 }}>{opt.emoji}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: mpSelectedType === opt.id ? '#7C3AED' : colors.muted }}>{opt.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Custom time picker (shown when yellow button tapped) */}
+                {mpCustomPickerVisible && (
+                  <View style={{ marginBottom: 14, gap: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, letterSpacing: 0.5 }}>PICK DURATION</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                      {[5, 10, 15, 20].map(min => (
+                        <Pressable
+                          key={min}
+                          onPress={() => { setMpSelectedDuration(min); setMpCustomDuration(''); }}
+                          style={({ pressed }) => ({
+                            paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5,
+                            borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.border,
+                            backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED18' : 'transparent',
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.foreground }}>{min} min</Text>
+                        </Pressable>
+                      ))}
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', borderWidth: 1.5,
+                        borderColor: mpCustomDuration ? '#7C3AED' : colors.border, borderRadius: 20,
+                        paddingHorizontal: 10, paddingVertical: 4,
+                        backgroundColor: mpCustomDuration ? '#7C3AED18' : 'transparent',
+                      }}>
+                        <TextInput
+                          value={mpCustomDuration}
+                          onChangeText={setMpCustomDuration}
+                          placeholder="Custom"
+                          placeholderTextColor={colors.muted}
+                          keyboardType="number-pad"
+                          style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#7C3AED' : colors.foreground, minWidth: 50, textAlign: 'center' }}
+                          returnKeyType="done"
+                        />
+                        {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#7C3AED', marginLeft: 2 }}>min</Text> : null}
+                      </View>
                     </View>
                   </View>
+                )}
 
-                  {/* Launch button */}
+                {/* Three action buttons: Green / Yellow / Red */}
+                <View style={{ gap: 10 }}>
+                  {/* GREEN — Begin with default time */}
                   <Pressable
                     style={({ pressed }) => ({
-                      backgroundColor: mpGenerating ? colors.border : '#7C3AED',
-                      borderRadius: 12,
-                      paddingVertical: 13,
-                      alignItems: 'center',
-                      marginTop: 4,
+                      backgroundColor: mpGenerating ? colors.border : '#16A34A',
+                      borderRadius: 12, paddingVertical: 14, alignItems: 'center',
                       opacity: pressed ? 0.85 : 1,
                     })}
                     onPress={handleMpLaunch}
                     disabled={mpGenerating}
                   >
                     <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
-                      {mpGenerating ? 'Generating...' : '▶  Begin Session'}
+                      {mpGenerating ? 'Generating...' : `▶  Begin ${meta.label} · ${effectiveDuration} min`}
                     </Text>
                   </Pressable>
+
+                  {/* YELLOW — Pick custom time */}
+                  <Pressable
+                    style={({ pressed }) => ({
+                      backgroundColor: '#D97706' + '18',
+                      borderWidth: 1.5, borderColor: '#D97706',
+                      borderRadius: 12, paddingVertical: 12, alignItems: 'center',
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                    onPress={() => setMpCustomPickerVisible(v => !v)}
+                  >
+                    <Text style={{ color: '#D97706', fontWeight: '700', fontSize: 14 }}>
+                      ⏱  {mpCustomPickerVisible ? 'Hide time picker' : 'Pick a different time'}
+                    </Text>
+                  </Pressable>
+
+                  {/* RED — Skip */}
+                  <Pressable
+                    style={({ pressed }) => ({
+                      backgroundColor: '#DC2626' + '12',
+                      borderWidth: 1.5, borderColor: '#DC2626',
+                      borderRadius: 12, paddingVertical: 12, alignItems: 'center',
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                    onPress={() => setMpDismissed(true)}
+                  >
+                    <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 14 }}>✕  Skip Morning Practice</Text>
+                  </Pressable>
                 </View>
-              )}
-            </View>
-          )}
+              </View>
+            );
+          })()}
 
           {(!hasTeams || shared) && (
             <Pressable

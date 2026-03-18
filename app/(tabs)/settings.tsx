@@ -298,6 +298,9 @@ export default function SettingsScreen() {
   const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
   const [snoozeMinutes, setSnoozeMinutes] = useState(alarm.snoozeMinutes ?? 10);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [practiceDurations, setPracticeDurations] = useState<Record<string, number>>(
+    alarm.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 }
+  );
 
 
   // Imperative player ref — created fresh each time, released when done
@@ -353,6 +356,7 @@ export default function SettingsScreen() {
     setEnabled(alarm.isEnabled);
     setSoundId(alarm.soundId ?? 'classic');
     setMeditationId(alarm.meditationId);
+    setPracticeDurations(alarm.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 });
     setRequireCheckin(alarm.requireCheckin ?? false);
     setSnoozeMinutes(alarm.snoozeMinutes ?? 10);
   }, [alarm]);
@@ -367,7 +371,7 @@ export default function SettingsScreen() {
   async function handleSave() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, requireCheckin, snoozeMinutes });
+    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, practiceDurations, requireCheckin, snoozeMinutes });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -531,29 +535,64 @@ export default function SettingsScreen() {
                   {MEDITATION_OPTIONS.map((med) => {
                     const isSelected = meditationId === med.id;
                     const isPreviewing = previewingId === med.id;
+                    const hasDuration = med.id !== 'journaling' && med.id !== 'none';
+                    const currentDuration = practiceDurations[med.id] ?? 10;
                     return (
-                      <Pressable
-                        key={med.id}
-                        onPress={() => {
-                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setMeditationId(med.id);
-                          playPreview(med.id, med.source ?? null);
-                        }}
-                        style={({ pressed }) => [
-                          styles.dropdownItem,
-                          isSelected && { backgroundColor: colors.primary + '18' },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
-                            {med.label}
-                          </Text>
-                          <Text style={[styles.meditationDesc, { color: colors.muted }]}>{med.description}</Text>
-                        </View>
-                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                      </Pressable>
+                      <View key={med.id}>
+                        <Pressable
+                          onPress={() => {
+                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setMeditationId(med.id);
+                            playPreview(med.id, med.source ?? null);
+                          }}
+                          style={({ pressed }) => [
+                            styles.dropdownItem,
+                            isSelected && { backgroundColor: colors.primary + '18' },
+                            { opacity: pressed ? 0.7 : 1 },
+                          ]}
+                        >
+                          <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
+                              {med.label}
+                            </Text>
+                            <Text style={[styles.meditationDesc, { color: colors.muted }]}>
+                              {hasDuration ? `${currentDuration} min · ${med.description.split(',').slice(1).join(',').trim() || med.description}` : med.description}
+                            </Text>
+                          </View>
+                          {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
+                        </Pressable>
+                        {/* Duration chips — shown when this option is selected and supports duration */}
+                        {isSelected && hasDuration && (
+                          <View style={[styles.durationChipRow, { borderTopColor: colors.border }]}>
+                            <Text style={[styles.durationChipLabel, { color: colors.muted }]}>Duration</Text>
+                            <View style={styles.durationChips}>
+                              {[5, 10, 15, 20].map((mins) => (
+                                <Pressable
+                                  key={mins}
+                                  onPress={() => {
+                                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    setPracticeDurations(prev => ({ ...prev, [med.id]: mins }));
+                                  }}
+                                  style={({ pressed }) => [{
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 7,
+                                    borderRadius: 20,
+                                    borderWidth: 1.5,
+                                    borderColor: currentDuration === mins ? colors.primary : colors.border,
+                                    backgroundColor: currentDuration === mins ? colors.primary + '18' : 'transparent',
+                                    opacity: pressed ? 0.7 : 1,
+                                  }]}
+                                >
+                                  <Text style={[{ fontSize: 13, fontWeight: '700', color: currentDuration === mins ? colors.primary : colors.muted }]}>
+                                    {mins} min
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+                      </View>
                     );
                   })}
                 </View>
@@ -1098,4 +1137,7 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: { fontSize: 15, fontWeight: '500' },
   previewBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, minWidth: 64, alignItems: 'center', justifyContent: 'center' },
+  durationChipRow: { paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 8 },
+  durationChipLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 },
+  durationChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

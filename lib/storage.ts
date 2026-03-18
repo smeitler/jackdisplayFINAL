@@ -69,6 +69,7 @@ export type AlarmConfig = {
   notificationIds: string[];
   soundId?: string;       // ID of the alarm sound to play (default: 'classic')
   meditationId?: string;  // ID of the post-alarm meditation (default: none)
+  practiceDurations?: Record<string, number>; // Per-type duration in minutes: { priming: 15, meditation: 10, ... }
   requireCheckin?: boolean; // If true, block app access until yesterday's check-in is done
   snoozeMinutes?: number;   // Snooze duration in minutes (default: 10)
   elevenLabsVoice?: string; // ElevenLabs voice key (e.g. 'rachel', 'aria', 'adam')
@@ -172,6 +173,7 @@ export const DEFAULT_ALARM: AlarmConfig = {
   notificationIds: [],
   soundId: 'classic',
   meditationId: undefined,
+  practiceDurations: { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 },
   snoozeMinutes: 10,
 };
 
