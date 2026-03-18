@@ -261,40 +261,66 @@ export default function PracticePlayerScreen() {
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunkIndexRef = useRef(0);
 
-  // ─── Load journal data (same pattern as checkin.tsx) ─────────────────────────
+  // ─── Load journal data ───────────────────────────────────────────────────────
+  // Scans ALL @journal_entries_v2_* keys so it works regardless of login state.
   useEffect(() => {
     async function loadJournalData() {
       try {
-        const { loadEntries, parseGratitudes } = await import('@/lib/journal-store');
-        const { getLastUserId } = await import('@/lib/storage');
-        const uid = await getLastUserId();
-        const entries = await loadEntries(uid || 'default');
+        import('@/lib/journal-store').then(async ({ parseGratitudes }) => {
+          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
 
-        const photoList: string[] = [];
-        const gratList: string[] = [];
+          // Get all keys and find every journal-entries key
+          const allKeys = await AsyncStorage.getAllKeys();
+          const journalKeys = allKeys.filter((k) => k.startsWith('@journal_entries_v2_'));
 
-        for (const e of entries.slice(0, 30)) {
-          // Collect photo attachments
-          for (const att of e.attachments ?? []) {
-            if (att.type === 'photo' && att.uri && photoList.length < 20) {
-              photoList.push(att.uri);
+          // Also try the primary key from getLastUserId
+          const { getLastUserId } = await import('@/lib/storage');
+          const uid = await getLastUserId();
+          const primaryKey = `@journal_entries_v2_${uid || 'default'}`;
+          if (!journalKeys.includes(primaryKey)) journalKeys.unshift(primaryKey);
+
+          console.log('[PracticePlayer] Journal keys found:', journalKeys);
+
+          // Merge entries from all keys
+          const allEntries: any[] = [];
+          for (const key of journalKeys) {
+            try {
+              const raw = await AsyncStorage.getItem(key);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) allEntries.push(...parsed);
+              }
+            } catch { /* skip bad key */ }
+          }
+
+          // Sort newest first
+          allEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          console.log('[PracticePlayer] Total entries across all keys:', allEntries.length);
+
+          const photoList: string[] = [];
+          const gratList: string[] = [];
+
+          for (const e of allEntries.slice(0, 50)) {
+            for (const att of e.attachments ?? []) {
+              if (att.type === 'photo' && att.uri && photoList.length < 20) {
+                photoList.push(att.uri);
+              }
+            }
+            const bodyGrats = parseGratitudes(e.body ?? '');
+            for (const g of bodyGrats) {
+              if (g.trim() && gratList.length < 15) gratList.push(g.trim());
+            }
+            for (const g of e.gratitudes ?? []) {
+              if (g.trim() && gratList.length < 15 && !gratList.includes(g.trim())) {
+                gratList.push(g.trim());
+              }
             }
           }
-          // Parse gratitudes from body text (🙏 Grateful for: section)
-          const bodyGrats = parseGratitudes(e.body ?? '');
-          for (const g of bodyGrats) {
-            if (g.trim() && gratList.length < 15) gratList.push(g.trim());
-          }
-          // Also check legacy gratitudes array field
-          for (const g of e.gratitudes ?? []) {
-            if (g.trim() && gratList.length < 15 && !gratList.includes(g.trim())) {
-              gratList.push(g.trim());
-            }
-          }
-        }
 
-        setPhotos(photoList);
-        setGratitudes(gratList);
+          console.log('[PracticePlayer] Photos found:', photoList.length, '| Gratitudes found:', gratList.length);
+          setPhotos(photoList);
+          setGratitudes(gratList);
+        });
       } catch (err) {
         console.warn('[PracticePlayer] Failed to load journal data:', err);
       }

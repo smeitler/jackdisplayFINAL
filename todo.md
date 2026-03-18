@@ -1115,3 +1115,10 @@
 - [x] Fix gratitudes not loading — parse from body text and entry.gratitudes field
 - [x] Add real-time audio progress bar above play/pause button (shows elapsed/remaining time)
 - [x] Update play/pause button color to match app theme (purple primary, not blue)
+
+## Practice Player Photo Debug (Mar 18 2026 v10)
+
+- [x] Add console.log to loadJournalData to show uid, entry count, photo count, gratitude count
+- [x] Check if getLastUserId returns null (no logged-in user) and try fallback keys
+- [x] Add fallback: scan ALL @journal_entries_v2_* AsyncStorage keys and merge entries from all of them
+- [ ] Add sample/placeholder photos shown when no journal photos exist (so carousel is never blank)
