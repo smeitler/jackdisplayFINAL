@@ -984,3 +984,10 @@
 - [x] On LLM result: lock any newly rated habits, advance consumedOffset to current transcript length
 - [x] Result: LLM calls get faster and cheaper as more habits are locked in
 - [x] Rolling audio cap at ~20s (200 chunks) to also bound Whisper cost
+
+## Calendar Redesign (Mar 18 2026)
+
+- [x] Remove text/labels from calendar day boxes
+- [x] Remove bordered/lined box style — use solid filled squares instead
+- [x] Darker filled color = entry exists for that day, dim/empty = no entry
+- [x] Fix alignment so grid is straight and feels like a tight box grid

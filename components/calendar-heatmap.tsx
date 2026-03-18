@@ -4,11 +4,11 @@ import { toDateString } from "@/lib/storage";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const H_PAD = 32;
-const CELL_GAP = 4;
+const CELL_GAP = 3;
 const COLS = 7;
 const CELL_SIZE = Math.floor((SCREEN_WIDTH - H_PAD - CELL_GAP * (COLS - 1)) / COLS);
 
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export type DayScore = {
   date: string;
@@ -45,18 +45,20 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
     cells.push({ type: "day", day: d, dateStr });
   }
 
-  function cellColor(score: number | null, dateStr: string): string {
-    if (dateStr >= today) return "transparent";
-    if (score === null)   return "#EF4444";
-    if (score >= 0.75)    return "#22C55E";
-    if (score >= 0.4)     return "#F59E0B";
-    return "#EF4444";
+  // Returns the fill color for a cell. Future days get a very dim surface color.
+  // Past days with an entry get a solid score color; past days without an entry get a dim red.
+  function cellBg(score: number | null, dateStr: string): string {
+    if (dateStr > today) return colors.surface;
+    if (score === null) return "#EF4444";   // missed / no entry
+    if (score >= 0.75)  return "#22C55E";   // crushed it
+    if (score >= 0.4)   return "#F59E0B";   // okay
+    return "#EF4444";                        // missed
   }
 
   function cellOpacity(score: number | null, dateStr: string): number {
-    if (dateStr >= today) return 0;
-    if (score === null)   return 0.35;
-    return 0.4 + score * 0.6;
+    if (dateStr > today) return 0.18;        // future: very dim placeholder
+    if (score === null)  return 0.30;        // past no-entry: dim red
+    return 0.45 + score * 0.55;             // past with entry: 0.45–1.0 based on score
   }
 
   const rows: typeof cells[] = [];
@@ -64,27 +66,26 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        {DAY_LABELS.map((d) => (
-          <View key={d} style={[styles.cell, styles.headerCell]}>
+      {/* Day-of-week header */}
+      <View style={styles.row}>
+        {DAY_LABELS.map((d, i) => (
+          <View key={i} style={styles.cell}>
             <Text style={[styles.headerText, { color: colors.muted }]}>{d}</Text>
           </View>
         ))}
       </View>
 
+      {/* Day grid */}
       {rows.map((row, ri) => (
         <View key={ri} style={styles.row}>
           {row.map((cell, ci) => {
             if (cell.type === "blank") {
               return <View key={`b-${ci}`} style={styles.cell} />;
             }
-            const { day, dateStr } = cell;
-            const score   = scoreMap[dateStr] ?? null;
-            const bg      = cellColor(score, dateStr);
-            const opacity = cellOpacity(score, dateStr);
-            const isToday  = dateStr === today;
+            const { dateStr } = cell;
+            const score    = scoreMap[dateStr] ?? null;
             const isFuture = dateStr > today;
-            const isPast   = dateStr < today;
+            const isToday  = dateStr === today;
 
             return (
               <Pressable
@@ -94,28 +95,17 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
                   styles.cell,
                   styles.dayCell,
                   {
-                    backgroundColor: bg,
-                    opacity: isFuture ? 0.12 : pressed ? 0.65 : opacity,
-                    borderWidth: isToday ? 2 : 0,
+                    backgroundColor: cellBg(score, dateStr),
+                    opacity: pressed ? 0.7 : cellOpacity(score, dateStr),
+                    // Today: subtle ring using a slightly larger border radius trick via shadow
+                    borderWidth: isToday ? 1.5 : 0,
                     borderColor: isToday ? colors.primary : "transparent",
                   },
                 ]}
-              >
-                <Text
-                  style={[
-                    styles.dayText,
-                    {
-                      color: isPast ? "#fff" : colors.muted,
-                      fontWeight: isToday ? "800" : "500",
-                      opacity: isFuture ? 0.35 : 1,
-                    },
-                  ]}
-                >
-                  {day}
-                </Text>
-              </Pressable>
+              />
             );
           })}
+          {/* Pad last row to keep grid width consistent */}
           {row.length < 7 &&
             Array.from({ length: 7 - row.length }).map((_, i) => (
               <View key={`t-${i}`} style={styles.cell} />
@@ -123,9 +113,10 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
         </View>
       ))}
 
+      {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#EF4444", opacity: 0.35 }]} />
+          <View style={[styles.legendDot, { backgroundColor: "#EF4444", opacity: 0.30 }]} />
           <Text style={[styles.legendText, { color: colors.muted }]}>Skipped</Text>
         </View>
         <View style={styles.legendItem}>
@@ -147,18 +138,25 @@ export function CalendarHeatmap({ year, month, scores, onDayPress }: CalendarHea
 
 const styles = StyleSheet.create({
   container: { width: "100%" },
-  headerRow: { flexDirection: "row", gap: CELL_GAP, marginBottom: CELL_GAP },
-  row: { flexDirection: "row", gap: CELL_GAP, marginBottom: CELL_GAP },
+  row: {
+    flexDirection: "row",
+    gap: CELL_GAP,
+    marginBottom: CELL_GAP,
+  },
   cell: {
     width: CELL_SIZE,
     height: CELL_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerCell: {},
-  headerText: { fontSize: 10, fontWeight: "600" },
-  dayCell: { borderRadius: CELL_SIZE * 0.22 },
-  dayText: { fontSize: 12 },
+  headerText: {
+    fontSize: 10,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  dayCell: {
+    borderRadius: 4,
+  },
   legend: {
     flexDirection: "row",
     justifyContent: "center",
@@ -166,6 +164,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 2 },
   legendText: { fontSize: 11 },
 });
