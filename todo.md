@@ -1102,3 +1102,16 @@
 - [x] Practice player: fixed play/pause button at bottom center (always visible)
 - [x] Practice player: X close button stays top-right
 - [x] Practice player: remove breathwork circle animation (replaced by photo carousel)
+
+## Practice Player Data Loading Fix (Mar 18 2026 v8)
+
+- [ ] Fix journal photos not loading in practice player (check AsyncStorage key and loadEntries call)
+- [ ] Fix gratitude entries not loading in practice player (check parseGratitudes and entry.gratitudes)
+- [ ] Ensure data loads from the correct user ID / storage key
+
+## Practice Player Fixes (Mar 18 2026 v9)
+
+- [x] Fix journal photos not loading — use same pattern as checkin.tsx (getLastUserId + loadEntries)
+- [x] Fix gratitudes not loading — parse from body text and entry.gratitudes field
+- [x] Add real-time audio progress bar above play/pause button (shows elapsed/remaining time)
+- [x] Update play/pause button color to match app theme (purple primary, not blue)
