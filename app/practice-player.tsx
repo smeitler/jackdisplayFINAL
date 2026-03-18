@@ -80,15 +80,15 @@ function fmtTime(secs: number): string {
 interface SlidingRowProps {
   speed: number;           // px/s
   rowHeight: number;
-  children: React.ReactNode[];  // individual items
+  items: React.ReactNode[];  // individual items passed as a proper array prop
   itemWidth: number;
   gap: number;
 }
 
-function SlidingRow({ speed, rowHeight, children, itemWidth, gap }: SlidingRowProps) {
-  const count = children.length;
+function SlidingRow({ speed, rowHeight, items, itemWidth, gap }: SlidingRowProps) {
+  const count = items.length;
   // Triple the items so the loop is seamless
-  const tripled = count > 0 ? [...children, ...children, ...children] : [];
+  const tripled = count > 0 ? [...items, ...items, ...items] : [];
   const loopW = count * (itemWidth + gap);
   const totalW = tripled.length * (itemWidth + gap) + 32;
 
@@ -169,9 +169,9 @@ function SlidingRow({ speed, rowHeight, children, itemWidth, gap }: SlidingRowPr
           transform: [{ translateX: Animated.multiply(scrollX, -1) }],
         }}
       >
-        {tripled.map((child, i) => (
+        {tripled.map((item, i) => (
           <View key={i} style={{ width: itemWidth, marginRight: gap }}>
-            {child}
+            {item}
           </View>
         ))}
       </Animated.View>
@@ -284,28 +284,14 @@ export default function PracticePlayerScreen() {
   useEffect(() => {
     async function loadData() {
       try {
-        const { parseGratitudes } = await import('@/lib/journal-store');
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        const { loadVisionBoard } = await import('@/lib/storage');
+        const { parseGratitudes, loadEntries } = await import('@/lib/journal-store');
+        const { loadVisionBoard, loadGratitudeEntries, getLastUserId } = await import('@/lib/storage');
 
-        // ── Journal photos + gratitudes ──
-        const allKeys = await AsyncStorage.getAllKeys();
-        const journalKeys = allKeys.filter((k) => k.startsWith('@journal_entries_v2_'));
-        const { getLastUserId } = await import('@/lib/storage');
         const uid = await getLastUserId();
-        const primaryKey = `@journal_entries_v2_${uid || 'default'}`;
-        if (!journalKeys.includes(primaryKey)) journalKeys.unshift(primaryKey);
+        const effectiveUid = uid || 'default';
 
-        const allEntries: any[] = [];
-        for (const key of journalKeys) {
-          try {
-            const raw = await AsyncStorage.getItem(key);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) allEntries.push(...parsed);
-            }
-          } catch { /* skip */ }
-        }
+        // ── Journal photos + body-parsed gratitudes ──
+        const allEntries = await loadEntries(effectiveUid);
         allEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         const photoList: string[] = [];
@@ -320,13 +306,25 @@ export default function PracticePlayerScreen() {
           for (const g of bodyGrats) {
             if (g.trim() && gratList.length < 20) gratList.push(g.trim());
           }
-          for (const g of e.gratitudes ?? []) {
+          for (const g of (e as any).gratitudes ?? []) {
             if (g.trim() && gratList.length < 20 && !gratList.includes(g.trim())) {
               gratList.push(g.trim());
             }
           }
         }
         setJournalPhotos(photoList);
+
+        // ── Dedicated gratitude entries (from Vision Board / Gratitude tab) ──
+        const gratEntries = await loadGratitudeEntries();
+        // Sort newest first
+        gratEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        for (const entry of gratEntries) {
+          for (const item of entry.items) {
+            if (item.trim() && gratList.length < 30 && !gratList.includes(item.trim())) {
+              gratList.push(item.trim());
+            }
+          }
+        }
         setGratitudes(gratList);
 
         // ── Vision board photos ──
@@ -509,9 +507,7 @@ export default function PracticePlayerScreen() {
         {hasJournal ? (
           <View style={styles.rowWrapper}>
             <Text style={styles.rowLabel}>MEMORIES</Text>
-            <SlidingRow speed={SPEED_JOURNAL} rowHeight={ROW_H} itemWidth={PHOTO_W} gap={PHOTO_GAP}>
-              {journalItems}
-            </SlidingRow>
+            <SlidingRow speed={SPEED_JOURNAL} rowHeight={ROW_H} itemWidth={PHOTO_W} gap={PHOTO_GAP} items={journalItems} />
           </View>
         ) : (
           <View style={[styles.emptyRow, { height: ROW_H }]}>
@@ -523,9 +519,7 @@ export default function PracticePlayerScreen() {
         {hasVision ? (
           <View style={styles.rowWrapper}>
             <Text style={styles.rowLabel}>VISION</Text>
-            <SlidingRow speed={SPEED_VISION} rowHeight={ROW_H} itemWidth={PHOTO_W} gap={PHOTO_GAP}>
-              {visionItems}
-            </SlidingRow>
+            <SlidingRow speed={SPEED_VISION} rowHeight={ROW_H} itemWidth={PHOTO_W} gap={PHOTO_GAP} items={visionItems} />
           </View>
         ) : (
           <View style={[styles.emptyRow, { height: ROW_H }]}>
@@ -537,9 +531,7 @@ export default function PracticePlayerScreen() {
         {hasGrats ? (
           <View style={styles.rowWrapper}>
             <Text style={styles.rowLabel}>GRATEFUL FOR</Text>
-            <SlidingRow speed={SPEED_GRAT} rowHeight={GRAT_CHIP_H + 8} itemWidth={220} gap={12}>
-              {gratItems}
-            </SlidingRow>
+            <SlidingRow speed={SPEED_GRAT} rowHeight={GRAT_CHIP_H + 8} itemWidth={220} gap={12} items={gratItems} />
           </View>
         ) : (
           <View style={[styles.emptyRow, { height: GRAT_CHIP_H + 24 }]}>

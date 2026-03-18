@@ -1132,3 +1132,15 @@
 - [x] Practice player: swipe finger to scrub speed, release to resume normal speed
 - [x] Practice player: load vision board images from AsyncStorage (VISION_BOARD_KEY)
 - [x] Practice player: play/pause + progress bar fixed at bottom
+
+## Practice Player Empty Rows Bug Fix (Mar 18 2026 v12)
+
+- [ ] Fix: MEMORIES row shows blank even when journal photos exist
+- [ ] Fix: VISION row shows blank even when vision board photos exist
+- [ ] Fix: SlidingRow Animated.multiply approach may not work on web — switch to JS-driven animation
+- [ ] Fix: empty-state placeholder for photos not showing (currently invisible)
+
+## Bug Fixes (Mar 18)
+- [x] Vision board photos not persisting on web (blob URLs now converted to base64 data URIs)
+- [x] Practice player SlidingRow not rendering (children prop replaced with items prop)
+- [x] Practice player gratitudes not loading from dedicated gratitude entries storage

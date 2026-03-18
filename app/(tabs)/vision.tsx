@@ -30,7 +30,25 @@ const CAROUSEL_H = Math.floor(CARD_W * 0.62);
 // Returns the permanent file:// path on success, or null if the copy failed.
 // NEVER returns the original ph:// URI — those are ephemeral and will break on restart.
 async function persistUri(uri: string): Promise<string | null> {
-  if (Platform.OS === "web") return uri;
+  if (Platform.OS === "web") {
+    // On web, ImagePicker returns a temporary blob: URL that dies on page reload.
+    // Convert it to a base64 data URI so it persists in AsyncStorage.
+    if (uri.startsWith("blob:") || uri.startsWith("http")) {
+      try {
+        const resp = await fetch(uri);
+        const blob = await resp.blob();
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        return null;
+      }
+    }
+    return uri; // already a data URI or other stable format
+  }
 
   const docDir = FileSystem.documentDirectory ?? "";
 
