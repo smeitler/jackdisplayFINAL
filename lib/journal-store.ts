@@ -52,14 +52,37 @@ export interface JournalEntry {
 
 // ── Templates ──────────────────────────────────────────────────────────────────
 
+export const GRATITUDE_HEADER = "🙏 Grateful for:";
+
 export const JOURNAL_TEMPLATES: { key: JournalTemplate; label: string; icon: string; prompt: string }[] = [
-  { key: "blank", label: "Blank", icon: "doc.fill", prompt: "" },
-  { key: "gratitude", label: "Gratitude", icon: "heart.fill", prompt: "Today I'm grateful for..." },
-  { key: "daily-reflection", label: "Daily Reflection", icon: "sun.max.fill", prompt: "How was my day?\n\nWhat went well?\n\nWhat could I improve?" },
-  { key: "mood-check", label: "Mood Check", icon: "sparkles", prompt: "How am I feeling right now?\n\nWhat's on my mind?\n\nWhat do I need?" },
-  { key: "goal-review", label: "Goal Review", icon: "flag.fill", prompt: "Progress on my goals:\n\n1. \n2. \n3. \n\nNext steps:" },
-  { key: "free-write", label: "Free Write", icon: "pencil", prompt: "" },
+  { key: "blank", label: "Blank", icon: "doc.fill", prompt: `${"🙏 Grateful for:"}\n1. \n2. \n3. \n` },
+  { key: "gratitude", label: "Gratitude", icon: "heart.fill", prompt: `${"🙏 Grateful for:"}\n1. \n2. \n3. \n4. \n5. \n\nWhy these things matter to me:\n` },
+  { key: "daily-reflection", label: "Daily Reflection", icon: "sun.max.fill", prompt: `How was my day?\n\nWhat went well?\n\nWhat could I improve?\n\n${"🙏 Grateful for:"}\n1. \n2. \n3. \n` },
+  { key: "mood-check", label: "Mood Check", icon: "sparkles", prompt: `How am I feeling right now?\n\nWhat's on my mind?\n\nWhat do I need?\n\n${"🙏 Grateful for:"}\n1. \n2. \n3. \n` },
+  { key: "goal-review", label: "Goal Review", icon: "flag.fill", prompt: `Progress on my goals:\n\n1. \n2. \n3. \n\nNext steps:\n\n${"🙏 Grateful for:"}\n1. \n2. \n3. \n` },
+  { key: "free-write", label: "Free Write", icon: "pencil", prompt: `${"🙏 Grateful for:"}\n1. \n2. \n3. \n\n` },
 ];
+
+/**
+ * Extracts gratitude items from a journal body.
+ * Looks for lines after a "🙏 Grateful for:" header and returns non-empty, non-numbered lines.
+ */
+export function parseGratitudes(body: string): string[] {
+  const lines = body.split("\n");
+  const headerIdx = lines.findIndex((l) => l.trim().startsWith("🙏 Grateful for"));
+  if (headerIdx === -1) return [];
+  const results: string[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    // Stop at next section header (emoji + word) or separator
+    if (raw.startsWith("---") || (/^[\p{Emoji}]/u.test(raw) && raw.length > 2 && raw.includes(" ") && i > headerIdx + 1)) break;
+    // Strip leading numbering like "1. ", "- ", "• "
+    const cleaned = raw.replace(/^[\d]+\.\s*/, "").replace(/^[-•]\s*/, "").trim();
+    if (cleaned) results.push(cleaned);
+  }
+  return results;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

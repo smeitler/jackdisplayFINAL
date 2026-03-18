@@ -1028,3 +1028,14 @@
 - [x] Priming screen: show photo highlights slideshow while audio plays
 - [x] Priming screen: show recent gratitudes list while audio plays
 - [x] Priming screen: show vision board goals while audio plays
+
+## Journal Template Gratitude Auto-Populate (Mar 18 2026)
+
+- [ ] When a journal template is selected, auto-populate the gratitudes field with the template's preset gratitude items
+
+## Inline Gratitudes in Journal Body (Mar 18 2026)
+
+- [x] Remove separate gratitudes chips UI from journal entry editor
+- [x] Each template in applyTemplateByKey auto-inserts a "🙏 Grateful for:" section in the body
+- [x] Add parseGratitudes(body) helper: extracts lines under "🙏 Grateful for:" section
+- [x] Update priming screen to use parseGratitudes() from recent journal entries

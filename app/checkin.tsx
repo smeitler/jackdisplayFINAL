@@ -546,12 +546,19 @@ export default function CheckInScreen() {
       // Collect recent photo attachments (last 30 entries)
       const photos: string[] = [];
       const gratitudes: string[] = [];
+      const { parseGratitudes } = await import('@/lib/journal-store');
       for (const e of journalEntries.slice(0, 30)) {
         for (const att of e.attachments ?? []) {
           if ((att.type === 'photo') && att.uri && photos.length < 12) photos.push(att.uri);
         }
-        for (const g of e.gratitudes ?? []) {
+        // Parse gratitudes from body text (🙏 Grateful for: section)
+        const bodyGratitudes = parseGratitudes(e.body ?? '');
+        for (const g of bodyGratitudes) {
           if (g.trim() && gratitudes.length < 10) gratitudes.push(g.trim());
+        }
+        // Also fall back to legacy gratitudes field if present
+        for (const g of e.gratitudes ?? []) {
+          if (g.trim() && gratitudes.length < 10 && !gratitudes.includes(g.trim())) gratitudes.push(g.trim());
         }
       }
       // Load vision board goals from storage

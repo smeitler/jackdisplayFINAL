@@ -441,8 +441,7 @@ function EntryEditor({
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
-  const [gratitudes, setGratitudes] = useState<string[]>([]);
-  const [newGratitude, setNewGratitude] = useState("");
+
   const transcribeMutation = trpc.voiceJournal.transcribeAndCategorize.useMutation();
 
   // Load habits for template
@@ -461,7 +460,6 @@ function EntryEditor({
         setAttachments(entry.attachments);
         setLocation(entry.location);
         setMood(entry.mood || "");
-        setGratitudes(entry.gratitudes ?? []);
         // Build merged text: title on first line, then body
         const merged = entry.title ? entry.title + (entry.body ? "\n" + entry.body : "") : entry.body;
         setMergedText(merged);
@@ -474,7 +472,6 @@ function EntryEditor({
         setAttachments([]);
         setLocation(undefined);
         setMood("");
-        setGratitudes([]);
       }
     }
   }, [visible, entry, initialDate]);
@@ -664,7 +661,7 @@ function EntryEditor({
         location,
         mood,
         tags: [],
-        gratitudes: gratitudes.filter((g) => g.trim().length > 0),
+        gratitudes: [], // gratitudes now live in body text under 🙏 Grateful for: section
       };
       onSave(saved);
       onClose();
@@ -725,13 +722,13 @@ function EntryEditor({
       setMergedText(title ? title + "\n" + merged : merged);
     } else if (key === "morning-pages") {
       setTemplate("free-write" as JournalTemplate);
-      const templateContent = "\uD83C\uDF05 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n";
+      const templateContent = "🌅 Morning Pages\n\nJust write whatever comes to mind. Don't stop, don't edit, just let it flow...\n\n🙏 Grateful for:\n1. \n2. \n3. \n";
       const merged = existingBody + separator + templateContent;
       setBody(merged);
       setMergedText(title ? title + "\n" + merged : merged);
     } else if (key === "weekly-review") {
       setTemplate("goal-review" as JournalTemplate);
-      const templateContent = "\uD83D\uDCCA Weekly Review\n\n\u2705 This week's wins:\n\n\n\u26A0\uFE0F This week's challenges:\n\n\n\uD83D\uDCA1 Lessons learned:\n\n\n\uD83C\uDFAF Focus for next week:\n\n";
+      const templateContent = "📊 Weekly Review\n\n✅ This week's wins:\n\n\n⚠️ This week's challenges:\n\n\n💡 Lessons learned:\n\n\n🎯 Focus for next week:\n\n🙏 Grateful for:\n1. \n2. \n3. \n";
       const merged = existingBody + separator + templateContent;
       setBody(merged);
       setMergedText(title ? title + "\n" + merged : merged);
@@ -895,49 +892,6 @@ function EntryEditor({
                 ))}
               </View>
             )}
-
-            {/* Gratitudes */}
-            <View style={{ gap: 8, marginTop: 16 }}>
-              <Text style={{ fontSize: 11, fontWeight: "700", color: colors.primary, letterSpacing: 0.5 }}>GRATEFUL FOR</Text>
-              {gratitudes.map((g, i) => (
-                <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 0.5, borderColor: colors.border }}>
-                  <Text style={{ fontSize: 14 }}>🙏</Text>
-                  <TextInput
-                    value={g}
-                    onChangeText={(text) => setGratitudes((prev) => prev.map((x, j) => j === i ? text : x))}
-                    style={{ flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 18 }}
-                    multiline
-                    returnKeyType="done"
-                    placeholderTextColor={colors.muted}
-                  />
-                  <Pressable onPress={() => setGratitudes((prev) => prev.filter((_, j) => j !== i))} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                    <IconSymbol name="xmark" size={14} color={colors.muted} />
-                  </Pressable>
-                </View>
-              ))}
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 0.5, borderColor: colors.border }}>
-                <Text style={{ fontSize: 14 }}>🙏</Text>
-                <TextInput
-                  value={newGratitude}
-                  onChangeText={setNewGratitude}
-                  placeholder="Add something you're grateful for…"
-                  placeholderTextColor={colors.muted}
-                  style={{ flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 18 }}
-                  returnKeyType="done"
-                  onSubmitEditing={() => {
-                    if (newGratitude.trim()) {
-                      setGratitudes((prev) => [...prev, newGratitude.trim()]);
-                      setNewGratitude("");
-                    }
-                  }}
-                />
-                {newGratitude.trim().length > 0 && (
-                  <Pressable onPress={() => { setGratitudes((prev) => [...prev, newGratitude.trim()]); setNewGratitude(""); }} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                    <IconSymbol name="plus.circle.fill" size={20} color={colors.primary} />
-                  </Pressable>
-                )}
-              </View>
-            </View>
 
             {/* Location */}
             {location && (
