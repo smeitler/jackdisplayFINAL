@@ -1077,3 +1077,8 @@
 
 - [x] Bundle uploaded MP3 as test audio for Priming 5-min session
 - [x] Wire it so tapping "Begin Priming · 5 min" in preview plays the bundled MP3 directly (no TTS generation needed)
+
+## Preview Submit Fix (Mar 18 2026 v5)
+
+- [x] Fix "Save Review (Preview)": stay on screen, show submitted UI (celebration + morning practice card) instead of navigating back immediately
+- [x] Preview submit must NOT call submitCheckIn or router.back() — just set submitted=true

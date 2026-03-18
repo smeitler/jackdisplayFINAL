@@ -887,6 +887,12 @@ export default function CheckInScreen() {
     if (countdownAnimRef.current) countdownAnimRef.current.stop();
     if (countdownRef.current) clearTimeout(countdownRef.current);
 
+    // ── PREVIEW MODE: skip saving, just show the post-submission screen ──
+    if (isPreview) {
+      setSubmitted(true);
+      return;
+    }
+
     // Save voice check-in notes to DayNotes so they appear in habit detail history
     const noteEntries = Object.entries(vcNotes).filter(([, v]) => v.trim().length > 0);
     if (noteEntries.length > 0) {
@@ -1371,12 +1377,12 @@ export default function CheckInScreen() {
             );
           })()}
 
-          {(!hasTeams || shared) && (
+          {(!hasTeams || shared || isPreview) && (
             <Pressable
               style={({ pressed }) => [styles.successDoneBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
               onPress={() => { stopAfterAlarm(); router.back(); }}
             >
-              <Text style={styles.successDoneBtnText}>{shared ? 'Shared!' : 'Done'}</Text>
+              <Text style={styles.successDoneBtnText}>{isPreview ? 'Close Preview' : shared ? 'Shared!' : 'Done'}</Text>
             </Pressable>
           )}
         </View>
