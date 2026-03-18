@@ -1122,3 +1122,13 @@
 - [x] Check if getLastUserId returns null (no logged-in user) and try fallback keys
 - [x] Add fallback: scan ALL @journal_entries_v2_* AsyncStorage keys and merge entries from all of them
 - [ ] Add sample/placeholder photos shown when no journal photos exist (so carousel is never blank)
+
+## Practice Player Two-Carousel Redesign (Mar 18 2026 v11)
+
+- [x] Practice player: Row 1 = journal photos sliding right-to-left (continuous carousel)
+- [x] Practice player: Row 2 = vision board photos sliding right-to-left (slightly different speed)
+- [x] Practice player: Row 3 = gratitude text chips scrolling right-to-left
+- [x] Practice player: hold finger on any row to pause that row's animation
+- [x] Practice player: swipe finger to scrub speed, release to resume normal speed
+- [x] Practice player: load vision board images from AsyncStorage (VISION_BOARD_KEY)
+- [x] Practice player: play/pause + progress bar fixed at bottom

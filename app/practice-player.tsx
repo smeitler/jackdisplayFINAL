@@ -3,15 +3,14 @@
  *
  * Layout (top → bottom):
  *   ┌─────────────────────────────────────┐
- *   │  [emoji] Title          [✕ close]   │  ← top bar
+ *   │  [emoji] Title          [✕ close]   │  ← compact top bar
  *   │  ─────────────────────────────────  │
- *   │  ◄── photos slide across ──►        │  ← horizontal photo carousel (top half)
- *   │  ─────────────────────────────────  │
- *   │  🙏 GRATEFUL FOR                    │  ← cycling gratitude card (middle)
- *   │    "item text here"                 │
+ *   │  ◄── journal photos slide ──►       │  ← Row 1: journal photos (hold=pause, swipe=scrub)
+ *   │  ◄── vision board photos slide ──►  │  ← Row 2: vision board photos (slightly slower)
+ *   │  ◄── gratitude text chips ──►       │  ← Row 3: gratitude text scrolling
  *   │  ─────────────────────────────────  │
  *   │  ████████░░░░░░░░  3:12 / 5:00      │  ← real-time progress bar
- *   │           [ ⏸ ]                     │  ← play/pause button (themed purple)
+ *   │           [ ⏸ ]                     │  ← play/pause button
  *   └─────────────────────────────────────┘
  */
 
@@ -23,6 +22,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  PanResponder,
   Platform,
   Dimensions,
   Image,
@@ -34,20 +34,26 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const PHOTO_W = SCREEN_W * 0.54;
-const PHOTO_H = SCREEN_H * 0.30;
-const PHOTO_GAP = 12;
-const CAROUSEL_SPEED = 38; // px/s
 
-// Theme colours (matches theme.config.js primary)
-const PRIMARY = '#6C63FF';
-const PRIMARY_DIM = 'rgba(108,99,255,0.25)';
-const PRIMARY_BORDER = 'rgba(108,99,255,0.6)';
+// Row dimensions
+const ROW_H = SCREEN_H * 0.22;          // height of each photo row
+const PHOTO_W = ROW_H * 0.75;           // portrait-ish aspect
+const PHOTO_GAP = 10;
+const GRAT_CHIP_H = 44;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Scroll speeds (px/s)
+const SPEED_JOURNAL = 40;
+const SPEED_VISION  = 28;
+const SPEED_GRAT    = 55;
+
+// Theme
+const PRIMARY        = '#6C63FF';
+const PRIMARY_DIM    = 'rgba(108,99,255,0.22)';
+const PRIMARY_BORDER = 'rgba(108,99,255,0.55)';
+const SURFACE        = 'rgba(255,255,255,0.07)';
+const OVERLAY        = 'rgba(0,0,0,0.55)';
 
 type PracticeType = 'priming' | 'meditation' | 'breathwork' | 'visualization';
-
 const PRACTICE_LABEL: Record<PracticeType, string> = {
   priming: 'Morning Priming',
   meditation: 'Guided Meditation',
@@ -61,8 +67,6 @@ const PRACTICE_EMOJI: Record<PracticeType, string> = {
   visualization: '🎯',
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function fmtTime(secs: number): string {
   const s = Math.max(0, Math.floor(secs));
   const m = Math.floor(s / 60);
@@ -70,28 +74,40 @@ function fmtTime(secs: number): string {
   return `${m}:${String(r).padStart(2, '0')}`;
 }
 
-// ─── PhotoCarousel ────────────────────────────────────────────────────────────
+// ─── SlidingRow ───────────────────────────────────────────────────────────────
+// A generic horizontally-sliding row with hold-to-pause and swipe-to-scrub.
 
-function PhotoCarousel({ photos }: { photos: string[] }) {
-  const items = photos.length > 0 ? [...photos, ...photos, ...photos] : [];
-  const totalW = items.length * (PHOTO_W + PHOTO_GAP) + 32;
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const animRef = useRef<Animated.CompositeAnimation | null>(null);
-  const currentXRef = useRef(0);
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  const expandScale = useRef(new Animated.Value(1)).current;
-  const pausedForExpand = useRef(false);
+interface SlidingRowProps {
+  speed: number;           // px/s
+  rowHeight: number;
+  children: React.ReactNode[];  // individual items
+  itemWidth: number;
+  gap: number;
+}
 
+function SlidingRow({ speed, rowHeight, children, itemWidth, gap }: SlidingRowProps) {
+  const count = children.length;
+  // Triple the items so the loop is seamless
+  const tripled = count > 0 ? [...children, ...children, ...children] : [];
+  const loopW = count * (itemWidth + gap);
+  const totalW = tripled.length * (itemWidth + gap) + 32;
+
+  const scrollX   = useRef(new Animated.Value(0)).current;
+  const curXRef   = useRef(0);
+  const animRef   = useRef<Animated.CompositeAnimation | null>(null);
+  const pausedRef = useRef(false);
+
+  // Track current X
   useEffect(() => {
-    const id = scrollX.addListener(({ value }) => { currentXRef.current = value; });
+    const id = scrollX.addListener(({ value }) => { curXRef.current = value; });
     return () => scrollX.removeListener(id);
   }, [scrollX]);
 
-  const startScroll = useCallback((fromX: number) => {
-    if (photos.length < 1) return;
-    const loopW = photos.length * (PHOTO_W + PHOTO_GAP);
-    const distToLoop = loopW - (fromX % loopW);
-    const duration = (distToLoop / CAROUSEL_SPEED) * 1000;
+  const startFrom = useCallback((fromX: number) => {
+    if (count < 1 || speed <= 0) return;
+    const loopedX = fromX % loopW;
+    const distToLoop = loopW - loopedX;
+    const duration = (distToLoop / speed) * 1000;
     animRef.current?.stop();
     animRef.current = Animated.timing(scrollX, {
       toValue: fromX + distToLoop,
@@ -101,120 +117,118 @@ function PhotoCarousel({ photos }: { photos: string[] }) {
     });
     animRef.current.start(({ finished }) => {
       if (finished) {
-        scrollX.setValue(0);
-        currentXRef.current = 0;
-        startScroll(0);
+        scrollX.setValue(fromX + distToLoop - loopW);
+        curXRef.current = fromX + distToLoop - loopW;
+        startFrom(fromX + distToLoop - loopW);
       }
     });
-  }, [photos.length, scrollX]);
+  }, [count, speed, loopW, scrollX]);
 
   useEffect(() => {
-    if (photos.length < 1) return;
-    startScroll(0);
+    if (count < 1) return;
+    startFrom(0);
     return () => { animRef.current?.stop(); };
-  }, [photos.length, startScroll]);
+  }, [count, startFrom]);
 
-  const handlePhotoTap = (idx: number) => {
-    if (pausedForExpand.current) return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    pausedForExpand.current = true;
-    setExpandedIdx(idx);
-    animRef.current?.stop();
-    Animated.sequence([
-      Animated.timing(expandScale, { toValue: 1.2, duration: 200, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-      Animated.delay(700),
-      Animated.timing(expandScale, { toValue: 1, duration: 250, useNativeDriver: true, easing: Easing.in(Easing.ease) }),
-    ]).start(() => {
-      setExpandedIdx(null);
-      pausedForExpand.current = false;
-      startScroll(currentXRef.current);
-    });
-  };
+  // PanResponder for hold-to-pause + swipe-to-scrub
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        pausedRef.current = true;
+        animRef.current?.stop();
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      onPanResponderMove: (_e, gs) => {
+        // Swipe left = advance, swipe right = go back
+        const newX = Math.max(0, curXRef.current - gs.dx * 0.5);
+        scrollX.setValue(newX % loopW);
+        curXRef.current = newX % loopW;
+      },
+      onPanResponderRelease: () => {
+        pausedRef.current = false;
+        startFrom(curXRef.current);
+      },
+      onPanResponderTerminate: () => {
+        pausedRef.current = false;
+        startFrom(curXRef.current);
+      },
+    })
+  ).current;
 
-  if (photos.length === 0) {
-    return (
-      <View style={styles.carouselEmpty}>
-        <Text style={styles.carouselEmptyTxt}>📷  Add photos to your journal entries{'\n'}and they'll appear here</Text>
-      </View>
-    );
-  }
+  if (count < 1) return null;
 
   return (
-    <View style={styles.carouselOuter}>
+    <View style={{ height: rowHeight, overflow: 'hidden' }} {...panResponder.panHandlers}>
       <Animated.View
-        style={[
-          styles.carouselTrack,
-          { width: totalW, transform: [{ translateX: Animated.multiply(scrollX, -1) }] },
-        ]}
+        style={{
+          flexDirection: 'row',
+          width: totalW,
+          alignItems: 'center',
+          transform: [{ translateX: Animated.multiply(scrollX, -1) }],
+        }}
       >
-        {items.map((uri, i) => {
-          const isExp = expandedIdx === i;
-          return (
-            <Pressable key={`${uri}-${i}`} onPress={() => handlePhotoTap(i)} style={styles.photoWrapper}>
-              <Animated.View style={[styles.photoCard, isExp && { transform: [{ scale: expandScale }], zIndex: 20 }]}>
-                <Image source={{ uri }} style={styles.photoImg} resizeMode="cover" />
-              </Animated.View>
-            </Pressable>
-          );
-        })}
+        {tripled.map((child, i) => (
+          <View key={i} style={{ width: itemWidth, marginRight: gap }}>
+            {child}
+          </View>
+        ))}
       </Animated.View>
     </View>
   );
 }
 
-// ─── GratitudeDisplay ─────────────────────────────────────────────────────────
+// ─── PhotoItem ────────────────────────────────────────────────────────────────
 
-function GratitudeDisplay({ items }: { items: string[] }) {
-  const [idx, setIdx] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+function PhotoItem({ uri, height }: { uri: string; height: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const scale = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    if (items.length < 2) return;
-    const timer = setInterval(() => {
-      Animated.timing(fadeAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
-        setIdx((i) => (i + 1) % items.length);
-        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-      });
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [items.length, fadeAnim]);
-
-  const handleTap = () => {
+  const handlePress = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setExpanded(true);
     Animated.sequence([
-      Animated.spring(scaleAnim, { toValue: 1.05, useNativeDriver: true, speed: 40, bounciness: 8 }),
-      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 4 }),
+      Animated.timing(scale, { toValue: 1.12, duration: 180, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
+      Animated.timing(scale, { toValue: 1, duration: 220, useNativeDriver: true, easing: Easing.in(Easing.ease) }),
+    ]).start(() => setExpanded(false));
+  };
+
+  return (
+    <Pressable onPress={handlePress}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Image
+          source={{ uri }}
+          style={{
+            width: PHOTO_W,
+            height,
+            borderRadius: 12,
+            backgroundColor: '#1a1a2e',
+          }}
+          resizeMode="cover"
+        />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+// ─── GratitudeChip ────────────────────────────────────────────────────────────
+
+function GratitudeChip({ text }: { text: string }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 1.08, duration: 120, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   };
 
-  if (items.length === 0) {
-    return (
-      <View style={styles.gratitudeCard}>
-        <Text style={styles.gratitudeLabel}>🙏  GRATEFUL FOR</Text>
-        <Text style={[styles.gratitudeText, { color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }]}>
-          Write journal entries with gratitudes{'\n'}and they'll appear here
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <Pressable onPress={handleTap} style={{ width: '100%' }}>
-      <Animated.View style={[styles.gratitudeCard, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        <Text style={styles.gratitudeLabel}>🙏  GRATEFUL FOR</Text>
-        <Text style={styles.gratitudeText}>{items[idx]}</Text>
-        {items.length > 1 && (
-          <View style={styles.gratitudeDots}>
-            {items.slice(0, Math.min(items.length, 8)).map((_, i) => (
-              <View key={i} style={[styles.gDot, {
-                backgroundColor: i === (idx % Math.min(items.length, 8))
-                  ? 'rgba(255,255,255,0.8)'
-                  : 'rgba(255,255,255,0.2)',
-              }]} />
-            ))}
-          </View>
-        )}
+    <Pressable onPress={handlePress}>
+      <Animated.View style={[styles.gratChip, { transform: [{ scale }] }]}>
+        <Text style={styles.gratChipText} numberOfLines={1}>🙏 {text}</Text>
       </Animated.View>
     </Pressable>
   );
@@ -224,108 +238,113 @@ function GratitudeDisplay({ items }: { items: string[] }) {
 
 export default function PracticePlayerScreen() {
   useKeepAwake();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{
+    type?: string;
+    chunkUrls?: string;
+    pausesBetweenChunks?: string;
+    totalDurationMinutes?: string;
+    title?: string;
+  }>();
 
-  const rawType = Array.isArray(params.type) ? params.type[0] : params.type;
-  const rawChunkUrls = Array.isArray(params.chunkUrls) ? params.chunkUrls[0] : params.chunkUrls;
-  const rawPauses = Array.isArray(params.pausesBetweenChunks) ? params.pausesBetweenChunks[0] : params.pausesBetweenChunks;
-  const rawMinutes = Array.isArray(params.totalDurationMinutes) ? params.totalDurationMinutes[0] : params.totalDurationMinutes;
-
-  const type = (rawType ?? 'meditation') as PracticeType;
-  const chunkUrls: string[] = JSON.parse(rawChunkUrls ?? '[]');
-  const pausesBetweenChunks: number[] = JSON.parse(rawPauses ?? '[]');
-  const totalMinutes = parseInt(rawMinutes ?? '10', 10);
-  const totalSecs = totalMinutes * 60;
+  const practiceType = (params.type ?? 'priming') as PracticeType;
+  const chunkUrls: string[] = params.chunkUrls
+    ? JSON.parse(decodeURIComponent(params.chunkUrls))
+    : [];
+  const pausesBetween = params.pausesBetweenChunks
+    ? JSON.parse(decodeURIComponent(params.pausesBetweenChunks))
+    : [];
+  const totalMinutes = Number(params.totalDurationMinutes ?? 5);
+  const displayTitle = params.title ?? PRACTICE_LABEL[practiceType];
 
   // ─── Audio state ─────────────────────────────────────────────────────────────
   const [currentChunk, setCurrentChunk] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFinished, setIsFinished] = useState(false);
-  // Real-time progress from audio player
   const [elapsedSecs, setElapsedSecs] = useState(0);
   const [chunkDuration, setChunkDuration] = useState(0);
   const isPausedRef = useRef(false);
 
-  // ─── Journal data ─────────────────────────────────────────────────────────────
-  const [photos, setPhotos] = useState<string[]>([]);
+  // ─── Journal + Vision Board data ─────────────────────────────────────────────
+  const [journalPhotos, setJournalPhotos] = useState<string[]>([]);
+  const [visionPhotos, setVisionPhotos] = useState<string[]>([]);
   const [gratitudes, setGratitudes] = useState<string[]>([]);
 
   // ─── Refs ─────────────────────────────────────────────────────────────────────
   const voicePlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const musicPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pauseTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const chunkIndexRef = useRef(0);
+  const chunkIndexRef  = useRef(0);
 
-  // ─── Load journal data ───────────────────────────────────────────────────────
-  // Scans ALL @journal_entries_v2_* keys so it works regardless of login state.
+  // ─── Load journal + vision board data ────────────────────────────────────────
   useEffect(() => {
-    async function loadJournalData() {
+    async function loadData() {
       try {
-        import('@/lib/journal-store').then(async ({ parseGratitudes }) => {
-          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const { parseGratitudes } = await import('@/lib/journal-store');
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const { loadVisionBoard } = await import('@/lib/storage');
 
-          // Get all keys and find every journal-entries key
-          const allKeys = await AsyncStorage.getAllKeys();
-          const journalKeys = allKeys.filter((k) => k.startsWith('@journal_entries_v2_'));
+        // ── Journal photos + gratitudes ──
+        const allKeys = await AsyncStorage.getAllKeys();
+        const journalKeys = allKeys.filter((k) => k.startsWith('@journal_entries_v2_'));
+        const { getLastUserId } = await import('@/lib/storage');
+        const uid = await getLastUserId();
+        const primaryKey = `@journal_entries_v2_${uid || 'default'}`;
+        if (!journalKeys.includes(primaryKey)) journalKeys.unshift(primaryKey);
 
-          // Also try the primary key from getLastUserId
-          const { getLastUserId } = await import('@/lib/storage');
-          const uid = await getLastUserId();
-          const primaryKey = `@journal_entries_v2_${uid || 'default'}`;
-          if (!journalKeys.includes(primaryKey)) journalKeys.unshift(primaryKey);
-
-          console.log('[PracticePlayer] Journal keys found:', journalKeys);
-
-          // Merge entries from all keys
-          const allEntries: any[] = [];
-          for (const key of journalKeys) {
-            try {
-              const raw = await AsyncStorage.getItem(key);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) allEntries.push(...parsed);
-              }
-            } catch { /* skip bad key */ }
-          }
-
-          // Sort newest first
-          allEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          console.log('[PracticePlayer] Total entries across all keys:', allEntries.length);
-
-          const photoList: string[] = [];
-          const gratList: string[] = [];
-
-          for (const e of allEntries.slice(0, 50)) {
-            for (const att of e.attachments ?? []) {
-              if (att.type === 'photo' && att.uri && photoList.length < 20) {
-                photoList.push(att.uri);
-              }
+        const allEntries: any[] = [];
+        for (const key of journalKeys) {
+          try {
+            const raw = await AsyncStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) allEntries.push(...parsed);
             }
-            const bodyGrats = parseGratitudes(e.body ?? '');
-            for (const g of bodyGrats) {
-              if (g.trim() && gratList.length < 15) gratList.push(g.trim());
-            }
-            for (const g of e.gratitudes ?? []) {
-              if (g.trim() && gratList.length < 15 && !gratList.includes(g.trim())) {
-                gratList.push(g.trim());
-              }
+          } catch { /* skip */ }
+        }
+        allEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        const photoList: string[] = [];
+        const gratList: string[] = [];
+        for (const e of allEntries.slice(0, 60)) {
+          for (const att of e.attachments ?? []) {
+            if (att.type === 'photo' && att.uri && photoList.length < 30) {
+              photoList.push(att.uri);
             }
           }
+          const bodyGrats = parseGratitudes(e.body ?? '');
+          for (const g of bodyGrats) {
+            if (g.trim() && gratList.length < 20) gratList.push(g.trim());
+          }
+          for (const g of e.gratitudes ?? []) {
+            if (g.trim() && gratList.length < 20 && !gratList.includes(g.trim())) {
+              gratList.push(g.trim());
+            }
+          }
+        }
+        setJournalPhotos(photoList);
+        setGratitudes(gratList);
 
-          console.log('[PracticePlayer] Photos found:', photoList.length, '| Gratitudes found:', gratList.length);
-          setPhotos(photoList);
-          setGratitudes(gratList);
-        });
+        // ── Vision board photos ──
+        const board = await loadVisionBoard();
+        const vbPhotos: string[] = [];
+        for (const uris of Object.values(board)) {
+          for (const uri of uris) {
+            if (uri && vbPhotos.length < 30) vbPhotos.push(uri);
+          }
+        }
+        setVisionPhotos(vbPhotos);
+
+        console.log('[PracticePlayer] Journal photos:', photoList.length, '| Vision photos:', vbPhotos.length, '| Gratitudes:', gratList.length);
       } catch (err) {
-        console.warn('[PracticePlayer] Failed to load journal data:', err);
+        console.warn('[PracticePlayer] Failed to load data:', err);
       }
     }
-    loadJournalData();
+    loadData();
   }, []);
 
   // ─── Audio setup ─────────────────────────────────────────────────────────────
@@ -339,98 +358,100 @@ export default function PracticePlayerScreen() {
     try {
       const p = createAudioPlayer({ uri: musicUrl });
       p.loop = true;
-      p.volume = 0.15;
-      p.play();
+      p.volume = 0.12;
       musicPlayerRef.current = p;
-    } catch { /* optional */ }
-    return () => { musicPlayerRef.current?.remove(); };
+    } catch { /* ignore */ }
+    return () => {
+      musicPlayerRef.current?.remove();
+      musicPlayerRef.current = null;
+    };
   }, []);
 
-  // ─── Progress polling ─────────────────────────────────────────────────────────
-  const startProgressPoll = useCallback(() => {
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    progressIntervalRef.current = setInterval(() => {
-      const p = voicePlayerRef.current as any;
-      if (!p || isPausedRef.current) return;
-      try {
-        const cur = typeof p.currentTime === 'number' ? p.currentTime : 0;
-        const dur = typeof p.duration === 'number' ? p.duration : 0;
-        setElapsedSecs(cur);
-        if (dur > 0) setChunkDuration(dur);
-      } catch { /* ignore */ }
-    }, 250);
-  }, []);
-
-  // ─── Playback logic ───────────────────────────────────────────────────────────
-  const playChunk = useCallback((index: number) => {
-    if (index >= chunkUrls.length) {
+  const playChunk = useCallback((idx: number) => {
+    if (idx >= chunkUrls.length) {
       setIsFinished(true);
       setIsPlaying(false);
-      setElapsedSecs(chunkDuration);
       musicPlayerRef.current?.pause();
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return;
     }
-    chunkIndexRef.current = index;
-    setCurrentChunk(index);
+    chunkIndexRef.current = idx;
+    setCurrentChunk(idx);
+    setIsLoading(true);
     setElapsedSecs(0);
     setChunkDuration(0);
 
-    voicePlayerRef.current?.remove();
-    voicePlayerRef.current = null;
-
-    const player = createAudioPlayer({ uri: chunkUrls[index] });
-    voicePlayerRef.current = player;
-    player.play();
-    setIsPlaying(true);
-    setIsLoading(false);
-    startProgressPoll();
-
-    // Poll for chunk completion
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    pollIntervalRef.current = setInterval(() => {
-      if (!voicePlayerRef.current || isPausedRef.current) return;
-      const p = voicePlayerRef.current as any;
-      try {
-        const dur = typeof p.duration === 'number' ? p.duration : 0;
-        const cur = typeof p.currentTime === 'number' ? p.currentTime : 0;
-        const playing = typeof p.playing === 'boolean' ? p.playing : true;
-        if (dur > 0.5 && cur >= dur - 0.3 && !playing) {
-          clearInterval(pollIntervalRef.current!);
-          pollIntervalRef.current = null;
-          if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-          const pause = pausesBetweenChunks[index] ?? 2000;
-          pauseTimerRef.current = setTimeout(() => playChunk(index + 1), pause);
-        }
-      } catch { /* ignore */ }
-    }, 400);
-  }, [chunkUrls, pausesBetweenChunks, chunkDuration, startProgressPoll]);
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+
+    try {
+      voicePlayerRef.current?.remove();
+      const p = createAudioPlayer({ uri: chunkUrls[idx] });
+      voicePlayerRef.current = p;
+
+      // Poll for ready + duration
+      pollIntervalRef.current = setInterval(() => {
+        try {
+          const dur = (p as any).duration ?? 0;
+          if (dur > 0) {
+            clearInterval(pollIntervalRef.current!);
+            setChunkDuration(dur);
+            setIsLoading(false);
+            if (!isPausedRef.current) {
+              p.play();
+              setIsPlaying(true);
+              musicPlayerRef.current?.play();
+            }
+          }
+        } catch { clearInterval(pollIntervalRef.current!); }
+      }, 200);
+
+      // Progress polling
+      progressIntervalRef.current = setInterval(() => {
+        try {
+          const t = (p as any).currentTime ?? 0;
+          const d = (p as any).duration ?? 0;
+          setElapsedSecs(t);
+          if (d > 0 && t >= d - 0.3) {
+            clearInterval(progressIntervalRef.current!);
+            const pauseSecs = pausesBetween[idx] ?? 0;
+            if (pauseSecs > 0) {
+              pauseTimerRef.current = setTimeout(() => playChunk(idx + 1), pauseSecs * 1000);
+            } else {
+              playChunk(idx + 1);
+            }
+          }
+        } catch { clearInterval(progressIntervalRef.current!); }
+      }, 250);
+    } catch (err) {
+      console.warn('[PracticePlayer] Audio error:', err);
+      setIsLoading(false);
+    }
+  }, [chunkUrls, pausesBetween]);
 
   useEffect(() => {
-    if (chunkUrls.length === 0) { setIsLoading(false); return; }
-    playChunk(0);
+    if (chunkUrls.length > 0) playChunk(0);
     return () => {
-      voicePlayerRef.current?.remove();
       if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      voicePlayerRef.current?.remove();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  // ─── Controls ─────────────────────────────────────────────────────────────────
-  const handlePlayPause = () => {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const togglePlayPause = () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const p = voicePlayerRef.current;
+    if (!p) return;
     if (isPlaying) {
-      voicePlayerRef.current?.pause();
+      p.pause();
       musicPlayerRef.current?.pause();
       isPausedRef.current = true;
       setIsPlaying(false);
     } else {
-      voicePlayerRef.current?.play();
+      p.play();
       musicPlayerRef.current?.play();
       isPausedRef.current = false;
       setIsPlaying(true);
-      startProgressPoll();
     }
   };
 
@@ -443,266 +464,292 @@ export default function PracticePlayerScreen() {
     router.back();
   };
 
-  // ─── Progress bar values ──────────────────────────────────────────────────────
-  // Use chunk progress for multi-chunk, or single-chunk elapsed/duration
-  const chunkProgress = chunkDuration > 0 ? Math.min(elapsedSecs / chunkDuration, 1) : 0;
-  // Overall progress across all chunks
-  const overallProgress = chunkUrls.length > 1
-    ? (currentChunk + chunkProgress) / chunkUrls.length
-    : chunkProgress;
-  const displayProgress = isFinished ? 1 : overallProgress;
+  // Progress bar values
+  const totalSecs = totalMinutes * 60;
+  const globalElapsed = currentChunk > 0
+    ? (currentChunk / chunkUrls.length) * totalSecs + elapsedSecs
+    : elapsedSecs;
+  const progressFraction = totalSecs > 0 ? Math.min(globalElapsed / totalSecs, 1) : 0;
+  const remaining = Math.max(0, totalSecs - globalElapsed);
 
-  // Time display: use actual audio time if available, else estimate from overall progress
-  const displayElapsed = elapsedSecs > 0 ? elapsedSecs + currentChunk * (chunkDuration || 0) : displayProgress * totalSecs;
-  const displayRemaining = Math.max(0, totalSecs - displayElapsed);
+  // Build carousel items
+  const journalItems = journalPhotos.map((uri, i) => (
+    <PhotoItem key={i} uri={uri} height={ROW_H} />
+  ));
+  const visionItems = visionPhotos.map((uri, i) => (
+    <PhotoItem key={i} uri={uri} height={ROW_H} />
+  ));
+  const gratItems = gratitudes.map((text, i) => (
+    <GratitudeChip key={i} text={text} />
+  ));
 
-  const chunkLabel = isFinished
-    ? 'Session complete ✓'
-    : isLoading
-    ? 'Preparing session...'
-    : chunkUrls.length > 1
-    ? `Part ${currentChunk + 1} of ${chunkUrls.length}`
-    : '';
+  const hasJournal = journalPhotos.length > 0;
+  const hasVision  = visionPhotos.length > 0;
+  const hasGrats   = gratitudes.length > 0;
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.screen]}>
-
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* ── Top bar ── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.topTitle}>
-          <Text style={styles.topEmoji}>{PRACTICE_EMOJI[type]}</Text>
-          <Text style={styles.topLabel}>{PRACTICE_LABEL[type]}</Text>
-          <Text style={styles.topSub}>{totalMinutes} min</Text>
+      <View style={styles.topBar}>
+        <View style={styles.topBarLeft}>
+          <Text style={styles.topEmoji}>{PRACTICE_EMOJI[practiceType]}</Text>
+          <View>
+            <Text style={styles.topTitle}>{displayTitle}</Text>
+            <Text style={styles.topSub}>{totalMinutes} minutes</Text>
+          </View>
         </View>
-        <Pressable style={styles.closeBtn} onPress={handleClose} hitSlop={16}>
+        <Pressable onPress={handleClose} style={styles.closeBtn} hitSlop={12}>
           <Text style={styles.closeTxt}>✕</Text>
         </Pressable>
       </View>
 
-      {/* ── Photo carousel ── */}
-      <View style={styles.carouselSection}>
-        <PhotoCarousel photos={photos} />
-      </View>
-
-      {/* ── Gratitude display ── */}
-      <View style={styles.gratitudeSection}>
-        <GratitudeDisplay items={gratitudes} />
-      </View>
-
-      {/* ── Finish banner ── */}
-      {isFinished && (
-        <View style={styles.finishBanner}>
-          <Text style={styles.finishTxt}>Great work — session complete!</Text>
-        </View>
-      )}
-
-      {/* ── Bottom bar: progress + play/pause ── */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-
-        {/* Progress bar + time */}
-        <View style={styles.progressRow}>
-          <Text style={styles.timeLabel}>{fmtTime(displayElapsed)}</Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(displayProgress * 100)}%` }]} />
+      {/* ── Content area ── */}
+      <View style={styles.content}>
+        {/* Row 1: Journal photos */}
+        {hasJournal ? (
+          <View style={styles.rowWrapper}>
+            <Text style={styles.rowLabel}>MEMORIES</Text>
+            <SlidingRow speed={SPEED_JOURNAL} rowHeight={ROW_H} itemWidth={PHOTO_W} gap={PHOTO_GAP}>
+              {journalItems}
+            </SlidingRow>
           </View>
-          <Text style={styles.timeLabel}>-{fmtTime(displayRemaining)}</Text>
-        </View>
+        ) : (
+          <View style={[styles.emptyRow, { height: ROW_H }]}>
+            <Text style={styles.emptyRowTxt}>📸 Add photos to your journal to see them here</Text>
+          </View>
+        )}
 
-        {chunkLabel ? <Text style={styles.chunkLabel}>{chunkLabel}</Text> : null}
+        {/* Row 2: Vision board photos */}
+        {hasVision ? (
+          <View style={styles.rowWrapper}>
+            <Text style={styles.rowLabel}>VISION</Text>
+            <SlidingRow speed={SPEED_VISION} rowHeight={ROW_H} itemWidth={PHOTO_W} gap={PHOTO_GAP}>
+              {visionItems}
+            </SlidingRow>
+          </View>
+        ) : (
+          <View style={[styles.emptyRow, { height: ROW_H }]}>
+            <Text style={styles.emptyRowTxt}>🎯 Add images to your Vision Board to see them here</Text>
+          </View>
+        )}
 
-        {/* Play / Pause / Done button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.playBtn,
-            pressed && { opacity: 0.8, transform: [{ scale: 0.94 }] },
-          ]}
-          onPress={isFinished ? handleClose : handlePlayPause}
-        >
-          <Text style={styles.playBtnTxt}>
-            {isFinished ? 'Done' : isLoading ? '···' : isPlaying ? '⏸' : '▶'}
-          </Text>
-        </Pressable>
-
+        {/* Row 3: Gratitude text chips */}
+        {hasGrats ? (
+          <View style={styles.rowWrapper}>
+            <Text style={styles.rowLabel}>GRATEFUL FOR</Text>
+            <SlidingRow speed={SPEED_GRAT} rowHeight={GRAT_CHIP_H + 8} itemWidth={220} gap={12}>
+              {gratItems}
+            </SlidingRow>
+          </View>
+        ) : (
+          <View style={[styles.emptyRow, { height: GRAT_CHIP_H + 24 }]}>
+            <Text style={styles.emptyRowTxt}>🙏 Write gratitudes in your journal to see them here</Text>
+          </View>
+        )}
       </View>
 
+      {/* ── Bottom: progress + play/pause ── */}
+      <View style={styles.bottomBar}>
+        {/* Progress bar */}
+        <View style={styles.progressRow}>
+          <Text style={styles.progressTime}>{fmtTime(globalElapsed)}</Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} />
+          </View>
+          <Text style={styles.progressTime}>-{fmtTime(remaining)}</Text>
+        </View>
+
+        {/* Part indicator */}
+        {chunkUrls.length > 1 && (
+          <Text style={styles.partLabel}>Part {currentChunk + 1} of {chunkUrls.length}</Text>
+        )}
+
+        {/* Play/Pause */}
+        <View style={styles.playRow}>
+          {isFinished ? (
+            <View style={styles.finishedBadge}>
+              <Text style={styles.finishedTxt}>✓ Session Complete</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={togglePlayPause}
+              style={({ pressed }) => [
+                styles.playBtn,
+                pressed && { opacity: 0.75, transform: [{ scale: 0.95 }] },
+              ]}
+            >
+              {isLoading ? (
+                <Text style={styles.playIcon}>⏳</Text>
+              ) : (
+                <Text style={styles.playIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+              )}
+            </Pressable>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  screen: {
+  root: {
     flex: 1,
-    backgroundColor: '#0F0E1A', // matches dark background token
+    backgroundColor: '#0d0d1a',
   },
-
-  // Top bar
   topBar: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  topTitle: { flex: 1, gap: 2 },
-  topEmoji: { fontSize: 26 },
-  topLabel: { color: '#EEEEFF', fontSize: 20, fontWeight: '700', letterSpacing: 0.2 },
-  topSub: { color: 'rgba(238,238,255,0.4)', fontSize: 13 },
-  closeBtn: { padding: 8, marginTop: 2 },
-  closeTxt: { color: 'rgba(238,238,255,0.5)', fontSize: 18 },
-
-  // Photo carousel
-  carouselSection: {
-    height: PHOTO_H + 8,
-    overflow: 'hidden',
-  },
-  carouselOuter: {
-    height: PHOTO_H,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  carouselTrack: {
+  topBarLeft: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 16,
-  },
-  photoWrapper: {
-    width: PHOTO_W,
-    height: PHOTO_H,
-    marginRight: PHOTO_GAP,
-  },
-  photoCard: {
-    width: PHOTO_W,
-    height: PHOTO_H,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#1C1B2E',
-  },
-  photoImg: { width: '100%', height: '100%' },
-  carouselEmpty: {
-    height: PHOTO_H,
-    marginHorizontal: 20,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(108,99,255,0.2)',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  carouselEmptyTxt: {
-    color: 'rgba(238,238,255,0.3)',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 24,
-  },
-
-  // Gratitude
-  gratitudeSection: {
-    flex: 1,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    minHeight: 100,
-  },
-  gratitudeCard: {
-    backgroundColor: 'rgba(108,99,255,0.1)',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(108,99,255,0.3)',
-    alignItems: 'center',
-    gap: 8,
-  },
-  gratitudeLabel: {
-    color: 'rgba(238,238,255,0.4)',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  gratitudeText: {
-    color: 'rgba(238,238,255,0.9)',
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 23,
-  },
-  gratitudeDots: {
-    flexDirection: 'row',
-    gap: 5,
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  gDot: { width: 5, height: 5, borderRadius: 2.5 },
-
-  // Finish
-  finishBanner: {
-    marginHorizontal: 20,
-    marginBottom: 8,
-    backgroundColor: 'rgba(74,222,128,0.12)',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(74,222,128,0.3)',
-  },
-  finishTxt: { color: '#4ADE80', fontSize: 14, fontWeight: '700' },
-
-  // Bottom bar
-  bottomBar: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
     alignItems: 'center',
     gap: 10,
+  },
+  topEmoji: {
+    fontSize: 26,
+  },
+  topTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  topSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 1,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeTxt: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  rowWrapper: {
+    gap: 4,
+  },
+  rowLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 1.5,
+    paddingLeft: 16,
+  },
+  emptyRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderStyle: 'dashed',
+  },
+  emptyRowTxt: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  gratChip: {
+    height: GRAT_CHIP_H,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 22,
+    backgroundColor: 'rgba(108,99,255,0.18)',
+    borderWidth: 1,
+    borderColor: PRIMARY_BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gratChipText: {
+    fontSize: 13,
+    color: '#e0ddff',
+    fontWeight: '500',
+  },
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(108,99,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    gap: 6,
   },
   progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    gap: 10,
+    gap: 8,
   },
-  timeLabel: {
-    color: 'rgba(238,238,255,0.4)',
+  progressTime: {
     fontSize: 11,
-    fontVariant: ['tabular-nums'],
-    minWidth: 36,
+    color: 'rgba(255,255,255,0.45)',
+    width: 38,
     textAlign: 'center',
   },
   progressTrack: {
     flex: 1,
     height: 4,
-    backgroundColor: 'rgba(108,99,255,0.2)',
     borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
   },
   progressFill: {
-    height: 4,
-    backgroundColor: PRIMARY,
+    height: '100%',
     borderRadius: 2,
+    backgroundColor: PRIMARY,
   },
-  chunkLabel: {
-    color: 'rgba(238,238,255,0.3)',
+  partLabel: {
     fontSize: 11,
-    letterSpacing: 0.3,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+  },
+  playRow: {
+    alignItems: 'center',
+    paddingTop: 4,
   },
   playBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: PRIMARY_DIM,
     borderWidth: 2,
     borderColor: PRIMARY_BORDER,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
-  playBtnTxt: {
-    color: '#EEEEFF',
-    fontSize: 24,
+  playIcon: {
+    fontSize: 26,
+    color: '#fff',
+  },
+  finishedBadge: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 32,
+    backgroundColor: 'rgba(34,197,94,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.5)',
+  },
+  finishedTxt: {
+    fontSize: 15,
+    color: '#4ade80',
     fontWeight: '700',
   },
 });
