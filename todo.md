@@ -1072,3 +1072,8 @@
 - [x] Preview submit: show full celebration overlay after tapping "Save Review (Preview)"
 - [x] Preview submit: show morning practice card (green/yellow/red) after preview submission
 - [x] Preview: morning practice card uses alarm's saved type and duration as defaults
+
+## Test Audio (Mar 18 2026 v4)
+
+- [x] Bundle uploaded MP3 as test audio for Priming 5-min session
+- [x] Wire it so tapping "Begin Priming · 5 min" in preview plays the bundled MP3 directly (no TTS generation needed)

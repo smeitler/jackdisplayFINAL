@@ -813,6 +813,25 @@ export default function CheckInScreen() {
   // ── Morning Practice inline launcher ────────────────────────────────────────
   async function handleMpLaunch() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // ── Test audio shortcut: Priming 5-min uses a pre-recorded MP3 (no TTS generation needed) ──
+    const customMinsRaw = parseInt(mpCustomDuration, 10);
+    const effectiveDurForTest = (!isNaN(customMinsRaw) && customMinsRaw > 0) ? customMinsRaw : mpSelectedDuration;
+    if (mpSelectedType === 'priming' && effectiveDurForTest === 5) {
+      stopAfterAlarm();
+      router.push({
+        pathname: '/practice-player',
+        params: {
+          type: 'priming',
+          chunkUrls: JSON.stringify(['https://files.manuscdn.com/user_upload_by_module/session_file/310519663287248938/lYxzlZcwkYrgInjh.mp3']),
+          pausesBetweenChunks: JSON.stringify([0]),
+          totalDurationMinutes: '5',
+          breathworkStyle: 'box',
+        },
+      } as never);
+      return;
+    }
+
     setMpGenerating(true);
     try {
       const allHabits = await loadHabits();
