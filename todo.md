@@ -1066,3 +1066,9 @@
 - [x] Morning practice card: green button = pre-selected time (default), yellow = pick custom time, red = skip
 - [x] Morning practice card: show the pre-selected time prominently on the green button
 - [x] Fix preview mode: show the after-alarm celebration and morning practice card in preview
+
+## Preview Mode Fix (Mar 18 2026 v3)
+
+- [x] Preview submit: show full celebration overlay after tapping "Save Review (Preview)"
+- [x] Preview submit: show morning practice card (green/yellow/red) after preview submission
+- [x] Preview: morning practice card uses alarm's saved type and duration as defaults

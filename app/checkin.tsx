@@ -1057,7 +1057,8 @@ export default function CheckInScreen() {
     // After-alarm meditation info
     const meditationId = alarm.meditationId;
     const meditationMeta = meditationId ? AFTER_ALARM_META[meditationId] : null;
-    const showAfterAlarm = fromAlarm && meditationMeta;
+    // Show after-alarm content in real alarm flow AND in preview mode
+    const showAfterAlarm = (fromAlarm || isPreview) && meditationMeta;
 
     const handleShareToTeams = async () => {
       if (!myTeams) return;
@@ -1215,7 +1216,7 @@ export default function CheckInScreen() {
           )}
 
           {/* Morning Practice card — shown after alarm check-in (and in preview mode), not dismissed */}
-          {fromAlarm && !mpDismissed && (() => {
+          {(fromAlarm || isPreview) && !mpDismissed && (() => {
             const MP_META: Record<string, { emoji: string; label: string }> = {
               priming: { emoji: '⚡', label: 'Priming' },
               meditation: { emoji: '🧘', label: 'Guided Meditation' },
