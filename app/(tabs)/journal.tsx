@@ -24,6 +24,7 @@ import {
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, type Habit } from "@/lib/storage";
+import { useIsCalm } from "@/components/calm-effects";
 
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
@@ -1626,6 +1627,7 @@ function MapTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function JournalScreen() {
   const colors = useColors();
+  const isCalm = useIsCalm();
   const [activeTab, setActiveTab] = useState<SubTab>("calendar");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [userId, setUserId] = useState("");
@@ -1735,7 +1737,7 @@ export default function JournalScreen() {
   ];
 
   return (
-    <ScreenContainer>
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>

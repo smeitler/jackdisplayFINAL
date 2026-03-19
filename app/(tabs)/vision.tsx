@@ -20,6 +20,7 @@ import {
   loadGratitudeEntries, addGratitudeEntry, deleteGratitudeEntry, GratitudeEntry,
   toDateString, formatDisplayDate,
 } from "@/lib/storage";
+import { useIsCalm } from "@/components/calm-effects";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PADDING = 20;
@@ -394,6 +395,7 @@ function GoalDetailModal({
 export default function VisionBoardScreen() {
   const { categories, isDemoMode } = useApp();
   const colors = useColors();
+  const isCalm = useIsCalm();
   const maxWidth = useContentMaxWidth();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
@@ -550,7 +552,7 @@ export default function VisionBoardScreen() {
   const detailCat = detailCatId ? sortedCategories.find((c) => c.id === detailCatId) : null;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 

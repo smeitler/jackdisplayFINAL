@@ -21,6 +21,7 @@ import * as WebBrowser from "expo-web-browser";
 import { VoicePickerSection } from "@/components/voice-picker-section";
 import { VoiceJournalSection } from "@/components/voice-journal-section";
 import { MorningPracticeSection } from "@/components/morning-practice-section";
+import { useIsCalm } from "@/components/calm-effects";
 
 
 // ─── Jack Alarm Device Pairing Section ─────────────────────────────────────
@@ -270,11 +271,18 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
     preview: "#A855F7",
     description: "Galaxy",
   },
+  {
+    id: "calm",
+    label: "Calm",
+    preview: "#F5A623",
+    description: "Deep navy",
+  },
 ];
 
 export default function SettingsScreen() {
   const { alarm, updateAlarm, activeHabits, isDemoMode, exitDemo } = useApp();
   const colors = useColors();
+  const isCalm = useIsCalm();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
@@ -378,7 +386,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         {/* Header */}

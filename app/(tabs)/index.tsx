@@ -14,6 +14,7 @@ import Svg, { Circle } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
+import { CalmHeader, useIsCalm } from "@/components/calm-effects";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 // Profile pic key is per-user — built dynamically once userId is known
@@ -530,6 +531,7 @@ export default function HomeScreen() {
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
+  const isCalm = useIsCalm();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
@@ -635,12 +637,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
+      {isCalm && (
+        <CalmHeader
+          title={new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          subtitle={streak > 0 ? `${streak} day streak` : 'Start your streak today'}
+          rightContent={
+            <ProfileAvatar uri={profilePicUri} onPress={handlePickProfilePic} size={40} />
+          }
+        />
+      )}
+      <ScrollView contentContainerStyle={[styles.scroll, isCalm && { paddingTop: 8 }]} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
-          {/* ── Header: date + streak pill + profile pic ── */}
-          <View style={styles.header}>
+          {/* ── Header: date + streak pill + profile pic (non-Calm) ── */}
+          {!isCalm && <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.dateText, { color: colors.foreground }]}>
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -686,19 +697,19 @@ export default function HomeScreen() {
                 size={40}
               />
             </View>
-          </View>
+          </View>}
 
           {/* ── Stats row: Streak + Days Logged (removed 30-day avg) ── */}
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
               <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
-              <Text style={[styles.statValue, { color: colors.foreground }]}>{streak}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>Streak</Text>
+              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{streak}</Text>
+              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Streak</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <IconSymbol name="calendar" size={16} color={colors.primary} />
-              <Text style={[styles.statValue, { color: colors.foreground }]}>{totalDaysLogged}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>Days Logged</Text>
+            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+              <IconSymbol name="calendar" size={16} color={isCalm ? '#F5A623' : colors.primary} />
+              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{totalDaysLogged}</Text>
+              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Days Logged</Text>
             </View>
           </View>
 

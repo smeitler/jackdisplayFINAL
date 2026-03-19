@@ -5,7 +5,7 @@ import { themeColors } from "@/theme.config";
 export type ColorScheme = "light" | "dark";
 
 // Named app themes
-export type AppTheme = "purple" | "white" | "black" | "punk" | "valley" | "airy" | "nova";
+export type AppTheme = "purple" | "white" | "black" | "punk" | "valley" | "airy" | "nova" | "calm";
 
 export const ThemeColors = themeColors;
 
@@ -188,6 +188,23 @@ const novaPalette: ThemeColorPalette = makeThemePalette(
   '#F43F5E', // error — supernova red-pink
 );
 
+/**
+ * Calm theme: inspired by Headspace/Calm app — deep navy background,
+ * warm amber primary, soft blue-grey muted text, rounded elevated cards.
+ * Designed for a serene, focused daily habit experience.
+ */
+const calmPalette: ThemeColorPalette = makeThemePalette(
+  '#F5A623', // primary — warm amber (CTAs, active tab, highlights)
+  '#0D1135', // background — deep navy
+  '#1A2050', // surface — elevated navy card
+  '#FFFFFF', // foreground — crisp white text
+  '#8B9CC8', // muted — soft blue-grey (subtitles, metadata)
+  '#252D6E', // border — subtle deep navy border
+  '#27AE60', // success — calm green
+  '#F5C518', // warning — warm gold
+  '#E74C3C', // error — soft red
+);
+
 export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   purple: purplePalette,
   white: whitePalette,
@@ -196,6 +213,7 @@ export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   valley: valleyPalette,
   airy: airyPalette,
   nova: novaPalette,
+  calm: calmPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
@@ -206,6 +224,7 @@ export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
   valley: "dark",
   airy: "light",
   nova: "dark",
+  calm: "dark",
 };
 
 export const Fonts = Platform.select({

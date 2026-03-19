@@ -8,10 +8,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useApp } from "@/lib/app-context";
 import { useEffect } from "react";
 import { useIsNova } from "@/components/nova-effects";
+import { useIsCalm } from "@/components/calm-effects";
 
 export default function TabLayout() {
   const colors = useColors();
   const isNova = useIsNova();
+  const isCalm = useIsCalm();
   const insets = useSafeAreaInsets();
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + bottomPadding;
@@ -20,8 +22,9 @@ export default function TabLayout() {
   const router = useRouter();
 
   // Nova theme: deep space black tab bar to match aurora background
-  const tabBarBg = isNova ? '#050510' : colors.surface;
-  const tabBarBorderColor = isNova ? '#2D1B69' : colors.border;
+  // Calm theme: deep navy tab bar matching the Headspace aesthetic
+  const tabBarBg = isNova ? '#050510' : isCalm ? '#0D1135' : colors.surface;
+  const tabBarBorderColor = isNova ? '#2D1B69' : isCalm ? '#252D6E' : colors.border;
 
   useEffect(() => {
     // Allow demo mode users through without authentication

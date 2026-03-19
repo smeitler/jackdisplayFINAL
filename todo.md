@@ -1153,3 +1153,8 @@
 - [x] Build coaching landing page (8-Week Execution Sprint, $297)
 - [ ] Voice-to-text habit notes: record audio, Whisper transcription, submit on stop
 - [x] Voice-to-text habit notes: record audio, stop, Whisper transcribes full audio, LLM rates all habits at once (simple reliable path)
+- [ ] Calm theme: deep navy bg, amber/orange gradient headers, rounded cards (Appearance section)
+- [ ] Calm theme: tab bar, headers, core navigation styling
+- [ ] Calm theme: home screen, check-in screen, habit cards
+- [ ] Calm theme: journal, vision board, community, settings screens
+- [x] Calm theme: deep navy + amber gradient headers, registered in Appearance settings, applied to all screens

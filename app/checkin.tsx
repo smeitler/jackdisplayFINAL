@@ -22,6 +22,7 @@ import {
   loadDayNotes,
   saveDayNotes,
 } from '@/lib/storage';
+import { useIsCalm } from '@/components/calm-effects';
 
 // ─── Voice Check-in Simple Recorder ─────────────────────────────────────────
 // Simple approach: record all audio, stop, send full blob to Whisper once.
@@ -229,6 +230,7 @@ export default function CheckInScreen() {
   const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm, isPendingCheckIn } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
+  const isCalm = useIsCalm();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string; fromAlarm?: string; preview?: string }>();
   const fromAlarm = params.fromAlarm === '1';
@@ -1155,7 +1157,7 @@ export default function CheckInScreen() {
   }
 
   return (
-    <ScreenContainer edges={["top", "left", "right"]}>
+    <ScreenContainer edges={["top", "left", "right"]} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
 
       {/* ── Countdown bar (alarm mode only) ── */}
       {isAlarmActive && (

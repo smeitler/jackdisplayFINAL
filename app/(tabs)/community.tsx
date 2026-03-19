@@ -23,6 +23,7 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useRouter } from "expo-router";
 import { useApp } from "@/lib/app-context";
+import { useIsCalm } from "@/components/calm-effects";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -415,6 +416,7 @@ const DEMO_TEAMS: TeamItem[] = [
 
 export default function CommunityScreen() {
   const colors = useColors();
+  const isCalm = useIsCalm();
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const [showModal, setShowModal] = useState(false);
@@ -427,7 +429,7 @@ export default function CommunityScreen() {
   const teams = isDemoMode ? DEMO_TEAMS : serverTeams;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

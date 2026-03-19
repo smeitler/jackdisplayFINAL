@@ -19,6 +19,7 @@ import {
   loadVisionMotivations, saveVisionMotivations, VisionMotivations,
   formatDisplayDate,
 } from "@/lib/storage";
+import { useIsCalm } from "@/components/calm-effects";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PADDING = 20;
@@ -608,10 +609,11 @@ function RewardsTab() {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function RewardsScreen() {
   const colors = useColors();
+  const isCalm = useIsCalm();
   const [activeTab, setActiveTab] = useState<"rewards" | "vision">("rewards");
 
   return (
-    <ScreenContainer>
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* Header */}
       <View style={sStyles.header}>
         <Text style={[sStyles.headerTitle, { color: colors.foreground }]}>
