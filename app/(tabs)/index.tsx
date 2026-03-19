@@ -218,9 +218,9 @@ const RING_SIZE_SM = 48;   // older period rings — medium
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
-// ── Calm Habit Pill Bars ──────────────────────────────────────────────────────
-const PILL_BAR_HEIGHT = 56;
-const PILL_BAR_WIDTH = 18;
+// ── Calm Habit Dots (flat solid circles, fraction inside) ───────────────────────
+const DOT_SIZE_LG = 44; // current period
+const DOT_SIZE_SM = 36; // older periods
 
 function HabitPillBars({
   p0Done, p1Done, p2Done, goal,
@@ -229,69 +229,84 @@ function HabitPillBars({
   p0Done: number; p1Done: number; p2Done: number; goal: number;
   p0Label: string; p1Label: string; p2Label: string;
 }) {
-  function pillColor(done: number, g: number) {
-    if (g <= 0) return '#334155';
+  function dotColor(done: number, g: number) {
+    if (g <= 0 || done <= 0) return '#1E2A4A';
     const pct = done / g;
     if (pct >= 0.8) return '#22C55E';
     if (pct >= 0.5) return '#F59E0B';
-    if (pct > 0)    return '#EF4444';
-    return '#1E2A4A';
+    return '#EF4444';
   }
-  function fillPct(done: number, g: number) {
-    if (g <= 0 || done <= 0) return 0;
-    return Math.min(done / g, 1);
+  function textColor(done: number, g: number) {
+    if (g <= 0 || done <= 0) return '#4A5A7A';
+    return '#FFFFFF';
   }
 
-  const bars = [
-    { done: p0Done, label: p0Label, isCurrent: false },
-    { done: p1Done, label: p1Label, isCurrent: false },
-    { done: p2Done, label: p2Label, isCurrent: true },
+  // Split label into "THIS" prefix and period name
+  // e.g. "This Mo" -> topLabel="THIS", bottomLabel="MO"
+  // "2 Mo Ago" -> topLabel="2 MO", bottomLabel="AGO"
+  // "Last Mo" -> topLabel="LAST", bottomLabel="MO"
+  function splitLabel(label: string) {
+    const parts = label.toUpperCase().split(' ');
+    if (parts.length === 1) return { top: '', bottom: parts[0] };
+    if (parts[0] === 'THIS') return { top: 'THIS', bottom: parts[1] };
+    if (parts[0] === 'LAST') return { top: 'LAST', bottom: parts[1] };
+    // "2 MO AGO" or "2 WKS"
+    return { top: parts.slice(0, -1).join(' '), bottom: parts[parts.length - 1] };
+  }
+
+  const dots = [
+    { done: p0Done, label: p0Label, isCurrent: false, size: DOT_SIZE_SM },
+    { done: p1Done, label: p1Label, isCurrent: false, size: DOT_SIZE_SM },
+    { done: p2Done, label: p2Label, isCurrent: true,  size: DOT_SIZE_LG },
   ];
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
-      {bars.map(({ done, label, isCurrent }, i) => {
-        const fill = fillPct(done, goal);
-        const color = pillColor(done, goal);
-        const barH = PILL_BAR_HEIGHT;
-        const filledH = Math.max(fill * barH, fill > 0 ? 4 : 0);
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {dots.map(({ done, label, isCurrent, size }, i) => {
+        const bg = dotColor(done, goal);
+        const fg = textColor(done, goal);
+        const fraction = goal > 0 ? `${done}/${goal}` : '—';
+        const { top, bottom } = splitLabel(label);
+        const labelColor = isCurrent ? '#FFFFFF' : '#5A6A8A';
+        const labelSize = 7;
         return (
-          <View key={i} style={{ alignItems: 'center', gap: 4 }}>
-            {/* label above */}
+          <View key={i} style={{ alignItems: 'center', gap: 2 }}>
+            {/* "THIS" / "LAST" / "2 MO" above circle */}
             <Text style={{
-              fontSize: 8,
+              fontSize: labelSize,
               fontWeight: isCurrent ? '700' : '400',
-              color: isCurrent ? '#FFFFFF' : '#6B7DB3',
+              color: labelColor,
               textTransform: 'uppercase',
-              letterSpacing: 0.3,
+              letterSpacing: 0.5,
               textAlign: 'center',
-              width: PILL_BAR_WIDTH + 8,
-            }}>{label}</Text>
-            {/* track */}
+              width: size + 4,
+            }}>{top}</Text>
+            {/* solid flat circle with fraction inside */}
             <View style={{
-              width: PILL_BAR_WIDTH,
-              height: barH,
-              borderRadius: PILL_BAR_WIDTH / 2,
-              backgroundColor: '#1E2A4A',
-              overflow: 'hidden',
-              justifyContent: 'flex-end',
-              borderWidth: isCurrent ? 1.5 : 0,
-              borderColor: isCurrent ? color + '88' : 'transparent',
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: bg,
+              alignItems: 'center',
+              justifyContent: 'center',
             }}>
-              {/* fill from bottom */}
-              <View style={{
-                width: '100%',
-                height: filledH,
-                borderRadius: PILL_BAR_WIDTH / 2,
-                backgroundColor: color,
-              }} />
+              <Text style={{
+                fontSize: isCurrent ? 11 : 9,
+                fontWeight: '700',
+                color: fg,
+                textAlign: 'center',
+              }}>{fraction}</Text>
             </View>
-            {/* fraction */}
+            {/* period name below circle: MO / WK / AGO */}
             <Text style={{
-              fontSize: 9,
-              color: isCurrent ? '#FFFFFF' : '#6B7DB3',
-              fontWeight: isCurrent ? '600' : '400',
-            }}>{goal > 0 ? `${done}/${goal}` : '—'}</Text>
+              fontSize: labelSize,
+              fontWeight: isCurrent ? '700' : '400',
+              color: labelColor,
+              textTransform: 'uppercase',
+              letterSpacing: 0.5,
+              textAlign: 'center',
+              width: size + 4,
+            }}>{bottom}</Text>
           </View>
         );
       })}
