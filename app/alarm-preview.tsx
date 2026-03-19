@@ -552,7 +552,7 @@ export default function AlarmPreviewScreen() {
                         }]}>
                           <Text style={[styles.habitNumText, { color: colors.primary }]}>{rank}</Text>
                         </View>
-                        <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={2}>
+                        <Text style={[styles.habitName, { color: colors.foreground }]}>
                           {habit.name}
                         </Text>
                       </View>
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 13, gap: 12,
   },
-  habitNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  habitNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, flex: 1 },
   habitNumBadge: {
     width: 26, height: 26, borderRadius: 7, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,

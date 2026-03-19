@@ -1145,3 +1145,4 @@
 - [x] Practice player SlidingRow not rendering (children prop replaced with items prop)
 - [x] Practice player gratitudes not loading from dedicated gratitude entries storage
 - [x] Journal photo save error on iOS (ph:// URIs now copied to cache before base64 read)
+- [x] Habit names no longer truncated — wrap to multiple lines in check-in, home, alarm preview, and analytics screens

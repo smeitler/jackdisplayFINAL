@@ -295,7 +295,7 @@ export default function CategoryDetailScreen() {
                   <View style={[styles.habitKeyBadge, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '44' }]}>
                     <Text style={[styles.habitKeyBadgeNum, { color: colors.primary }]}>{idx + 1}</Text>
                   </View>
-                  <Text style={[styles.habitKeyName, { color: colors.foreground }]} numberOfLines={1}>{h.name}</Text>
+                  <Text style={[styles.habitKeyName, { color: colors.foreground }]}>{h.name}</Text>
                   <IconSymbol name="chevron.right" size={12} color={colors.muted} />
                 </Pressable>
               ))}
@@ -392,7 +392,7 @@ export default function CategoryDetailScreen() {
                   </Text>
                 </View>
                 <View style={styles.habitInfo}>
-                  <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>{habit.name}</Text>
+                  <Text style={[styles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
                   {habit.teamId && teamNameMap[habit.teamId] && (
                     <View style={[styles.teamBadge, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
                       <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>

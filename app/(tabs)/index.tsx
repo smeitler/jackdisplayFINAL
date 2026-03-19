@@ -309,7 +309,7 @@ function HabitGoalRow({
       activeOpacity={0.7}
     >
       {/* Left: habit name */}
-      <Text style={[styles.habitName, { color: colors.foreground }]} numberOfLines={1}>
+      <Text style={[styles.habitName, { color: colors.foreground }]}>
         {habit.name}
       </Text>
 
