@@ -110,12 +110,6 @@ function CoachCard() {
           </View>
         </View>
 
-        {/* CTA */}
-        <View style={styles.coachCTA}>
-          <Text style={styles.coachCTAText}>Add Your Accountability Coach</Text>
-          <Text style={styles.coachCTASubtext}>8-Week Execution Sprint · $297 · "Daily voice feedback. Weekly strategy note. 8 weeks of zero hiding."</Text>
-        </View>
-
         <View style={styles.coachBtn}>
           <Text style={styles.coachBtnText}>Get Your Coach  →</Text>
         </View>
