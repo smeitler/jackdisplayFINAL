@@ -1151,3 +1151,5 @@
 - [ ] Build coaching landing page (8-Week Execution Sprint, $297)
 - [x] Remove emojis and 'Async' from in-app coach card
 - [x] Build coaching landing page (8-Week Execution Sprint, $297)
+- [ ] Voice-to-text habit notes: record audio, Whisper transcription, submit on stop
+- [x] Voice-to-text habit notes: record audio, stop, Whisper transcribes full audio, LLM rates all habits at once (simple reliable path)

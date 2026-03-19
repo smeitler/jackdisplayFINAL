@@ -23,59 +23,23 @@ import {
   saveDayNotes,
 } from '@/lib/storage';
 
-// ─── Voice Check-in Segment-Based Recorder ────────────────────────────────────
-// Architecture:
-//   SEGMENT MODEL — audio is split into segments at each silence boundary:
-//   • currentSegmentChunks: audio blobs since the last silence (always small/fast for Whisper)
-//   • committedTranscript: full text of all finalized segments (grows across session)
-//
-//   Each 1.5s tick: send currentSegmentChunks to Whisper → live preview of current speech
-//     Display: committedTranscript + " " + segmentPreview
-//
-//   On silence: finalize current segment → commit its Whisper result to committedTranscript
-//     → send full committedTranscript to LLM for habit rating
-//     → reset currentSegmentChunks for the next segment
-//
-//   Result: Whisper always processes ≤15s of audio regardless of session length.
-//   LLM analyzes the full accumulated transcript but only re-runs when a segment commits.
-const CHUNK_INTERVAL_MS = 1500;        // live preview tick: send current segment every 1.5s
-const SILENCE_THRESHOLD_RMS = 0.02;    // RMS below this = silence
-const SILENCE_TRIGGER_MS = 700;        // 0.7s of continuous silence → commit segment + fire LLM
-const WORD_DELTA_TRIGGER = 2;          // fallback: 2+ new words → fire LLM even without silence
+// ─── Voice Check-in Simple Recorder ─────────────────────────────────────────
+// Simple approach: record all audio, stop, send full blob to Whisper once.
+// No streaming, no silence detection, no chunk intervals.
+// Result: reliable on web + native, ~0.5-1.5s transcription after stop.
 
-type DeltaChunkCallback = (deltaBlob: Blob, mimeType: string) => void;
-type SilenceCallback = () => void;
-
-function useCheckinWebRecorder(
-  onDeltaChunk: DeltaChunkCallback,
-  onSilenceDetected: SilenceCallback,
-) {
+function useSimpleRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const allChunksRef = useRef<Blob[]>([]); // ALL audio blobs since recording started
-  const rollingWindowRef = useRef<Blob[]>([]); // exposed for external access (unused internally now)
+  const allChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>('audio/webm');
-  const chunkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Silence detection via Web Audio API
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const silenceSinceRef = useRef<number | null>(null); // timestamp when silence started
-  const silenceFiredRef = useRef(false); // prevent multiple fires per silence window
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const onDeltaChunkRef = useRef(onDeltaChunk);
-  const onSilenceRef = useRef(onSilenceDetected);
-  useEffect(() => { onDeltaChunkRef.current = onDeltaChunk; });
-  useEffect(() => { onSilenceRef.current = onSilenceDetected; });
 
   const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
-    allChunksRef.current = [];   // reset cumulative audio on each new session
-    rollingWindowRef.current = [];
-    silenceSinceRef.current = null;
-    silenceFiredRef.current = false;
+    allChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -88,66 +52,12 @@ function useCheckinWebRecorder(
       mimeTypeRef.current = mimeType || 'audio/webm';
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => {
-        // Accumulate ALL audio since recording started
         if (e.data && e.data.size > 0) allChunksRef.current.push(e.data);
       };
       mr.start(100);
       mediaRecorderRef.current = mr;
       isRecordingRef.current = true;
       setIsRecording(true);
-
-      // ── Web Audio silence detection ───────────────────────────────────────────────────────────────────────────────────────
-      try {
-        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
-        const ctx = new AudioCtx();
-        audioCtxRef.current = ctx;
-        const source = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-        const buf = new Float32Array(analyser.fftSize);
-
-        silenceIntervalRef.current = setInterval(() => {
-          if (!isRecordingRef.current) return;
-          analyser.getFloatTimeDomainData(buf);
-          // RMS amplitude
-          let sum = 0;
-          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-          const rms = Math.sqrt(sum / buf.length);
-
-          if (rms < SILENCE_THRESHOLD_RMS) {
-            // Silence detected
-            if (silenceSinceRef.current === null) silenceSinceRef.current = Date.now();
-            const silenceDuration = Date.now() - silenceSinceRef.current;
-            if (silenceDuration >= SILENCE_TRIGGER_MS && !silenceFiredRef.current) {
-              silenceFiredRef.current = true; // prevent re-firing until speech resumes
-              onSilenceRef.current();
-            }
-          } else {
-            // Speech detected — reset silence window and allow next silence trigger
-            silenceSinceRef.current = null;
-            silenceFiredRef.current = false;
-          }
-        }, 100); // check every 100ms
-      } catch {
-        // Web Audio not available — silence detection disabled, word-delta debounce still works
-      }
-
-      // ── Rolling audio interval (Whisper feed) ────────────────────────────────────────────────────────────────────────────────────────
-      // Cap: keep only the last ~20s of audio blobs so Whisper processes a constant-size window.
-      // MediaRecorder fires ondataavailable every 100ms, so 20s ≈ 200 chunks.
-      const MAX_AUDIO_CHUNKS = 200; // ~20s at 100ms per chunk
-      chunkIntervalRef.current = setInterval(() => {
-        if (!isRecordingRef.current || allChunksRef.current.length === 0) return;
-        // Trim old chunks: keep only the last MAX_AUDIO_CHUNKS blobs
-        if (allChunksRef.current.length > MAX_AUDIO_CHUNKS) {
-          allChunksRef.current = allChunksRef.current.slice(-MAX_AUDIO_CHUNKS);
-        }
-        const windowBlob = new Blob(allChunksRef.current, { type: mimeTypeRef.current });
-        if (windowBlob.size < 500) return; // too small — skip
-        onDeltaChunkRef.current(windowBlob, mimeTypeRef.current);
-      }, CHUNK_INTERVAL_MS);
       return true;
     } catch (e: any) {
       const name = e?.name ?? '';
@@ -162,33 +72,34 @@ function useCheckinWebRecorder(
     }
   }, []);
 
-  const stop = useCallback((): Promise<void> => {
-    if (chunkIntervalRef.current) { clearInterval(chunkIntervalRef.current); chunkIntervalRef.current = null; }
-    if (silenceIntervalRef.current) { clearInterval(silenceIntervalRef.current); silenceIntervalRef.current = null; }
-    audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
-    analyserRef.current = null;
+  // Stop recording and return the full audio blob
+  const stop = useCallback((): Promise<Blob | null> => {
     return new Promise((resolve) => {
       const mr = mediaRecorderRef.current;
       if (!mr || mr.state === 'inactive') {
         isRecordingRef.current = false;
         setIsRecording(false);
-        resolve();
+        resolve(null);
         return;
       }
       mr.addEventListener('stop', () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        const blob = allChunksRef.current.length > 0
+          ? new Blob(allChunksRef.current, { type: mimeTypeRef.current })
+          : null;
         allChunksRef.current = [];
         isRecordingRef.current = false;
         setIsRecording(false);
-        resolve();
+        resolve(blob);
       }, { once: true });
       mr.stop();
     });
   }, []);
 
-  return { start, stop, isRecording, isRecordingRef, micError, rollingWindowRef };
+  const getMimeType = useCallback(() => mimeTypeRef.current, []);
+
+  return { start, stop, getMimeType, isRecording, isRecordingRef, micError };
 }
 
 // Convert Blob to base64 string
@@ -346,34 +257,17 @@ export default function CheckInScreen() {
   const [mpGenerating, setMpGenerating] = useState(false);
   const [mpDismissed, setMpDismissed] = useState(false);
 
-  // ── Voice Check-in state (isolated from journal) ──
-  const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'done' | 'error'>('idle');
-  const [vcTranscript, setVcTranscript] = useState(''); // cumulative transcript shown live
+  // ── Voice Check-in state (simple: record all → stop → transcribe once → analyze) ──
+  const [vcStatus, setVcStatus] = useState<'idle' | 'recording' | 'transcribing' | 'done' | 'error'>('idle');
+  const [vcTranscript, setVcTranscript] = useState('');
   const [vcNotes, setVcNotes] = useState<Record<string, string>>({});
   const [vcElapsed, setVcElapsed] = useState(0);
-  const [vcProcessing, setVcProcessing] = useState(false); // true while a chunk is being analyzed
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null); // habitId being edited inline
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  // Split pipeline: two separate mutations
   const transcribeChunkMutation = trpc.voiceCheckin.transcribeChunk.useMutation();
   const analyzeTranscriptMutation = trpc.voiceCheckin.analyzeTranscript.useMutation();
-  // Refs for use inside callbacks (avoids stale closures — all callbacks use .current)
-  const activeHabitsRef = useRef(activeHabits);
-  useEffect(() => { activeHabitsRef.current = activeHabits; }, [activeHabits]);
-  const setRatingsRef = useRef(setRatings);
-  useEffect(() => { setRatingsRef.current = setRatings; }, [setRatings]);
-  const setVcNotesRef = useRef(setVcNotes);
-  useEffect(() => { setVcNotesRef.current = setVcNotes; }, [setVcNotes]);
-  // Keep mutation refs so callbacks never go stale
-  const transcribeChunkMutationRef = useRef(transcribeChunkMutation);
-  useEffect(() => { transcribeChunkMutationRef.current = transcribeChunkMutation; });
-  const analyzeTranscriptMutationRef = useRef(analyzeTranscriptMutation);
-  useEffect(() => { analyzeTranscriptMutationRef.current = analyzeTranscriptMutation; });
-  // Accumulated transcript ref (used by LLM analysis path without stale closure)
-  const vcTranscriptRef = useRef('');
-  useEffect(() => { vcTranscriptRef.current = vcTranscript; }, [vcTranscript]);
 
   // Load existing day notes for the current date into vcNotes on mount
   useEffect(() => {
@@ -386,149 +280,9 @@ export default function CheckInScreen() {
       if (Object.keys(notesForDate).length > 0) setVcNotes(notesForDate);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount — date changes handled by navigateDate
+  }, []);
 
-  // Guard: skip delta if Whisper is still processing the previous chunk
-  const vcWhisperInFlightRef = useRef(false);
-  // Smart LLM debounce: track word count at last LLM call
-  const vcLastLlmWordCountRef = useRef(0);
-  // Incremental LLM tracking:
-  //   vcLockedHabitsRef — habit IDs already rated with confidence; excluded from future LLM calls
-  //   vcConsumedOffsetRef — char offset in vcTranscriptRef already sent to LLM; next call sends only new text
-  const vcLockedHabitsRef = useRef<Set<string>>(new Set());
-  const vcConsumedOffsetRef = useRef(0);
-  const vcLlmInFlightRef = useRef(false); // guard: only one LLM call at a time
-
-  // Shared LLM fire function — INCREMENTAL: only sends new (unanalyzed) transcript to LLM
-  // and only asks about habits not yet locked in.
-  const fireAnalyzeTranscript = useCallback((transcript: string) => {
-    if (!transcript.trim()) return;
-    if (vcLlmInFlightRef.current) return; // LLM already running — skip
-
-    // Only send the NEW portion of the transcript since the last LLM call
-    const newText = transcript.slice(vcConsumedOffsetRef.current).trim();
-    if (!newText) return; // nothing new to analyze
-
-    // Only ask about habits not yet locked in
-    const unlockedHabits = activeHabitsRef.current
-      .filter((h) => !vcLockedHabitsRef.current.has(h.id))
-      .map((h) => ({ id: h.id, name: h.name }));
-    if (unlockedHabits.length === 0) return; // all habits already rated — nothing to do
-
-    vcLlmInFlightRef.current = true;
-    vcLastLlmWordCountRef.current = transcript.split(/\s+/).filter(Boolean).length;
-    // Advance consumed offset NOW so parallel calls don't re-send the same text
-    vcConsumedOffsetRef.current = transcript.length;
-
-    analyzeTranscriptMutationRef.current.mutateAsync({ transcript: newText, habits: unlockedHabits })
-      .then((analysis) => {
-        const newRatings: Record<string, Rating> = {};
-        const newNotes: Record<string, string> = {};
-        for (const [habitId, data] of Object.entries(analysis.results) as [string, { rating: string | null; note: string }][]) {
-          if (data.rating) {
-            newRatings[habitId] = data.rating as Rating;
-            // Lock this habit — it won't be re-analyzed in future LLM calls
-            vcLockedHabitsRef.current.add(habitId);
-          }
-          if (data.note) newNotes[habitId] = data.note;
-        }
-        if (Object.keys(newRatings).length > 0) setRatingsRef.current((prev) => ({ ...prev, ...newRatings }));
-        if (Object.keys(newNotes).length > 0) setVcNotesRef.current((prev) => ({ ...prev, ...newNotes }));
-      })
-      .catch((e) => console.warn('[VoiceCheckin] LLM analysis error:', e))
-      .finally(() => { vcLlmInFlightRef.current = false; });
-  }, []); // stable — all deps accessed via refs
-
-  // Silence callback: fires when 1.5s of silence is detected mid-recording
-  // Guard: only fire if we have at least 3 words of transcript (avoids firing on startup silence)
-  const handleVcSilence = useCallback(() => {
-    const t = vcTranscriptRef.current;
-    const wordCount = t.trim().split(/\s+/).filter(Boolean).length;
-    if (wordCount < 3) return; // not enough transcript yet — ignore startup silence
-    console.log('[VoiceCheckin] Silence detected — firing LLM analysis on', wordCount, 'words');
-    fireAnalyzeTranscript(t);
-  }, [fireAnalyzeTranscript]);
-
-  // Called every CHUNK_INTERVAL_MS with ALL audio since recording started (cumulative blob)
-  // Whisper returns the FULL transcript of everything spoken so far.
-  // We REPLACE vcTranscriptRef with Whisper's result — no deduplication needed.
-  // Uses refs only — stable callback, never stale
-  //
-  // IMPORTANT: vcWhisperInFlightRef guards against concurrent calls.
-  // ALL exit paths MUST clear this flag via the finally block — never use bare return inside try.
-  //
-  // CUMULATIVE APPROACH: we send ALL audio since recording started to Whisper each tick.
-  // Whisper returns the FULL transcript of everything spoken so far.
-  // We REPLACE vcTranscriptRef with Whisper's result (no deduplication needed).
-  // Whisper's `previousTranscript` prompt hint helps it continue naturally.
-  const handleVcDeltaChunk = useCallback(async (cumulativeBlob: Blob, mimeType: string) => {
-    if (vcWhisperInFlightRef.current) return; // Whisper still busy — skip this tick (guard NOT set yet)
-    vcWhisperInFlightRef.current = true;
-    setVcProcessing(true);
-
-    // Watchdog: auto-clear the guard after 12s in case Whisper hangs on longer audio
-    const watchdog = setTimeout(() => {
-      if (vcWhisperInFlightRef.current) {
-        console.warn('[VoiceCheckin] Whisper watchdog fired — clearing in-flight guard');
-        vcWhisperInFlightRef.current = false;
-        setVcProcessing(false);
-      }
-    }, 12000);
-
-    // PARALLEL PATH: fire LLM on the CURRENT transcript immediately while Whisper processes new audio
-    // This hides Whisper latency — LLM analysis starts ~1.5s earlier than sequential approach
-    const transcriptAtTickStart = vcTranscriptRef.current;
-    const wordsAtTickStart = transcriptAtTickStart.split(/\s+/).filter(Boolean).length;
-    const parallelWordDelta = wordsAtTickStart - vcLastLlmWordCountRef.current;
-    if (parallelWordDelta >= WORD_DELTA_TRIGGER && transcriptAtTickStart.trim()) {
-      fireAnalyzeTranscript(transcriptAtTickStart);
-    }
-
-    try {
-      // STEP 1: Whisper — transcribe ALL audio since recording started
-      // Pass previousTranscript as a prompt hint so Whisper continues naturally
-      const audioBase64 = await blobToBase64(cumulativeBlob);
-      const result = await transcribeChunkMutationRef.current.mutateAsync({
-        audioBase64,
-        mimeType,
-        previousTranscript: vcTranscriptRef.current,
-      });
-      const fullText = result.delta?.trim() ?? '';
-
-      if (fullText) {
-        // REPLACE the transcript with Whisper's full result (it transcribed all audio so far)
-        // Only update if Whisper returned something longer / different than what we have
-        const prevWordCount = vcTranscriptRef.current.split(/\s+/).filter(Boolean).length;
-        const newWordCount = fullText.split(/\s+/).filter(Boolean).length;
-
-        if (newWordCount >= prevWordCount) {
-          // Whisper's result is at least as long — trust it and replace
-          setVcTranscript(fullText);
-          vcTranscriptRef.current = fullText;
-
-          // STEP 2: Fire LLM again if Whisper returned MORE words than the parallel path saw
-          // (catches words that arrived during Whisper's processing time)
-          const postWhisperDelta = newWordCount - vcLastLlmWordCountRef.current;
-          if (postWhisperDelta >= WORD_DELTA_TRIGGER) {
-            fireAnalyzeTranscript(fullText);
-          }
-          // (Silence path fires separately via handleVcSilence callback)
-        }
-        // If Whisper returned fewer words (e.g. hallucination on silence), keep existing transcript
-      }
-
-    } catch (e) {
-      console.warn('[VoiceCheckin] Whisper chunk error:', e);
-    } finally {
-      clearTimeout(watchdog);
-      vcWhisperInFlightRef.current = false;
-      setVcProcessing(false);
-    }
-  }, [fireAnalyzeTranscript]); // stable — all other deps via refs
-
-  const checkinRecorder = useCheckinWebRecorder(handleVcDeltaChunk, handleVcSilence);
-  const checkinRecorderRef = useRef(checkinRecorder);
-  useEffect(() => { checkinRecorderRef.current = checkinRecorder; });
+  const checkinRecorder = useSimpleRecorder();
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -982,60 +736,70 @@ export default function CheckInScreen() {
   }
 
   // ── Voice Check-in handlers ──
+  // Simple flow: tap mic → record → tap stop → Whisper transcribes full audio → LLM rates habits
   async function handleVoiceMicPress() {
     if (vcStatus === 'recording') {
-      // Stop recording — chunks are already being processed in background
+      // STOP: stop timer + animation, get full audio blob, transcribe + analyze
       if (vcTimerRef.current) { clearInterval(vcTimerRef.current); vcTimerRef.current = null; }
       vcPulseLoopRef.current?.stop();
       Animated.spring(vcPulseAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
-      await checkinRecorder.stop();
-      // MANDATORY FINAL ANALYSIS: fire one last LLM call on any remaining unanalyzed transcript
-      // Only sends the NEW portion since the last LLM call, and only for unlocked habits.
-      const finalTranscript = vcTranscriptRef.current;
-      const finalNewText = finalTranscript.slice(vcConsumedOffsetRef.current).trim();
-      const finalUnlockedHabits = activeHabitsRef.current
-        .filter((h) => !vcLockedHabitsRef.current.has(h.id))
-        .map((h) => ({ id: h.id, name: h.name }));
-      if (finalNewText && finalUnlockedHabits.length > 0) {
-        setVcProcessing(true);
-        try {
-          const finalAnalysis = await analyzeTranscriptMutation.mutateAsync({
-            transcript: finalNewText,
-            habits: finalUnlockedHabits,
-          });
-          const finalRatings: Record<string, Rating> = {};
-          const finalNotes: Record<string, string> = {};
-          for (const [habitId, data] of Object.entries(finalAnalysis.results) as [string, { rating: string | null; note: string }][]) {
-            if (data.rating) finalRatings[habitId] = data.rating as Rating;
-            if (data.note) finalNotes[habitId] = data.note;
-          }
-          if (Object.keys(finalRatings).length > 0) setRatings((prev) => ({ ...prev, ...finalRatings }));
-          if (Object.keys(finalNotes).length > 0) setVcNotes((prev) => ({ ...prev, ...finalNotes }));
-        } catch (e) {
-          console.warn('[VoiceCheckin] Final analysis error:', e);
-        } finally {
-          setVcProcessing(false);
-        }
-      }
-      // Show done state
-      setVcStatus('done');
-      // Auto-clear after 5 seconds
-      setTimeout(() => setVcStatus('idle'), 5000);
-    } else if (vcStatus === 'idle' || vcStatus === 'done' || vcStatus === 'error') {
-      // Start recording
-      if (Platform.OS !== 'web') {
+
+      // Show transcribing state immediately (optimistic UI)
+      setVcStatus('transcribing');
+
+      // Get the full audio blob from the recorder
+      const audioBlob = await checkinRecorder.stop();
+      if (!audioBlob || audioBlob.size < 500) {
         setVcStatus('error');
-        setTimeout(() => setVcStatus('idle'), 2000);
+        setTimeout(() => setVcStatus('idle'), 3000);
         return;
       }
-      // Reset transcript and notes for new session
+
+      try {
+        // STEP 1: Whisper — transcribe full audio in one shot
+        const audioBase64 = await blobToBase64(audioBlob);
+        const mimeType = checkinRecorder.getMimeType();
+        const transcribeResult = await transcribeChunkMutation.mutateAsync({
+          audioBase64,
+          mimeType,
+          previousTranscript: 'Daily habit check-in',
+        });
+        const fullTranscript = transcribeResult.delta?.trim() ?? '';
+        if (!fullTranscript) {
+          setVcStatus('error');
+          setTimeout(() => setVcStatus('idle'), 3000);
+          return;
+        }
+        setVcTranscript(fullTranscript);
+
+        // STEP 2: LLM — analyze full transcript and rate all habits at once
+        const allHabits = activeHabits.map((h) => ({ id: h.id, name: h.name }));
+        const analysis = await analyzeTranscriptMutation.mutateAsync({
+          transcript: fullTranscript,
+          habits: allHabits,
+        });
+        const newRatings: Record<string, Rating> = {};
+        const newNotes: Record<string, string> = {};
+        for (const [habitId, data] of Object.entries(analysis.results) as [string, { rating: string | null; note: string }][]) {
+          if (data.rating) newRatings[habitId] = data.rating as Rating;
+          if (data.note) newNotes[habitId] = data.note;
+        }
+        if (Object.keys(newRatings).length > 0) setRatings((prev) => ({ ...prev, ...newRatings }));
+        if (Object.keys(newNotes).length > 0) setVcNotes((prev) => ({ ...prev, ...newNotes }));
+
+        setVcStatus('done');
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Auto-clear after 6 seconds
+        setTimeout(() => setVcStatus('idle'), 6000);
+      } catch (e) {
+        console.warn('[VoiceCheckin] Transcription/analysis error:', e);
+        setVcStatus('error');
+        setTimeout(() => setVcStatus('idle'), 3000);
+      }
+
+    } else if (vcStatus === 'idle' || vcStatus === 'done' || vcStatus === 'error') {
+      // START recording
       setVcTranscript('');
-      vcTranscriptRef.current = '';
-      vcWhisperInFlightRef.current = false;
-      vcLastLlmWordCountRef.current = 0;
-      vcLockedHabitsRef.current = new Set();
-      vcConsumedOffsetRef.current = 0;
-      vcLlmInFlightRef.current = false;
       const ok = await checkinRecorder.start();
       if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
       setVcElapsed(0);
@@ -1667,18 +1431,13 @@ export default function CheckInScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Animated.View style={[styles.vcDot, { backgroundColor: '#EF4444', transform: [{ scale: vcPulseAnim }] }]} />
               <Text style={[styles.vcStatusText, { color: '#EF4444', flex: 1 }]}>Recording… {formatMMSS(vcElapsed)}</Text>
-              {vcProcessing && (
-                <Text style={[styles.vcStatusHint, { color: colors.primary }]}>● Analyzing</Text>
-              )}
-              {!vcProcessing && (
-                <Text style={[styles.vcStatusHint, { color: '#EF4444' }]}>Tap ■ to stop</Text>
-              )}
+              <Text style={[styles.vcStatusHint, { color: '#EF4444' }]}>Tap ■ to stop</Text>
             </View>
-            {vcTranscript ? (
-              <Text style={[styles.vcStatusHint, { color: '#EF4444', opacity: 0.8, paddingLeft: 16 }]} numberOfLines={2}>
-                {vcTranscript}
-              </Text>
-            ) : null}
+          </View>
+        )}
+        {vcStatus === 'transcribing' && (
+          <View style={[styles.vcStatusBar, { backgroundColor: '#7C3AED10', borderColor: '#7C3AED30' }]}>
+            <Text style={[styles.vcStatusText, { color: '#7C3AED', flex: 1 }]}>● Transcribing…</Text>
           </View>
         )}
         {vcStatus === 'done' && vcTranscript ? (
