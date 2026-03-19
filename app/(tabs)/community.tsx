@@ -79,7 +79,7 @@ function CoachCard() {
         {/* Badge */}
         <View style={styles.coachBadgeRow}>
           <View style={styles.coachBadge}>
-            <Text style={styles.coachBadgeText}>⚡ 8-WEEK SPRINT</Text>
+            <Text style={styles.coachBadgeText}>8-WEEK SPRINT</Text>
           </View>
           <View style={styles.coachLimitBadge}>
             <Text style={styles.coachLimitText}>LIMITED SPOTS</Text>
@@ -87,38 +87,37 @@ function CoachCard() {
         </View>
 
         {/* Headline */}
-        <Text style={styles.coachHeadline}>Async Accountability Coach</Text>
+        <Text style={styles.coachHeadline}>Accountability Coach</Text>
         <Text style={styles.coachSubheadline}>Daily voice feedback based on your actual app data.</Text>
 
         {/* Feature bullets */}
         <View style={styles.coachFeatures}>
           <View style={styles.coachFeatureRow}>
-            <Text style={styles.coachFeatureIcon}>🎙️</Text>
+            <View style={styles.coachFeatureDot} />
             <Text style={styles.coachFeatureText}>Daily 1–3 min voice memo from your coach (Mon–Fri)</Text>
           </View>
           <View style={styles.coachFeatureRow}>
-            <Text style={styles.coachFeatureIcon}>📊</Text>
+            <View style={styles.coachFeatureDot} />
             <Text style={styles.coachFeatureText}>Weekly strategy note — what to fix, where to push harder</Text>
           </View>
           <View style={styles.coachFeatureRow}>
-            <Text style={styles.coachFeatureIcon}>🚫</Text>
-            <Text style={styles.coachFeatureText}>No Zoom calls. No scheduling. Just real feedback in your ear.</Text>
+            <View style={styles.coachFeatureDot} />
+            <Text style={styles.coachFeatureText}>No Zoom calls. No scheduling. Real feedback in your ear every day.</Text>
           </View>
           <View style={styles.coachFeatureRow}>
-            <Text style={styles.coachFeatureIcon}>⏱️</Text>
+            <View style={styles.coachFeatureDot} />
             <Text style={styles.coachFeatureText}>Coach responds within 24 business hours to your check-ins</Text>
           </View>
         </View>
 
         {/* CTA */}
         <View style={styles.coachCTA}>
-          <Text style={styles.coachCTAText}>Add Your Accountability Coach (Async)</Text>
-          <Text style={styles.coachCTASubtext}>8-Week Execution Sprint · "Daily voice feedback. Weekly strategy note. 8 weeks of zero hiding."</Text>
+          <Text style={styles.coachCTAText}>Add Your Accountability Coach</Text>
+          <Text style={styles.coachCTASubtext}>8-Week Execution Sprint · $297 · "Daily voice feedback. Weekly strategy note. 8 weeks of zero hiding."</Text>
         </View>
 
         <View style={styles.coachBtn}>
-          <IconSymbol name="person.wave.2.fill" size={18} color="#000" />
-          <Text style={styles.coachBtnText}>Get Your Coach →</Text>
+          <Text style={styles.coachBtnText}>Get Your Coach  →</Text>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -524,7 +523,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(251,191,36,0.15)",
     borderWidth: 1, borderColor: "rgba(251,191,36,0.6)",
   },
-  coachHeaderBtnText: { color: "#FBBF24", fontWeight: "700", fontSize: 13 },
+  coachHeaderBtnText: { color: "#FBBF24", fontWeight: "700", fontSize: 13, letterSpacing: 0.3 },
 
   // Coach upsell card
   coachCard: {
@@ -541,7 +540,7 @@ const styles = StyleSheet.create({
   coachSubheadline: { fontSize: 14, color: "rgba(251,191,36,0.75)", lineHeight: 20, marginTop: -4 },
   coachFeatures: { gap: 8, marginTop: 4 },
   coachFeatureRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  coachFeatureIcon: { fontSize: 15, lineHeight: 22 },
+  coachFeatureDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#FBBF24", marginTop: 8, flexShrink: 0 },
   coachFeatureText: { flex: 1, fontSize: 13, color: "#E5E7EB", lineHeight: 20 },
   coachCTA: { backgroundColor: "rgba(251,191,36,0.1)", borderRadius: 12, padding: 12, gap: 4, borderWidth: 1, borderColor: "rgba(251,191,36,0.25)" },
   coachCTAText: { fontSize: 15, fontWeight: "700", color: "#FBBF24" },

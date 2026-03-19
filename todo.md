@@ -1147,3 +1147,7 @@
 - [x] Journal photo save error on iOS (ph:// URIs now copied to cache before base64 read)
 - [x] Habit names no longer truncated — wrap to multiple lines in check-in, home, alarm preview, and analytics screens
 - [x] Coach upsell card added to Community tab (glowing gold, above My Teams, Refer a Friend moved to bottom)
+- [ ] Remove emojis and 'Async' from in-app coach card
+- [ ] Build coaching landing page (8-Week Execution Sprint, $297)
+- [x] Remove emojis and 'Async' from in-app coach card
+- [x] Build coaching landing page (8-Week Execution Sprint, $297)

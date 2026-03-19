@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>8-Week Execution Sprint — Accountability Coach</title>
+  <meta name="description" content="Daily voice feedback from your Accountability Coach based on your actual data. No Zoom calls. No scheduling. 8 weeks of zero hiding." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #FBBF24;
+      --gold-dim: rgba(251,191,36,0.15);
+      --gold-border: rgba(251,191,36,0.35);
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #16161f;
+      --text: #F1F1F3;
+      --muted: #8B8B9A;
+      --red: #EF4444;
+      --green: #22C55E;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Layout ── */
+    .container { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── Nav ── */
+    nav {
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 18px 0;
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,10,15,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.3px; }
+    .nav-logo span { color: var(--gold); }
+    .nav-cta {
+      background: var(--gold); color: #000;
+      font-size: 13px; font-weight: 700;
+      padding: 8px 18px; border-radius: 8px;
+      text-decoration: none; letter-spacing: 0.2px;
+      transition: opacity 0.15s;
+    }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 80px 0 64px;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--gold-dim);
+      border: 1px solid var(--gold-border);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 12px; font-weight: 700;
+      color: var(--gold); letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--gold);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+    .hero h1 {
+      font-size: clamp(32px, 6vw, 52px);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+    .hero h1 em { font-style: normal; color: var(--gold); }
+    .hero-sub {
+      font-size: 18px;
+      color: var(--muted);
+      line-height: 1.65;
+      max-width: 520px;
+      margin: 0 auto 40px;
+    }
+    .hero-price {
+      display: inline-flex; align-items: baseline; gap: 8px;
+      margin-bottom: 32px;
+    }
+    .hero-price .amount {
+      font-size: 48px; font-weight: 900;
+      color: var(--gold); letter-spacing: -2px;
+    }
+    .hero-price .period {
+      font-size: 16px; color: var(--muted); font-weight: 500;
+    }
+    .cta-primary {
+      display: inline-block;
+      background: var(--gold);
+      color: #000;
+      font-size: 17px; font-weight: 800;
+      padding: 16px 40px;
+      border-radius: 14px;
+      text-decoration: none;
+      letter-spacing: 0.1px;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 0 32px rgba(251,191,36,0.3);
+    }
+    .cta-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 48px rgba(251,191,36,0.5);
+    }
+    .hero-guarantee {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      margin: 0;
+    }
+
+    /* ── Section ── */
+    section { padding: 72px 0; }
+    .section-label {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(24px, 4vw, 36px);
+      font-weight: 800; letter-spacing: -0.8px;
+      line-height: 1.2; color: var(--text);
+      margin-bottom: 16px;
+    }
+    .section-body {
+      font-size: 16px; color: var(--muted); line-height: 1.7;
+    }
+
+    /* ── Problem ── */
+    .problem-list { list-style: none; margin-top: 32px; display: flex; flex-direction: column; gap: 14px; }
+    .problem-list li {
+      display: flex; align-items: flex-start; gap: 14px;
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-size: 15px; color: var(--muted); line-height: 1.5;
+    }
+    .problem-list li::before {
+      content: "";
+      width: 4px; height: 4px; border-radius: 50%;
+      background: var(--red);
+      margin-top: 9px; flex-shrink: 0;
+    }
+
+    /* ── How it works ── */
+    .steps { display: flex; flex-direction: column; gap: 2px; margin-top: 40px; }
+    .step {
+      display: flex; gap: 20px; align-items: flex-start;
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 22px 20px;
+    }
+    .step-num {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--gold-dim);
+      border: 1px solid var(--gold-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: var(--gold);
+      flex-shrink: 0;
+    }
+    .step-content h3 {
+      font-size: 16px; font-weight: 700; color: var(--text);
+      margin-bottom: 6px;
+    }
+    .step-content p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+    /* ── What you get ── */
+    .deliverables { display: flex; flex-direction: column; gap: 12px; margin-top: 40px; }
+    .deliverable {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+    }
+    .deliverable-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: var(--gold-dim);
+      border: 1px solid var(--gold-border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .deliverable-icon svg { width: 18px; height: 18px; fill: var(--gold); }
+    .deliverable h3 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .deliverable p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    /* ── SLA strip ── */
+    .sla-strip {
+      background: var(--gold-dim);
+      border: 1px solid var(--gold-border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      display: flex; align-items: center; gap: 16px;
+      margin-top: 40px;
+    }
+    .sla-strip-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: rgba(251,191,36,0.2);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .sla-strip-icon svg { width: 20px; height: 20px; fill: var(--gold); }
+    .sla-strip p { font-size: 14px; color: var(--text); line-height: 1.5; }
+    .sla-strip strong { color: var(--gold); }
+
+    /* ── Not for everyone ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 36px; }
+    @media (max-width: 520px) { .two-col { grid-template-columns: 1fr; } }
+    .col-card {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .col-card h3 {
+      font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; margin-bottom: 14px;
+    }
+    .col-card.good h3 { color: var(--green); }
+    .col-card.bad h3 { color: var(--red); }
+    .col-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .col-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13px; color: var(--muted); line-height: 1.5;
+    }
+    .col-list li::before {
+      content: "";
+      width: 4px; height: 4px; border-radius: 50%;
+      margin-top: 8px; flex-shrink: 0;
+    }
+    .col-card.good .col-list li::before { background: var(--green); }
+    .col-card.bad .col-list li::before { background: var(--red); }
+
+    /* ── Pricing ── */
+    .pricing-card {
+      background: var(--surface2);
+      border: 1.5px solid var(--gold-border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      text-align: center;
+      margin-top: 40px;
+      box-shadow: 0 0 60px rgba(251,191,36,0.08);
+    }
+    .pricing-card .price-label { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+    .pricing-card .price-amount { font-size: 64px; font-weight: 900; color: var(--gold); letter-spacing: -3px; line-height: 1; margin-bottom: 4px; }
+    .pricing-card .price-period { font-size: 15px; color: var(--muted); margin-bottom: 28px; }
+    .pricing-includes { list-style: none; text-align: left; display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+    .pricing-includes li {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 14px; color: var(--text);
+    }
+    .pricing-includes li::before {
+      content: "";
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23000' d='M6.5 11.5L3 8l1.4-1.4 2.1 2.1 4.6-4.6L12.5 5.5z'/%3E%3C/svg%3E");
+      background-size: cover;
+    }
+    .pricing-cta {
+      display: block;
+      background: var(--gold);
+      color: #000;
+      font-size: 17px; font-weight: 800;
+      padding: 17px 32px;
+      border-radius: 14px;
+      text-decoration: none;
+      letter-spacing: 0.1px;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 0 32px rgba(251,191,36,0.25);
+    }
+    .pricing-cta:hover { transform: translateY(-2px); box-shadow: 0 0 48px rgba(251,191,36,0.45); }
+    .pricing-note { font-size: 12px; color: var(--muted); margin-top: 14px; }
+
+    /* ── FAQ ── */
+    .faq { display: flex; flex-direction: column; gap: 2px; margin-top: 36px; }
+    details {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    summary {
+      padding: 18px 20px;
+      font-size: 15px; font-weight: 600; color: var(--text);
+      cursor: pointer; list-style: none;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: "+";
+      font-size: 20px; color: var(--gold); font-weight: 300;
+      transition: transform 0.2s;
+    }
+    details[open] summary::after { transform: rotate(45deg); }
+    .faq-body { padding: 0 20px 18px; font-size: 14px; color: var(--muted); line-height: 1.7; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 40px 0;
+      text-align: center;
+    }
+    footer p { font-size: 13px; color: var(--muted); }
+    footer a { color: var(--muted); text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .hero { padding: 56px 0 48px; }
+      .pricing-card { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <span class="nav-logo">Jack <span>App</span></span>
+      <a href="#pricing" class="nav-cta">Get Your Coach</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <div class="hero-badge-dot"></div>
+        8-Week Execution Sprint
+      </div>
+      <h1>Your <em>Accountability Coach</em><br>is in your ear every day.</h1>
+      <p class="hero-sub">
+        Daily voice feedback based on your actual check-in data.
+        No Zoom calls. No scheduling. Just real coaching delivered straight to your phone.
+      </p>
+      <div class="hero-price">
+        <span class="amount">$297</span>
+        <span class="period">one-time &middot; 8 weeks</span>
+      </div>
+      <br />
+      <a href="#pricing" class="cta-primary">Add Your Accountability Coach &rarr;</a>
+      <p class="hero-guarantee">Limited spots available &middot; Coach responds within 24 business hours</p>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Problem -->
+  <section>
+    <div class="container">
+      <p class="section-label">The Problem</p>
+      <h2 class="section-title">You already know what to do.<br>You just need someone watching.</h2>
+      <p class="section-body">Most people don't fail because they lack knowledge. They fail because there's no one holding them to account when they slip, rationalize, or go quiet.</p>
+      <ul class="problem-list">
+        <li>You start strong, then life gets in the way and nobody notices</li>
+        <li>You have a coach on Zoom once a week — but the other 6 days you're on your own</li>
+        <li>You track your habits in an app but nobody ever looks at the data with you</li>
+        <li>You know your patterns but keep repeating them because there's no external voice calling them out</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- How it works -->
+  <section>
+    <div class="container">
+      <p class="section-label">How It Works</p>
+      <h2 class="section-title">Simple. Consistent. No fluff.</h2>
+      <p class="section-body">Three touchpoints per week. All voice. All based on your real data from the Jack app.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>You check in daily inside the app</h3>
+            <p>Answer 3–5 prompts: your Big 3 for the day, biggest win, where you slipped. Optional: attach a short voice memo. Takes under 3 minutes.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Your coach responds Mon–Fri with a voice memo</h3>
+            <p>1–3 minutes. Acknowledges your wins, calls out patterns and excuses, gives you one concrete adjustment for tomorrow. Short, sharp, specific.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Weekly strategy recap (longer memo)</h3>
+            <p>Once a week: a 5–10 minute voice note covering what your coach saw in your week, your focus for next week, and what to stop doing.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sla-strip">
+        <div class="sla-strip-icon">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+        </div>
+        <p><strong>SLA guarantee:</strong> Your coach responds within 24 business hours to every check-in. That's what makes it feel real and reliable.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- What you get -->
+  <section>
+    <div class="container">
+      <p class="section-label">What You Get</p>
+      <h2 class="section-title">Everything you need.<br>Nothing you don't.</h2>
+      <div class="deliverables">
+        <div class="deliverable">
+          <div class="deliverable-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+          </div>
+          <div>
+            <h3>Daily voice memo from your coach (Mon–Fri)</h3>
+            <p>1–3 minutes. Based on your actual check-in data. Wins acknowledged, patterns called out, one adjustment for tomorrow.</p>
+          </div>
+        </div>
+        <div class="deliverable">
+          <div class="deliverable-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          </div>
+          <div>
+            <h3>Weekly strategy note</h3>
+            <p>5–10 minute voice recap every week: what your coach saw, what to focus on next week, and what to stop doing.</p>
+          </div>
+        </div>
+        <div class="deliverable">
+          <div class="deliverable-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+          </div>
+          <div>
+            <h3>8 full weeks of coaching</h3>
+            <p>56 days. No hiding. Your coach sees your data every single day and holds you to what you said you'd do.</p>
+          </div>
+        </div>
+        <div class="deliverable">
+          <div class="deliverable-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+          </div>
+          <div>
+            <h3>No Zoom calls. No scheduling.</h3>
+            <p>Everything is voice-first and delivered on your schedule. You check in when it works for you. Your coach responds within 24 business hours.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Not for everyone -->
+  <section>
+    <div class="container">
+      <p class="section-label">Is This For You?</p>
+      <h2 class="section-title">This is not for everyone.</h2>
+      <p class="section-body">Be honest with yourself before you apply.</p>
+      <div class="two-col">
+        <div class="col-card good">
+          <h3>This is for you if&hellip;</h3>
+          <ul class="col-list">
+            <li>You already use Jack daily and want someone reviewing your data</li>
+            <li>You're serious about execution and not just motivation</li>
+            <li>You want real feedback, not cheerleading</li>
+            <li>You can handle being called out when you slip</li>
+            <li>You're ready to commit to 8 weeks of daily check-ins</li>
+          </ul>
+        </div>
+        <div class="col-card bad">
+          <h3>This is not for you if&hellip;</h3>
+          <ul class="col-list">
+            <li>You want live calls and hand-holding</li>
+            <li>You're looking for motivation, not accountability</li>
+            <li>You won't do the daily check-ins consistently</li>
+            <li>You're not ready to hear hard truths about your patterns</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Pricing -->
+  <section id="pricing">
+    <div class="container">
+      <p class="section-label">Investment</p>
+      <h2 class="section-title">One price. Eight weeks.<br>Zero hiding.</h2>
+      <div class="pricing-card">
+        <p class="price-label">8-Week Execution Sprint</p>
+        <p class="price-amount">$297</p>
+        <p class="price-period">one-time payment &middot; no recurring fees</p>
+        <ul class="pricing-includes">
+          <li>Daily voice memo from your coach (Mon–Fri)</li>
+          <li>Weekly strategy recap voice note</li>
+          <li>8 full weeks of accountability coaching</li>
+          <li>Coach reviews your actual Jack app data</li>
+          <li>24-hour response SLA on all check-ins</li>
+          <li>No Zoom calls. No scheduling. No fluff.</li>
+        </ul>
+        <a href="#" class="pricing-cta" id="main-cta">Add Your Accountability Coach &rarr;</a>
+        <p class="pricing-note">Limited spots available. Once they're gone, they're gone.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- FAQ -->
+  <section>
+    <div class="container">
+      <p class="section-label">FAQ</p>
+      <h2 class="section-title">Common questions.</h2>
+      <div class="faq">
+        <details>
+          <summary>How does the daily check-in work?</summary>
+          <div class="faq-body">You answer 3–5 prompts inside the Jack app — things like your Big 3 for the day, your biggest win, and where you slipped. You can also attach a short voice memo. Your coach reviews this and sends a voice response within 24 business hours.</div>
+        </details>
+        <details>
+          <summary>What does the coach actually say in the voice memos?</summary>
+          <div class="faq-body">Each daily memo is 1–3 minutes. Your coach acknowledges your wins, calls out any patterns or excuses they're seeing in your data, and gives you one concrete adjustment for tomorrow. No essays. Short, sharp, specific.</div>
+        </details>
+        <details>
+          <summary>What if I miss a day?</summary>
+          <div class="faq-body">Life happens. Your coach will notice and address it. That's the point — there's no hiding. Missing a day is data, and your coach will call it out directly.</div>
+        </details>
+        <details>
+          <summary>Do I need to be on any live calls?</summary>
+          <div class="faq-body">No. Everything is voice-first and delivered asynchronously. You check in when it works for you. Your coach responds within 24 business hours. No scheduling, no Zoom fatigue.</div>
+        </details>
+        <details>
+          <summary>What happens after 8 weeks?</summary>
+          <div class="faq-body">You'll have 8 weeks of real data, real feedback, and a clear picture of your patterns. Continuation options will be available at the end of your sprint if you want to keep going.</div>
+        </details>
+        <details>
+          <summary>Do I need to already use the Jack app?</summary>
+          <div class="faq-body">Yes. The coaching is built around your daily check-in data inside Jack. Download the app and start your daily check-ins before applying.</div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Final CTA -->
+  <section style="text-align:center; padding: 80px 0;">
+    <div class="container">
+      <h2 class="section-title" style="margin-bottom:12px;">Ready to stop hiding?</h2>
+      <p class="section-body" style="margin-bottom:36px; max-width:460px; margin-left:auto; margin-right:auto;">
+        Daily voice feedback. Weekly strategy note. 8 weeks of zero hiding.
+      </p>
+      <a href="#pricing" class="cta-primary">Add Your Accountability Coach &rarr;</a>
+      <p style="margin-top:14px; font-size:13px; color:var(--muted);">$297 one-time &middot; Limited spots</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 Jack App. All rights reserved. &nbsp;&middot;&nbsp; <a href="#">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="#">Terms</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>
