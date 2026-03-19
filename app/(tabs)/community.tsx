@@ -11,6 +11,9 @@ import {
   StyleSheet,
   Share,
   Platform,
+  Linking,
+  Animated,
+  Easing,
 } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { ScreenContainer } from "@/components/screen-container";
@@ -31,6 +34,96 @@ type TeamItem = {
   creatorId: number;
   role: "owner" | "member";
 };
+
+// ─── Coach Upsell Card ───────────────────────────────────────────────────────
+
+const COACH_URL = "https://jackalarm.com/coach"; // TODO: replace with your landing page
+
+function CoachCard() {
+  const colors = useColors();
+  const pulseAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+      ])
+    ).start();
+  }, []);
+
+  const glowOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.85] });
+  const glowRadius = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 20] });
+
+  const handlePress = () => {
+    Linking.openURL(COACH_URL).catch(() =>
+      Alert.alert("Coming Soon", "The coaching page will be available shortly.")
+    );
+  };
+
+  return (
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.85} style={{ marginBottom: 20 }}>
+      <Animated.View
+        style={[
+          styles.coachCard,
+          {
+            borderColor: glowOpacity.interpolate({ inputRange: [0.35, 0.85], outputRange: ["rgba(251,191,36,0.5)", "rgba(251,191,36,1)"] }),
+            shadowColor: "#FBBF24",
+            shadowOpacity: glowOpacity as unknown as number,
+            shadowRadius: glowRadius as unknown as number,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 8,
+          },
+        ]}
+      >
+        {/* Badge */}
+        <View style={styles.coachBadgeRow}>
+          <View style={styles.coachBadge}>
+            <Text style={styles.coachBadgeText}>⚡ 8-WEEK SPRINT</Text>
+          </View>
+          <View style={styles.coachLimitBadge}>
+            <Text style={styles.coachLimitText}>LIMITED SPOTS</Text>
+          </View>
+        </View>
+
+        {/* Headline */}
+        <Text style={styles.coachHeadline}>Async Accountability Coach</Text>
+        <Text style={styles.coachSubheadline}>Daily voice feedback based on your actual app data.</Text>
+
+        {/* Feature bullets */}
+        <View style={styles.coachFeatures}>
+          <View style={styles.coachFeatureRow}>
+            <Text style={styles.coachFeatureIcon}>🎙️</Text>
+            <Text style={styles.coachFeatureText}>Daily 1–3 min voice memo from your coach (Mon–Fri)</Text>
+          </View>
+          <View style={styles.coachFeatureRow}>
+            <Text style={styles.coachFeatureIcon}>📊</Text>
+            <Text style={styles.coachFeatureText}>Weekly strategy note — what to fix, where to push harder</Text>
+          </View>
+          <View style={styles.coachFeatureRow}>
+            <Text style={styles.coachFeatureIcon}>🚫</Text>
+            <Text style={styles.coachFeatureText}>No Zoom calls. No scheduling. Just real feedback in your ear.</Text>
+          </View>
+          <View style={styles.coachFeatureRow}>
+            <Text style={styles.coachFeatureIcon}>⏱️</Text>
+            <Text style={styles.coachFeatureText}>Coach responds within 24 business hours to your check-ins</Text>
+          </View>
+        </View>
+
+        {/* CTA */}
+        <View style={styles.coachCTA}>
+          <Text style={styles.coachCTAText}>Add Your Accountability Coach (Async)</Text>
+          <Text style={styles.coachCTASubtext}>8-Week Execution Sprint · "Daily voice feedback. Weekly strategy note. 8 weeks of zero hiding."</Text>
+        </View>
+
+        <View style={styles.coachBtn}>
+          <IconSymbol name="person.wave.2.fill" size={18} color="#000" />
+          <Text style={styles.coachBtnText}>Get Your Coach →</Text>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
 
 // ─── Referral Banner ──────────────────────────────────────────────────────────
 
@@ -351,18 +444,27 @@ export default function CommunityScreen() {
         {/* Header */}
         <View style={styles.pageHeader}>
           <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setShowModal(true)}
-            activeOpacity={0.8}
-          >
-            <IconSymbol name="plus" size={18} color="#fff" />
-            <Text style={styles.addBtnText}>Team</Text>
-          </TouchableOpacity>
+          <View style={styles.headerBtns}>
+            <TouchableOpacity
+              style={styles.coachHeaderBtn}
+              onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert("Coming Soon", "The coaching page will be available shortly."))}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.coachHeaderBtnText}>⚡ Get a Coach</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setShowModal(true)}
+              activeOpacity={0.8}
+            >
+              <IconSymbol name="plus" size={18} color="#fff" />
+              <Text style={styles.addBtnText}>Team</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Referral Banner */}
-        <ReferralBanner />
+        {/* Coach Upsell Card */}
+        <CoachCard />
 
         {/* Teams Section */}
         <Text style={[styles.sectionTitle, { color: colors.muted }]}>MY TEAMS</Text>
@@ -395,6 +497,9 @@ export default function CommunityScreen() {
             ))}
           </View>
         )}
+        {/* Referral Banner — moved to bottom */}
+        <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 24 }]}>REFER A FRIEND</Text>
+        <ReferralBanner />
         </View>
       </ScrollView>
 
@@ -410,11 +515,47 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, paddingBottom: 32 },
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   pageTitle: { fontSize: 28, fontWeight: "700" },
+  headerBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   addBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
+  coachHeaderBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: "rgba(251,191,36,0.15)",
+    borderWidth: 1, borderColor: "rgba(251,191,36,0.6)",
+  },
+  coachHeaderBtnText: { color: "#FBBF24", fontWeight: "700", fontSize: 13 },
+
+  // Coach upsell card
+  coachCard: {
+    borderRadius: 18, borderWidth: 1.5,
+    backgroundColor: "rgba(251,191,36,0.06)",
+    padding: 18, gap: 12,
+  },
+  coachBadgeRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  coachBadge: { backgroundColor: "#FBBF24", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  coachBadgeText: { color: "#000", fontWeight: "800", fontSize: 11, letterSpacing: 0.5 },
+  coachLimitBadge: { backgroundColor: "rgba(239,68,68,0.15)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: "rgba(239,68,68,0.4)" },
+  coachLimitText: { color: "#EF4444", fontWeight: "700", fontSize: 11, letterSpacing: 0.5 },
+  coachHeadline: { fontSize: 20, fontWeight: "800", color: "#FBBF24", lineHeight: 26 },
+  coachSubheadline: { fontSize: 14, color: "rgba(251,191,36,0.75)", lineHeight: 20, marginTop: -4 },
+  coachFeatures: { gap: 8, marginTop: 4 },
+  coachFeatureRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  coachFeatureIcon: { fontSize: 15, lineHeight: 22 },
+  coachFeatureText: { flex: 1, fontSize: 13, color: "#E5E7EB", lineHeight: 20 },
+  coachCTA: { backgroundColor: "rgba(251,191,36,0.1)", borderRadius: 12, padding: 12, gap: 4, borderWidth: 1, borderColor: "rgba(251,191,36,0.25)" },
+  coachCTAText: { fontSize: 15, fontWeight: "700", color: "#FBBF24" },
+  coachCTASubtext: { fontSize: 12, color: "rgba(251,191,36,0.7)", lineHeight: 18 },
+  coachBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#FBBF24", borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 20,
+    marginTop: 4,
+  },
+  coachBtnText: { color: "#000", fontWeight: "800", fontSize: 16 },
 
   // Referral
-  referralCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 24 },
+  referralCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
   referralHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   referralTitle: { fontSize: 16, fontWeight: "700", flex: 1 },
   referralSubtitle: { fontSize: 12 },

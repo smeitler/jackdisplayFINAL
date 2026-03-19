@@ -1146,3 +1146,4 @@
 - [x] Practice player gratitudes not loading from dedicated gratitude entries storage
 - [x] Journal photo save error on iOS (ph:// URIs now copied to cache before base64 read)
 - [x] Habit names no longer truncated — wrap to multiple lines in check-in, home, alarm preview, and analytics screens
+- [x] Coach upsell card added to Community tab (glowing gold, above My Teams, Refer a Friend moved to bottom)

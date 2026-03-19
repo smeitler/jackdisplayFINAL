@@ -83,6 +83,8 @@ const MAPPING: Record<string, MaterialIconName> = {
   "arrow.up.right": "north-east",
   "music.note": "music-note",
   "headphones": "headphones",
+  "person.wave.2.fill": "record-voice-over",
+  "bolt.fill": "bolt",
   "speaker.wave.2.fill": "volume-up",
   "play.fill": "play-arrow",
   "stop.fill": "stop",
