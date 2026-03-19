@@ -634,13 +634,25 @@ function EntryEditor({
                 const dataUri = await blobToDataUri(blob);
                 return { ...att, uri: dataUri };
               } else {
-                // On native, read as base64 and build data URI
-                const base64 = await FileSystem.readAsStringAsync(att.uri, { encoding: FileSystem.EncodingType.Base64 });
+                // On native: ph:// URIs (iOS Photos) cannot be read directly.
+                // Copy to a temp file first, then read as base64.
+                let readableUri = att.uri;
+                if (att.uri.startsWith("ph://") || att.uri.startsWith("assets-library://")) {
+                  const dest = (FileSystem.cacheDirectory ?? "") + `journal_photo_${Date.now()}.jpg`;
+                  await FileSystem.copyAsync({ from: att.uri, to: dest });
+                  readableUri = dest;
+                }
+                const base64 = await FileSystem.readAsStringAsync(readableUri, { encoding: FileSystem.EncodingType.Base64 });
                 const mime = att.mimeType || "image/jpeg";
+                // Clean up temp file if we created one
+                if (readableUri !== att.uri) {
+                  FileSystem.deleteAsync(readableUri, { idempotent: true }).catch(() => {});
+                }
                 return { ...att, uri: `data:${mime};base64,${base64}` };
               }
-            } catch {
-              // If conversion fails, keep original URI
+            } catch (e) {
+              console.warn("[Journal] Failed to persist attachment:", e);
+              // If conversion fails, keep original URI (photo still shows in this session)
               return att;
             }
           }

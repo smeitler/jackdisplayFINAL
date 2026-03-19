@@ -1144,3 +1144,4 @@
 - [x] Vision board photos not persisting on web (blob URLs now converted to base64 data URIs)
 - [x] Practice player SlidingRow not rendering (children prop replaced with items prop)
 - [x] Practice player gratitudes not loading from dedicated gratitude entries storage
+- [x] Journal photo save error on iOS (ph:// URIs now copied to cache before base64 read)
