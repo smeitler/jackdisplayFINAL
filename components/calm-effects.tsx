@@ -1,33 +1,24 @@
 /**
  * CalmEffects — Visual effects layer for the Calm theme.
  *
- * Inspired by the Headspace/Calm app aesthetic:
+ * Design language:
  *  - Deep navy backgrounds (#0D1135)
- *  - Warm amber→orange gradient headers with curved bottom edge
+ *  - Flat navy header — NO gradients
+ *  - Amber accent line only
+ *  - Tall pill bars for period stats (red/yellow/green fill from bottom)
  *  - Rounded elevated cards
  *  - Soft blue-grey muted text
- *
- * Provides:
- *  - useIsCalm: hook to check if Calm theme is active
- *  - CalmHeader: curved gradient header (amber→orange→navy)
- *  - CalmCard: elevated navy card with subtle border
- *  - CalmSectionTitle: bold white section heading
  */
 import React, { ReactNode } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   ViewStyle,
   TextStyle,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeContext } from "@/lib/theme-provider";
-import Svg, { Path } from "react-native-svg";
-
-const { width: SCREEN_W } = Dimensions.get("window");
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useIsCalm() {
@@ -37,95 +28,145 @@ export function useIsCalm() {
 
 // ─── Calm Header ──────────────────────────────────────────────────────────────
 /**
- * Curved gradient header with amber→orange→deep-navy gradient.
- * The bottom edge has a concave arch shape matching the Headspace aesthetic.
- *
- * Usage:
- * ```tsx
- * <CalmHeader title="Today" subtitle="March 19" />
- * ```
+ * Flat navy header — no gradient, no date, no icons.
+ * Just the app/screen title with an amber accent underline.
  */
 export function CalmHeader({
   title,
-  subtitle,
-  rightContent,
-  height = 160,
   style,
 }: {
   title?: string;
-  subtitle?: string;
-  rightContent?: ReactNode;
-  height?: number;
   style?: ViewStyle;
 }) {
   const insets = useSafeAreaInsets();
-  const totalHeight = height + insets.top;
-  const curveDepth = 28; // how deep the concave arch dips
-
-  // SVG path for concave bottom arch
-  // Starts at bottom-left, curves up to center, then back down to bottom-right
-  const archPath = `M 0 0 L ${SCREEN_W} 0 L ${SCREEN_W} ${curveDepth} Q ${SCREEN_W / 2} ${-curveDepth} 0 ${curveDepth} Z`;
 
   return (
-    <View style={[{ height: totalHeight + curveDepth, overflow: "hidden" }, style]}>
-      <LinearGradient
-        colors={["#F5A623", "#E8751A", "#C0392B", "#1a1f5e"]}
-        locations={[0, 0.35, 0.65, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Content area above the arch */}
-      <View
-        style={{
-          paddingTop: insets.top + 12,
+    <View
+      style={[
+        {
+          backgroundColor: "#0D1135",
+          paddingTop: insets.top + 10,
+          paddingBottom: 12,
           paddingHorizontal: 20,
-          paddingBottom: curveDepth + 8,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <View style={{ flex: 1 }}>
-          {title ? (
-            <Text style={styles.headerTitle}>{title}</Text>
-          ) : null}
-          {subtitle ? (
-            <Text style={styles.headerSubtitle}>{subtitle}</Text>
-          ) : null}
-        </View>
-        {rightContent ? (
-          <View style={{ marginLeft: 12 }}>{rightContent}</View>
-        ) : null}
-      </View>
-      {/* Concave arch overlay — navy color to create the arch illusion */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: curveDepth * 2,
-        }}
-        pointerEvents="none"
-      >
-        <Svg
-          width={SCREEN_W}
-          height={curveDepth * 2}
-          viewBox={`0 0 ${SCREEN_W} ${curveDepth * 2}`}
-        >
-          <Path
-            d={`M 0 ${curveDepth * 2} Q ${SCREEN_W / 2} 0 ${SCREEN_W} ${curveDepth * 2} Z`}
-            fill="#0D1135"
-          />
-        </Svg>
-      </View>
+        },
+        style,
+      ]}
+    >
+      {title ? (
+        <Text style={styles.headerTitle}>{title}</Text>
+      ) : null}
+      {/* Amber accent underline */}
+      <View style={styles.headerAccentLine} />
+    </View>
+  );
+}
+
+// ─── Calm Pill Bars ───────────────────────────────────────────────────────────
+/**
+ * Three tall pill bars showing 3 rolling periods.
+ * Each pill fills from bottom up with a color based on score:
+ *   - 0%: empty (dark navy)
+ *   - 1–59%: red (#EF4444)
+ *   - 60–89%: amber (#F5A623)
+ *   - 90–100%: green (#22C55E)
+ *
+ * Current period pill is wider and uses amber/gold fill.
+ */
+export function CalmPillBars({
+  periods,
+}: {
+  periods: Array<{
+    done: number;
+    goal: number;
+    weekLabel: string;  // e.g. "Wk 3 & 4"
+    monthLabel: string; // e.g. "Feb"
+    isCurrent: boolean;
+  }>;
+}) {
+  const PILL_H = 160;
+  const PILL_W_NORMAL = 72;
+  const PILL_W_CURRENT = 90;
+
+  return (
+    <View style={pillStyles.container}>
+      {periods.map((p, i) => {
+        const pct = p.goal > 0 ? Math.min(p.done / p.goal, 1) : 0;
+        const fillH = Math.round(PILL_H * pct);
+
+        // Color logic
+        let fillColor: string;
+        if (pct === 0) {
+          fillColor = "transparent";
+        } else if (pct >= 0.9) {
+          fillColor = "#22C55E"; // green
+        } else if (pct >= 0.6) {
+          fillColor = "#F5A623"; // amber
+        } else {
+          fillColor = "#EF4444"; // red
+        }
+
+        // Current period always uses amber/gold
+        if (p.isCurrent && pct > 0) {
+          fillColor = "#F5A623";
+        }
+
+        const pillW = p.isCurrent ? PILL_W_CURRENT : PILL_W_NORMAL;
+
+        return (
+          <View key={i} style={pillStyles.pillarWrapper}>
+            {/* Pill container */}
+            <View
+              style={[
+                pillStyles.pillOuter,
+                {
+                  width: pillW,
+                  height: PILL_H,
+                  backgroundColor: "#1A2050",
+                },
+              ]}
+            >
+              {/* Fill from bottom */}
+              {fillH > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: fillH,
+                    backgroundColor: fillColor,
+                    borderRadius: pillW / 2,
+                  }}
+                />
+              )}
+            </View>
+
+            {/* Labels below */}
+            <Text
+              style={[
+                pillStyles.weekLabel,
+                p.isCurrent && pillStyles.weekLabelCurrent,
+              ]}
+            >
+              {p.weekLabel}
+            </Text>
+            <Text
+              style={[
+                pillStyles.monthLabel,
+                p.isCurrent && pillStyles.monthLabelCurrent,
+              ]}
+            >
+              {p.monthLabel}
+            </Text>
+            {p.isCurrent && <View style={pillStyles.currentDot} />}
+          </View>
+        );
+      })}
     </View>
   );
 }
 
 // ─── Calm Card ────────────────────────────────────────────────────────────────
-/**
- * Elevated navy card with subtle border and rounded corners.
- */
 export function CalmCard({
   children,
   style,
@@ -141,9 +182,6 @@ export function CalmCard({
 }
 
 // ─── Calm Section Title ───────────────────────────────────────────────────────
-/**
- * Bold white section heading with optional amber accent underline.
- */
 export function CalmSectionTitle({
   children,
   style,
@@ -164,9 +202,6 @@ export function CalmSectionTitle({
 }
 
 // ─── Calm List Row ────────────────────────────────────────────────────────────
-/**
- * Dark navy list row card — used for habit rows, journal entries, etc.
- */
 export function CalmListRow({
   children,
   style,
@@ -184,16 +219,17 @@ export function CalmListRow({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   headerTitle: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
     letterSpacing: -0.3,
+    marginBottom: 8,
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.75)",
-    marginTop: 2,
-    fontWeight: "400",
+  headerAccentLine: {
+    width: 32,
+    height: 3,
+    backgroundColor: "#F5A623",
+    borderRadius: 2,
   },
   card: {
     backgroundColor: "#1A2050",
@@ -224,5 +260,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginBottom: 8,
+  },
+});
+
+const pillStyles = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "flex-end",
+    gap: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  pillarWrapper: {
+    alignItems: "center",
+    gap: 6,
+  },
+  pillOuter: {
+    borderRadius: 999,
+    overflow: "hidden",
+    position: "relative",
+  },
+  weekLabel: {
+    fontSize: 11,
+    color: "#8B9CC8",
+    fontWeight: "400",
+    textAlign: "center",
+  },
+  weekLabelCurrent: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  monthLabel: {
+    fontSize: 15,
+    color: "#8B9CC8",
+    fontWeight: "400",
+    textAlign: "center",
+  },
+  monthLabelCurrent: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  currentDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
+    marginTop: 2,
   },
 });

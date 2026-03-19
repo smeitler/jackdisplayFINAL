@@ -344,6 +344,7 @@ function GoalCard({
   colors,
   onPressGoal,
   onPressHabit,
+  isCalm = false,
 }: {
   cat: import('@/lib/storage').CategoryDef;
   habits: Habit[];
@@ -351,6 +352,7 @@ function GoalCard({
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
   onPressGoal: () => void;
   onPressHabit: (habitId: string) => void;
+  isCalm?: boolean;
 }) {
   const pct = Math.min(Math.max(rate, 0), 1);
   const isOnTrack = pct >= 0.8;
@@ -394,9 +396,11 @@ function GoalCard({
           )}
         </View>
         <View style={{ alignItems: 'flex-end', gap: 3 }}>
-          <Text style={[styles.goalCardPct, { color: pctColor }]}>
-            {hasData ? `${Math.round(pct * 100)}%` : '—'}
-          </Text>
+          {!isCalm && (
+            <Text style={[styles.goalCardPct, { color: pctColor }]}>
+              {hasData ? `${Math.round(pct * 100)}%` : '—'}
+            </Text>
+          )}
           {deadlineLabel ? (
             <View style={[styles.deadlineTag, { borderColor: deadlineColor + '55', backgroundColor: deadlineColor + '18' }]}>
               <Text style={[styles.deadlineText, { color: deadlineColor }]}>{deadlineLabel}</Text>
@@ -530,6 +534,7 @@ export default function HomeScreen() {
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
+
   const colors = useColors();
   const isCalm = useIsCalm();
   const router = useRouter();
@@ -638,15 +643,7 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
-      {isCalm && (
-        <CalmHeader
-          title={new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          subtitle={streak > 0 ? `${streak} day streak` : 'Start your streak today'}
-          rightContent={
-            <ProfileAvatar uri={profilePicUri} onPress={handlePickProfilePic} size={40} />
-          }
-        />
-      )}
+      {isCalm && <CalmHeader />}
       <ScrollView contentContainerStyle={[styles.scroll, isCalm && { paddingTop: 8 }]} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
@@ -699,7 +696,7 @@ export default function HomeScreen() {
             </View>
           </View>}
 
-          {/* ── Stats row: Streak + Days Logged (removed 30-day avg) ── */}
+          {/* ── Stats row ── */}
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
               <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
@@ -878,6 +875,7 @@ export default function HomeScreen() {
                       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       router.push((`/habit-detail?habitId=${habitId}`) as never);
                     }}
+                    isCalm={isCalm}
                   />
                 );
               })}

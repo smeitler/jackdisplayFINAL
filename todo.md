@@ -1158,3 +1158,7 @@
 - [ ] Calm theme: home screen, check-in screen, habit cards
 - [ ] Calm theme: journal, vision board, community, settings screens
 - [x] Calm theme: deep navy + amber gradient headers, registered in Appearance settings, applied to all screens
+- [ ] Calm theme: remove all gradients, flat navy colors only
+- [ ] Calm theme home: shrink header, no date, no icons
+- [ ] Calm theme home: replace stats bar with 3-month pill bars (red/yellow/green fill)
+- [ ] Calm theme home: remove percentage labels under category goal sections
