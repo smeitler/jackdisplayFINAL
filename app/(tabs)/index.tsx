@@ -218,6 +218,87 @@ const RING_SIZE_SM = 48;   // older period rings — medium
 const RING_LABEL_HEIGHT = 12;
 const RING_CONTAINER_HEIGHT = RING_LABEL_HEIGHT + 3 + RING_SIZE;
 
+// ── Calm Habit Pill Bars ──────────────────────────────────────────────────────
+const PILL_BAR_HEIGHT = 56;
+const PILL_BAR_WIDTH = 18;
+
+function HabitPillBars({
+  p0Done, p1Done, p2Done, goal,
+  p0Label, p1Label, p2Label,
+}: {
+  p0Done: number; p1Done: number; p2Done: number; goal: number;
+  p0Label: string; p1Label: string; p2Label: string;
+}) {
+  function pillColor(done: number, g: number) {
+    if (g <= 0) return '#334155';
+    const pct = done / g;
+    if (pct >= 0.8) return '#22C55E';
+    if (pct >= 0.5) return '#F59E0B';
+    if (pct > 0)    return '#EF4444';
+    return '#1E2A4A';
+  }
+  function fillPct(done: number, g: number) {
+    if (g <= 0 || done <= 0) return 0;
+    return Math.min(done / g, 1);
+  }
+
+  const bars = [
+    { done: p0Done, label: p0Label, isCurrent: false },
+    { done: p1Done, label: p1Label, isCurrent: false },
+    { done: p2Done, label: p2Label, isCurrent: true },
+  ];
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
+      {bars.map(({ done, label, isCurrent }, i) => {
+        const fill = fillPct(done, goal);
+        const color = pillColor(done, goal);
+        const barH = PILL_BAR_HEIGHT;
+        const filledH = Math.max(fill * barH, fill > 0 ? 4 : 0);
+        return (
+          <View key={i} style={{ alignItems: 'center', gap: 4 }}>
+            {/* label above */}
+            <Text style={{
+              fontSize: 8,
+              fontWeight: isCurrent ? '700' : '400',
+              color: isCurrent ? '#FFFFFF' : '#6B7DB3',
+              textTransform: 'uppercase',
+              letterSpacing: 0.3,
+              textAlign: 'center',
+              width: PILL_BAR_WIDTH + 8,
+            }}>{label}</Text>
+            {/* track */}
+            <View style={{
+              width: PILL_BAR_WIDTH,
+              height: barH,
+              borderRadius: PILL_BAR_WIDTH / 2,
+              backgroundColor: '#1E2A4A',
+              overflow: 'hidden',
+              justifyContent: 'flex-end',
+              borderWidth: isCurrent ? 1.5 : 0,
+              borderColor: isCurrent ? color + '88' : 'transparent',
+            }}>
+              {/* fill from bottom */}
+              <View style={{
+                width: '100%',
+                height: filledH,
+                borderRadius: PILL_BAR_WIDTH / 2,
+                backgroundColor: color,
+              }} />
+            </View>
+            {/* fraction */}
+            <Text style={{
+              fontSize: 9,
+              color: isCurrent ? '#FFFFFF' : '#6B7DB3',
+              fontWeight: isCurrent ? '600' : '400',
+            }}>{goal > 0 ? `${done}/${goal}` : '—'}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function CircleRing({
   done,
   goal,
@@ -280,10 +361,12 @@ function HabitGoalRow({
   habit,
   colors,
   onPress,
+  isCalm = false,
 }: {
   habit: Habit;
   colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
   onPress: () => void;
+  isCalm?: boolean;
 }) {
   const {
     getHabitWeeklyDone, getHabitMonthlyDone,
@@ -317,13 +400,20 @@ function HabitGoalRow({
             {/* Right side: three rings — current period is largest */}
           <View style={styles.habitRight}>
             {goal > 0 ? (
-              <View style={styles.ringTriple}>
-                <CircleRing done={p0Done} goal={goal} size={RING_SIZE_SM} periodLabel={p0Label} />
-                <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-                <CircleRing done={p1Done} goal={goal} size={RING_SIZE_SM} periodLabel={p1Label} />
-                <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
-                <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
-              </View>
+              isCalm ? (
+                <HabitPillBars
+                  p0Done={p0Done} p1Done={p1Done} p2Done={p2Done} goal={goal}
+                  p0Label={p0Label} p1Label={p1Label} p2Label={p2Label}
+                />
+              ) : (
+                <View style={styles.ringTriple}>
+                  <CircleRing done={p0Done} goal={goal} size={RING_SIZE_SM} periodLabel={p0Label} />
+                  <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
+                  <CircleRing done={p1Done} goal={goal} size={RING_SIZE_SM} periodLabel={p1Label} />
+                  <View style={[styles.ringDivider, { backgroundColor: colors.border }]} />
+                  <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
+                </View>
+              )
         ) : (
           <Text style={[styles.noGoalText, { color: colors.muted }]}>
             {isMonthly ? 'No monthly goal' : 'No weekly goal'}
@@ -421,6 +511,7 @@ function GoalCard({
             habit={h}
             colors={colors}
             onPress={() => onPressHabit(h.id)}
+            isCalm={isCalm}
           />
         ))
       )}
