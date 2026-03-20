@@ -130,6 +130,11 @@ const MAPPING: Record<string, MaterialIconName> = {
   "chart.clipboard.fill": "assignment",
   "pin.fill": "push-pin",
   "pin": "push-pin",
+  "keyboard.chevron.compact.down": "keyboard-hide",
+  "doc.text.viewfinder": "document-scanner",
+  "text.viewfinder": "manage-search",
+  "scribble": "draw",
+  "tag": "label-outline",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;

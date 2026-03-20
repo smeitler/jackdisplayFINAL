@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
-  Modal, FlatList, Dimensions, Image, useWindowDimensions,
+  Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -443,6 +443,10 @@ function EntryEditor({
   const [showTemplates, setShowTemplates] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showAttachSheet, setShowAttachSheet] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [showTagInput, setShowTagInput] = useState(false);
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
@@ -566,6 +570,84 @@ function EntryEditor({
         setAttachments((prev) => [...prev, att]);
       }
     } catch (e) { console.warn("Document picker error:", e); }
+  }
+
+  async function handleLaunchCamera() {
+    setShowAttachSheet(false);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") { Alert.alert("Camera permission required"); return; }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.85 });
+      if (result.canceled) return;
+      for (const asset of result.assets) {
+        setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: asset.uri, mimeType: asset.mimeType || "image/jpeg" }]);
+      }
+    } catch (e) { console.warn("Camera error:", e); }
+  }
+
+  async function handleLaunchVideo() {
+    setShowAttachSheet(false);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") { Alert.alert("Camera permission required"); return; }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["videos"], videoMaxDuration: 120, quality: 0.8 });
+      if (result.canceled) return;
+      for (const asset of result.assets) {
+        setAttachments((prev) => [...prev, { id: generateId(), type: "video", uri: asset.uri, mimeType: asset.mimeType || "video/mp4", durationMs: asset.duration ? asset.duration * 1000 : undefined }]);
+      }
+    } catch (e) { console.warn("Video error:", e); }
+  }
+
+  function handleAddTag() {
+    setShowAttachSheet(false);
+    setShowTagInput(true);
+  }
+
+  function commitTag() {
+    const t = tagInput.trim();
+    if (!t) { setShowTagInput(false); return; }
+    setAttachments((prev) => [...prev, { id: generateId(), type: "tag" as any, uri: "", mimeType: "text/plain", name: t }]);
+    setTagInput("");
+    setShowTagInput(false);
+  }
+
+  function handleScanText() {
+    setShowMoreSheet(false);
+    Alert.alert("Scan Text", "Point your camera at text to extract it.", [
+      { text: "Open Camera", onPress: async () => {
+        try {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted") { Alert.alert("Camera permission required"); return; }
+          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9 });
+          if (result.canceled) return;
+          const asset = result.assets[0];
+          setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: asset.uri, mimeType: asset.mimeType || "image/jpeg", name: "Scanned text" }]);
+        } catch {}
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  function handleScanToPDF() {
+    setShowMoreSheet(false);
+    Alert.alert("Scan to PDF", "Take a photo to attach as a scanned document.", [
+      { text: "Open Camera", onPress: async () => {
+        try {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted") { Alert.alert("Camera permission required"); return; }
+          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.95 });
+          if (result.canceled) return;
+          const asset = result.assets[0];
+          setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: asset.uri, mimeType: asset.mimeType || "image/jpeg", name: "Scanned document" }]);
+        } catch {}
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  function handleDraw() {
+    setShowMoreSheet(false);
+    Alert.alert("Draw", "Drawing canvas coming soon.");
   }
 
   function handleRecordingComplete(uri: string, duration: number, mimeType: string) {
@@ -924,49 +1006,118 @@ function EntryEditor({
             )}
           </ScrollView>
 
-          {/* Bottom toolbar — photo | paperclip | template | [MIC CENTER] | location | spacer */}
-          <View style={[editorStyles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-            <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-              <Pressable onPress={handlePickPhoto} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                <IconSymbol name="photo.fill" size={22} color={colors.muted} />
+          {/* Tag input row — shown when user taps Tag */}
+          {showTagInput && (
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5, borderTopColor: colors.border, backgroundColor: colors.background, gap: 10 }}>
+              <IconSymbol name="tag" size={18} color={colors.primary} />
+              <TextInput
+                style={{ flex: 1, fontSize: 15, color: colors.foreground }}
+                placeholder="Add a tag..."
+                placeholderTextColor={colors.muted}
+                value={tagInput}
+                onChangeText={setTagInput}
+                onSubmitEditing={commitTag}
+                returnKeyType="done"
+                autoFocus
+              />
+              <Pressable onPress={commitTag} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 15 }}>Add</Text>
               </Pressable>
-              <Pressable onPress={handlePickDocument} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                <IconSymbol name="paperclip" size={22} color={colors.muted} />
-              </Pressable>
-              {/* Template picker button — shows active template name */}
-              <Pressable
-                onPress={() => setShowTemplates(!showTemplates)}
-                style={({ pressed }) => [{
-                  flexDirection: "row", alignItems: "center", gap: 4,
-                  paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14,
-                  backgroundColor: showTemplates ? colors.primary + "20" : colors.surface,
-                  borderWidth: 1, borderColor: showTemplates ? colors.primary : colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                }]}
-              >
-                <IconSymbol name="doc.fill" size={13} color={showTemplates ? colors.primary : colors.muted} />
-                <Text style={{ fontSize: 11, fontWeight: "600", color: showTemplates ? colors.primary : colors.muted }}>
-                  {allTemplates.find((t) => t.key === template)?.label || "Template"}
-                </Text>
+              <Pressable onPress={() => { setShowTagInput(false); setTagInput(""); }} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                <IconSymbol name="xmark" size={16} color={colors.muted} />
               </Pressable>
             </View>
-            {/* MicButton always passes habit prompts so they show on record */}
+          )}
+
+          {/* Bottom toolbar — ↓ dismiss | [MIC CENTER] | photo | paperclip */}
+          <View style={[editorStyles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+            {/* Left: keyboard dismiss */}
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
+            >
+              <IconSymbol name="chevron.down" size={26} color={colors.muted} />
+            </Pressable>
+
+            {/* Center: mic */}
             <MicButton
               onRecordingComplete={handleRecordingComplete}
               colors={colors}
               templatePrompt={habitRecordPrompt}
             />
-            <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-              {!location ? (
-                <Pressable onPress={handleAddLocation} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
-                  <IconSymbol name="location.fill" size={22} color={colors.muted} />
-                </Pressable>
-              ) : (
-                <View style={{ width: 22 }} />
-              )}
-              <View style={{ width: 22 }} />
+
+            {/* Right: photo + paperclip */}
+            <View style={{ flexDirection: "row", gap: 18, alignItems: "center" }}>
+              <Pressable onPress={handlePickPhoto} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                <IconSymbol name="photo.fill" size={24} color={colors.muted} />
+              </Pressable>
+              <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowAttachSheet(true); }} style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}>
+                <IconSymbol name="paperclip" size={24} color={colors.muted} />
+              </Pressable>
             </View>
           </View>
+
+          {/* Attachment action sheet */}
+          <Modal visible={showAttachSheet} transparent animationType="slide" onRequestClose={() => setShowAttachSheet(false)}>
+            <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} onPress={() => setShowAttachSheet(false)} />
+            <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34, paddingTop: 12 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 16 }} />
+              {/* Main options */}
+              {([
+                { icon: "tag" as const, label: "Tag", onPress: handleAddTag },
+                { icon: "mic.fill" as const, label: "Audio", onPress: () => { setShowAttachSheet(false); /* mic handled by MicButton in toolbar */ Alert.alert("Audio", "Use the mic button in the toolbar to record audio."); } },
+                { icon: "camera.fill" as const, label: "Camera", onPress: handleLaunchCamera },
+                { icon: "video.fill" as const, label: "Video", onPress: handleLaunchVideo },
+              ] as const).map((item) => (
+                <Pressable
+                  key={item.label}
+                  onPress={item.onPress}
+                  style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+                    <IconSymbol name={item.icon} size={20} color={colors.primary} />
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: "500", color: colors.foreground }}>{item.label}</Text>
+                </Pressable>
+              ))}
+              {/* More option */}
+              <Pressable
+                onPress={() => { setShowAttachSheet(false); setTimeout(() => setShowMoreSheet(true), 200); }}
+                style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}
+              >
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+                  <IconSymbol name="ellipsis" size={20} color={colors.primary} />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: "500", color: colors.foreground }}>More</Text>
+              </Pressable>
+            </View>
+          </Modal>
+
+          {/* More submenu sheet */}
+          <Modal visible={showMoreSheet} transparent animationType="slide" onRequestClose={() => setShowMoreSheet(false)}>
+            <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} onPress={() => setShowMoreSheet(false)} />
+            <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34, paddingTop: 12 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: 16 }} />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted, paddingHorizontal: 24, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.8 }}>More Options</Text>
+              {([
+                { icon: "scribble" as const, label: "Draw", onPress: handleDraw },
+                { icon: "doc.text.viewfinder" as const, label: "Scan to PDF", onPress: handleScanToPDF },
+                { icon: "text.viewfinder" as const, label: "Scan Text", onPress: handleScanText },
+                { icon: "doc.fill" as const, label: "Template", onPress: () => { setShowMoreSheet(false); setShowTemplates(true); } },
+              ] as const).map((item) => (
+                <Pressable
+                  key={item.label}
+                  onPress={item.onPress}
+                  style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+                    <IconSymbol name={item.icon} size={20} color={colors.primary} />
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: "500", color: colors.foreground }}>{item.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Modal>
         </KeyboardAvoidingView>
       </View>
     </Modal>

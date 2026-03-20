@@ -1255,3 +1255,6 @@
 - [x] Journal entry section includes a photo attachment button (image picker)
 - [x] Pinned favorite section header: replace "⭐ Pinned Favorite" text with a pin icon only
 - [x] Favorites tab: add explicit pin button on each track row so user can choose which one is pinned to Explore
+- [x] Journal entry bottom toolbar: keyboard dismiss (↓ chevron), photo library icon, paperclip attachment menu
+- [x] Paperclip menu options: Tag, Audio (record), Camera (in-app photo), Video (in-app video)
+- [x] Paperclip More submenu: Draw, Scan to PDF, Scan Text, Template
