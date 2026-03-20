@@ -1236,3 +1236,7 @@
 - [x] Wellness card icons: remove tinted background, show icon only at larger size with bold brand color
 - [x] Meditate icon: replace with large peace symbol (circle + lines); Move icon: replace with dumbbell icon
 - [x] Use uploaded PNG icons for wellness cards: zen.png (Meditate), fast-forward.png (Move), music.png (Focus), tinted to brand colors
+- [x] Wellness audio screens: pill tab switcher (Explore / Favorites) at top of each category screen
+- [x] Explore tab: shows all tracks; first favorited track pinned at top with a star/pin indicator
+- [x] Favorites tab: shows all tracks the user has starred, persisted via AsyncStorage per category
+- [x] Heart/star button on each track row to toggle favorite; haptic feedback on toggle

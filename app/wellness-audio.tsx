@@ -2,8 +2,12 @@
  * WellnessAudio Screen
  *
  * Displays audio tracks for a given wellness category (Meditate, Sleep, Move, Focus).
- * Each category has its own curated list of audio tracks from Pixabay (royalty-free).
- * Tapping a track plays it inline with play/pause controls and a progress bar.
+ *
+ * Features:
+ * - Pill tab switcher: Explore (default) / Favorites
+ * - Explore tab: full track list; first favorited track pinned at top with a star badge
+ * - Favorites tab: all tracks the user has starred, persisted via AsyncStorage
+ * - Heart button on each track row to toggle favorite with haptic feedback
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,6 +22,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
@@ -28,12 +33,13 @@ import * as Haptics from 'expo-haptics';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type WellnessCategory = 'meditate' | 'sleep' | 'move' | 'focus';
+type TabKey = 'explore' | 'favorites';
 
 interface AudioTrack {
   id: string;
   title: string;
   artist: string;
-  duration: string; // display string e.g. "1:27"
+  duration: string;
   durationSec: number;
   url: string;
 }
@@ -147,12 +153,16 @@ const AUDIO_CATALOG: Record<WellnessCategory, AudioTrack[]> = {
   ],
 };
 
-const CATEGORY_META: Record<WellnessCategory, { label: string; emoji: string; color: string; description: string }> = {
-  meditate: { label: 'Meditate', emoji: '🟠', color: '#FF8C42', description: 'Guided meditation and calming music to center your mind.' },
-  sleep: { label: 'Sleep', emoji: '🌙', color: '#B07FD0', description: 'Ambient sounds and white noise for restful sleep.' },
-  move: { label: 'Move', emoji: '⏩', color: '#22C55E', description: 'High-energy tracks to power your workout.' },
-  focus: { label: 'Focus', emoji: '🎵', color: '#3B82F6', description: 'Lo-fi beats and ambient music for deep concentration.' },
+const CATEGORY_META: Record<WellnessCategory, { label: string; color: string; description: string }> = {
+  meditate: { label: 'Meditate', color: '#FF8C42', description: 'Guided meditation and calming music to center your mind.' },
+  sleep:    { label: 'Sleep',    color: '#B07FD0', description: 'Ambient sounds and white noise for restful sleep.' },
+  move:     { label: 'Move',     color: '#22C55E', description: 'High-energy tracks to power your workout.' },
+  focus:    { label: 'Focus',    color: '#3B82F6', description: 'Lo-fi beats and ambient music for deep concentration.' },
 };
+
+function favKey(category: WellnessCategory) {
+  return `wellness_favorites_${category}`;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -167,35 +177,54 @@ export default function WellnessAudioScreen() {
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 50) : insets.top;
 
+  // ── Tab state ────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabKey>('explore');
+
+  // ── Favorites state ──────────────────────────────────────────────────────────
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(favKey(cat)).then((raw) => {
+      if (raw) {
+        try { setFavoriteIds(JSON.parse(raw)); } catch {}
+      }
+    });
+  }, [cat]);
+
+  const toggleFavorite = useCallback(async (trackId: string) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setFavoriteIds((prev) => {
+      const next = prev.includes(trackId)
+        ? prev.filter((id) => id !== trackId)
+        : [...prev, trackId];
+      AsyncStorage.setItem(favKey(cat), JSON.stringify(next));
+      return next;
+    });
+  }, [cat]);
+
+  // ── Audio playback ───────────────────────────────────────────────────────────
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState(0); // 0-1
+  const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useKeepAwake();
 
-  // Set audio mode for silent mode playback
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true });
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (playerRef.current) {
-        try { playerRef.current.remove(); } catch {}
-      }
+      if (playerRef.current) { try { playerRef.current.remove(); } catch {} }
     };
   }, []);
 
   const stopCurrent = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     if (playerRef.current) {
       try { playerRef.current.pause(); } catch {}
       try { playerRef.current.remove(); } catch {}
@@ -208,49 +237,25 @@ export default function WellnessAudioScreen() {
 
   const handlePlay = useCallback(async (track: AudioTrack) => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    // If same track, toggle pause/play
-    if (playingId === track.id && playerRef.current) {
-      try {
-        playerRef.current.pause();
-      } catch {}
-      stopCurrent();
-      return;
-    }
-
-    // Stop any current playback
+    if (playingId === track.id && playerRef.current) { stopCurrent(); return; }
     stopCurrent();
-
     setIsLoading(true);
     setPlayingId(track.id);
-
     try {
       const player = createAudioPlayer({ uri: track.url });
       playerRef.current = player;
-
-      // Start playback
       player.play();
       setIsLoading(false);
-
-      // Track progress via polling
       intervalRef.current = setInterval(() => {
         try {
           const ct = player.currentTime || 0;
           const dur = player.duration || track.durationSec;
           setCurrentTime(ct);
-          if (dur > 0) {
-            setProgress(ct / dur);
-          }
-          // Auto-stop when done
-          if (dur > 0 && ct >= dur - 0.5) {
-            stopCurrent();
-          }
-        } catch {
-          // Player may have been removed
-        }
+          if (dur > 0) setProgress(ct / dur);
+          if (dur > 0 && ct >= dur - 0.5) stopCurrent();
+        } catch {}
       }, 500);
-    } catch (e) {
-      console.error('Audio playback error:', e);
+    } catch {
       setIsLoading(false);
       stopCurrent();
     }
@@ -262,65 +267,110 @@ export default function WellnessAudioScreen() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
-  const renderTrack = useCallback(({ item }: { item: AudioTrack }) => {
+  // ── Derived lists ─────────────────────────────────────────────────────────────
+  // Explore: pinned first-favorite at top, then remaining tracks
+  const pinnedId = favoriteIds[0] ?? null;
+  const exploreList: (AudioTrack & { pinned?: boolean })[] = pinnedId
+    ? [
+        { ...tracks.find((t) => t.id === pinnedId)!, pinned: true },
+        ...tracks.filter((t) => t.id !== pinnedId),
+      ]
+    : tracks;
+
+  const favoritesList = favoriteIds
+    .map((id) => tracks.find((t) => t.id === id))
+    .filter(Boolean) as AudioTrack[];
+
+  // ── Track row renderer ────────────────────────────────────────────────────────
+  const renderTrack = useCallback(({ item }: { item: AudioTrack & { pinned?: boolean } }) => {
     const isPlaying = playingId === item.id;
     const isThisLoading = isPlaying && isLoading;
+    const isFav = favoriteIds.includes(item.id);
 
     return (
-      <Pressable
-        onPress={() => handlePlay(item)}
-        style={({ pressed }) => [
-          styles.trackCard,
-          {
-            backgroundColor: isPlaying ? meta.color + '18' : colors.surface,
-            borderColor: isPlaying ? meta.color + '55' : colors.border,
-            opacity: pressed ? 0.85 : 1,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
-          },
-        ]}
-      >
-        {/* Play/Pause icon */}
-        <View style={[styles.playBtn, { backgroundColor: isPlaying ? meta.color : meta.color + '22' }]}>
-          {isThisLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <IconSymbol
-              name={isPlaying ? 'pause.fill' : 'play.fill'}
-              size={20}
-              color={isPlaying ? '#fff' : meta.color}
-            />
-          )}
-        </View>
-
-        {/* Track info */}
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={[styles.trackTitle, { color: colors.foreground }]} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={[styles.trackArtist, { color: colors.muted }]} numberOfLines={1}>
-            {item.artist}
-          </Text>
-
-          {/* Progress bar (only when playing) */}
-          {isPlaying && (
-            <View style={styles.progressRow}>
-              <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: meta.color }]} />
-              </View>
-              <Text style={[styles.timeText, { color: colors.muted }]}>
-                {formatTime(currentTime)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Duration */}
-        {!isPlaying && (
-          <Text style={[styles.durationText, { color: colors.muted }]}>{item.duration}</Text>
+      <View>
+        {item.pinned && (
+          <View style={styles.pinnedBadgeRow}>
+            <Text style={[styles.pinnedBadge, { color: meta.color }]}>⭐ Pinned Favorite</Text>
+          </View>
         )}
-      </Pressable>
+        <Pressable
+          onPress={() => handlePlay(item)}
+          style={({ pressed }) => [
+            styles.trackCard,
+            {
+              backgroundColor: isPlaying
+                ? meta.color + '18'
+                : item.pinned
+                ? meta.color + '10'
+                : colors.surface,
+              borderColor: item.pinned ? meta.color + '55' : isPlaying ? meta.color + '55' : colors.border,
+              opacity: pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            },
+          ]}
+        >
+          {/* Play/Pause */}
+          <View style={[styles.playBtn, { backgroundColor: isPlaying ? meta.color : meta.color + '22' }]}>
+            {isThisLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <IconSymbol
+                name={isPlaying ? 'pause.fill' : 'play.fill'}
+                size={20}
+                color={isPlaying ? '#fff' : meta.color}
+              />
+            )}
+          </View>
+
+          {/* Track info */}
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.trackTitle, { color: colors.foreground }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={[styles.trackArtist, { color: colors.muted }]} numberOfLines={1}>
+              {item.artist}
+            </Text>
+            {isPlaying && (
+              <View style={styles.progressRow}>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: meta.color }]} />
+                </View>
+                <Text style={[styles.timeText, { color: colors.muted }]}>{formatTime(currentTime)}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Duration / heart */}
+          <View style={styles.rightCol}>
+            {!isPlaying && (
+              <Text style={[styles.durationText, { color: colors.muted }]}>{item.duration}</Text>
+            )}
+            <Pressable
+              onPress={() => toggleFavorite(item.id)}
+              style={({ pressed }) => [styles.heartBtn, { opacity: pressed ? 0.6 : 1 }]}
+              hitSlop={8}
+            >
+              <Text style={{ fontSize: 18, color: isFav ? '#FF3B6B' : colors.muted }}>
+                {isFav ? '♥' : '♡'}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </View>
     );
-  }, [playingId, isLoading, progress, currentTime, colors, meta, handlePlay]);
+  }, [playingId, isLoading, progress, currentTime, colors, meta, favoriteIds, handlePlay, toggleFavorite]);
+
+  // ── Empty favorites state ─────────────────────────────────────────────────────
+  const EmptyFavorites = () => (
+    <View style={styles.emptyWrap}>
+      <Text style={[styles.emptyIcon]}>♡</Text>
+      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No favorites yet</Text>
+      <Text style={[styles.emptyDesc, { color: colors.muted }]}>
+        Tap the heart on any track in Explore to save it here.
+      </Text>
+    </View>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -343,15 +393,57 @@ export default function WellnessAudioScreen() {
         <Text style={[styles.heroDesc, { color: colors.muted }]}>{meta.description}</Text>
       </View>
 
+      {/* Pill tab switcher */}
+      <View style={[styles.pillWrap, { backgroundColor: colors.surface }]}>
+        {(['explore', 'favorites'] as TabKey[]).map((tab) => {
+          const active = activeTab === tab;
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveTab(tab);
+              }}
+              style={[
+                styles.pillTab,
+                active && { backgroundColor: meta.color },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pillLabel,
+                  { color: active ? '#fff' : colors.muted },
+                ]}
+              >
+                {tab === 'explore' ? 'Explore' : `Favorites${favoriteIds.length > 0 ? ` (${favoriteIds.length})` : ''}`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       {/* Track list */}
-      <FlatList
-        data={tracks}
-        keyExtractor={(item) => item.id}
-        renderItem={renderTrack}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={<View style={{ height: insets.bottom + 20 }} />}
-      />
+      {activeTab === 'explore' ? (
+        <FlatList
+          data={exploreList}
+          keyExtractor={(item) => item.id}
+          renderItem={renderTrack}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={<View style={{ height: insets.bottom + 20 }} />}
+        />
+      ) : favoritesList.length === 0 ? (
+        <EmptyFavorites />
+      ) : (
+        <FlatList
+          data={favoritesList}
+          keyExtractor={(item) => item.id}
+          renderItem={renderTrack}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={<View style={{ height: insets.bottom + 20 }} />}
+        />
+      )}
     </View>
   );
 }
@@ -359,9 +451,7 @@ export default function WellnessAudioScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -369,43 +459,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
   hero: {
     marginHorizontal: 16,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  heroIconWrap: {
-    width: 72, height: 72,
-    borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
     marginBottom: 12,
   },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
+  heroTitle: { fontSize: 22, fontWeight: '800', marginBottom: 4, marginTop: 10 },
+  heroDesc: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+  // Pill tabs
+  pillWrap: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 14,
+    borderRadius: 50,
+    padding: 4,
   },
-  heroDesc: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
+  pillTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  listContent: {
-    paddingHorizontal: 16,
-  },
+  pillLabel: { fontSize: 14, fontWeight: '600' },
+
+  // Pinned badge
+  pinnedBadgeRow: { paddingHorizontal: 4, marginBottom: 4 },
+  pinnedBadge: { fontSize: 12, fontWeight: '600' },
+
+  // Track cards
+  listContent: { paddingHorizontal: 16 },
   trackCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -415,44 +503,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   playBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
   },
-  trackTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  trackArtist: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 8,
-  },
-  progressBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  timeText: {
-    fontSize: 11,
-    fontVariant: ['tabular-nums'],
-    width: 36,
-  },
-  durationText: {
-    fontSize: 13,
-    fontVariant: ['tabular-nums'],
-    marginLeft: 8,
-  },
+  trackTitle: { fontSize: 16, fontWeight: '600' },
+  trackArtist: { fontSize: 13, marginTop: 2 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+  progressBar: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2 },
+  timeText: { fontSize: 11, fontVariant: ['tabular-nums'], width: 36 },
+  rightCol: { alignItems: 'flex-end', gap: 4, marginLeft: 8 },
+  durationText: { fontSize: 13, fontVariant: ['tabular-nums'] },
+  heartBtn: { padding: 4 },
+
+  // Empty favorites
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  emptyDesc: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });
