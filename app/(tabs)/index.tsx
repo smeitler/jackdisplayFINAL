@@ -639,13 +639,13 @@ export default function HomeScreen() {
   const [widgetLibraryOpen, setWidgetLibraryOpen] = useState(false);
 
   const WIDGET_STORAGE_KEY = 'daycheck:dashboard:widgets:v1';
-  const DEFAULT_WIDGETS: string[] = ['alarm', 'goals', 'manage_habits', 'daily_quote'];
+  const DEFAULT_WIDGETS: string[] = [];
 
   // Load widget layout from storage
   useEffect(() => {
     AsyncStorage.getItem(WIDGET_STORAGE_KEY).then((raw) => {
       if (raw) {
-        try { setWidgetIds(JSON.parse(raw)); } catch { setWidgetIds(DEFAULT_WIDGETS); }
+        try { setWidgetIds(JSON.parse(raw)); } catch { setWidgetIds([]); }
       } else {
         setWidgetIds(DEFAULT_WIDGETS);
       }
@@ -792,7 +792,7 @@ export default function HomeScreen() {
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {isCalm && <CalmHeader />}
-      <ScrollView contentContainerStyle={[styles.scroll, isCalm && { paddingTop: 8 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, isCalm && { paddingTop: 20 }]} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
           {/* ── Header: date + streak pill + profile pic (non-Calm) ── */}
@@ -1633,10 +1633,10 @@ const pillStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 40 },
+  scroll: { padding: 20, paddingTop: 24, paddingBottom: 40 },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
   dateText: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   streakPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,

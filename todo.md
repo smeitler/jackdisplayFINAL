@@ -1214,3 +1214,5 @@
 - [x] Dashboard: remove "All caught up" banner
 - [x] Dashboard: keep only alarm card + streak + days-logged stats as default
 - [x] Dashboard: add customizable widget system (add/remove/reorder widgets from a library)
+- [x] Dashboard header: increase top padding so date/streak/profile row is not squished against status bar
+- [x] Dashboard: change default widget set to empty (no Goals pre-loaded) so users start with a clean dashboard below the alarm
