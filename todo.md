@@ -1162,3 +1162,4 @@
 - [ ] Calm theme home: shrink header, no date, no icons
 - [ ] Calm theme home: replace stats bar with 3-month pill bars (red/yellow/green fill)
 - [ ] Calm theme home: remove percentage labels under category goal sections
+- [x] Voice check-in full-screen modal: idle mic → listening waveform → analyzing spinner → results (habit cards + journal block + gratitude) → log/save

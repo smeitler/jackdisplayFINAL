@@ -80,6 +80,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "ellipsis": "more-horiz",
   "crown.fill": "workspace-premium",
   "medal.fill": "military-tech",
+  "arrow.up": "arrow-upward",
   "arrow.up.right": "north-east",
   "music.note": "music-note",
   "headphones": "headphones",

@@ -149,6 +149,7 @@ export default function RootLayout() {
               <Stack.Screen name="permissions-setup" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="practice-player" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="morning-practice-catalog" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="voice-checkin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
             </Stack>
             <StatusBar style="auto" />
             </JournalProvider>

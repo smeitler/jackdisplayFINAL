@@ -43,7 +43,7 @@ export default function TabLayout() {
 
   function handleVoiceLog() {
     closePlusSheet();
-    router.push("/(tabs)/journal?action=voice");
+    router.push("/voice-checkin" as never);
   }
 
   function handleLogHabits() {
