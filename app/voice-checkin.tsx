@@ -46,14 +46,175 @@ import { trpc } from "@/lib/trpc";
 import { addEntry, generateId, todayDateStr } from "@/lib/journal-store";
 import { getLastUserId, submitCheckIn, type Rating } from "@/lib/storage";
 
-// ─── Web MediaRecorder hook ───────────────────────────────────────────────────
+/// ─── Scrolling Waveform (iOS Voice Memos style) ─────────────────────────────
+// Renders a horizontal scrolling waveform with bars flowing left.
+// On web: uses Web Audio API AnalyserNode for real amplitude.
+// On native: uses expo-audio metering (dB → 0-1).
+function ScrollingWaveform({
+  color,
+  isActive,
+  nativeMeteringRef,
+}: {
+  color: string;
+  isActive: boolean;
+  nativeMeteringRef?: React.RefObject<number>;
+}) {
+  const BAR_WIDTH = 3;
+  const BAR_GAP = 2;
+  const CONTAINER_WIDTH = 320;
+  const CONTAINER_HEIGHT = 80;
+  const MAX_BAR_HEIGHT = 72;
+  const TOTAL_BARS = Math.floor(CONTAINER_WIDTH / (BAR_WIDTH + BAR_GAP)) + 2;
+
+  // Rolling buffer of amplitude values (0–1)
+  const bufferRef = useRef<number[]>(Array(TOTAL_BARS).fill(0));
+  const [bars, setBars] = useState<number[]>(Array(TOTAL_BARS).fill(0));
+
+  // Web Audio analyser
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+
+  // Interval ref
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      // Fade bars to 0 gradually
+      let fadeCount = 0;
+      const fadeInterval = setInterval(() => {
+        fadeCount++;
+        bufferRef.current = bufferRef.current.map((v) => Math.max(0, v - 0.08));
+        setBars([...bufferRef.current]);
+        if (fadeCount > 15) clearInterval(fadeInterval);
+      }, 60);
+      return () => {
+        clearInterval(fadeInterval);
+        if (audioCtxRef.current) {
+          audioCtxRef.current.close().catch(() => {});
+          audioCtxRef.current = null;
+          analyserRef.current = null;
+        }
+      };
+    }
+
+    // Set up Web Audio API on web
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof AudioContext !== "undefined") {
+      try {
+        const ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+        navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then((stream) => {
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.5;
+            source.connect(analyser);
+            analyserRef.current = analyser;
+            dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+          })
+          .catch(() => {});
+      } catch (_) {}
+    }
+
+    // Sample amplitude every 80ms and push to rolling buffer
+    intervalRef.current = setInterval(() => {
+      let amplitude = 0;
+
+      if (Platform.OS === "web" && analyserRef.current && dataArrayRef.current) {
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        const sum = dataArrayRef.current.reduce((a, b) => a + b, 0);
+        amplitude = Math.min(1, (sum / dataArrayRef.current.length) / 80);
+        // Add slight noise floor so bars are never completely flat
+        if (amplitude < 0.04) amplitude = 0.02 + Math.random() * 0.03;
+      } else if (nativeMeteringRef?.current !== undefined) {
+        // Native: dB value from expo-audio metering (-160 to 0)
+        const db = nativeMeteringRef.current ?? -60;
+        amplitude = Math.max(0, Math.min(1, (db + 60) / 60));
+        if (amplitude < 0.04) amplitude = 0.02 + Math.random() * 0.03;
+      } else {
+        // Fallback: animated random bars
+        amplitude = 0.15 + Math.random() * 0.5;
+      }
+
+      // Shift buffer left and push new value
+      bufferRef.current = [...bufferRef.current.slice(1), amplitude];
+      setBars([...bufferRef.current]);
+    }, 80);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [isActive]);
+
+  const midY = CONTAINER_HEIGHT / 2;
+
+  return (
+    <View
+      style={{
+        width: CONTAINER_WIDTH,
+        height: CONTAINER_HEIGHT,
+        overflow: "hidden",
+        alignSelf: "center",
+      }}
+    >
+      {/* Horizontal center line */}
+      <View
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: midY - 0.5,
+          height: 1,
+          backgroundColor: color + "33",
+        }}
+      />
+      {/* Bars */}
+      <View
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          flexDirection: "row",
+          alignItems: "center",
+          height: CONTAINER_HEIGHT,
+          gap: BAR_GAP,
+        }}
+      >
+        {bars.map((amp, i) => {
+          const barH = Math.max(2, amp * MAX_BAR_HEIGHT);
+          // Fade older bars (left side)
+          const opacity = 0.3 + (i / TOTAL_BARS) * 0.7;
+          return (
+            <View
+              key={i}
+              style={{
+                width: BAR_WIDTH,
+                height: barH,
+                borderRadius: BAR_WIDTH / 2,
+                backgroundColor: color,
+                opacity,
+              }}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ─── Web MediaRecorder hook ─────────────────────────────────────────────────
 function useWebRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const allChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("audio/webm");
   const [isRecording, setIsRecording] = useState(false);
-  const [micError, setMicError] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);;
 
   const start = useCallback(async (): Promise<boolean> => {
     setMicError(null);
@@ -581,10 +742,13 @@ export default function VoiceCheckinScreen() {
     setVcRatings(map);
     // Pre-fill transcript editor with full transcript
     setEditedTranscript(results.transcript || results.journalEntries.join("\n\n"));
-    // Pre-fill habit descriptions from current habit data
+    // Pre-fill habit descriptions: AI-extracted note takes priority over stored description
+    // The AI returns a 3-8 word punchy note per habit (e.g. "2-hour mountain hike")
     const descMap: Record<string, string> = {};
     for (const h of activeHabits) {
-      descMap[h.id] = h.description ?? "";
+      const aiNote = results.habitResults.find((r) => r.habitId === h.id)?.note;
+      // Use AI note if it's meaningful (not empty/generic), otherwise fall back to stored description
+      descMap[h.id] = aiNote && aiNote.trim().length > 0 ? aiNote.trim() : (h.description ?? "");
     }
     setEditedDescriptions(descMap);
   }, [results, activeHabits]);
@@ -961,9 +1125,9 @@ export default function VoiceCheckinScreen() {
           contentContainerStyle={listeningStyles.container}
           showsVerticalScrollIndicator={false}
         >
-          {/* Waveform + status */}
+          {/* Scrolling waveform (iOS Voice Memos style) */}
           <View style={listeningStyles.waveRow}>
-            <WaveformBars isActive color={colors.primary} />
+            <ScrollingWaveform isActive color={colors.primary} />
             <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
               {isRecording ? "Recording..." : "Starting..."}
             </Text>

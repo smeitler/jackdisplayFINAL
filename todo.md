@@ -1179,3 +1179,5 @@
 - [x] Fix transcription: chunk large audio files on client before sending to avoid payload limits
 - [x] Voice check-in results: show editable habit description under each habit name
 - [x] Voice check-in results: Journal Entry shows full transcript (editable TextInput)
+- [x] Scrolling waveform visualizer (iOS Voice Memos style, bars scroll left, amplitude-driven)
+- [x] AI auto-fills habit descriptions from transcript in results screen
