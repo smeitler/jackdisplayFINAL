@@ -28,7 +28,6 @@ import {
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
-import RichTextEditorView, { type RichTextEditorHandle, type EditorToolbarState } from "@/components/rich-text-editor-view";
 import { WheelColumn } from "@/components/wheel-time-picker";
 import Svg, { Path as SvgPath } from "react-native-svg";
 
@@ -2278,76 +2277,51 @@ interface FullScreenJournalEditorProps {
   colors: any;
 }
 function FullScreenJournalEditor({
-  visible, value, onChange, onClose, onPickPhoto, onPickCamera, colors,
+  visible, value, onChange, onClose, onPickPhoto, onPickCamera,
 }: FullScreenJournalEditorProps) {
-  // Read insets fresh INSIDE the modal so they are correct on all platforms
   const modalInsets = useSafeAreaInsets();
+  const inputRef = useRef<TextInput>(null);
+  const [text, setText] = useState(value);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Ref to the rich-text editor engine (exposes toggleMark, setBlockType, etc.)
-  const editorRef = useRef<RichTextEditorHandle>(null);
+  // Sync value prop when entry changes
+  useEffect(() => { setText(value); }, [value]);
 
-  const [showFmtSheet, setShowFmtSheet] = useState(false);
-
-  // Toolbar state derived from editor selection
-  const [toolbarState, setToolbarState] = useState<EditorToolbarState>({
-    activeBlockType: 'body',
-    bold: false, italic: false, underline: false, strike: false,
-    pendingMarks: { bold: false, italic: false, underline: false, strike: false },
-  });
-
-  // Preserve selection when format sheet opens (opening sheet steals focus on web)
-  const savedToolbarState = useRef<EditorToolbarState>({
-    activeBlockType: 'body',
-    bold: false, italic: false, underline: false, strike: false,
-    pendingMarks: { bold: false, italic: false, underline: false, strike: false },
-  });
-
-  const handleToolbarStateChange = useCallback((state: EditorToolbarState) => {
-    savedToolbarState.current = state;
-    setToolbarState(state);
-  }, []);
-
-  const openFmtSheet = useCallback(() => {
-    // Snapshot current toolbar state before opening (focus loss may clear selection)
-    setToolbarState(savedToolbarState.current);
-    setShowFmtSheet(true);
-  }, []);
-
-  const closeFmtSheet = useCallback(() => {
-    setShowFmtSheet(false);
-    editorRef.current?.focus();
-  }, []);
-
+  // Auto-focus when modal opens
   useEffect(() => {
-    if (visible) setTimeout(() => editorRef.current?.focus(), 120);
+    if (visible) setTimeout(() => inputRef.current?.focus(), 120);
   }, [visible]);
+
+  // Cleanup autosave on unmount
+  useEffect(() => {
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, []);
+
+  const handleChangeText = useCallback((newText: string) => {
+    setText(newText);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => onChange(newText), 500);
+  }, [onChange]);
+
+  const handleClose = useCallback(() => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); onChange(text); }
+    onClose();
+  }, [onClose, onChange, text]);
 
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        {/* Status bar spacer — on web insets.top is 0, use 48pt minimum */}
+        {/* Status bar spacer */}
         <View style={{ height: Math.max(modalInsets.top, Platform.OS === 'web' ? 48 : 44) }} />
         {/* Top navigation bar */}
         <View style={fsStyles.topBar}>
-          <Pressable onPress={onClose} style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
             <IconSymbol name="chevron.left" size={22} color="#ffffff" />
           </Pressable>
           <View style={{ flex: 1 }} />
-          <Pressable style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-            <IconSymbol name="arrow.uturn.backward" size={20} color="#ffffff" />
-          </Pressable>
-          <View style={fsStyles.topBarGroup}>
-            <Pressable style={({ pressed }) => [fsStyles.topBarGroupBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="square.and.arrow.up" size={20} color="#ffffff" />
-            </Pressable>
-            <View style={fsStyles.topBarDivider} />
-            <Pressable style={({ pressed }) => [fsStyles.topBarGroupBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="ellipsis" size={20} color="#ffffff" />
-            </Pressable>
-          </View>
-          <Pressable onPress={onClose} style={({ pressed }) => [fsStyles.checkBtn, { opacity: pressed ? 0.8 : 1 }]}>
+          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { opacity: pressed ? 0.8 : 1 }]}>
             <IconSymbol name="checkmark" size={20} color="#000000" />
           </Pressable>
         </View>
@@ -2359,134 +2333,35 @@ function FullScreenJournalEditor({
         >
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* RichTextEditorView — proper block+inline document model */}
-            <RichTextEditorView
-              ref={editorRef}
-              initialValue={value}
-              onChange={onChange}
-              onToolbarStateChange={handleToolbarStateChange}
+            <TextInput
+              ref={inputRef}
+              value={text}
+              onChangeText={handleChangeText}
+              multiline
               placeholder="Start writing..."
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              style={[
+                fsStyles.textInput,
+                Platform.OS === 'web'
+                  ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: '#ffffff' } as any)
+                  : {},
+              ]}
+              textAlignVertical="top"
+              autoCorrect
+              autoCapitalize="sentences"
+              spellCheck
+              scrollEnabled={false}
             />
           </ScrollView>
 
-          {/* Format sheet — sits ABOVE the toolbar, inside KeyboardAvoidingView */}
-          {showFmtSheet && (
-            <View style={fsStyles.fmtSheetContainer}>
-              {/* Handle */}
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
-                <View style={fsStyles.handle} />
-              </View>
-              {/* Header */}
-              <View style={fsStyles.fmtHeader}>
-                <Text style={fsStyles.fmtTitle}>Format</Text>
-                <Pressable onPress={closeFmtSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}>
-                  <IconSymbol name="xmark" size={20} color="rgba(255,255,255,0.6)" />
-                </Pressable>
-              </View>
-              {/* Paragraph style pills */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>
-                {(['title', 'heading', 'subheading', 'body'] as const).map((styleType) => {
-                  const isActive = toolbarState.activeBlockType === styleType;
-                  return (
-                    <Pressable
-                      key={styleType}
-                      onPress={() => { editorRef.current?.setBlockType(styleType); closeFmtSheet(); }}
-                      style={({ pressed }) => [fsStyles.stylePill, isActive && fsStyles.stylePillActive, { opacity: pressed ? 0.7 : 1 }]}
-                    >
-                      <Text style={[fsStyles.stylePillText, isActive && fsStyles.stylePillTextActive,
-                        styleType === 'title' ? { fontSize: 18, fontWeight: '700' } :
-                        styleType === 'heading' ? { fontSize: 16, fontWeight: '700' } :
-                        styleType === 'subheading' ? { fontSize: 14, fontWeight: '600' } :
-                        { fontSize: 13 }
-                      ]}>
-                        {styleType.charAt(0).toUpperCase() + styleType.slice(1)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-              {/* Inline format row: B I U S */}
-              <View style={fsStyles.fmtRow}>
-                {([
-                  { key: 'bold' as const, label: 'B', extra: { fontWeight: '900' as const } },
-                  { key: 'italic' as const, label: 'I', extra: { fontStyle: 'italic' as const } },
-                  { key: 'underline' as const, label: 'U', extra: { textDecorationLine: 'underline' as const } },
-                  { key: 'strike' as const, label: 'S', extra: { textDecorationLine: 'line-through' as const } },
-                ]).map(({ key, label, extra }) => {
-                  const isActive = toolbarState[key] === true;
-                  const isMixed = toolbarState[key] === 'mixed';
-                  return (
-                    <Pressable
-                      key={key}
-                      onPress={() => editorRef.current?.toggleMark(key)}
-                      style={({ pressed }) => [fsStyles.fmtBtn, (isActive || isMixed) && fsStyles.fmtBtnActive, { opacity: pressed ? 0.6 : 1 }]}
-                    >
-                      <Text style={[fsStyles.fmtBtnText, extra, isActive && { color: '#000000' }]}>{label}</Text>
-                    </Pressable>
-                  );
-                })}
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="pencil" size={20} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5A623' }} />
-                </Pressable>
-              </View>
-              {/* List / indent row */}
-              <View style={[fsStyles.fmtRow, { paddingBottom: 12 }]}>
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="list.bullet.indent" size={20} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="list.number" size={20} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="text.alignleft" size={20} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="increase.indent" size={20} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="decrease.indent" size={20} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-              </View>
-            </View>
-          )}
-
-          {/* Keyboard accessory toolbar */}
+          {/* Keyboard accessory toolbar — photo buttons only */}
           <View style={[fsStyles.toolbar, { paddingBottom: 10 + modalInsets.bottom }]}>
-            {/* Aa — Toggle format sheet */}
-            <Pressable
-              onPress={() => { if (showFmtSheet) closeFmtSheet(); else openFmtSheet(); }}
-              style={({ pressed }) => [fsStyles.toolbarBtn, showFmtSheet && fsStyles.toolbarBtnActive, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Text style={fsStyles.aaText}>Aa</Text>
-            </Pressable>
-            {/* Checklist — inserts a checklist item via the editor */}
-            <Pressable
-              onPress={() => editorRef.current?.toggleMark('bold')}
-              style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <IconSymbol name="checklist" size={22} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-            {/* Table */}
-            <Pressable style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="table.fill" size={22} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-            {/* Paperclip — photo library */}
+            {/* Photo library */}
             <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
               <IconSymbol name="paperclip" size={22} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-            {/* Location */}
-            <Pressable style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="location.circle.fill" size={22} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-            {/* Magic / AI */}
-            <Pressable style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="wand.and.stars" size={22} color="rgba(255,255,255,0.8)" />
             </Pressable>
             <View style={{ flex: 1 }} />
             {/* Camera */}
@@ -2503,28 +2378,10 @@ function FullScreenJournalEditor({
 const fsStyles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   topBarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-  topBarGroup: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 20, overflow: 'hidden' },
-  topBarGroupBtn: { paddingHorizontal: 12, paddingVertical: 10 },
-  topBarDivider: { width: 0.5, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 8 },
   checkBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
-  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0, ...(Platform.OS === 'web' ? { outlineWidth: 0, outlineStyle: 'none' } as any : {}) },
+  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  toolbarBtnActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  aaText: { fontSize: 15, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
-  fmtSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12 },
-  fmtSheetContainer: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12, zIndex: 100, elevation: 10 },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
-  fmtHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
-  fmtTitle: { fontSize: 17, fontWeight: '600', color: '#ffffff', flex: 1 },
-  stylePill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)' },
-  stylePillActive: { backgroundColor: '#F5A623' },
-  stylePillText: { color: '#ffffff' },
-  stylePillTextActive: { color: '#000000' },
-  fmtRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, paddingBottom: 12 },
-  fmtBtn: { width: 52, height: 44, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-  fmtBtnActive: { backgroundColor: '#ffffff' },
-  fmtBtnText: { fontSize: 18, color: '#ffffff' },
 });
 
 export default function JournalScreen() {

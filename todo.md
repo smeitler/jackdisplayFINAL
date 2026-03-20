@@ -1318,3 +1318,8 @@
 - [x] Fix text not rendering bold/italic visually after applying format (simplified overlay renderer, markdown wrapSelection)
 
 - [x] Fix cursor misalignment in journal editor — removed transparent overlay, single visible TextInput with correct cursor position
+
+- [x] Simplify full-screen journal editor: remove Aa button, format sheet, bold/italic/heading/list toolbar buttons
+- [x] Keep only the photo (camera/library) buttons in the keyboard toolbar
+- [x] Make editor scroll fluidly as user types (ScrollView wrapping TextInput with scrollEnabled=false)
+- [x] Remove RichTextEditorView import (no longer needed in journal.tsx)
