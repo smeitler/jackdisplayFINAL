@@ -90,9 +90,9 @@ describe('transcribeAudioBuffer', () => {
     }
   });
 
-  it('returns error when file exceeds 16MB limit', async () => {
-    // Create a buffer larger than 16MB
-    const largeBuffer = Buffer.alloc(17 * 1024 * 1024);
+  it('returns error when file exceeds 100MB limit', async () => {
+    // Create a buffer larger than 100MB (server limit is 100MB)
+    const largeBuffer = Buffer.alloc(101 * 1024 * 1024);
     const result = await transcribeAudioBuffer(largeBuffer, 'audio/m4a');
 
     expect('error' in result).toBe(true);

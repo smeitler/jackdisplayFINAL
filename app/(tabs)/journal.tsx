@@ -1930,7 +1930,8 @@ export default function JournalScreen() {
   // ── Always-visible journal note + gratitude fields ─────────────────────────
   // These represent the "primary" entry for the day (or a new one to be created)
   const [dvJournalNote, setDvJournalNote] = useState('');
-  const [dvGratitude, setDvGratitude] = useState('');
+  // Gratitude items as individual strings (shown as separate cards)
+  const [dvGratItems, setDvGratItems] = useState<string[]>(['', '', '']);
   const dvPrimaryEntryId = useRef<string | null>(null);
 
   // Sync note/gratitude from the first non-voice entry for the day
@@ -1942,42 +1943,54 @@ export default function JournalScreen() {
       const gratIdx = body.indexOf('\n\n🙏 Grateful for:');
       const mainBody = gratIdx >= 0 ? body.slice(0, gratIdx).trim() : body.trim();
       const gratRaw = gratIdx >= 0 ? body.slice(gratIdx + 2).trim() : '';
-      const gratLines = gratRaw.replace(/^🙏 Grateful for:\n?/, '');
+      // Parse individual gratitude lines (strip numbering like "1. ", "- ")
+      const rawLines = gratRaw.replace(/^🙏 Grateful for:\n?/, '').split('\n').filter(Boolean);
+      const items = rawLines.map((l) => l.replace(/^\d+\.\s*/, '').replace(/^[-•]\s*/, '').trim());
+      // Always show at least 3 slots
+      while (items.length < 3) items.push('');
       setDvJournalNote(mainBody);
-      setDvGratitude(gratLines);
+      setDvGratItems(items);
     } else {
       dvPrimaryEntryId.current = null;
       setDvJournalNote('');
-      setDvGratitude('');
+      setDvGratItems(['', '', '']);
     }
   }, [dayEntries, selectedDate]);
 
-  const saveDvNoteAndGrat = useCallback(async (note: string, grat: string) => {
+  const [dvSaving, setDvSaving] = useState(false);
+
+  const saveDvNoteAndGrat = useCallback(async (note: string, gratItems: string[]) => {
     if (!userId) return;
-    const gratSection = grat.trim() ? '\n\n🙏 Grateful for:\n' + grat.trim() : '';
-    const fullBody = note.trim() + gratSection;
-    if (dvPrimaryEntryId.current) {
-      // Update existing entry
-      await updateEntryInStore(userId, dvPrimaryEntryId.current, { body: fullBody });
-      setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, body: fullBody } : e));
-    } else if (fullBody.trim()) {
-      // Create new entry
-      const now = new Date().toISOString();
-      const newEntry: JournalEntry = {
-        id: generateId(),
-        userId,
-        date: selectedDate,
-        createdAt: now,
-        updatedAt: now,
-        title: '',
-        body: fullBody,
-        template: 'blank',
-        attachments: [],
-        tags: [],
-      };
-      const updated = await addEntry(userId, newEntry);
-      dvPrimaryEntryId.current = newEntry.id;
-      setEntries(updated);
+    setDvSaving(true);
+    try {
+      const nonEmpty = gratItems.filter((g) => g.trim());
+      const gratSection = nonEmpty.length > 0
+        ? '\n\n🙏 Grateful for:\n' + nonEmpty.map((g, i) => `${i + 1}. ${g.trim()}`).join('\n')
+        : '';
+      const fullBody = note.trim() + gratSection;
+      if (dvPrimaryEntryId.current) {
+        await updateEntryInStore(userId, dvPrimaryEntryId.current, { body: fullBody });
+        setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, body: fullBody } : e));
+      } else if (fullBody.trim()) {
+        const now = new Date().toISOString();
+        const newEntry: JournalEntry = {
+          id: generateId(),
+          userId,
+          date: selectedDate,
+          createdAt: now,
+          updatedAt: now,
+          title: '',
+          body: fullBody,
+          template: 'blank',
+          attachments: [],
+          tags: [],
+        };
+        const updated = await addEntry(userId, newEntry);
+        dvPrimaryEntryId.current = newEntry.id;
+        setEntries(updated);
+      }
+    } finally {
+      setDvSaving(false);
     }
   }, [userId, selectedDate]);
 
@@ -2149,13 +2162,12 @@ export default function JournalScreen() {
             );
           })}
 
-          {/* ── JOURNAL NOTE — always visible, editable ── */}
+          {/* ── JOURNAL ENTRY — always visible, editable ── */}
           <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL</Text>
+            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
             <TextInput
               value={dvJournalNote}
               onChangeText={setDvJournalNote}
-              onBlur={() => saveDvNoteAndGrat(dvJournalNote, dvGratitude)}
               multiline
               placeholder="What happened today? How are you feeling?"
               placeholderTextColor={colors.muted}
@@ -2163,19 +2175,45 @@ export default function JournalScreen() {
             />
           </View>
 
-          {/* ── GRATITUDE — always visible, editable ── */}
-          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>🙏 GRATEFUL FOR</Text>
-            <TextInput
-              value={dvGratitude}
-              onChangeText={setDvGratitude}
-              onBlur={() => saveDvNoteAndGrat(dvJournalNote, dvGratitude)}
-              multiline
-              placeholder="1. \n2. \n3. "
-              placeholderTextColor={colors.muted}
-              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 70 }]}
-            />
-          </View>
+          {/* ── GRATEFUL FOR — individual cards ── */}
+          <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 6 }]}>GRATEFUL FOR</Text>
+          {dvGratItems.map((item, idx) => (
+            <View key={idx} style={[dvStyles.gratCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <TextInput
+                value={item}
+                onChangeText={(text) => {
+                  const updated = [...dvGratItems];
+                  updated[idx] = text;
+                  setDvGratItems(updated);
+                }}
+                placeholder={`Grateful for...`}
+                placeholderTextColor={colors.muted}
+                style={[dvStyles.gratInput, { color: colors.foreground }]}
+                returnKeyType="done"
+              />
+            </View>
+          ))}
+
+          {/* ── Add more gratitude slot ── */}
+          <Pressable
+            onPress={() => setDvGratItems((prev) => [...prev, ''])}
+            style={({ pressed }) => [dvStyles.addGratBtn, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Text style={[dvStyles.addGratText, { color: colors.muted }]}>+ Add another</Text>
+          </Pressable>
+
+          {/* ── SAVE ENTRY button ── */}
+          <Pressable
+            onPress={() => saveDvNoteAndGrat(dvJournalNote, dvGratItems)}
+            disabled={dvSaving}
+            style={({ pressed }) => [dvStyles.saveEntryBtn, {
+              backgroundColor: colors.primary,
+              opacity: dvSaving ? 0.6 : pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            }]}
+          >
+            <Text style={dvStyles.saveEntryText}>{dvSaving ? 'Saving...' : 'Save Entry'}</Text>
+          </Pressable>
         </ScrollView>
       )}
 
@@ -2334,4 +2372,9 @@ const dvStyles = StyleSheet.create({
   },
   pickerTitle: { fontSize: 17, fontWeight: '600' },
   todayBtn: { alignSelf: 'center', paddingVertical: 10 },
+  gratCard: { borderRadius: 12, borderWidth: 0.5, padding: 12, marginBottom: 8 },
+  addGratBtn: { borderRadius: 10, borderWidth: 0.5, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
+  addGratText: { fontSize: 13, fontWeight: '500' },
+  saveEntryBtn: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 16 },
+  saveEntryText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
 });

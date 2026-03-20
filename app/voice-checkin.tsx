@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert,
   Animated,
+  Dimensions,
   Easing,
   Platform,
   Pressable,
@@ -54,14 +55,16 @@ function ScrollingWaveform({
   color,
   isActive,
   nativeMeteringRef,
+  containerWidth,
 }: {
   color: string;
   isActive: boolean;
   nativeMeteringRef?: React.RefObject<number>;
+  containerWidth?: number;
 }) {
   const BAR_WIDTH = 3;
   const BAR_GAP = 2;
-  const CONTAINER_WIDTH = 320;
+  const CONTAINER_WIDTH = containerWidth ?? (Dimensions.get('window').width - 32);
   const CONTAINER_HEIGHT = 80;
   const MAX_BAR_HEIGHT = 72;
   const TOTAL_BARS = Math.floor(CONTAINER_WIDTH / (BAR_WIDTH + BAR_GAP)) + 2;
@@ -159,7 +162,7 @@ function ScrollingWaveform({
         width: CONTAINER_WIDTH,
         height: CONTAINER_HEIGHT,
         overflow: "hidden",
-        alignSelf: "center",
+        alignSelf: "stretch",
       }}
     >
       {/* Horizontal center line */}
@@ -764,6 +767,17 @@ export default function VoiceCheckinScreen() {
   const isRecording =
     Platform.OS === "web" ? webRecorder.isRecording : nativeRecorderState.isRecording;
 
+  // ── Live recording timer ──────────────────────────────────────────────────
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordingSeconds(0);
+      return;
+    }
+    const t = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [isRecording]);
+
   // Mic pulse animation for idle state
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -1126,11 +1140,16 @@ export default function VoiceCheckinScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Scrolling waveform (iOS Voice Memos style) */}
-          <View style={listeningStyles.waveRow}>
+          <View style={[listeningStyles.waveRow, { alignSelf: 'stretch' }]}>
             <ScrollingWaveform isActive color={colors.primary} />
-            <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
-              {isRecording ? "Recording..." : "Starting..."}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
+                {isRecording ? "Recording..." : "Starting..."}
+              </Text>
+              <Text style={[listeningStyles.recordingLabel, { color: colors.muted, fontVariant: ['tabular-nums'] }]}>
+                {`${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`}
+              </Text>
+            </View>
           </View>
 
           {/* Habit prompt card */}
@@ -1476,10 +1495,10 @@ const listeningStyles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
     gap: 16,
-    alignItems: "center",
+    alignItems: "stretch",
   },
   waveRow: {
-    alignItems: "center",
+    alignItems: "stretch",
     gap: 8,
     paddingVertical: 8,
   },
