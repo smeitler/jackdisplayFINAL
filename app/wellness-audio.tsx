@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { WellnessIcon } from '@/components/wellness-icon';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 
@@ -337,7 +338,9 @@ export default function WellnessAudioScreen() {
 
       {/* Category hero */}
       <View style={[styles.hero, { backgroundColor: meta.color + '12' }]}>
-        <Text style={styles.heroEmoji}>{meta.emoji}</Text>
+        <View style={[styles.heroIconWrap, { backgroundColor: meta.color + '22' }]}>
+          <WellnessIcon category={cat} size={40} color={meta.color} />
+        </View>
         <Text style={[styles.heroTitle, { color: colors.foreground }]}>{meta.label}</Text>
         <Text style={[styles.heroDesc, { color: colors.muted }]}>{meta.description}</Text>
       </View>
@@ -386,9 +389,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  heroEmoji: {
-    fontSize: 40,
-    marginBottom: 8,
+  heroIconWrap: {
+    width: 72, height: 72,
+    borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 12,
   },
   heroTitle: {
     fontSize: 22,

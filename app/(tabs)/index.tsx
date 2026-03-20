@@ -18,6 +18,7 @@ import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { CalmHeader, useIsCalm } from "@/components/calm-effects";
+import { WellnessIcon } from "@/components/wellness-icon";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 // Profile pic key is per-user — built dynamically once userId is known
@@ -929,10 +930,10 @@ export default function HomeScreen() {
           {/* ── Wellness Audio Grid (2×2) ── */}
           <View style={styles.wellnessGrid}>
             {[
-              { key: 'meditate', label: 'Meditate', emoji: '🟠', color: '#FF8C42' },
-              { key: 'sleep', label: 'Sleep', emoji: '🌙', color: '#B07FD0' },
-              { key: 'move', label: 'Move', emoji: '⏩', color: '#22C55E' },
-              { key: 'focus', label: 'Focus', emoji: '🎵', color: '#3B82F6' },
+              { key: 'meditate', label: 'Meditate', color: '#FF8C42' },
+              { key: 'sleep', label: 'Sleep', color: '#B07FD0' },
+              { key: 'move', label: 'Move', color: '#22C55E' },
+              { key: 'focus', label: 'Focus', color: '#3B82F6' },
             ].map((item) => (
               <Pressable
                 key={item.key}
@@ -950,7 +951,9 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                <Text style={styles.wellnessEmoji}>{item.emoji}</Text>
+                <View style={[styles.wellnessIconWrap, { backgroundColor: item.color + '22' }]}>
+                  <WellnessIcon category={item.key as any} size={24} color={item.color} />
+                </View>
                 <Text style={[styles.wellnessLabel, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{item.label}</Text>
               </Pressable>
             ))}
@@ -1811,8 +1814,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     borderWidth: 1,
   },
-  wellnessEmoji: {
-    fontSize: 22,
+  wellnessIconWrap: {
+    width: 40, height: 40,
+    borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
   },
   wellnessLabel: {
     fontSize: 17, fontWeight: '700',
