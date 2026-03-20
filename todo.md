@@ -1198,3 +1198,4 @@
 - [x] Journal screen: remove the FAB (floating + button) from bottom-right
 - [x] Journal screen: add photo button in the JOURNAL ENTRY section
 - [x] Journal calendar modal: tapping a day navigates the day-view to that date and closes the modal
+- [x] Tab bar: redesign to floating pill style (dark frosted background, active tab rounded rect highlight, no top border, large icons) with tabs: Dashboard, Journal, + center, Chat, More
