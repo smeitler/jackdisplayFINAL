@@ -799,7 +799,7 @@ export default function HomeScreen() {
           {!isCalm && <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.dateText, { color: colors.foreground }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -1080,7 +1080,13 @@ function WidgetGrid({
   onMoveUp: (id: string) => void;
   onMoveDown: (id: string) => void;
 }) {
-  if (widgetIds.length === 0 && !editing) return null;
+  if (widgetIds.length === 0 && !editing) {
+    return (
+      <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+        <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'center' }}>Tap Edit Dashboard to customize</Text>
+      </View>
+    );
+  }
 
   function renderWidget(id: string, idx: number) {
     const wrapStyle = [

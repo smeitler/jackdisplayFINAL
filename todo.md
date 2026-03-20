@@ -1220,3 +1220,6 @@
 - [x] Fix double safe-area padding on all tab screens — remove manual insets.top additions since ScreenContainer already handles the top edge
 - [x] Fix all tab screens overlapping status bar — content starts at very top edge on every screen
 - [x] Fix top safe area on all screens — SafeAreaView not applying top inset on device, need alternative approach
+- [x] DEFINITIVE FIX: top safe area overlap on all screens — replaced SafeAreaView with useSafeAreaInsets() + 50px web minimum fallback in ScreenContainer
+- [x] Abbreviate dashboard date format from "Friday, March 20" to "Fri, Mar 20" to prevent truncation
+- [x] Add empty state message when no widgets on dashboard ("Tap Edit Dashboard to customize")
