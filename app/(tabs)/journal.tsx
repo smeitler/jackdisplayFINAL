@@ -2104,80 +2104,76 @@ function RichTextEditor({
   };
 
   return (
-    <View style={{ minHeight: 120 }}>
-      {/* When focused: show the raw TextInput for editing */}
-      {isFocused && (
-        <TextInput
-          ref={inputRef}
-          value={value}
-          onChangeText={handleChangeText}
-          onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
-          selection={bodySelection}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          multiline
-          placeholder="Write your entry..."
-          placeholderTextColor={colors.muted}
-          style={{
-            fontSize: 16,
-            lineHeight: 24,
-            minHeight: 120,
-            color: colors.foreground,
-            textAlignVertical: 'top',
-            padding: 0,
-          }}
-        />
-      )}
-      {/* When blurred: show styled preview. TextInput stays mounted (hidden) so ref is always valid. */}
+    <View>
+      {/* Single TextInput — always mounted so ref is always valid.
+          In preview mode it is visually hidden (opacity 0, height 0) but NOT unmounted,
+          so onChangeText never fires with stale/empty data. */}
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={handleChangeText}
+        onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
+        selection={bodySelection}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        multiline
+        placeholder="Write your entry..."
+        placeholderTextColor={colors.muted}
+        style={isFocused ? {
+          fontSize: 16,
+          lineHeight: 24,
+          minHeight: 80,
+          color: colors.foreground,
+          textAlignVertical: 'top',
+          padding: 0,
+        } : {
+          position: 'absolute',
+          opacity: 0,
+          height: 0,
+          width: 0,
+        }}
+      />
+      {/* Preview: rendered markdown, tappable to enter edit mode */}
       {!isFocused && (
         <Pressable
           onPress={() => {
             setIsFocused(true);
             setTimeout(() => inputRef.current?.focus(), 20);
           }}
-          style={{ minHeight: 120 }}
+          style={{ minHeight: 40 }}
         >
           {renderPreview()}
         </Pressable>
-      )}
-      {/* Hidden TextInput always mounted so ref is valid for dvApplyFormat */}
-      {!isFocused && (
-        <TextInput
-          ref={inputRef}
-          value={value}
-          onChangeText={handleChangeText}
-          onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
-          selection={bodySelection}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          multiline
-          style={{ height: 0, opacity: 0, position: 'absolute', top: 0 }}
-        />
       )}
     </View>
   );
 }
 
-// Parse inline markdown (bold, italic) into React Native Text elements
+// Parse inline markdown (bold, italic) into React Native Text elements.
+// Handles: **bold**, *italic*, ***bold+italic***, and plain text.
 function parseInlineMarkdown(text: string, colors: any): React.ReactNode[] {
+  if (!text) return [];
   const result: React.ReactNode[] = [];
-  // Regex: **bold**, *italic*, or plain text
-  const regex = /\*\*([^*]+)\*\*|\*([^*]+)\*|([^*]+)/g;
+  // Order matters: match ***text*** before **text** before *text*
+  const regex = /\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|\*([^*]+)\*|([^*]+)/g;
   let match;
   let key = 0;
   while ((match = regex.exec(text)) !== null) {
     if (match[1] !== undefined) {
-      // Bold
-      result.push(<Text key={key++} style={{ fontWeight: '700', color: colors.foreground }}>{match[1]}</Text>);
+      // Bold + Italic
+      result.push(<Text key={key++} style={{ fontWeight: '700', fontStyle: 'italic', color: colors.foreground }}>{match[1]}</Text>);
     } else if (match[2] !== undefined) {
-      // Italic
-      result.push(<Text key={key++} style={{ fontStyle: 'italic', color: colors.foreground }}>{match[2]}</Text>);
+      // Bold
+      result.push(<Text key={key++} style={{ fontWeight: '700', color: colors.foreground }}>{match[2]}</Text>);
     } else if (match[3] !== undefined) {
+      // Italic
+      result.push(<Text key={key++} style={{ fontStyle: 'italic', color: colors.foreground }}>{match[3]}</Text>);
+    } else if (match[4] !== undefined) {
       // Plain
-      result.push(<Text key={key++} style={{ color: colors.foreground }}>{match[3]}</Text>);
+      result.push(<Text key={key++} style={{ color: colors.foreground }}>{match[4]}</Text>);
     }
   }
-  return result;
+  return result.length > 0 ? result : [<Text key={0} style={{ color: colors.foreground }}>{text}</Text>];
 }
 
 // ─── DrawCanvas ────────────────────────────────────────────────────────────────────────────────────
@@ -2474,6 +2470,8 @@ export default function JournalScreen() {
   const [dvJournalNote, setDvJournalNote] = useState('');
   // TextInput ref and cursor/selection tracking for formatting
   const dvTextInputRef = useRef<any>(null);
+  // dvSelection stores the LAST known selection — only updated on user-initiated selection changes.
+  // It is NOT reset on blur, so formatting applied from the font sheet uses the correct position.
   const dvSelection = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   // Controlled selection for cursor repositioning after formatting (avoids setNativeProps)
   const [dvBodySelection, setDvBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
@@ -2492,6 +2490,18 @@ export default function JournalScreen() {
   const [dvShowDraw, setDvShowDraw] = useState(false);
   // Font style sheet
   const [dvShowFontSheet, setDvShowFontSheet] = useState(false);
+  const fontSheetAnim = useRef(new Animated.Value(300)).current;
+
+  const openFontSheet = useCallback(() => {
+    setDvShowFontSheet(true);
+    Animated.timing(fontSheetAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+  }, [fontSheetAnim]);
+
+  const closeFontSheet = useCallback(() => {
+    Animated.timing(fontSheetAnim, { toValue: 300, duration: 200, useNativeDriver: true }).start(() => {
+      setDvShowFontSheet(false);
+    });
+  }, [fontSheetAnim]);
   // Scan text (OCR)
   const [dvScanTextLoading, setDvScanTextLoading] = useState(false);
   const [dvShowScanTextResult, setDvShowScanTextResult] = useState(false);
@@ -2661,7 +2671,7 @@ export default function JournalScreen() {
   // Bold/Italic toggle: if selection is already wrapped, remove the markers; otherwise add them.
   // Uses dvBodySelection state (not setNativeProps) to reposition the cursor.
   const dvApplyFormat = useCallback((type: 'bold' | 'italic' | 'heading' | 'bullet') => {
-    setDvShowFontSheet(false);
+    closeFontSheet();
     const text = dvJournalNote;
     const { start, end } = dvSelection.current;
     const hasSelection = start !== end;
@@ -2685,8 +2695,8 @@ export default function JournalScreen() {
           newCursorPos = end + 4;
         }
       } else {
-        const insert = '**bold**';
-        newText = text.slice(0, start) + insert + text.slice(end);
+        // No selection: insert **| ** with cursor between markers so user types bold text
+        newText = text.slice(0, start) + '****' + text.slice(end);
         newCursorPos = start + 2;
       }
     } else if (type === 'italic') {
@@ -2703,8 +2713,8 @@ export default function JournalScreen() {
           newCursorPos = end + 2;
         }
       } else {
-        const insert = '*italic*';
-        newText = text.slice(0, start) + insert + text.slice(end);
+        // No selection: insert *| * with cursor between markers so user types italic text
+        newText = text.slice(0, start) + '**' + text.slice(end);
         newCursorPos = start + 1;
       }
     } else if (type === 'heading') {
@@ -2740,7 +2750,7 @@ export default function JournalScreen() {
     }, 50);
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newText, dvGratItems), 800);
-  }, [dvJournalNote, dvGratItems, saveDvNoteAndGrat]);
+  }, [dvJournalNote, dvGratItems, saveDvNoteAndGrat, closeFontSheet]);
 
   // ── Scan Text (OCR) ───────────────────────────────────────────────────────────────────────────────
   const dvScanText = useCallback(async () => {
@@ -2908,7 +2918,12 @@ export default function JournalScreen() {
                 if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
                 autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
               }}
-              onSelectionChange={(sel) => { dvSelection.current = sel; }}
+              onSelectionChange={(sel) => {
+                // Only persist non-zero selections (ignore programmatic focus resets)
+                if (sel.start !== 0 || sel.end !== 0 || dvJournalNote.length === 0) {
+                  dvSelection.current = sel;
+                }
+              }}
               inputRef={dvTextInputRef}
               bodySelection={dvBodySelection}
               colors={colors}
@@ -2975,7 +2990,7 @@ export default function JournalScreen() {
                 <Pressable onPress={() => setDvShowAttachSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                   <IconSymbol name="paperclip" size={22} color={colors.muted} />
                 </Pressable>
-                <Pressable onPress={() => setDvShowFontSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                <Pressable onPress={openFontSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                   <Text style={{ fontSize: 16, fontWeight: '700', color: colors.muted, letterSpacing: -0.5 }}>Aa</Text>
                 </Pressable>
               </View>
@@ -3307,63 +3322,50 @@ export default function JournalScreen() {
         </View>
       </Modal>
 
-      {/* ── Font Style Sheet ── */}
-      <Modal visible={dvShowFontSheet} transparent animationType="slide" onRequestClose={() => setDvShowFontSheet(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setDvShowFontSheet(false)} />
-        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 }}>
-          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
-          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, paddingHorizontal: 24, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>Text Style</Text>
-          {([
-            {
-              label: 'Bold',
-              icon: 'bold' as const,
-              desc: 'Make selected text bold',
-              preview: 'B',
-              previewStyle: { fontWeight: '800' as const, fontSize: 20 },
-              type: 'bold' as const,
-            },
-            {
-              label: 'Italic',
-              icon: 'italic' as const,
-              desc: 'Make selected text italic',
-              preview: 'I',
-              previewStyle: { fontStyle: 'italic' as const, fontSize: 20 },
-              type: 'italic' as const,
-            },
-            {
-              label: 'Heading',
-              icon: 'textformat.size' as const,
-              desc: 'Format current line as a heading',
-              preview: 'H',
-              previewStyle: { fontWeight: '800' as const, fontSize: 22 },
-              type: 'heading' as const,
-            },
-            {
-              label: 'Bullet List',
-              icon: 'list.bullet.indent' as const,
-              desc: 'Add a bullet point to current line',
-              preview: '•',
-              previewStyle: { fontSize: 22 },
-              type: 'bullet' as const,
-            },
-          ]).map((item) => (
-            <Pressable
-              key={item.label}
-              onPress={() => dvApplyFormat(item.type)}
-              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 14, opacity: pressed ? 0.6 : 1 }]}
-            >
-              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={[{ color: colors.primary }, item.previewStyle]}>{item.preview}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>{item.label}</Text>
-                <Text style={{ fontSize: 12, color: colors.muted }}>{item.desc}</Text>
-              </View>
-              <IconSymbol name={item.icon} size={18} color={colors.muted} />
-            </Pressable>
-          ))}
-        </View>
-      </Modal>
+      {/* ── Font Style Sheet (inline, no Modal so keyboard stays open) ── */}
+      {dvShowFontSheet && (
+        <>
+          {/* Backdrop */}
+          <Pressable
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }}
+            onPress={closeFontSheet}
+          />
+          {/* Sheet */}
+          <Animated.View
+            style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 100,
+              backgroundColor: colors.background,
+              borderTopLeftRadius: 24, borderTopRightRadius: 24,
+              paddingBottom: 40,
+              transform: [{ translateY: fontSheetAnim }],
+              shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 20,
+            }}
+          >
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, paddingHorizontal: 24, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>Text Style</Text>
+            {([
+              { label: 'Bold', desc: 'Wrap selected text in **bold**', preview: 'B', previewStyle: { fontWeight: '800' as const, fontSize: 20 }, type: 'bold' as const },
+              { label: 'Italic', desc: 'Wrap selected text in *italic*', preview: 'I', previewStyle: { fontStyle: 'italic' as const, fontSize: 20 }, type: 'italic' as const },
+              { label: 'Heading', desc: 'Format current line as a heading', preview: 'H', previewStyle: { fontWeight: '800' as const, fontSize: 22 }, type: 'heading' as const },
+              { label: 'Bullet List', desc: 'Add a bullet point to current line', preview: '•', previewStyle: { fontSize: 22 }, type: 'bullet' as const },
+            ]).map((item) => (
+              <Pressable
+                key={item.label}
+                onPress={() => dvApplyFormat(item.type)}
+                style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 14, opacity: pressed ? 0.6 : 1 }]}
+              >
+                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={[{ color: colors.primary }, item.previewStyle]}>{item.preview}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>{item.label}</Text>
+                  <Text style={{ fontSize: 12, color: colors.muted }}>{item.desc}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </Animated.View>
+        </>
+      )}
 
       {/* ── Calendar Modal ── */}
       <Modal

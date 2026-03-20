@@ -1279,3 +1279,12 @@
 - [x] Fix setNativeProps cursor crash — use selection prop state instead
 - [x] Fix auto-heading: first line should visually appear large/bold without showing raw markdown syntax
 - [x] Replace two-box journal editor with single seamless TextInput (no Title/Body split)
+
+- [x] Keep keyboard open when Aa is tapped (don't blur TextInput before formatting runs)
+- [x] Fix Bold/Italic to only wrap the actual selected text range, not the entire entry
+- [x] Fix bold toggle detection — tapping Bold on bold text should remove ** not add more
+- [x] Fix Heading to render correctly in preview (parseInlineMarkdown heading lines)
+- [x] Remove hidden mounted TextInput that fires onChangeText with empty string on blur (wipes entry)
+- [x] Fix parseInlineMarkdown to correctly render bold/italic segments visually
+- [x] Reduce journal card minimum height so it fits content tightly (no excessive empty space)
+- [x] Clean up font sheet — remove redundant right-side preview badges (B, I, T, ≡)
