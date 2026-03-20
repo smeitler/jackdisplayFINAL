@@ -2240,6 +2240,12 @@ export default function JournalScreen() {
   // Gratitude items as individual strings (shown as separate cards)
   const [dvGratItems, setDvGratItems] = useState<string[]>(['', '', '']);
   const dvPrimaryEntryId = useRef<string | null>(null);
+  // Day-view toolbar sheet state
+  const [dvShowAttachSheet, setDvShowAttachSheet] = useState(false);
+  const [dvShowMoreSheet, setDvShowMoreSheet] = useState(false);
+  const [dvTagInput, setDvTagInput] = useState('');
+  const [dvShowTagInput, setDvShowTagInput] = useState(false);
+  const [dvTags, setDvTags] = useState<string[]>([]);
 
   // Sync note/gratitude from the first non-voice entry, or fall back to the voice entry body
   useEffect(() => {
@@ -2335,6 +2341,67 @@ export default function JournalScreen() {
       setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, attachments: merged } : e));
     } catch (e) { console.warn('dvPickPhoto error:', e); }
   }, [userId, selectedDate, entries]);
+
+  // ── Day-view camera / video / tag handlers ───────────────────────────────
+  const dvPickCamera = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') return;
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
+      if (result.canceled || !userId) return;
+      let entryId = dvPrimaryEntryId.current;
+      if (!entryId) {
+        const now = new Date().toISOString();
+        const newEntry: JournalEntry = { id: generateId(), userId, date: selectedDate, createdAt: now, updatedAt: now, title: '', body: '', template: 'blank', attachments: [], tags: [] };
+        const updated = await addEntry(userId, newEntry);
+        dvPrimaryEntryId.current = newEntry.id;
+        setEntries(updated);
+        entryId = newEntry.id;
+      }
+      const newAtts: JournalAttachment[] = result.assets.map((a) => ({ id: generateId(), type: 'photo' as const, uri: a.uri, mimeType: a.mimeType || 'image/jpeg' }));
+      const existing = entries.find((e) => e.id === entryId);
+      const merged = [...(existing?.attachments ?? []), ...newAtts];
+      await updateEntryInStore(userId, entryId, { attachments: merged });
+      setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, attachments: merged } : e));
+    } catch (e) { console.warn('dvPickCamera error:', e); }
+  }, [userId, selectedDate, entries]);
+
+  const dvPickVideo = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') return;
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['videos'], videoMaxDuration: 120, quality: 0.8 });
+      if (result.canceled || !userId) return;
+      let entryId = dvPrimaryEntryId.current;
+      if (!entryId) {
+        const now = new Date().toISOString();
+        const newEntry: JournalEntry = { id: generateId(), userId, date: selectedDate, createdAt: now, updatedAt: now, title: '', body: '', template: 'blank', attachments: [], tags: [] };
+        const updated = await addEntry(userId, newEntry);
+        dvPrimaryEntryId.current = newEntry.id;
+        setEntries(updated);
+        entryId = newEntry.id;
+      }
+      const newAtts: JournalAttachment[] = result.assets.map((a) => ({ id: generateId(), type: 'video' as const, uri: a.uri, mimeType: a.mimeType || 'video/mp4' }));
+      const existing = entries.find((e) => e.id === entryId);
+      const merged = [...(existing?.attachments ?? []), ...newAtts];
+      await updateEntryInStore(userId, entryId, { attachments: merged });
+      setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, attachments: merged } : e));
+    } catch (e) { console.warn('dvPickVideo error:', e); }
+  }, [userId, selectedDate, entries]);
+
+  const dvAddTag = useCallback(async (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed || dvTags.includes(trimmed)) return;
+    const next = [...dvTags, trimmed];
+    setDvTags(next);
+    setDvTagInput('');
+    setDvShowTagInput(false);
+    if (!userId || !dvPrimaryEntryId.current) return;
+    const existing = entries.find((e) => e.id === dvPrimaryEntryId.current);
+    const merged = [...(existing?.tags ?? []), trimmed];
+    await updateEntryInStore(userId, dvPrimaryEntryId.current, { tags: merged });
+    setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, tags: merged } : e));
+  }, [dvTags, userId, entries]);
 
   // ── Date wheel picker columns ───────────────────────────────────────────────
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2463,18 +2530,108 @@ export default function JournalScreen() {
                 </ScrollView>
               );
             })()}
-            {/* Add photo button */}
-            <Pressable
-              onPress={dvPickPhoto}
-              style={({ pressed }) => ({
-                flexDirection: 'row', alignItems: 'center', gap: 6,
-                marginTop: 10, opacity: pressed ? 0.6 : 1,
-              })}
-            >
-              <IconSymbol name="photo.fill" size={16} color={colors.primary} />
-              <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '500' }}>Add Photo</Text>
-            </Pressable>
+            {/* Tag chips */}
+            {dvTags.length > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {dvTags.map((tag) => (
+                  <Pressable
+                    key={tag}
+                    onPress={() => setDvTags((prev) => prev.filter((t) => t !== tag))}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '22', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
+                  >
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>#{tag}</Text>
+                    <IconSymbol name="xmark" size={10} color={colors.primary} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {/* Tag input */}
+            {dvShowTagInput && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <TextInput
+                  value={dvTagInput}
+                  onChangeText={setDvTagInput}
+                  placeholder="Add tag..."
+                  placeholderTextColor={colors.muted}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => dvAddTag(dvTagInput)}
+                  style={{ flex: 1, fontSize: 14, color: colors.foreground, borderBottomWidth: 1, borderBottomColor: colors.primary, paddingVertical: 4 }}
+                />
+                <Pressable onPress={() => dvAddTag(dvTagInput)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                  <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Add</Text>
+                </Pressable>
+              </View>
+            )}
+            {/* Bottom toolbar: ↓ dismiss | photo | paperclip */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+              {/* Left: dismiss keyboard */}
+              <Pressable
+                onPress={() => Keyboard.dismiss()}
+                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 6 })}
+              >
+                <IconSymbol name="chevron.down" size={20} color={colors.muted} />
+              </Pressable>
+              {/* Right: photo + paperclip */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                <Pressable onPress={dvPickPhoto} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                  <IconSymbol name="photo.fill" size={22} color={colors.muted} />
+                </Pressable>
+                <Pressable onPress={() => setDvShowAttachSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                  <IconSymbol name="paperclip" size={22} color={colors.muted} />
+                </Pressable>
+              </View>
+            </View>
           </View>
+
+          {/* ── Day-view Attach Sheet ── */}
+          <Modal visible={dvShowAttachSheet} transparent animationType="slide" onRequestClose={() => setDvShowAttachSheet(false)}>
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setDvShowAttachSheet(false)} />
+            <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
+              {([
+                { icon: 'tag.fill' as const, label: 'Tag', color: '#8B5CF6', onPress: () => { setDvShowAttachSheet(false); setDvShowTagInput(true); } },
+                { icon: 'mic.fill' as const, label: 'Audio', color: '#EF4444', onPress: () => setDvShowAttachSheet(false) },
+                { icon: 'camera.fill' as const, label: 'Camera', color: '#3B82F6', onPress: () => { setDvShowAttachSheet(false); dvPickCamera(); } },
+                { icon: 'video.fill' as const, label: 'Video', color: '#10B981', onPress: () => { setDvShowAttachSheet(false); dvPickVideo(); } },
+              ]).map((item) => (
+                <Pressable key={item.label} onPress={item.onPress} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}>
+                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: item.color + '22', alignItems: 'center', justifyContent: 'center' }}>
+                    <IconSymbol name={item.icon} size={20} color={item.color} />
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: colors.foreground }}>{item.label}</Text>
+                </Pressable>
+              ))}
+              <Pressable onPress={() => { setDvShowAttachSheet(false); setDvShowMoreSheet(true); }} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+                  <IconSymbol name="ellipsis" size={20} color={colors.muted} />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '500', color: colors.foreground }}>More</Text>
+              </Pressable>
+            </View>
+          </Modal>
+
+          {/* ── Day-view More Sheet ── */}
+          <Modal visible={dvShowMoreSheet} transparent animationType="slide" onRequestClose={() => setDvShowMoreSheet(false)}>
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setDvShowMoreSheet(false)} />
+            <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 8 }} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.muted, paddingHorizontal: 24, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.8 }}>More Options</Text>
+              {([
+                { icon: 'scribble' as const, label: 'Draw', onPress: () => setDvShowMoreSheet(false) },
+                { icon: 'doc.text.viewfinder' as const, label: 'Scan to PDF', onPress: () => setDvShowMoreSheet(false) },
+                { icon: 'text.viewfinder' as const, label: 'Scan Text', onPress: () => setDvShowMoreSheet(false) },
+                { icon: 'doc.fill' as const, label: 'Template', onPress: () => { setDvShowMoreSheet(false); setEditorVisible(true); } },
+              ] as const).map((item) => (
+                <Pressable key={item.label} onPress={item.onPress} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}>
+                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+                    <IconSymbol name={item.icon} size={20} color={colors.primary} />
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: colors.foreground }}>{item.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Modal>
 
           {/* ── Legend row ── */}
           {habits.filter((h) => h.isActive).length > 0 && (

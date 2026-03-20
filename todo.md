@@ -1258,3 +1258,4 @@
 - [x] Journal entry bottom toolbar: keyboard dismiss (↓ chevron), photo library icon, paperclip attachment menu
 - [x] Paperclip menu options: Tag, Audio (record), Camera (in-app photo), Video (in-app video)
 - [x] Paperclip More submenu: Draw, Scan to PDF, Scan Text, Template
+- [x] Journal day-view inline card: add toolbar (↓ dismiss keyboard, photo, paperclip with Tag/Audio/Camera/Video/More) matching the editor modal toolbar
