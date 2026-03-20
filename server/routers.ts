@@ -658,8 +658,8 @@ export const appRouter = router({
 
         // 3. AI categorization — extract journal thoughts, gratitude items, AND per-habit notes
         const habitList = (input.habits ?? []).map((h) => `- ${h.id}: ${h.name}`).join('\n');
-        const habitSection = habitList ? `\n3. "habitNotes": an object mapping habit IDs to a VERY SHORT punchy phrase (3-8 words max) capturing the key fact about that habit. Think like a bullet point note, not a sentence. Examples: "2-hour mountain hike", "skipped — no time", "8 glasses, hit goal", "30 min yoga flow". Only include habits clearly mentioned. Habit list:\n${habitList}` : '';
-        const habitJsonExample = habitList ? `, "habitNotes": {"habit_id": "punchy 3-8 word note"}` : '';
+        const habitSection = habitList ? `\n3. "habitNotes": an object mapping habit IDs to a descriptive phrase capturing the key fact about that habit. Be specific and include all relevant details from the transcript. Examples: "climbed Mount Timpanogos with friends, 8-hour round trip", "skipped — no time today", "drank 8 glasses, hit daily goal", "30 min yoga flow before work". Only include habits clearly mentioned. Habit list:\n${habitList}` : '';
+        const habitJsonExample = habitList ? `, "habitNotes": {"habit_id": "descriptive note about the habit"}` : '';
 
         const llmResp = await invokeLLM({
           messages: [
@@ -757,7 +757,7 @@ Return ONLY valid JSON: {"journalEntries": [...]${habitJsonExample}, "gratitudeI
               content: `You are a habit coach analyzing a user's voice check-in. Given their speech transcript and a list of habits, determine:
 1. Which habits they mentioned (directly or indirectly)
 2. How well they did on each mentioned habit: "green" (crushed it / did it / succeeded), "yellow" (partial / okay / tried), or "red" (missed / skipped / failed)
-3. A very short punchy note (3-8 words max) capturing the key fact
+3. A descriptive note capturing the key fact and specific details from the transcript
 
 Rating guidelines:
 - GREEN: "crushed my workout", "hit the gym", "8 glasses of water", "called mom", "meditated", "read for an hour", "got 8 hours sleep", "finished the project"
@@ -770,7 +770,7 @@ Only include habits that were clearly mentioned or strongly implied.
 Habits:
 ${habitList}
 
-Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"red"|null, "note": "short note"}, ...}}`,
+Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"red"|null, "note": "descriptive note with specific details"}, ...}}`,
             },
             {
               role: 'user',
@@ -787,7 +787,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             results = Object.fromEntries(
               Object.entries(parsed.results)
                 .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
-                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '').slice(0, 60) }])
+                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '') }])
             ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
           }
         } catch {
@@ -838,9 +838,9 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         }
         const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
         const habitSection = habitList
-          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "specific achievement in 5-12 words"}. Habits:\n${habitList}`
+          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "specific achievement with full details from transcript"}. Habits:\n${habitList}`
           : '';
-        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "climbed Mount Timpanogos, 5-hour workout"}}` : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "climbed Mount Timpanogos with friends, 8-hour round trip"}}` : '';
         const llmResp = await invokeLLM({
           messages: [
             {
@@ -869,7 +869,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             habitResults = Object.fromEntries(
               Object.entries(parsed.habitResults)
                 .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
-                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '').slice(0, 60) }])
+                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '') }])
             ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
           }
         } catch {
@@ -898,9 +898,9 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         }
         const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
         const habitSection = habitList
-          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "specific achievement in 5-12 words"}. Habits:\n${habitList}`
+          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "specific achievement with full details from transcript"}. Habits:\n${habitList}`
           : '';
-        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "climbed Mount Timpanogos, 5-hour workout"}}` : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "climbed Mount Timpanogos with friends, 8-hour round trip"}}` : '';
         const llmResp = await invokeLLM({
           messages: [
             {
@@ -929,7 +929,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             habitResults = Object.fromEntries(
               Object.entries(parsed.habitResults)
                 .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
-                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '').slice(0, 60) }])
+                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '') }])
             ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
           }
         } catch {

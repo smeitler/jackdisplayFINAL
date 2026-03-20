@@ -1202,3 +1202,4 @@
 - [x] Tab bar: revert floating pill, use standard full-width dark navy bar with large soft rounded icons and bold active label
 - [x] Voice AI: recalibrate to aggressively extract all habit evidence from transcript, map fragments to correct habits with detailed descriptions and accurate ratings
 - [x] Journal day-view: habit notes/descriptions from voice check-in not showing after save — fix sync between voice save and journal dvHabitNotes state
+- [x] Remove character limits on habit note fields: TextInput maxLength and any AI prompt truncation that cuts off descriptions
