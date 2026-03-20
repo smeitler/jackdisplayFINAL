@@ -1175,3 +1175,5 @@
 - [ ] Fix voice-checkin: results screen should use classic check-in UI (grouped categories + red/yellow/green squares)
 - [x] Fix voice-checkin spinner: always mounted so Animated.loop never resets
 - [x] Fix voice-checkin results: replace HabitResultCard with classic grouped-category layout (segmented red/yellow/green squares)
+- [x] Fix transcription: raise 16MB limit to 100MB, increase body parser limit, set long server timeout
+- [x] Fix transcription: chunk large audio files on client before sending to avoid payload limits

@@ -63,8 +63,9 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Raised to 200MB: base64-encoded 30-min audio can be ~100MB raw × 1.33 base64 overhead
+  app.use(express.json({ limit: "200mb" }));
+  app.use(express.urlencoded({ limit: "200mb", extended: true }));
 
   // Serve static public files (privacy policy, terms, etc.)
   // In dev: __dirname = server/_core/, so ../../public = project root/public
@@ -163,6 +164,11 @@ async function startServer() {
   if (!ENV.databaseUrl) {
     console.error('[STARTUP] WARNING: DATABASE_URL is not set! All data operations will fail silently.');
   }
+
+  // Set a 10-minute timeout for long-running requests (e.g. 30-min voice transcription)
+  server.timeout = 10 * 60 * 1000; // 10 minutes in ms
+  server.keepAliveTimeout = 10 * 60 * 1000;
+  server.headersTimeout = 10 * 60 * 1000 + 5000; // slightly above keepAlive
 
   server.listen(port, () => {
     console.log(`[api] server listening on port ${port}`);

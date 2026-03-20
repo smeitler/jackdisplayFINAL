@@ -609,8 +609,11 @@ export default function VoiceCheckinScreen() {
     return () => loop.stop();
   }, []);
 
-  // tRPC combined mutation (single call = faster)
+  // tRPC mutations
   const transcribeAndAnalyze = trpc.voiceCheckin.transcribeAndAnalyze.useMutation();
+  const transcribeChunk = trpc.voiceCheckin.transcribeChunk.useMutation();
+  const analyzeTranscript = trpc.voiceCheckin.analyzeTranscript.useMutation();
+  const analyzeTranscriptFull = trpc.voiceCheckin.analyzeTranscriptFull.useMutation();
 
   // ── Auto-start recording on mount (no delay, no idle flash) ─────────────
   const hasAutoStarted = useRef(false);
@@ -658,7 +661,7 @@ export default function VoiceCheckinScreen() {
     }
   }, [webRecorder, nativeRecorder]);
 
-  // ── Stop & analyze (single combined API call) ────────────────────────────
+  // ── Stop & analyze (chunked for large recordings, single call for small) ───
   const stopAndAnalyze = useCallback(async () => {
     setPhase("analyzing");
     if (Platform.OS !== "web")
@@ -667,13 +670,15 @@ export default function VoiceCheckinScreen() {
     try {
       let audioBase64 = "";
       let mimeType = "audio/webm";
+      let blobSizeMB = 0;
+      let rawBlob: Blob | null = null;
 
       if (Platform.OS === "web") {
-        const blob = await webRecorder.stop();
-        if (!blob || blob.size === 0) {
+        rawBlob = await webRecorder.stop();
+        if (!rawBlob || rawBlob.size === 0) {
           throw new Error("No audio recorded. Please try again.");
         }
-        audioBase64 = await blobToBase64(blob);
+        blobSizeMB = rawBlob.size / (1024 * 1024);
         mimeType = webRecorder.getMimeType();
       } else {
         await nativeRecorder.stop();
@@ -683,35 +688,98 @@ export default function VoiceCheckinScreen() {
           encoding: FileSystem.EncodingType.Base64,
         });
         mimeType = "audio/m4a";
+        // Estimate size from base64 length
+        blobSizeMB = (audioBase64.length * 0.75) / (1024 * 1024);
       }
 
-      // Single combined call: transcribe + analyze habits + extract journal/gratitude
       const habitList = habits.map((h) => ({ id: h.id, name: h.name }));
-      const combined = await transcribeAndAnalyze.mutateAsync({
-        audioBase64,
-        mimeType,
+
+      // ── Small recording (≤10 MB): single combined call ───────────────────
+      if (blobSizeMB <= 10) {
+        if (rawBlob) audioBase64 = await blobToBase64(rawBlob);
+        const combined = await transcribeAndAnalyze.mutateAsync({
+          audioBase64,
+          mimeType,
+          habits: habitList,
+        });
+        const habitResults: HabitResult[] = Object.entries(combined.habitResults)
+          .map(([habitId, data]) => {
+            const habit = habits.find((h) => h.id === habitId);
+            if (!habit) return null;
+            return { habitId, habitName: habit.name, rating: data.rating, note: data.note };
+          })
+          .filter(Boolean) as HabitResult[];
+        setResults({
+          habitResults,
+          journalEntries: combined.journalEntries,
+          gratitudeItems: combined.gratitudeItems,
+          transcript: combined.transcript,
+        });
+        setPhase("results");
+        return;
+      }
+
+      // ── Large recording (>10 MB): chunk into ~5 MB pieces ───────────────
+      // Split the blob into ~5 MB chunks and transcribe sequentially
+      const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+      let transcriptParts: string[] = [];
+      let prevTranscript = "";
+
+      if (rawBlob) {
+        // Web: split Blob directly
+        let offset = 0;
+        while (offset < rawBlob.size) {
+          const chunkBlob = rawBlob.slice(offset, offset + CHUNK_SIZE, mimeType);
+          const chunkBase64 = await blobToBase64(chunkBlob);
+          const result = await transcribeChunk.mutateAsync({
+            audioBase64: chunkBase64,
+            mimeType,
+            previousTranscript: prevTranscript,
+          });
+          if (result.error) throw new Error(`Transcription chunk failed: ${result.error}`);
+          transcriptParts.push(result.delta);
+          prevTranscript = result.delta;
+          offset += CHUNK_SIZE;
+        }
+      } else {
+        // Native: split base64 string by character count (~5 MB raw = ~6.67 MB base64)
+        const CHUNK_B64 = Math.ceil((CHUNK_SIZE * 4) / 3);
+        let pos = 0;
+        while (pos < audioBase64.length) {
+          const chunkB64 = audioBase64.slice(pos, pos + CHUNK_B64);
+          const result = await transcribeChunk.mutateAsync({
+            audioBase64: chunkB64,
+            mimeType,
+            previousTranscript: prevTranscript,
+          });
+          if (result.error) throw new Error(`Transcription chunk failed: ${result.error}`);
+          transcriptParts.push(result.delta);
+          prevTranscript = result.delta;
+          pos += CHUNK_B64;
+        }
+      }
+
+      const fullTranscript = transcriptParts.join(" ").trim();
+
+      // Single LLM call: habits + journal + gratitude from merged transcript
+      const analysis = await analyzeTranscriptFull.mutateAsync({
+        transcript: fullTranscript,
         habits: habitList,
       });
 
-      // Build habit results from the combined response
-      const habitResults: HabitResult[] = Object.entries(combined.habitResults)
+      const habitResults: HabitResult[] = Object.entries(analysis.habitResults)
         .map(([habitId, data]) => {
           const habit = habits.find((h) => h.id === habitId);
           if (!habit) return null;
-          return {
-            habitId,
-            habitName: habit.name,
-            rating: data.rating,
-            note: data.note,
-          };
+          return { habitId, habitName: habit.name, rating: data.rating, note: data.note };
         })
         .filter(Boolean) as HabitResult[];
 
       setResults({
         habitResults,
-        journalEntries: combined.journalEntries,
-        gratitudeItems: combined.gratitudeItems,
-        transcript: combined.transcript,
+        journalEntries: analysis.journalEntries,
+        gratitudeItems: analysis.gratitudeItems,
+        transcript: fullTranscript,
       });
       setPhase("results");
     } catch (err: any) {
@@ -721,7 +789,7 @@ export default function VoiceCheckinScreen() {
       Alert.alert("Error", msg);
       setPhase("idle");
     }
-  }, [webRecorder, nativeRecorder, habits, transcribeAndAnalyze]);
+  }, [webRecorder, nativeRecorder, habits, transcribeAndAnalyze, transcribeChunk, analyzeTranscript]);
 
   // ── Update habit rating ──────────────────────────────────────────────────
   const handleRatingChange = useCallback(

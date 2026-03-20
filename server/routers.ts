@@ -877,6 +877,66 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         }
         return { transcript, journalEntries, gratitudeItems, habitResults, audioUrl: storageResult.url };
       }),
+
+    /**
+     * ANALYZE TEXT TRANSCRIPT — habits + journal + gratitude from plain text.
+     * Used for large recordings that were chunked and transcribed separately.
+     */
+    analyzeTranscriptFull: publicProcedure
+      .input(z.object({
+        transcript: z.string(),
+        habits: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+        if (!input.transcript.trim()) {
+          return {
+            journalEntries: [] as string[],
+            gratitudeItems: [] as string[],
+            habitResults: {} as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>,
+          };
+        }
+        const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
+        const habitSection = habitList
+          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "3-8 word punchy note"}. Only include habits clearly mentioned. Rating: green=did it/crushed, yellow=partial/okay, red=missed/skipped. Habits:\n${habitList}`
+          : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "hit the gym"}}` : '';
+        const llmResp = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim${habitSection}\nRules:\n- Gratitude expressions \u2192 gratitudeItems\n- Everything else \u2192 journalEntries\n- For habitResults: be generous with inference, match by context\n- Only include habits clearly mentioned or strongly implied\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+            },
+            {
+              role: 'user',
+              content: `Transcript:\n${input.transcript}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        });
+        let journalEntries: string[] = [];
+        let gratitudeItems: string[] = [];
+        let habitResults: Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> = {};
+        try {
+          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+          journalEntries = Array.isArray(parsed.journalEntries)
+            ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+            : [];
+          gratitudeItems = Array.isArray(parsed.gratitudeItems)
+            ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+            : [];
+          if (parsed.habitResults && typeof parsed.habitResults === 'object') {
+            habitResults = Object.fromEntries(
+              Object.entries(parsed.habitResults)
+                .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
+                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '').slice(0, 60) }])
+            ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
+          }
+        } catch {
+          journalEntries = [input.transcript];
+        }
+        return { journalEntries, gratitudeItems, habitResults };
+      }),
   }),
 
   // ─── Morning Practice ────────────────────────────────────────────────────────

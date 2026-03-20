@@ -113,13 +113,13 @@ export async function transcribeAudio(
       // Use caller-provided mimeType if available (more reliable than content-type header from storage)
       mimeType = options.mimeType || response.headers.get("content-type") || "audio/m4a";
 
-      // Check file size (16MB limit)
+      // Check file size (100MB limit — supports up to ~30 min recordings)
       const sizeMB = audioBuffer.length / (1024 * 1024);
-      if (sizeMB > 16) {
+      if (sizeMB > 100) {
         return {
           error: "Audio file exceeds maximum size limit",
           code: "FILE_TOO_LARGE",
-          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`,
+          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 100MB`,
         };
       }
     } catch (error) {
@@ -212,9 +212,10 @@ export async function transcribeAudioBuffer(
     if (!ENV.forgeApiKey) {
       return { error: 'Voice transcription service authentication is missing', code: 'SERVICE_ERROR', details: 'BUILT_IN_FORGE_API_KEY is not set' };
     }
+    // 100MB limit — supports up to ~30 min recordings at typical bitrates
     const sizeMB = audioBuffer.length / (1024 * 1024);
-    if (sizeMB > 16) {
-      return { error: 'Audio file exceeds maximum size limit', code: 'FILE_TOO_LARGE', details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB` };
+    if (sizeMB > 100) {
+      return { error: 'Audio file exceeds maximum size limit', code: 'FILE_TOO_LARGE', details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 100MB` };
     }
     // Normalize mimeType: strip codec suffixes (e.g. "audio/webm;codecs=opus" → "audio/webm")
     // Whisper API rejects MIME types with codec parameters
