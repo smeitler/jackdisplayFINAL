@@ -543,7 +543,8 @@ export default function VoiceCheckinScreen() {
   const router = useRouter();
   const { habits } = useApp();
 
-  const [phase, setPhase] = useState<Phase>("idle");
+  // Start directly in listening phase — idle screen never renders
+  const [phase, setPhase] = useState<Phase>("listening");
   const [results, setResults] = useState<ParsedResults | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -585,17 +586,12 @@ export default function VoiceCheckinScreen() {
   // tRPC combined mutation (single call = faster)
   const transcribeAndAnalyze = trpc.voiceCheckin.transcribeAndAnalyze.useMutation();
 
-  // ── Auto-start recording on mount ────────────────────────────────────────
-  // Skip the idle "tap to start" step — begin recording immediately when screen opens.
+  // ── Auto-start recording on mount (no delay, no idle flash) ─────────────
   const hasAutoStarted = useRef(false);
   useEffect(() => {
     if (hasAutoStarted.current) return;
     hasAutoStarted.current = true;
-    // Small delay so the screen finishes mounting/animating before we request mic
-    const timer = setTimeout(() => {
-      startRecording();
-    }, 400);
-    return () => clearTimeout(timer);
+    startRecording();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
