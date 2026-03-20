@@ -1,12 +1,14 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image } from "react-native";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useWindowDimensions } from "react-native";
 import { Animated } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId, loadVisionBoard, saveVisionBoard, VisionBoard, loadVisionMotivations, saveVisionMotivations, VisionMotivations } from "@/lib/storage";
+import { JournalEntry, loadEntries, todayDateStr } from "@/lib/journal-store";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
@@ -14,6 +16,7 @@ import Svg, { Circle } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { CalmHeader, useIsCalm } from "@/components/calm-effects";
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
@@ -798,7 +801,7 @@ export default function HomeScreen() {
           </View>}
 
           {/* ── Quick Access Pill Bar ── */}
-          <QuickAccessPills isCalm={isCalm} colors={colors} router={router} />
+          <QuickAccessPills isCalm={isCalm} colors={colors} />
 
           {/* ── Stats row ── */}
           <View style={styles.statsRow}>
@@ -1022,13 +1025,334 @@ export default function HomeScreen() {
   );
 }
 
+// ─── Calendar helpers (mirrored from journal.tsx) ────────────────────────────
+const MONTH_NAMES_CAL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function calGetMonthDays(year: number, month: number): number { return new Date(year, month, 0).getDate(); }
+function calGetFirstDay(year: number, month: number): number { return new Date(year, month - 1, 1).getDay(); }
+function calGenerateMonths(sy: number, sm: number, ey: number, em: number): { year: number; month: number }[] {
+  const r: { year: number; month: number }[] = []; let y = sy; let m = sm;
+  while (y < ey || (y === ey && m <= em)) { r.push({ year: y, month: m }); m++; if (m > 12) { m = 1; y++; } }
+  return r;
+}
+
+// ─── Inline Calendar Section ──────────────────────────────────────────────────
+function InlineCalendar({ colors }: { colors: any }) {
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const { width: winWidth } = useWindowDimensions();
+
+  useEffect(() => {
+    (async () => {
+      const uid = await getLastUserId();
+      const loaded = await loadEntries(uid || 'default');
+      setEntries(loaded);
+    })();
+  }, []);
+
+  const today = new Date();
+  const todayStr = todayDateStr();
+  const months = useMemo(() => calGenerateMonths(today.getFullYear() - 2, 1, today.getFullYear() + 1, 12), []);
+  const todayMonthIndex = useMemo(() => {
+    const y = today.getFullYear(); const m = today.getMonth() + 1;
+    return months.findIndex((mo) => mo.year === y && mo.month === m);
+  }, [months]);
+
+  const entryMap = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const e of entries) { const list = map.get(e.date) ?? []; list.push(e); map.set(e.date, list); }
+    return map;
+  }, [entries]);
+
+  const CELL_GAP = 3;
+  const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - 40 - CELL_GAP * 6) / 7);
+  const cellHeight = cellWidth;
+
+  const scrollRef = useRef<ScrollView>(null);
+  const [didScroll, setDidScroll] = useState(false);
+  const monthOffsets = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (!didScroll && todayMonthIndex >= 0 && monthOffsets.current[todayMonthIndex] != null) {
+      scrollRef.current?.scrollTo({ y: monthOffsets.current[todayMonthIndex], animated: false });
+      setDidScroll(true);
+    }
+  }, [didScroll, todayMonthIndex]);
+
+  return (
+    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20 }}>
+      {months.map(({ year, month }, monthIndex) => {
+        const daysInMonth = calGetMonthDays(year, month);
+        const firstDay = calGetFirstDay(year, month);
+        const cells: (number | null)[] = [];
+        for (let i = 0; i < firstDay; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        while (cells.length % 7 !== 0) cells.push(null);
+        const rows: (number | null)[][] = [];
+        for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+        return (
+          <View key={`${year}-${month}`} onLayout={(e) => {
+            monthOffsets.current[monthIndex] = e.nativeEvent.layout.y;
+            if (monthIndex === todayMonthIndex && !didScroll) {
+              scrollRef.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
+              setDidScroll(true);
+            }
+          }} style={{ marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, paddingHorizontal: 0, paddingTop: 12, paddingBottom: 6 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{MONTH_NAMES_CAL[month - 1]}</Text>
+              <Text style={{ fontSize: 12, fontWeight: '500', color: colors.muted }}>{year}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: CELL_GAP, marginBottom: CELL_GAP }}>
+              {['S','M','T','W','T','F','S'].map((d, i) => (
+                <View key={i} style={{ width: cellWidth, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 9, fontWeight: '600', color: colors.muted }}>{d}</Text>
+                </View>
+              ))}
+            </View>
+            {rows.map((row, rowIdx) => (
+              <View key={rowIdx} style={{ flexDirection: 'row', gap: CELL_GAP, marginBottom: CELL_GAP }}>
+                {row.map((day, colIdx) => {
+                  if (day === null) return <View key={`e-${colIdx}`} style={{ width: cellWidth, height: cellHeight }} />;
+                  const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                  const dayEntries = entryMap.get(dateStr) || [];
+                  const isToday = dateStr === todayStr;
+                  const isFuture = dateStr > todayStr;
+                  const hasEntries = dayEntries.length > 0;
+                  let photoUri: string | null = null;
+                  for (const de of dayEntries) {
+                    const photo = de.attachments?.find((a: { type: string }) => a.type === 'photo');
+                    if (photo) { photoUri = (photo as { uri: string }).uri; break; }
+                  }
+                  const bgColor = photoUri ? '#000' : hasEntries ? colors.primary : colors.surface;
+                  const cellOpacity = isFuture ? 0.18 : photoUri ? 1 : hasEntries ? 0.75 : 0.22;
+                  return (
+                    <View key={day} style={{
+                      width: cellWidth, height: cellHeight, borderRadius: 4, overflow: 'hidden',
+                      backgroundColor: bgColor, opacity: cellOpacity,
+                      borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
+                    }}>
+                      {photoUri ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+                      <Text style={{ fontSize: 10, fontWeight: '700', lineHeight: 13, color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+// ─── Inline Vision Board Section ─────────────────────────────────────────────
+function InlineVisionBoard({ colors }: { colors: any }) {
+  const { categories, isDemoMode } = useApp();
+  const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
+  const [board, setBoard] = useState<VisionBoard>({});
+
+  useEffect(() => {
+    loadVisionBoard().then(async (loaded) => {
+      if (Platform.OS !== 'web') {
+        const docDir = FileSystem.documentDirectory ?? '';
+        const cleaned: VisionBoard = {};
+        for (const [catId, uris] of Object.entries(loaded)) {
+          const valid: string[] = [];
+          for (const uri of uris) {
+            if (uri.startsWith(docDir)) {
+              try { const info = await FileSystem.getInfoAsync(uri); if (info.exists) valid.push(uri); } catch { /* skip */ }
+            }
+          }
+          cleaned[catId] = valid;
+        }
+        setBoard(cleaned);
+      } else { setBoard(loaded); }
+    });
+  }, [isDemoMode]);
+
+  const pickImage = useCallback(async (catId: string) => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.8, selectionLimit: 10 });
+    if (!result.canceled && result.assets.length > 0) {
+      const uris = result.assets.map((a) => a.uri);
+      const existing = board[catId] ?? [];
+      const updated = { ...board, [catId]: [...existing, ...uris] };
+      setBoard(updated);
+      await saveVisionBoard(updated);
+    }
+  }, [board]);
+
+  if (sortedCategories.length === 0) {
+    return <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', padding: 20 }}>No goals yet — add one in Manage Habits</Text>;
+  }
+
+  return (
+    <View style={{ gap: 12 }}>
+      {sortedCategories.map((cat) => {
+        const images = board[cat.id] ?? [];
+        return (
+          <View key={cat.id} style={[pillSectionStyles.vbCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={pillSectionStyles.vbHeader}>
+              <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} bgColor={colors.primary + '18'} bgSize={36} borderRadius={9} />
+              <Text style={[pillSectionStyles.vbLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+              <TouchableOpacity onPress={() => pickImage(cat.id)} activeOpacity={0.7} style={[pillSectionStyles.vbAddBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+                <Text style={[pillSectionStyles.vbAddBtnText, { color: colors.primary }]}>+ Photos</Text>
+              </TouchableOpacity>
+            </View>
+            {images.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                {images.map((uri, idx) => (
+                  <Image key={idx} source={{ uri }} style={{ width: 80, height: 80, borderRadius: 8, marginRight: 6 }} resizeMode="cover" />
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={{ color: colors.primary, fontSize: 12, paddingTop: 6, paddingBottom: 2 }}>Tap + Photos to add images →</Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Inline Rewards Section ───────────────────────────────────────────────────
+function InlineRewards({ colors }: { colors: any }) {
+  const { habits, checkIns } = useApp();
+  const [claims, setClaims] = useState<{ habitId: string; periodKey: string; claimedAt: string }[]>([]);
+
+  useEffect(() => {
+    AsyncStorage.getItem('habit_reward_claims_v1').then((raw) => {
+      if (raw) { try { setClaims(JSON.parse(raw)); } catch { /* ignore */ } }
+    });
+  }, []);
+
+  function getPeriodKey(freqType: 'weekly' | 'monthly'): string {
+    const now = new Date();
+    if (freqType === 'monthly') return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const day = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  }
+
+  const rewardItems = useMemo(() => {
+    return habits.filter((h) => h.isActive && h.rewardName && (h.weeklyGoal || h.monthlyGoal)).map((h) => {
+      const freqType = h.frequencyType ?? 'weekly';
+      const goal = freqType === 'monthly' ? (h.monthlyGoal ?? 0) : (h.weeklyGoal ?? 0);
+      const periodKey = getPeriodKey(freqType);
+      const now = new Date();
+      let currentCount = 0;
+      if (freqType === 'weekly') {
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7)); startOfWeek.setHours(0,0,0,0);
+        currentCount = checkIns.filter((c) => c.habitId === h.id && new Date(c.date) >= startOfWeek && c.rating === 'green').length;
+      } else {
+        currentCount = checkIns.filter((c) => c.habitId === h.id && new Date(c.date).getFullYear() === now.getFullYear() && new Date(c.date).getMonth() === now.getMonth() && c.rating === 'green').length;
+      }
+      const isUnlocked = goal > 0 && currentCount >= goal;
+      const claimRecord = claims.find((c) => c.habitId === h.id && c.periodKey === periodKey);
+      return { habitId: h.id, habitName: h.name, rewardName: h.rewardName!, rewardEmoji: h.rewardEmoji ?? '🎁', frequencyType: freqType, goal, currentCount, isUnlocked, claimedAt: claimRecord?.claimedAt };
+    });
+  }, [habits, checkIns, claims]);
+
+  if (rewardItems.length === 0) {
+    return <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', padding: 20 }}>No rewards yet — set a goal on a habit to add one.</Text>;
+  }
+
+  return (
+    <View style={{ gap: 10 }}>
+      {rewardItems.map((item) => {
+        const accent = item.isUnlocked ? '#22C55E' : colors.primary;
+        const pct = item.goal > 0 ? Math.min(item.currentCount / item.goal, 1) : 0;
+        return (
+          <View key={`${item.habitId}`} style={[pillSectionStyles.rewardCard, { backgroundColor: colors.surface, borderColor: item.isUnlocked ? '#22C55E' : colors.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={[pillSectionStyles.rewardEmoji, { backgroundColor: accent + '22' }]}>
+                <Text style={{ fontSize: 20 }}>{item.rewardEmoji}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }} numberOfLines={1}>{item.rewardName}</Text>
+                <Text style={{ fontSize: 11, color: colors.muted }}>{item.habitName} · {item.frequencyType === 'weekly' ? 'Weekly' : 'Monthly'}</Text>
+              </View>
+              {item.isUnlocked && !item.claimedAt && <Text style={{ fontSize: 11, fontWeight: '700', color: '#22C55E' }}>Unlocked!</Text>}
+              {item.claimedAt && <Text style={{ fontSize: 11, fontWeight: '700', color: '#22C55E' }}>Claimed ✓</Text>}
+            </View>
+            {!item.claimedAt && (
+              <View style={pillSectionStyles.progressTrack}>
+                <View style={[pillSectionStyles.progressFill, { width: `${pct * 100}%` as any, backgroundColor: accent }]} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Inline Analytics Section ─────────────────────────────────────────────────
+function InlineAnalytics({ colors, isCalm }: { colors: any; isCalm: boolean }) {
+  const { categories, activeHabits, getCategoryRate } = useApp();
+  const router = useRouter();
+  const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
+  const [showLegend, setShowLegend] = useState(false);
+
+  if (categories.length === 0) {
+    return <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', padding: 20 }}>No goals yet — add one in Manage Habits</Text>;
+  }
+
+  return (
+    <View>
+      <View style={[styles.sectionRow, { marginBottom: 10 }]}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
+        <Pressable onPress={() => setShowLegend(true)} style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
+        </Pressable>
+      </View>
+      <Modal visible={showLegend} transparent animationType="fade" onRequestClose={() => setShowLegend(false)}>
+        <Pressable style={styles.legendOverlay} onPress={() => setShowLegend(false)}>
+          <View style={[styles.legendModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.legendModalTitle, { color: colors.foreground }]}>Ring Colors</Text>
+            {(['#22C55E','#F59E0B','#EF4444'] as const).map((c, i) => (
+              <View key={c} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: c }]} />
+                <Text style={[styles.legendText, { color: colors.muted }]}>{i === 0 ? 'Hit — goal reached' : i === 1 ? 'On Track — ≥60% of goal' : 'Behind — <60% of goal'}</Text>
+              </View>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+      <View style={styles.goalList}>
+        {sortedCategories.map((cat) => {
+          const catHabits = activeHabits.filter((h) => h.category === cat.id);
+          return (
+            <GoalCard
+              key={cat.id}
+              cat={cat}
+              habits={catHabits}
+              rate={getCategoryRate(cat.id, 7)}
+              colors={colors}
+              onPressGoal={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push((`/category-detail?categoryId=${cat.id}`) as never); }}
+              onPressHabit={(habitId) => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push((`/habit-detail?habitId=${habitId}`) as never); }}
+              isCalm={isCalm}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // ─── QuickAccessPills component ─────────────────────────────────────────────
-function QuickAccessPills({ isCalm, colors, router }: { isCalm: boolean; colors: any; router: any }) {
-  const PILLS = [
-    { label: 'Vision Board', onPress: () => router.push('/(tabs)/rewards?tab=vision') },
-    { label: 'Rewards',      onPress: () => router.push('/(tabs)/rewards') },
-    { label: 'Calendar',     onPress: () => router.push('/(tabs)/journal?tab=calendar') },
-    { label: 'Analytics',    onPress: () => router.push('/analytics') },
+function QuickAccessPills({ isCalm, colors }: { isCalm: boolean; colors: any }) {
+  type Section = 'vision' | 'rewards' | 'calendar' | 'analytics';
+  const [active, setActive] = useState<Section>('vision');
+
+  const PILLS: { label: string; key: Section }[] = [
+    { label: 'Vision Board', key: 'vision' },
+    { label: 'Rewards',      key: 'rewards' },
+    { label: 'Calendar',     key: 'calendar' },
+    { label: 'Analytics',    key: 'analytics' },
   ];
 
   const trackBg = isCalm ? '#1A2050' : colors.surface;
@@ -1038,22 +1362,45 @@ function QuickAccessPills({ isCalm, colors, router }: { isCalm: boolean; colors:
   const pillInactiveText = isCalm ? '#8B9CC8' : colors.muted;
 
   return (
-    <View style={[pillStyles.track, { backgroundColor: trackBg, borderColor: trackBorder }]}>
-      {PILLS.map((pill, i) => (
-        <TouchableOpacity
-          key={pill.label}
-          onPress={pill.onPress}
-          style={[pillStyles.pill, { backgroundColor: i === 0 ? pillActiveBg : 'transparent' }]}
-          activeOpacity={0.75}
-        >
-          <Text style={[pillStyles.pillText, { color: i === 0 ? pillActiveText : pillInactiveText }]}>
-            {pill.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
+    <View style={{ marginBottom: 14 }}>
+      {/* Pill selector track */}
+      <View style={[pillStyles.track, { backgroundColor: trackBg, borderColor: trackBorder }]}>
+        {PILLS.map((pill) => (
+          <TouchableOpacity
+            key={pill.key}
+            onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActive(pill.key); }}
+            style={[pillStyles.pill, { backgroundColor: active === pill.key ? pillActiveBg : 'transparent' }]}
+            activeOpacity={0.75}
+          >
+            <Text style={[pillStyles.pillText, { color: active === pill.key ? pillActiveText : pillInactiveText }]}>
+              {pill.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {/* Inline section content */}
+      <View style={[pillSectionStyles.sectionBox, { backgroundColor: isCalm ? '#111830' : colors.background }]}>
+        {active === 'vision'    && <InlineVisionBoard colors={colors} />}
+        {active === 'rewards'   && <InlineRewards colors={colors} />}
+        {active === 'calendar'  && <InlineCalendar colors={colors} />}
+        {active === 'analytics' && <InlineAnalytics colors={colors} isCalm={isCalm} />}
+      </View>
     </View>
   );
 }
+
+const pillSectionStyles = StyleSheet.create({
+  sectionBox: { borderRadius: 14, padding: 14, marginTop: 4 },
+  vbCard: { borderRadius: 12, borderWidth: 1, padding: 12 },
+  vbHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  vbLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
+  vbAddBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5 },
+  vbAddBtnText: { fontSize: 11, fontWeight: '600' },
+  rewardCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 8 },
+  rewardEmoji: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  progressTrack: { height: 4, borderRadius: 2, backgroundColor: '#33415560', overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2 },
+});
 
 const pillStyles = StyleSheet.create({
   track: {
