@@ -1869,62 +1869,13 @@ export default function JournalScreen() {
 
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Journal</Text>
-      </View>
-
-      {/* Sticky stats bar — collapses on scroll down, reappears on scroll up */}
-      <Animated.View style={{
-        overflow: "hidden",
-        opacity: statsBarAnim,
-        maxHeight: statsBarAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 52] }),
-      }}>
-        <View style={[{
-          flexDirection: "row", paddingHorizontal: 16, paddingVertical: 8, gap: 10,
-          borderBottomWidth: 0.5, borderBottomColor: colors.border,
-        }]}>
-          {/* Streak */}
-          <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={{ fontSize: 14 }}>🔥</Text>
-            <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.streak}</Text>
-            <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Streak</Text>
-          </View>
-          {/* Entries */}
-          <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <IconSymbol name="book.fill" size={14} color={colors.primary} />
-            <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.totalEntries}</Text>
-            <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Entries</Text>
-          </View>
-          {/* Media */}
-          <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <IconSymbol name="photo.fill" size={14} color={colors.primary} />
-            <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.mediaCount}</Text>
-            <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Media</Text>
-          </View>
+      {/* Header — streak top-right, no title */}
+      <View style={[styles.header, { justifyContent: 'flex-end' }]}>
+        <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={{ fontSize: 14 }}>🔥</Text>
+          <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.streak}</Text>
+          <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Streak</Text>
         </View>
-      </Animated.View>
-
-      {/* Sub-tab bar */}
-      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-        {SUB_TABS.map((tab) => (
-          <Pressable
-            key={tab.key}
-            onPress={() => setActiveTab(tab.key)}
-            style={[
-              styles.tabItem,
-              activeTab === tab.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
-            ]}
-          >
-            <IconSymbol name={tab.icon as any} size={18} color={activeTab === tab.key ? colors.primary : colors.muted} />
-            <Text style={{
-              fontSize: 12, fontWeight: activeTab === tab.key ? "700" : "500",
-              color: activeTab === tab.key ? colors.primary : colors.muted,
-            }}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        ))}
       </View>
 
       {/* Content */}
@@ -1941,12 +1892,7 @@ export default function JournalScreen() {
           onScroll={handleStatsScroll}
           scrollEventThrottle={16}
         >
-          {activeTab === "habits" && (
-            <TodayHabitsSection colors={colors} onAddJournalEntry={() => openNewEntry()} />
-          )}
-          {activeTab === "journal" && (
-            <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
-          )}
+          <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
         </ScrollView>
       )}
 

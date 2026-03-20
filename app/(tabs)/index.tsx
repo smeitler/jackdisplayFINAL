@@ -1379,12 +1379,17 @@ function QuickAccessPills({ isCalm, colors }: { isCalm: boolean; colors: any }) 
         ))}
       </View>
       {/* Inline section content */}
-      <View style={[pillSectionStyles.sectionBox, { backgroundColor: isCalm ? '#111830' : colors.background }]}>
-        {active === 'vision'    && <InlineVisionBoard colors={colors} />}
-        {active === 'rewards'   && <InlineRewards colors={colors} />}
-        {active === 'calendar'  && <InlineCalendar colors={colors} />}
-        {active === 'analytics' && <InlineAnalytics colors={colors} isCalm={isCalm} />}
-      </View>
+      {active === 'analytics' ? (
+        <View style={{ marginHorizontal: -20, marginTop: 4 }}>
+          <InlineAnalytics colors={colors} isCalm={isCalm} />
+        </View>
+      ) : (
+        <View style={[pillSectionStyles.sectionBox, { backgroundColor: isCalm ? '#111830' : colors.background }]}>
+          {active === 'vision'   && <InlineVisionBoard colors={colors} />}
+          {active === 'rewards'  && <InlineRewards colors={colors} />}
+          {active === 'calendar' && <InlineCalendar colors={colors} />}
+        </View>
+      )}
     </View>
   );
 }
