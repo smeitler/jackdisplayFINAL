@@ -2030,6 +2030,137 @@ function JournalCalendarView({ colors, onDayPress }: { colors: any; onDayPress?:
     </ScrollView>
   );
 }
+// ─── RichTextEditor ────────────────────────────────────────────────────────────────────────────────────
+// The TextInput is always mounted so the ref stays valid for dvApplyFormat.
+// When focused: shows the raw markdown TextInput.
+// When blurred: shows the styled rendered preview (TextInput is hidden via opacity/height:0).
+// First character typed auto-prefixes the first line as a heading.
+function RichTextEditor({
+  value,
+  onChange,
+  onSelectionChange,
+  inputRef,
+  colors,
+}: {
+  value: string;
+  onChange: (text: string) => void;
+  onSelectionChange: (sel: { start: number; end: number }) => void;
+  inputRef: React.RefObject<any>;
+  colors: any;
+}) {
+  const [isFocused, setIsFocused] = React.useState(false);
+
+  const handleChangeText = React.useCallback((text: string) => {
+    // Auto-prefix first line as heading when first character is typed
+    if (value === '' && text.length === 1 && text !== '\n') {
+      onChange('# ' + text);
+      return;
+    }
+    // When Enter is pressed after a bullet line, continue the bullet
+    if (text.length > value.length && text[text.length - 1] === '\n') {
+      const beforeNewline = text.slice(0, text.length - 1);
+      const lastNL = beforeNewline.lastIndexOf('\n');
+      const prevLine = beforeNewline.slice(lastNL + 1);
+      if (prevLine.startsWith('- ') && prevLine.length > 2) {
+        onChange(text + '- ');
+        return;
+      }
+      if (prevLine === '- ') {
+        onChange(beforeNewline.slice(0, lastNL + 1) + '\n');
+        return;
+      }
+    }
+    onChange(text);
+  }, [value, onChange]);
+
+  const lines = value.split('\n');
+
+  return (
+    <View style={{ minHeight: 120 }}>
+      {/* Preview layer: shown when not focused */}
+      {!isFocused && (
+        <Pressable
+          onPress={() => {
+            setIsFocused(true);
+            setTimeout(() => inputRef.current?.focus(), 30);
+          }}
+          style={{ minHeight: 120 }}
+        >
+          {value.length === 0 ? (
+            <Text style={{ fontSize: 22, fontWeight: '700', color: colors.muted }}>Start with a title...</Text>
+          ) : (
+            lines.map((line, idx) => {
+              const isHeading = line.startsWith('# ');
+              const isBullet = line.startsWith('- ');
+              const lineContent = isHeading ? line.slice(2) : isBullet ? line.slice(2) : line;
+              const segments = parseInlineMarkdown(lineContent, colors);
+              return (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: isHeading ? 6 : 2 }}>
+                  {isBullet && (
+                    <Text style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, marginRight: 6, marginTop: 1 }}>•</Text>
+                  )}
+                  <Text
+                    style={
+                      isHeading
+                        ? { fontSize: 22, fontWeight: '700', lineHeight: 30, color: colors.foreground, flex: 1 }
+                        : { fontSize: 15, lineHeight: 22, color: colors.foreground, flex: 1 }
+                    }
+                  >
+                    {segments}
+                  </Text>
+                </View>
+              );
+            })
+          )}
+        </Pressable>
+      )}
+      {/* TextInput: always mounted (so ref stays valid), shown only when focused */}
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={handleChangeText}
+        onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        multiline
+        placeholder={isFocused ? 'Start with a title...' : ''}
+        placeholderTextColor={colors.muted}
+        style={{
+          fontSize: 15,
+          lineHeight: 22,
+          minHeight: isFocused ? 120 : 0,
+          height: isFocused ? undefined : 0,
+          color: colors.foreground,
+          textAlignVertical: 'top',
+          // Hide when not focused but keep mounted
+          opacity: isFocused ? 1 : 0,
+        }}
+      />
+    </View>
+  );
+}
+
+// Parse inline markdown (bold, italic) into React Native Text elements
+function parseInlineMarkdown(text: string, colors: any): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
+  // Regex: **bold**, *italic*, or plain text
+  const regex = /\*\*([^*]+)\*\*|\*([^*]+)\*|([^*]+)/g;
+  let match;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match[1] !== undefined) {
+      // Bold
+      result.push(<Text key={key++} style={{ fontWeight: '700', color: colors.foreground }}>{match[1]}</Text>);
+    } else if (match[2] !== undefined) {
+      // Italic
+      result.push(<Text key={key++} style={{ fontStyle: 'italic', color: colors.foreground }}>{match[2]}</Text>);
+    } else if (match[3] !== undefined) {
+      // Plain
+      result.push(<Text key={key++} style={{ color: colors.foreground }}>{match[3]}</Text>);
+    }
+  }
+  return result;
+}
 
 // ─── DrawCanvas ────────────────────────────────────────────────────────────────────────────────────
 function DrawCanvas({ colors }: { colors: any }) {
@@ -2323,6 +2454,9 @@ export default function JournalScreen() {
   // ── Always-visible journal note + gratitude fields ─────────────────────────
   // These represent the "primary" entry for the day (or a new one to be created)
   const [dvJournalNote, setDvJournalNote] = useState('');
+  // TextInput ref and cursor/selection tracking for formatting
+  const dvTextInputRef = useRef<any>(null);
+  const dvSelection = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   // Gratitude items as individual strings (shown as separate cards)
   const [dvGratItems, setDvGratItems] = useState<string[]>(['', '', '']);
   const dvPrimaryEntryId = useRef<string | null>(null);
@@ -2500,6 +2634,77 @@ export default function JournalScreen() {
     setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, tags: merged } : e));
   }, [dvTags, userId, entries]);
 
+  // ── Text formatting helper ────────────────────────────────────────────────────────────────────────────────────
+  const dvApplyFormat = useCallback((type: 'bold' | 'italic' | 'heading' | 'bullet') => {
+    setDvShowFontSheet(false);
+    const text = dvJournalNote;
+    const { start, end } = dvSelection.current;
+    const hasSelection = start !== end;
+    const selectedText = hasSelection ? text.slice(start, end) : '';
+
+    let newText = text;
+    let newCursorPos = end;
+
+    if (type === 'bold') {
+      if (hasSelection) {
+        // Wrap selection in **
+        newText = text.slice(0, start) + '**' + selectedText + '**' + text.slice(end);
+        newCursorPos = end + 4;
+      } else {
+        // Insert **bold** at cursor
+        const insert = '**bold**';
+        newText = text.slice(0, start) + insert + text.slice(end);
+        newCursorPos = start + insert.length;
+      }
+    } else if (type === 'italic') {
+      if (hasSelection) {
+        newText = text.slice(0, start) + '*' + selectedText + '*' + text.slice(end);
+        newCursorPos = end + 2;
+      } else {
+        const insert = '*italic*';
+        newText = text.slice(0, start) + insert + text.slice(end);
+        newCursorPos = start + insert.length;
+      }
+    } else if (type === 'heading') {
+      // Find the start of the current line
+      const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = text.indexOf('\n', start);
+      const lineText = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+      // Toggle heading: if already a heading remove it, otherwise add it
+      if (lineText.startsWith('# ')) {
+        newText = text.slice(0, lineStart) + lineText.slice(2) + text.slice(lineEnd === -1 ? text.length : lineEnd);
+        newCursorPos = Math.max(lineStart, start - 2);
+      } else {
+        newText = text.slice(0, lineStart) + '# ' + lineText + text.slice(lineEnd === -1 ? text.length : lineEnd);
+        newCursorPos = start + 2;
+      }
+    } else if (type === 'bullet') {
+      // Find the start of the current line
+      const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = text.indexOf('\n', start);
+      const lineText = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+      // Toggle bullet: if already a bullet remove it, otherwise add it
+      if (lineText.startsWith('- ')) {
+        newText = text.slice(0, lineStart) + lineText.slice(2) + text.slice(lineEnd === -1 ? text.length : lineEnd);
+        newCursorPos = Math.max(lineStart, start - 2);
+      } else {
+        newText = text.slice(0, lineStart) + '- ' + lineText + text.slice(lineEnd === -1 ? text.length : lineEnd);
+        newCursorPos = start + 2;
+      }
+    }
+
+    setDvJournalNote(newText);
+    // Re-focus the TextInput and restore cursor position after state update
+    setTimeout(() => {
+      dvTextInputRef.current?.focus();
+      setTimeout(() => {
+        dvTextInputRef.current?.setNativeProps({ selection: { start: newCursorPos, end: newCursorPos } });
+      }, 30);
+    }, 80);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newText, dvGratItems), 800);
+  }, [dvJournalNote, dvGratItems, saveDvNoteAndGrat]);
+
   // ── Scan Text (OCR) ───────────────────────────────────────────────────────────────────────────────
   const dvScanText = useCallback(async () => {
     setDvShowMoreSheet(false);
@@ -2659,17 +2864,16 @@ export default function JournalScreen() {
           {/* ── JOURNAL ENTRY — moved above habit ratings ── */}
           <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
-            <TextInput
+<RichTextEditor
               value={dvJournalNote}
-              onChangeText={(text) => {
+              onChange={(text) => {
                 setDvJournalNote(text);
                 if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
                 autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
               }}
-              multiline
-              placeholder="What happened today? How are you feeling?"
-              placeholderTextColor={colors.muted}
-              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 120, textAlignVertical: 'top' }]}
+              onSelectionChange={(sel) => { dvSelection.current = sel; }}
+              inputRef={dvTextInputRef}
+              colors={colors}
             />
             {/* Photo thumbnails for this day's primary entry */}
             {dvPrimaryEntryId.current && (() => {
@@ -3072,30 +3276,52 @@ export default function JournalScreen() {
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, paddingHorizontal: 24, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>Text Style</Text>
           {([
-            { label: 'Bold', icon: 'bold' as const, desc: 'Wrap text with **bold**', prefix: '**', suffix: '**' },
-            { label: 'Italic', icon: 'italic' as const, desc: 'Wrap text with *italic*', prefix: '*', suffix: '*' },
-            { label: 'Heading', icon: 'textformat.size' as const, desc: 'Add a heading line', prefix: '# ', suffix: '' },
-            { label: 'Bullet List', icon: 'list.bullet.indent' as const, desc: 'Add a bullet point', prefix: '- ', suffix: '' },
+            {
+              label: 'Bold',
+              icon: 'bold' as const,
+              desc: 'Make selected text bold',
+              preview: 'B',
+              previewStyle: { fontWeight: '800' as const, fontSize: 20 },
+              type: 'bold' as const,
+            },
+            {
+              label: 'Italic',
+              icon: 'italic' as const,
+              desc: 'Make selected text italic',
+              preview: 'I',
+              previewStyle: { fontStyle: 'italic' as const, fontSize: 20 },
+              type: 'italic' as const,
+            },
+            {
+              label: 'Heading',
+              icon: 'textformat.size' as const,
+              desc: 'Format current line as a heading',
+              preview: 'H',
+              previewStyle: { fontWeight: '800' as const, fontSize: 22 },
+              type: 'heading' as const,
+            },
+            {
+              label: 'Bullet List',
+              icon: 'list.bullet.indent' as const,
+              desc: 'Add a bullet point to current line',
+              preview: '•',
+              previewStyle: { fontSize: 22 },
+              type: 'bullet' as const,
+            },
           ]).map((item) => (
             <Pressable
               key={item.label}
-              onPress={() => {
-                setDvShowFontSheet(false);
-                const insertion = item.suffix ? `${item.prefix}text${item.suffix}` : `${item.prefix}text`;
-                const newNote = dvJournalNote ? dvJournalNote + '\n' + insertion : insertion;
-                setDvJournalNote(newNote);
-                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newNote, dvGratItems), 800);
-              }}
+              onPress={() => dvApplyFormat(item.type)}
               style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 14, opacity: pressed ? 0.6 : 1 }]}
             >
-              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
-                <IconSymbol name={item.icon} size={20} color={colors.primary} />
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={[{ color: colors.primary }, item.previewStyle]}>{item.preview}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>{item.label}</Text>
                 <Text style={{ fontSize: 12, color: colors.muted }}>{item.desc}</Text>
               </View>
+              <IconSymbol name={item.icon} size={18} color={colors.muted} />
             </Pressable>
           ))}
         </View>

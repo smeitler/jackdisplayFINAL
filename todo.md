@@ -1268,3 +1268,8 @@
 - [x] Wire Scan Text button to capture image via camera and extract text via AI OCR
 - [x] Wire Template button to open EntryEditor with template selection
 - [x] Add journal.scanText tRPC endpoint (LLM vision-based OCR)
+
+- [x] Fix font style sheet icons (show Bold/Italic/Heading/Bullet icons, not question marks)
+- [x] Make Bold/Italic/Heading/Bullet formatting actually apply to selected/current text in journal entry
+- [x] Auto-format first line of journal entry as heading; pressing Enter reverts to paragraph style
+- [x] Render formatted text visually in the journal entry (bold renders bold, heading renders large, etc.)

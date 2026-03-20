@@ -135,6 +135,11 @@ const MAPPING: Record<string, MaterialIconName> = {
   "text.viewfinder": "manage-search",
   "scribble": "draw",
   "tag": "label-outline",
+  // Text formatting icons
+  "bold": "format-bold",
+  "italic": "format-italic",
+  "textformat.size": "format-size",
+  "list.bullet.indent": "format-list-bulleted",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;
