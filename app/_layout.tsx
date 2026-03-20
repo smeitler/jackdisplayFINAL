@@ -109,13 +109,7 @@ export default function RootLayout() {
   );
   const [trpcClient] = useState(() => createTRPCClient());
 
-  // Use actual device insets — do NOT override with hardcoded minimums as that
-  // prevents the real notch height from being applied on physical devices.
-  const providerInitialMetrics = useMemo(() => {
-    return initialWindowMetrics ?? { insets: initialInsets, frame: initialFrame };
-  }, [initialInsets, initialFrame]);
-
-  const content = (
+  const appContent = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
@@ -152,25 +146,35 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 
-  const shouldOverrideSafeArea = Platform.OS === "web";
-
-  if (shouldOverrideSafeArea) {
+  // On web, override safe area context with values from the Manus runtime
+  // (the web preview iframe provides insets via postMessage).
+  // On native (iOS/Android), do NOT pass initialMetrics — let SafeAreaProvider
+  // measure the actual device insets dynamically. Passing stale or zero
+  // initialMetrics locks the provider to wrong values on physical devices.
+  if (Platform.OS === "web") {
+    const webMetrics = {
+      insets: initialInsets,
+      frame: initialFrame,
+    };
     return (
-      <ThemeProvider>
-        <SafeAreaProvider initialMetrics={providerInitialMetrics}>
-          <SafeAreaFrameContext.Provider value={frame}>
-            <SafeAreaInsetsContext.Provider value={insets}>
-              {content}
-            </SafeAreaInsetsContext.Provider>
-          </SafeAreaFrameContext.Provider>
-        </SafeAreaProvider>
-      </ThemeProvider>
+      <SafeAreaProvider initialMetrics={webMetrics}>
+        <SafeAreaFrameContext.Provider value={frame}>
+          <SafeAreaInsetsContext.Provider value={insets}>
+            <ThemeProvider>
+              {appContent}
+            </ThemeProvider>
+          </SafeAreaInsetsContext.Provider>
+        </SafeAreaFrameContext.Provider>
+      </SafeAreaProvider>
     );
   }
 
+  // Native: SafeAreaProvider is outermost, no initialMetrics override
   return (
-    <ThemeProvider>
-      <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        {appContent}
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
