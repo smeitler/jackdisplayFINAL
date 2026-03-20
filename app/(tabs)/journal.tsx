@@ -1927,6 +1927,60 @@ export default function JournalScreen() {
     setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, body } : e));
   }, [userId]);
 
+  // ── Always-visible journal note + gratitude fields ─────────────────────────
+  // These represent the "primary" entry for the day (or a new one to be created)
+  const [dvJournalNote, setDvJournalNote] = useState('');
+  const [dvGratitude, setDvGratitude] = useState('');
+  const dvPrimaryEntryId = useRef<string | null>(null);
+
+  // Sync note/gratitude from the first non-voice entry for the day
+  useEffect(() => {
+    const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'));
+    if (primaryEntry) {
+      dvPrimaryEntryId.current = primaryEntry.id;
+      const body = primaryEntry.body || '';
+      const gratIdx = body.indexOf('\n\n🙏 Grateful for:');
+      const mainBody = gratIdx >= 0 ? body.slice(0, gratIdx).trim() : body.trim();
+      const gratRaw = gratIdx >= 0 ? body.slice(gratIdx + 2).trim() : '';
+      const gratLines = gratRaw.replace(/^🙏 Grateful for:\n?/, '');
+      setDvJournalNote(mainBody);
+      setDvGratitude(gratLines);
+    } else {
+      dvPrimaryEntryId.current = null;
+      setDvJournalNote('');
+      setDvGratitude('');
+    }
+  }, [dayEntries, selectedDate]);
+
+  const saveDvNoteAndGrat = useCallback(async (note: string, grat: string) => {
+    if (!userId) return;
+    const gratSection = grat.trim() ? '\n\n🙏 Grateful for:\n' + grat.trim() : '';
+    const fullBody = note.trim() + gratSection;
+    if (dvPrimaryEntryId.current) {
+      // Update existing entry
+      await updateEntryInStore(userId, dvPrimaryEntryId.current, { body: fullBody });
+      setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, body: fullBody } : e));
+    } else if (fullBody.trim()) {
+      // Create new entry
+      const now = new Date().toISOString();
+      const newEntry: JournalEntry = {
+        id: generateId(),
+        userId,
+        date: selectedDate,
+        createdAt: now,
+        updatedAt: now,
+        title: '',
+        body: fullBody,
+        template: 'blank',
+        attachments: [],
+        tags: [],
+      };
+      const updated = await addEntry(userId, newEntry);
+      dvPrimaryEntryId.current = newEntry.id;
+      setEntries(updated);
+    }
+  }, [userId, selectedDate]);
+
   // ── Date wheel picker columns ───────────────────────────────────────────────
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const pickerMonthRef = useRef(0);
@@ -2007,32 +2061,32 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── Habit check-in card ── */}
-          {(() => {
-            const activeHabitsWithRatings = habits.filter((h) => h.isActive && dvRatings[h.id]);
+          {/* ── HABITS — always show all active habits with rating buttons ── */}
+          {habits.filter((h) => h.isActive).length > 0 && (() => {
             const sortedCats = [...categories].sort((a, b) => a.order - b.order);
-            const hasAny = activeHabitsWithRatings.length > 0 || dayCheckIns.length > 0;
-            if (!hasAny) return null;
             return (
               <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>HABITS</Text>
                 {sortedCats.map((cat) => {
                   const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
-                  const catHasRating = catHabits.some((h) => dvRatings[h.id]);
-                  if (!catHasRating) return null;
+                  if (catHabits.length === 0) return null;
                   return (
                     <View key={cat.id} style={{ marginBottom: 10 }}>
                       <Text style={[dvStyles.catLabel, { color: colors.muted }]}>{cat.label.toUpperCase()}</Text>
                       {catHabits.map((habit) => {
-                        if (!dvRatings[habit.id]) return null;
-                        const currentRating = dvRatings[habit.id];
+                        const currentRating = dvRatings[habit.id] ?? null;
                         return (
                           <View key={habit.id} style={dvStyles.habitRow}>
-                            <Text style={[dvStyles.habitName, { color: colors.foreground, flex: 1 }]}>{habit.name}</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[dvStyles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
+                              {!!habit.description && (
+                                <Text style={[dvStyles.habitDesc, { color: colors.muted }]}>{habit.description}</Text>
+                              )}
+                            </View>
                             <View style={dvStyles.ratingBtns}>
                               {RATINGS_DV.map((r) => {
                                 const isSelected = currentRating === r;
-                                const rColor = RATING_COLORS_DV[r];
+                                const rColor = RATING_COLORS_DV[r as string];
                                 const rLabel = r === 'green' ? 'Crushed' : r === 'yellow' ? 'Okay' : 'Missed';
                                 return (
                                   <Pressable
@@ -2061,28 +2115,21 @@ export default function JournalScreen() {
             );
           })()}
 
-          {/* ── Journal / voice entries ── */}
-          {dayEntries.map((entry) => {
-            const isVoice = !!(entry.tags?.includes('voice') || entry.template === 'free-write');
+          {/* ── Voice transcript entries (read-only header, editable body) ── */}
+          {dayEntries.filter((e) => e.tags?.includes('voice')).map((entry) => {
             const bodyText = dvBodies[entry.id] ?? entry.body ?? '';
             const gratIdx = bodyText.indexOf('\n\n🙏 Grateful for:');
             const mainBody = gratIdx >= 0 ? bodyText.slice(0, gratIdx).trim() : bodyText.trim();
             const gratSection = gratIdx >= 0 ? bodyText.slice(gratIdx + 2).trim() : '';
             return (
-              <View
-                key={entry.id}
-                style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
+              <View key={entry.id} style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={dvStyles.entryHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {isVoice && <IconSymbol name="mic.fill" size={13} color={colors.primary} />}
-                    <Text style={[dvStyles.entryTime, { color: colors.muted }]}>{formatTime(entry.createdAt)}</Text>
+                    <IconSymbol name="mic.fill" size={13} color={colors.primary} />
+                    <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 0 }]}>VOICE LOG</Text>
+                    <Text style={[dvStyles.entryTime, { color: colors.muted, marginLeft: 4 }]}>{formatTime(entry.createdAt)}</Text>
                   </View>
-                  {!!entry.title && (
-                    <Text style={[dvStyles.entryTitle, { color: colors.foreground }]}>{entry.title}</Text>
-                  )}
                 </View>
-                {/* Editable main body */}
                 <TextInput
                   value={mainBody}
                   onChangeText={(text) => {
@@ -2091,28 +2138,10 @@ export default function JournalScreen() {
                   }}
                   onBlur={() => saveDvBody(entry.id, dvBodies[entry.id] ?? entry.body ?? '')}
                   multiline
-                  placeholder="Tap to edit..."
+                  placeholder="Voice transcript..."
                   placeholderTextColor={colors.muted}
                   style={[dvStyles.entryBodyInput, { color: colors.foreground }]}
                 />
-                {/* Editable gratitude section */}
-                {gratSection.length > 0 && (
-                  <View style={[dvStyles.gratBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    <Text style={[dvStyles.gratLabel, { color: colors.muted }]}>🙏 Grateful for:</Text>
-                    <TextInput
-                      value={gratSection.replace(/^🙏 Grateful for:\n?/, '')}
-                      onChangeText={(text) => {
-                        const newGrat = '🙏 Grateful for:\n' + text;
-                        const newBody = mainBody + '\n\n' + newGrat;
-                        setDvBodies((prev) => ({ ...prev, [entry.id]: newBody }));
-                      }}
-                      onBlur={() => saveDvBody(entry.id, dvBodies[entry.id] ?? entry.body ?? '')}
-                      multiline
-                      placeholderTextColor={colors.muted}
-                      style={[dvStyles.gratInput, { color: colors.foreground }]}
-                    />
-                  </View>
-                )}
                 {entry.attachments && entry.attachments.filter(a => a.type === 'audio').map((att, i) => (
                   <AudioPlaybackRow key={i} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
                 ))}
@@ -2120,18 +2149,33 @@ export default function JournalScreen() {
             );
           })}
 
-          {/* ── Empty state ── */}
-          {dayCheckIns.length === 0 && dayEntries.length === 0 && (
-            <View style={dvStyles.emptyState}>
-              <Text style={{ fontSize: 40, textAlign: 'center' }}>📋</Text>
-              <Text style={[dvStyles.emptyTitle, { color: colors.foreground }]}>Nothing logged yet</Text>
-              <Text style={[dvStyles.emptySubtitle, { color: colors.muted }]}>
-                {selectedDate === todayDateStr()
-                  ? 'Use Voice Log or Log Habits from the + button, or tap + to write an entry.'
-                  : 'No entries were recorded for this day.'}
-              </Text>
-            </View>
-          )}
+          {/* ── JOURNAL NOTE — always visible, editable ── */}
+          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL</Text>
+            <TextInput
+              value={dvJournalNote}
+              onChangeText={setDvJournalNote}
+              onBlur={() => saveDvNoteAndGrat(dvJournalNote, dvGratitude)}
+              multiline
+              placeholder="What happened today? How are you feeling?"
+              placeholderTextColor={colors.muted}
+              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 80 }]}
+            />
+          </View>
+
+          {/* ── GRATITUDE — always visible, editable ── */}
+          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>🙏 GRATEFUL FOR</Text>
+            <TextInput
+              value={dvGratitude}
+              onChangeText={setDvGratitude}
+              onBlur={() => saveDvNoteAndGrat(dvJournalNote, dvGratitude)}
+              multiline
+              placeholder="1. \n2. \n3. "
+              placeholderTextColor={colors.muted}
+              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 70 }]}
+            />
+          </View>
         </ScrollView>
       )}
 
@@ -2263,6 +2307,7 @@ const dvStyles = StyleSheet.create({
   habitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 },
   ratingDot: { width: 10, height: 10, borderRadius: 5 },
   habitName: { fontSize: 14, fontWeight: '500' },
+  habitDesc: { fontSize: 11, marginTop: 1 },
   ratingLabel: { fontSize: 12, fontWeight: '600' },
   ratingBtns: { flexDirection: 'row', gap: 4 },
   ratingBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
