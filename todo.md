@@ -1182,3 +1182,5 @@
 - [x] Scrolling waveform visualizer (iOS Voice Memos style, bars scroll left, amplitude-driven)
 - [x] AI auto-fills habit descriptions from transcript in results screen
 - [ ] Journal tab redesign: day-view with < Today ▼ > header, date wheel picker, show all day's inputs (habits, voice, notes, gratitude) as cards
+- [ ] Date wheel picker: add year column
+- [ ] Journal day-view: make habits/transcript/gratitude editable inline

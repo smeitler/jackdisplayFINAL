@@ -24,7 +24,7 @@ import {
   JOURNAL_TEMPLATES, generateId, todayDateStr, formatDateLabel, formatTime,
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
-import { getLastUserId, loadHabits, type Habit } from "@/lib/storage";
+import { getLastUserId, loadHabits, type Habit, type Rating } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
 import { WheelColumn } from "@/components/wheel-time-picker";
 
@@ -1867,7 +1867,7 @@ export default function JournalScreen() {
   const [selectedDate, setSelectedDate] = useState(todayDateStr());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const pickerTempDate = useRef(selectedDate);
-  const { habits, checkIns, categories } = useApp();
+  const { habits, checkIns, categories, submitCheckIn } = useApp();
 
   const goDay = useCallback((delta: number) => {
     setSelectedDate((prev) => {
@@ -1899,18 +1899,46 @@ export default function JournalScreen() {
   );
 
   const RATING_COLORS_DV: Record<string, string> = { green: '#22C55E', yellow: '#F59E0B', red: '#EF4444' };
+  const RATINGS_DV: Array<Rating> = ['red','yellow','green'];
+  // Editable ratings map: habitId -> rating (mirrors dayCheckIns but editable)
+  const [dvRatings, setDvRatings] = useState<Record<string, Rating>>({});
+  // Editable entry bodies: entryId -> body text
+  const [dvBodies, setDvBodies] = useState<Record<string, string>>({});
+  // Sync dvRatings when dayCheckIns changes
+  useEffect(() => {
+    const map: Record<string, Rating> = {};
+    dayCheckIns.forEach((ci) => { if (ci.rating !== 'none') map[ci.habitId] = ci.rating as Rating; });
+    setDvRatings(map);
+  }, [dayCheckIns]);
+  // Sync dvBodies when dayEntries changes
+  useEffect(() => {
+    const map: Record<string, string> = {};
+    dayEntries.forEach((e) => { map[e.id] = e.body || ''; });
+    setDvBodies(map);
+  }, [dayEntries]);
+  const saveDvRating = useCallback(async (habitId: string, rating: Rating) => {
+    const newMap = { ...dvRatings, [habitId]: rating };
+    setDvRatings(newMap);
+    await submitCheckIn(selectedDate, newMap);
+  }, [dvRatings, selectedDate, submitCheckIn]);
+  const saveDvBody = useCallback(async (entryId: string, body: string) => {
+    if (!userId) return;
+    await updateEntryInStore(userId, entryId, { body });
+    setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, body } : e));
+  }, [userId]);
 
   // ── Date wheel picker columns ───────────────────────────────────────────────
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const pickerMonthRef = useRef(0);
   const pickerDayRef = useRef(0);
   const pickerYearRef = useRef(0);
+  const YEARS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 2 + i));
 
   function initPickerRefs(dateStr: string) {
     const d = new Date(dateStr + 'T12:00:00');
     pickerMonthRef.current = d.getMonth();
     pickerDayRef.current = d.getDate() - 1;
-    pickerYearRef.current = 0; // only current year for now
+    pickerYearRef.current = Math.max(0, d.getFullYear() - (new Date().getFullYear() - 2));
   }
 
   const todayYear = new Date().getFullYear();
@@ -1920,12 +1948,12 @@ export default function JournalScreen() {
   function buildPickerDate(): string {
     const m = pickerMonthRef.current;
     const day = pickerDayRef.current + 1;
-    const y = todayYear;
+    const y = new Date().getFullYear() - 2 + pickerYearRef.current;
     return `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   }
-
   function getDaysInMonth(month: number): number {
-    return new Date(todayYear, month + 1, 0).getDate();
+    const y = new Date().getFullYear() - 2 + pickerYearRef.current;
+    return new Date(y, month + 1, 0).getDate();
   }
 
   const [pickerMonth, setPickerMonth] = useState(0);
@@ -1980,28 +2008,49 @@ export default function JournalScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Habit check-in card ── */}
-          {dayCheckIns.length > 0 && (() => {
+          {(() => {
+            const activeHabitsWithRatings = habits.filter((h) => h.isActive && dvRatings[h.id]);
             const sortedCats = [...categories].sort((a, b) => a.order - b.order);
+            const hasAny = activeHabitsWithRatings.length > 0 || dayCheckIns.length > 0;
+            if (!hasAny) return null;
             return (
               <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>HABITS</Text>
                 {sortedCats.map((cat) => {
                   const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
-                  const catCIs = dayCheckIns.filter((c) => catHabits.some((h) => h.id === c.habitId));
-                  if (catCIs.length === 0) return null;
+                  const catHasRating = catHabits.some((h) => dvRatings[h.id]);
+                  if (!catHasRating) return null;
                   return (
-                    <View key={cat.id} style={{ marginBottom: 8 }}>
+                    <View key={cat.id} style={{ marginBottom: 10 }}>
                       <Text style={[dvStyles.catLabel, { color: colors.muted }]}>{cat.label.toUpperCase()}</Text>
                       {catHabits.map((habit) => {
-                        const ci = dayCheckIns.find((c) => c.habitId === habit.id);
-                        if (!ci) return null;
+                        if (!dvRatings[habit.id]) return null;
+                        const currentRating = dvRatings[habit.id];
                         return (
                           <View key={habit.id} style={dvStyles.habitRow}>
-                            <View style={[dvStyles.ratingDot, { backgroundColor: RATING_COLORS_DV[ci.rating] ?? colors.border }]} />
                             <Text style={[dvStyles.habitName, { color: colors.foreground, flex: 1 }]}>{habit.name}</Text>
-                            <Text style={[dvStyles.ratingLabel, { color: RATING_COLORS_DV[ci.rating] ?? colors.muted }]}>
-                              {ci.rating === 'green' ? 'Crushed' : ci.rating === 'yellow' ? 'Okay' : 'Missed'}
-                            </Text>
+                            <View style={dvStyles.ratingBtns}>
+                              {RATINGS_DV.map((r) => {
+                                const isSelected = currentRating === r;
+                                const rColor = RATING_COLORS_DV[r];
+                                const rLabel = r === 'green' ? 'Crushed' : r === 'yellow' ? 'Okay' : 'Missed';
+                                return (
+                                  <Pressable
+                                    key={r}
+                                    onPress={() => saveDvRating(habit.id, r)}
+                                    style={({ pressed }) => [dvStyles.ratingBtn, {
+                                      backgroundColor: isSelected ? rColor : colors.background,
+                                      borderColor: isSelected ? rColor : colors.border,
+                                      opacity: pressed ? 0.7 : 1,
+                                    }]}
+                                  >
+                                    <Text style={[dvStyles.ratingBtnText, { color: isSelected ? '#fff' : colors.muted }]}>
+                                      {rLabel}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
                           </View>
                         );
                       })}
@@ -2015,19 +2064,14 @@ export default function JournalScreen() {
           {/* ── Journal / voice entries ── */}
           {dayEntries.map((entry) => {
             const isVoice = !!(entry.tags?.includes('voice') || entry.template === 'free-write');
-            const bodyText = entry.body || '';
+            const bodyText = dvBodies[entry.id] ?? entry.body ?? '';
             const gratIdx = bodyText.indexOf('\n\n🙏 Grateful for:');
             const mainBody = gratIdx >= 0 ? bodyText.slice(0, gratIdx).trim() : bodyText.trim();
-            const gratSection = gratIdx >= 0 ? bodyText.slice(gratIdx).trim() : '';
+            const gratSection = gratIdx >= 0 ? bodyText.slice(gratIdx + 2).trim() : '';
             return (
-              <Pressable
+              <View
                 key={entry.id}
-                onPress={() => openEditEntry(entry)}
-                style={({ pressed }) => [dvStyles.card, {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  opacity: pressed ? 0.85 : 1,
-                }]}
+                style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
               >
                 <View style={dvStyles.entryHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -2038,20 +2082,41 @@ export default function JournalScreen() {
                     <Text style={[dvStyles.entryTitle, { color: colors.foreground }]}>{entry.title}</Text>
                   )}
                 </View>
-                {mainBody.length > 0 && (
-                  <Text style={[dvStyles.entryBody, { color: colors.foreground }]} numberOfLines={10}>
-                    {mainBody}
-                  </Text>
-                )}
+                {/* Editable main body */}
+                <TextInput
+                  value={mainBody}
+                  onChangeText={(text) => {
+                    const newBody = gratSection.length > 0 ? text + '\n\n' + gratSection : text;
+                    setDvBodies((prev) => ({ ...prev, [entry.id]: newBody }));
+                  }}
+                  onBlur={() => saveDvBody(entry.id, dvBodies[entry.id] ?? entry.body ?? '')}
+                  multiline
+                  placeholder="Tap to edit..."
+                  placeholderTextColor={colors.muted}
+                  style={[dvStyles.entryBodyInput, { color: colors.foreground }]}
+                />
+                {/* Editable gratitude section */}
                 {gratSection.length > 0 && (
                   <View style={[dvStyles.gratBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    <Text style={[dvStyles.gratText, { color: colors.muted }]}>{gratSection}</Text>
+                    <Text style={[dvStyles.gratLabel, { color: colors.muted }]}>🙏 Grateful for:</Text>
+                    <TextInput
+                      value={gratSection.replace(/^🙏 Grateful for:\n?/, '')}
+                      onChangeText={(text) => {
+                        const newGrat = '🙏 Grateful for:\n' + text;
+                        const newBody = mainBody + '\n\n' + newGrat;
+                        setDvBodies((prev) => ({ ...prev, [entry.id]: newBody }));
+                      }}
+                      onBlur={() => saveDvBody(entry.id, dvBodies[entry.id] ?? entry.body ?? '')}
+                      multiline
+                      placeholderTextColor={colors.muted}
+                      style={[dvStyles.gratInput, { color: colors.foreground }]}
+                    />
                   </View>
                 )}
                 {entry.attachments && entry.attachments.filter(a => a.type === 'audio').map((att, i) => (
                   <AudioPlaybackRow key={i} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
                 ))}
-              </Pressable>
+              </View>
             );
           })}
 
@@ -2131,7 +2196,7 @@ export default function JournalScreen() {
           >
             <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Today</Text>
           </Pressable>
-          {/* Month / Day columns */}
+          {/* Month / Day / Year columns */}
           <View style={{ flexDirection: 'row', height: 144, paddingHorizontal: 16 }}>
             <WheelColumn
               items={MONTHS}
@@ -2141,13 +2206,22 @@ export default function JournalScreen() {
                 setPickerMonth(idx);
                 setPickerDayCount(getDaysInMonth(idx));
               }}
-              width={180}
+              width={160}
             />
             <WheelColumn
               key={`day-${pickerDayCount}`}
               items={Array.from({ length: pickerDayCount }, (_, i) => String(i + 1))}
               initialIndex={Math.min(pickerDayRef.current, pickerDayCount - 1)}
               onSelect={(idx) => { pickerDayRef.current = idx; }}
+              width={60}
+            />
+            <WheelColumn
+              items={YEARS}
+              initialIndex={pickerYearRef.current}
+              onSelect={(idx) => {
+                pickerYearRef.current = idx;
+                setPickerDayCount(getDaysInMonth(pickerMonthRef.current));
+              }}
               width={80}
             />
           </View>
@@ -2188,14 +2262,20 @@ const dvStyles = StyleSheet.create({
   catLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 4 },
   habitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 },
   ratingDot: { width: 10, height: 10, borderRadius: 5 },
-  habitName: { fontSize: 15, fontWeight: '500' },
+  habitName: { fontSize: 14, fontWeight: '500' },
   ratingLabel: { fontSize: 12, fontWeight: '600' },
+  ratingBtns: { flexDirection: 'row', gap: 4 },
+  ratingBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
+  ratingBtnText: { fontSize: 11, fontWeight: '600' },
   entryHeader: { marginBottom: 6 },
   entryTime: { fontSize: 12 },
   entryTitle: { fontSize: 16, fontWeight: '600', marginTop: 2 },
   entryBody: { fontSize: 15, lineHeight: 22 },
+  entryBodyInput: { fontSize: 15, lineHeight: 22, minHeight: 40 },
   gratBox: { borderRadius: 8, borderWidth: 0.5, padding: 10, marginTop: 8 },
   gratText: { fontSize: 13, lineHeight: 19 },
+  gratLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  gratInput: { fontSize: 13, lineHeight: 19, minHeight: 30 },
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyTitle: { fontSize: 18, fontWeight: '600' },
   emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24 },
