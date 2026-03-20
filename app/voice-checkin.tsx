@@ -1081,10 +1081,11 @@ export default function VoiceCheckinScreen() {
   }, [results, habits, router, vcRatings, editedTranscript]);
 
   const handleTryAgain = useCallback(() => {
-    setPhase("idle");
     setResults(null);
     setErrorMsg(null);
-  }, []);
+    // Go straight back to recording — same as the initial auto-start
+    startRecording();
+  }, [startRecording]);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1358,13 +1359,29 @@ export default function VoiceCheckinScreen() {
               />
             </View>
 
-            {/* Gratitude */}
+            {/* Gratitude — editable */}
             {results.gratitudeItems.length > 0 && (
               <View style={classicStyles.journalSection}>
                 <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Grateful For</Text>
                 {results.gratitudeItems.map((g, i) => (
                   <View key={i} style={[classicStyles.gratitudeItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Text style={[classicStyles.journalText, { color: colors.foreground }]}>{g}</Text>
+                    <TextInput
+                      value={g}
+                      onChangeText={(t) =>
+                        setResults((prev) => {
+                          if (!prev) return prev;
+                          const updated = [...prev.gratitudeItems];
+                          updated[i] = t;
+                          return { ...prev, gratitudeItems: updated };
+                        })
+                      }
+                      style={[classicStyles.journalText, { color: colors.foreground }]}
+                      multiline
+                      scrollEnabled={false}
+                      textAlignVertical="top"
+                      placeholderTextColor={colors.muted + "66"}
+                      placeholder="What are you grateful for?"
+                    />
                   </View>
                 ))}
               </View>
