@@ -30,7 +30,7 @@ import { useIsCalm } from "@/components/calm-effects";
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
 
 // ─── Sub-tab type ────────────────────────────────────────────────────────────
-type SubTab = "journal" | "calendar" | "media" | "map";
+type SubTab = "habits" | "journal";
 
 // ─── Web MediaRecorder Hook ──────────────────────────────────────────────────
 function useWebRecorder() {
@@ -1623,12 +1623,141 @@ function MapTab({ entries, colors }: { entries: JournalEntry[]; colors: any }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── MAIN JOURNAL SCREEN ─────────────────────────────────────────────────────
+// ─── TODAY'S HABITS SECTION ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+function TodayHabitsSection({ colors, onAddJournalEntry }: { colors: any; onAddJournalEntry: () => void }) {
+  const { habits, checkIns } = useApp();
+  const todayStr = todayDateStr();
+
+  // Filter habits that are scheduled for today
+  const todayHabits = habits.filter((h) => {
+    if (!h.isActive) return false;
+    // frequencyType: 'weekly' (default) | 'monthly' — all show daily in this view
+    return true;
+  });
+
+  // completedIds: set of habitIds that have a 'green' check-in today
+  const completedIds = new Set(
+    checkIns.filter((c) => c.date === todayStr && c.rating === 'green').map((c) => c.habitId)
+  );
+  const completedCount = todayHabits.filter((h) => completedIds.has(h.id)).length;
+  const totalCount = todayHabits.length;
+
+  return (
+    <View style={{ gap: 12 }}>
+      {/* Section header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <View>
+          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.foreground }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </Text>
+          <Text style={{ fontSize: 13, color: colors.muted, marginTop: 2 }}>
+            {totalCount > 0 ? `${completedCount} of ${totalCount} habits done` : 'No habits scheduled today'}
+          </Text>
+        </View>
+        <Pressable
+          onPress={onAddJournalEntry}
+          style={({ pressed }) => ({
+            backgroundColor: colors.primary + '22',
+            borderRadius: 10,
+            padding: 8,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <IconSymbol name="pencil" size={18} color={colors.primary} />
+        </Pressable>
+      </View>
+
+      {/* Progress bar */}
+      {totalCount > 0 && (
+        <View style={{ height: 6, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden' }}>
+          <View style={{
+            height: 6,
+            width: `${Math.round((completedCount / totalCount) * 100)}%`,
+            backgroundColor: completedCount === totalCount ? '#22C55E' : colors.primary,
+            borderRadius: 3,
+          }} />
+        </View>
+      )}
+
+      {/* Habit rows */}
+      {todayHabits.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: 32, gap: 8 }}>
+          <IconSymbol name="checkmark.circle" size={40} color={colors.muted} />
+          <Text style={{ color: colors.muted, fontSize: 15, textAlign: 'center' }}>No habits scheduled for today</Text>
+        </View>
+      ) : (
+        todayHabits.map((habit) => {
+          const done = completedIds.has(habit.id);
+          return (
+            <View
+              key={habit.id}
+              style={[{
+                flexDirection: 'row', alignItems: 'center', gap: 12,
+                backgroundColor: colors.surface,
+                borderRadius: 14, padding: 14,
+                borderWidth: 0.5, borderColor: done ? '#22C55E44' : colors.border,
+              }]}
+            >
+              <View style={[{
+                width: 32, height: 32, borderRadius: 16,
+                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: done ? '#22C55E22' : colors.border + '55',
+              }]}>
+                <IconSymbol
+                  name={done ? 'checkmark.circle.fill' : 'circle'}
+                  size={22}
+                  color={done ? '#22C55E' : colors.muted}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[
+                  { fontSize: 15, fontWeight: '600', color: colors.foreground },
+                  done && { textDecorationLine: 'line-through', color: colors.muted },
+                ]}>
+                  {habit.name}
+                </Text>
+                {habit.category && (
+                  <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{habit.category}</Text>
+                )}
+              </View>
+              {done && (
+                <View style={{ backgroundColor: '#22C55E22', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#22C55E' }}>Done</Text>
+                </View>
+              )}
+            </View>
+          );
+        })
+      )}
+
+      {/* Add journal note button */}
+      <Pressable
+        onPress={onAddJournalEntry}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          backgroundColor: colors.surface,
+          borderRadius: 14, padding: 14,
+          borderWidth: 1, borderColor: colors.primary + '44',
+          borderStyle: 'dashed',
+          opacity: pressed ? 0.7 : 1,
+          marginTop: 4,
+        })}
+      >
+        <IconSymbol name="pencil" size={20} color={colors.primary} />
+        <Text style={{ fontSize: 15, color: colors.primary, fontWeight: '600' }}>Add a journal note for today</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MAIN JOURNAL SCREEN ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function JournalScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
-  const [activeTab, setActiveTab] = useState<SubTab>("calendar");
+  const [activeTab, setActiveTab] = useState<SubTab>("habits");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1730,10 +1859,8 @@ export default function JournalScreen() {
   }
 
   const SUB_TABS: { key: SubTab; label: string; icon: string }[] = [
-    { key: "calendar", label: "Calendar", icon: "calendar" },
-    { key: "journal", label: "List", icon: "list.bullet" },
-    { key: "media", label: "Media", icon: "photo.stack.fill" },
-    { key: "map", label: "Map", icon: "map.fill" },
+    { key: "habits", label: "Today's Habits", icon: "checkmark.circle.fill" },
+    { key: "journal", label: "Entries", icon: "book.fill" },
   ];
 
   return (
@@ -1801,11 +1928,6 @@ export default function JournalScreen() {
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : activeTab === "calendar" ? (
-        // Calendar gets its own scroll — no outer ScrollView wrapper
-        <View style={{ flex: 1 }}>
-          <CalendarTab entries={entries} onDayPress={handleCalendarDayPress} colors={colors} />
-        </View>
       ) : (
         <ScrollView
           style={{ flex: 1 }}
@@ -1815,14 +1937,11 @@ export default function JournalScreen() {
           onScroll={handleStatsScroll}
           scrollEventThrottle={16}
         >
+          {activeTab === "habits" && (
+            <TodayHabitsSection colors={colors} onAddJournalEntry={() => openNewEntry()} />
+          )}
           {activeTab === "journal" && (
             <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
-          )}
-          {activeTab === "media" && (
-            <MediaTab entries={entries} colors={colors} />
-          )}
-          {activeTab === "map" && (
-            <MapTab entries={entries} colors={colors} />
           )}
         </ScrollView>
       )}

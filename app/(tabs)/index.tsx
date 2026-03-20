@@ -483,7 +483,7 @@ function GoalCard({
   }
 
   return (
-    <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: colors.border, borderLeftColor: accentColor, borderLeftWidth: 3 }]}>
+    <View style={[styles.goalCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
       <TouchableOpacity onPress={onPressGoal} style={styles.goalCardHeader} activeOpacity={0.8}>
         <CategoryIcon
           categoryId={cat.id}
@@ -501,11 +501,6 @@ function GoalCard({
           )}
         </View>
         <View style={{ alignItems: 'flex-end', gap: 3 }}>
-          {!isCalm && (
-            <Text style={[styles.goalCardPct, { color: pctColor }]}>
-              {hasData ? `${Math.round(pct * 100)}%` : '—'}
-            </Text>
-          )}
           {deadlineLabel ? (
             <View style={[styles.deadlineTag, { borderColor: deadlineColor + '55', backgroundColor: deadlineColor + '18' }]}>
               <Text style={[styles.deadlineText, { color: deadlineColor }]}>{deadlineLabel}</Text>
@@ -802,6 +797,26 @@ export default function HomeScreen() {
             </View>
           </View>}
 
+          {/* ── Quick Access Row: Vision Board / Rewards / Calendar / Analytics ── */}
+          <View style={[quickAccessStyles.row]}>
+            {[
+              { label: 'Vision\nBoard', icon: 'sparkles' as const, onPress: () => router.push('/(tabs)/rewards?tab=vision') },
+              { label: 'Rewards', icon: 'trophy.fill' as const, onPress: () => router.push('/(tabs)/rewards') },
+              { label: 'Calendar', icon: 'calendar' as const, onPress: () => router.push('/(tabs)/journal?tab=calendar') },
+              { label: 'Analytics', icon: 'chart.bar.fill' as const, onPress: () => router.push('/(tabs)/settings?section=analytics') },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                onPress={item.onPress}
+                style={[quickAccessStyles.item, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}
+                activeOpacity={0.75}
+              >
+                <IconSymbol name={item.icon} size={22} color={isCalm ? '#F5A623' : colors.primary} />
+                <Text style={[quickAccessStyles.label, { color: isCalm ? '#8B9CC8' : colors.muted }]}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {/* ── Stats row ── */}
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
@@ -1023,6 +1038,29 @@ export default function HomeScreen() {
     </ScreenContainer>
   );
 }
+
+const quickAccessStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  item: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    gap: 6,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+});
 
 const styles = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 40 },
