@@ -1273,3 +1273,8 @@
 - [x] Make Bold/Italic/Heading/Bullet formatting actually apply to selected/current text in journal entry
 - [x] Auto-format first line of journal entry as heading; pressing Enter reverts to paragraph style
 - [x] Render formatted text visually in the journal entry (bold renders bold, heading renders large, etc.)
+
+- [x] Fix raw # symbol showing in TextInput while typing (heading should style text, not show # prefix)
+- [x] Fix Bold/Italic toggling — tapping Bold on already-bold text should remove the markers, not add more
+- [x] Fix setNativeProps cursor crash — use selection prop state instead
+- [x] Fix auto-heading: first line should visually appear large/bold without showing raw markdown syntax
