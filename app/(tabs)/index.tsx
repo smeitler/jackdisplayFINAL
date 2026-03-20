@@ -887,7 +887,7 @@ export default function HomeScreen() {
 
           {/* ── Alarm strip ── */}
           <Pressable
-            onPress={() => router.push('/(tabs)/settings' as never)}
+            onPress={() => router.push('/you-settings' as never)}
             style={({ pressed }) => [
               styles.alarmStrip,
               { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },

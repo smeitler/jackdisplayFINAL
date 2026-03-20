@@ -2285,6 +2285,46 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* ── JOURNAL ENTRY — moved above habit ratings ── */}
+          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
+            <TextInput
+              value={dvJournalNote}
+              onChangeText={(text) => {
+                setDvJournalNote(text);
+                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+              }}
+              multiline
+              placeholder="What happened today? How are you feeling?"
+              placeholderTextColor={colors.muted}
+              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 80 }]}
+            />
+            {/* Photo thumbnails for this day's primary entry */}
+            {dvPrimaryEntryId.current && (() => {
+              const photoAtts = (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo');
+              if (photoAtts.length === 0) return null;
+              return (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {photoAtts.map((att) => (
+                    <Image key={att.id} source={{ uri: att.uri }} style={{ width: 72, height: 72, borderRadius: 8, marginRight: 6 }} />
+                  ))}
+                </ScrollView>
+              );
+            })()}
+            {/* Add photo button */}
+            <Pressable
+              onPress={dvPickPhoto}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 6,
+                marginTop: 10, opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <IconSymbol name="photo.fill" size={16} color={colors.primary} />
+              <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '500' }}>Add Photo</Text>
+            </Pressable>
+          </View>
+
           {/* ── Legend row ── */}
           {habits.filter((h) => h.isActive).length > 0 && (
             <View style={[dvStyles.legendRow, { borderBottomColor: colors.border }]}>
@@ -2433,46 +2473,6 @@ export default function JournalScreen() {
               </View>
             );
           })}
-
-          {/* ── JOURNAL ENTRY — always visible, auto-saves on keystroke ── */}
-          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
-            <TextInput
-              value={dvJournalNote}
-              onChangeText={(text) => {
-                setDvJournalNote(text);
-                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-              }}
-              multiline
-              placeholder="What happened today? How are you feeling?"
-              placeholderTextColor={colors.muted}
-              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 80 }]}
-            />
-            {/* Photo thumbnails for this day's primary entry */}
-            {dvPrimaryEntryId.current && (() => {
-              const photoAtts = (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo');
-              if (photoAtts.length === 0) return null;
-              return (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                  {photoAtts.map((att) => (
-                    <Image key={att.id} source={{ uri: att.uri }} style={{ width: 72, height: 72, borderRadius: 8, marginRight: 6 }} />
-                  ))}
-                </ScrollView>
-              );
-            })()}
-            {/* Add photo button */}
-            <Pressable
-              onPress={dvPickPhoto}
-              style={({ pressed }) => ({
-                flexDirection: 'row', alignItems: 'center', gap: 6,
-                marginTop: 10, opacity: pressed ? 0.6 : 1,
-              })}
-            >
-              <IconSymbol name="photo.fill" size={16} color={colors.primary} />
-              <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '500' }}>Add Photo</Text>
-            </Pressable>
-          </View>
 
           {/* ── GRATEFUL FOR — individual cards ── */}
           <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 6 }]}>GRATEFUL FOR</Text>

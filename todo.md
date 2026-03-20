@@ -1250,3 +1250,6 @@
 - [x] Layer 4: Explore library — structured subcategory rows with horizontal scroll, outcome-based naming
 - [x] All 4 categories (Meditate, Sleep, Move, Focus) get category-specific quick actions and subcategories
 - [x] Pinned favorite appears above Recommended section in Explore tab (not at the bottom)
+- [x] Fix alarm card tap on dashboard — navigate to you-settings (alarm config)
+- [x] Journal screen reorder: journal entry (with photo attachment) appears above habit rating buttons (Missed/OK/Crushed It)
+- [x] Journal entry section includes a photo attachment button (image picker)
