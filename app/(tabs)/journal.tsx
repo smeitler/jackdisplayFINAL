@@ -29,6 +29,7 @@ import {
 import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
 import { WheelColumn } from "@/components/wheel-time-picker";
+import Svg, { Path as SvgPath } from "react-native-svg";
 
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
@@ -2030,6 +2031,91 @@ function JournalCalendarView({ colors, onDayPress }: { colors: any; onDayPress?:
   );
 }
 
+// ─── DrawCanvas ────────────────────────────────────────────────────────────────────────────────────
+function DrawCanvas({ colors }: { colors: any }) {
+  const [paths, setPaths] = React.useState<{ points: { x: number; y: number }[]; color: string; width: number }[]>([]);
+  const [currentPath, setCurrentPath] = React.useState<{ x: number; y: number }[]>([]);
+  const [penColor, setPenColor] = React.useState('#000000');
+  const [penWidth, setPenWidth] = React.useState(3);
+  const isDrawing = React.useRef(false);
+
+  const COLORS = ['#000000', '#EF4444', '#3B82F6', '#22C55E', '#F59E0B', '#8B5CF6', '#EC4899'];
+
+  function pointsToPath(pts: { x: number; y: number }[]): string {
+    if (pts.length < 2) return '';
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) d += ` L ${pts[i].x} ${pts[i].y}`;
+    return d;
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View
+        style={{ flex: 1, backgroundColor: '#FAFAFA' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={(e) => {
+          isDrawing.current = true;
+          const { locationX: x, locationY: y } = e.nativeEvent;
+          setCurrentPath([{ x, y }]);
+        }}
+        onResponderMove={(e) => {
+          if (!isDrawing.current) return;
+          const { locationX: x, locationY: y } = e.nativeEvent;
+          setCurrentPath((prev) => [...prev, { x, y }]);
+        }}
+        onResponderRelease={() => {
+          isDrawing.current = false;
+          if (currentPath.length > 1) {
+            setPaths((prev) => [...prev, { points: currentPath, color: penColor, width: penWidth }]);
+          }
+          setCurrentPath([]);
+        }}
+      >
+        <Svg style={StyleSheet.absoluteFillObject}>
+          {paths.map((p, i) => (
+            <SvgPath key={i} d={pointsToPath(p.points)} stroke={p.color} strokeWidth={p.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+          {currentPath.length > 1 && (
+            <SvgPath d={pointsToPath(currentPath)} stroke={penColor} strokeWidth={penWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          )}
+        </Svg>
+      </View>
+      {/* Toolbar */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            {COLORS.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => setPenColor(c)}
+                style={[{ width: 28, height: 28, borderRadius: 14, backgroundColor: c }, penColor === c && { borderWidth: 3, borderColor: colors.primary }]}
+              />
+            ))}
+          </View>
+        </ScrollView>
+        <View style={{ flexDirection: 'row', gap: 12, marginLeft: 12 }}>
+          {[2, 4, 8].map((w) => (
+            <Pressable
+              key={w}
+              onPress={() => setPenWidth(w)}
+              style={[{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }, penWidth === w && { backgroundColor: colors.primary + '33' }]}
+            >
+              <View style={{ width: w * 2, height: w * 2, borderRadius: w, backgroundColor: penColor }} />
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => { setPaths([]); setCurrentPath([]); }}
+            style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 }]}
+          >
+            <IconSymbol name="trash" size={18} color={colors.error} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function JournalScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
@@ -2246,6 +2332,17 @@ export default function JournalScreen() {
   const [dvTagInput, setDvTagInput] = useState('');
   const [dvShowTagInput, setDvShowTagInput] = useState(false);
   const [dvTags, setDvTags] = useState<string[]>([]);
+  // Audio recorder
+  const [dvShowAudioRecorder, setDvShowAudioRecorder] = useState(false);
+  // Draw canvas
+  const [dvShowDraw, setDvShowDraw] = useState(false);
+  // Font style sheet
+  const [dvShowFontSheet, setDvShowFontSheet] = useState(false);
+  // Scan text (OCR)
+  const [dvScanTextLoading, setDvScanTextLoading] = useState(false);
+  const [dvShowScanTextResult, setDvShowScanTextResult] = useState(false);
+  const [dvScanTextResult, setDvScanTextResult] = useState('');
+  const dvScanTextMutation = trpc.journal.scanText.useMutation();
 
   // Sync note/gratitude from the first non-voice entry, or fall back to the voice entry body
   useEffect(() => {
@@ -2403,6 +2500,62 @@ export default function JournalScreen() {
     setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, tags: merged } : e));
   }, [dvTags, userId, entries]);
 
+  // ── Scan Text (OCR) ───────────────────────────────────────────────────────────────────────────────
+  const dvScanText = useCallback(async () => {
+    setDvShowMoreSheet(false);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('Permission needed', 'Camera access is required to scan text.'); return; }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9, base64: true });
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      const imageBase64 = asset.base64;
+      if (!imageBase64) { Alert.alert('Error', 'Could not read image data.'); return; }
+      setDvScanTextLoading(true);
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const res = await dvScanTextMutation.mutateAsync({ imageBase64, mimeType });
+      setDvScanTextResult(res.text || 'No text found in image.');
+      setDvShowScanTextResult(true);
+    } catch (e) {
+      console.warn('dvScanText error:', e);
+      Alert.alert('Scan failed', 'Could not extract text from the image.');
+    } finally {
+      setDvScanTextLoading(false);
+    }
+  }, [dvScanTextMutation]);
+
+  const dvInsertScannedText = useCallback((text: string) => {
+    setDvShowScanTextResult(false);
+    const newNote = dvJournalNote ? dvJournalNote + '\n\n' + text : text;
+    setDvJournalNote(newNote);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newNote, dvGratItems), 800);
+  }, [dvJournalNote, dvGratItems, saveDvNoteAndGrat]);
+
+  // ── Audio recording handler ────────────────────────────────────────────────────────────────────────────
+  const dvHandleAudioRecording = useCallback(async (uri: string, duration: number, mimeType: string) => {
+    setDvShowAudioRecorder(false);
+    if (!userId) return;
+    let entryId = dvPrimaryEntryId.current;
+    if (!entryId) {
+      const now = new Date().toISOString();
+      const newEntry: JournalEntry = {
+        id: generateId(), userId, date: selectedDate,
+        createdAt: now, updatedAt: now, title: '', body: '', template: 'blank', attachments: [], tags: [],
+      };
+      const updated = await addEntry(userId, newEntry);
+      dvPrimaryEntryId.current = newEntry.id;
+      setEntries(updated);
+      entryId = newEntry.id;
+    }
+    const newAtt: JournalAttachment = { id: generateId(), type: 'audio', uri, mimeType, durationMs: duration * 1000 };
+    const existing = entries.find((e) => e.id === entryId);
+    const merged = [...(existing?.attachments ?? []), newAtt];
+    await updateEntryInStore(userId, entryId, { attachments: merged });
+    setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, attachments: merged } : e));
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [userId, selectedDate, entries]);
+
   // ── Date wheel picker columns ───────────────────────────────────────────────
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const pickerMonthRef = useRef(0);
@@ -2516,7 +2669,7 @@ export default function JournalScreen() {
               multiline
               placeholder="What happened today? How are you feeling?"
               placeholderTextColor={colors.muted}
-              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 80 }]}
+              style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 120, textAlignVertical: 'top' }]}
             />
             {/* Photo thumbnails for this day's primary entry */}
             {dvPrimaryEntryId.current && (() => {
@@ -2563,7 +2716,7 @@ export default function JournalScreen() {
                 </Pressable>
               </View>
             )}
-            {/* Bottom toolbar: ↓ dismiss | photo | paperclip */}
+            {/* Bottom toolbar: ↓ dismiss | photo | paperclip | Aa */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
               {/* Left: dismiss keyboard */}
               <Pressable
@@ -2572,13 +2725,16 @@ export default function JournalScreen() {
               >
                 <IconSymbol name="chevron.down" size={20} color={colors.muted} />
               </Pressable>
-              {/* Right: photo + paperclip */}
+              {/* Right: photo + paperclip + Aa */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                 <Pressable onPress={dvPickPhoto} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                   <IconSymbol name="photo.fill" size={22} color={colors.muted} />
                 </Pressable>
                 <Pressable onPress={() => setDvShowAttachSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                   <IconSymbol name="paperclip" size={22} color={colors.muted} />
+                </Pressable>
+                <Pressable onPress={() => setDvShowFontSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: colors.muted, letterSpacing: -0.5 }}>Aa</Text>
                 </Pressable>
               </View>
             </View>
@@ -2591,7 +2747,7 @@ export default function JournalScreen() {
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
               {([
                 { icon: 'tag.fill' as const, label: 'Tag', color: '#8B5CF6', onPress: () => { setDvShowAttachSheet(false); setDvShowTagInput(true); } },
-                { icon: 'mic.fill' as const, label: 'Audio', color: '#EF4444', onPress: () => setDvShowAttachSheet(false) },
+                { icon: 'mic.fill' as const, label: 'Audio', color: '#EF4444', onPress: () => { setDvShowAttachSheet(false); setDvShowAudioRecorder(true); } },
                 { icon: 'camera.fill' as const, label: 'Camera', color: '#3B82F6', onPress: () => { setDvShowAttachSheet(false); dvPickCamera(); } },
                 { icon: 'video.fill' as const, label: 'Video', color: '#10B981', onPress: () => { setDvShowAttachSheet(false); dvPickVideo(); } },
               ]).map((item) => (
@@ -2618,9 +2774,9 @@ export default function JournalScreen() {
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 8 }} />
               <Text style={{ fontSize: 13, fontWeight: '600', color: colors.muted, paddingHorizontal: 24, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.8 }}>More Options</Text>
               {([
-                { icon: 'scribble' as const, label: 'Draw', onPress: () => setDvShowMoreSheet(false) },
-                { icon: 'doc.text.viewfinder' as const, label: 'Scan to PDF', onPress: () => setDvShowMoreSheet(false) },
-                { icon: 'text.viewfinder' as const, label: 'Scan Text', onPress: () => setDvShowMoreSheet(false) },
+                { icon: 'scribble' as const, label: 'Draw', onPress: () => { setDvShowMoreSheet(false); setDvShowDraw(true); } },
+                { icon: 'doc.text.viewfinder' as const, label: 'Scan to PDF', onPress: () => { setDvShowMoreSheet(false); dvPickCamera(); } },
+                { icon: 'text.viewfinder' as const, label: 'Scan Text', onPress: () => dvScanText() },
                 { icon: 'doc.fill' as const, label: 'Template', onPress: () => { setDvShowMoreSheet(false); setEditorVisible(true); } },
               ] as const).map((item) => (
                 <Pressable key={item.label} onPress={item.onPress} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 16, opacity: pressed ? 0.6 : 1 }]}>
@@ -2827,6 +2983,123 @@ export default function JournalScreen() {
         colors={colors}
         userId={userId}
       />
+
+      {/* ── Audio Recorder Modal ── */}
+      <Modal visible={dvShowAudioRecorder} transparent animationType="slide" onRequestClose={() => setDvShowAudioRecorder(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setDvShowAudioRecorder(false)} />
+        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 48, paddingTop: 20, alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 8 }} />
+          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>Record Audio</Text>
+          <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: 32 }}>Tap the mic to start recording. Tap again to stop and save.</Text>
+          <MicButton
+            onRecordingComplete={dvHandleAudioRecording}
+            colors={colors}
+          />
+          <Pressable onPress={() => setDvShowAudioRecorder(false)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginTop: 8 })}>
+            <Text style={{ fontSize: 16, color: colors.muted }}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      {/* ── Scan Text Loading overlay ── */}
+      {dvScanTextLoading && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 32, alignItems: 'center', gap: 16 }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.foreground }}>Extracting text…</Text>
+            <Text style={{ fontSize: 12, color: colors.muted }}>AI is reading your image</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Scan Text Result Modal ── */}
+      <Modal visible={dvShowScanTextResult} transparent animationType="slide" onRequestClose={() => setDvShowScanTextResult(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40, maxHeight: '80%' }}>
+            <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>Scanned Text</Text>
+              <Pressable onPress={() => setDvShowScanTextResult(false)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                <IconSymbol name="xmark" size={20} color={colors.muted} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ paddingHorizontal: 20, paddingTop: 12 }} contentContainerStyle={{ paddingBottom: 20 }}>
+              <Text style={{ fontSize: 15, color: colors.foreground, lineHeight: 24 }}>{dvScanTextResult}</Text>
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 12 }}>
+              <Pressable
+                onPress={() => setDvShowScanTextResult(false)}
+                style={({ pressed }) => [{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.muted }}>Discard</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => dvInsertScannedText(dvScanTextResult)}
+                style={({ pressed }) => [{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>Insert into Entry</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Draw Canvas Modal ── */}
+      <Modal visible={dvShowDraw} transparent animationType="slide" onRequestClose={() => setDvShowDraw(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
+            <Pressable onPress={() => setDvShowDraw(false)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+              <Text style={{ fontSize: 16, color: colors.muted }}>Cancel</Text>
+            </Pressable>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>Draw</Text>
+            <Pressable
+              onPress={() => {
+                setDvShowDraw(false);
+                Alert.alert('Drawing Saved', 'Your drawing has been noted.');
+              }}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={{ fontSize: 16, color: colors.primary, fontWeight: '600' }}>Done</Text>
+            </Pressable>
+          </View>
+          <DrawCanvas colors={colors} />
+        </View>
+      </Modal>
+
+      {/* ── Font Style Sheet ── */}
+      <Modal visible={dvShowFontSheet} transparent animationType="slide" onRequestClose={() => setDvShowFontSheet(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setDvShowFontSheet(false)} />
+        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
+          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, paddingHorizontal: 24, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>Text Style</Text>
+          {([
+            { label: 'Bold', icon: 'bold' as const, desc: 'Wrap text with **bold**', prefix: '**', suffix: '**' },
+            { label: 'Italic', icon: 'italic' as const, desc: 'Wrap text with *italic*', prefix: '*', suffix: '*' },
+            { label: 'Heading', icon: 'textformat.size' as const, desc: 'Add a heading line', prefix: '# ', suffix: '' },
+            { label: 'Bullet List', icon: 'list.bullet.indent' as const, desc: 'Add a bullet point', prefix: '- ', suffix: '' },
+          ]).map((item) => (
+            <Pressable
+              key={item.label}
+              onPress={() => {
+                setDvShowFontSheet(false);
+                const insertion = item.suffix ? `${item.prefix}text${item.suffix}` : `${item.prefix}text`;
+                const newNote = dvJournalNote ? dvJournalNote + '\n' + insertion : insertion;
+                setDvJournalNote(newNote);
+                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newNote, dvGratItems), 800);
+              }}
+              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 14, opacity: pressed ? 0.6 : 1 }]}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+                <IconSymbol name={item.icon} size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>{item.label}</Text>
+                <Text style={{ fontSize: 12, color: colors.muted }}>{item.desc}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      </Modal>
 
       {/* ── Calendar Modal ── */}
       <Modal

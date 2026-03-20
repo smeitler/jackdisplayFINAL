@@ -1259,3 +1259,12 @@
 - [x] Paperclip menu options: Tag, Audio (record), Camera (in-app photo), Video (in-app video)
 - [x] Paperclip More submenu: Draw, Scan to PDF, Scan Text, Template
 - [x] Journal day-view inline card: add toolbar (↓ dismiss keyboard, photo, paperclip with Tag/Audio/Camera/Video/More) matching the editor modal toolbar
+
+- [x] Fix journal entry text cutoff (increase minHeight to 120, set textAlignVertical top)
+- [x] Add Aa font style button to journal toolbar (opens Bold/Italic/Heading/Bullet formatting sheet)
+- [x] Wire Audio button in attach sheet to open MicButton audio recorder modal
+- [x] Wire Draw button in more sheet to open full-screen DrawCanvas with color/width picker
+- [x] Wire Scan to PDF button to launch camera (capture document photo as attachment)
+- [x] Wire Scan Text button to capture image via camera and extract text via AI OCR
+- [x] Wire Template button to open EntryEditor with template selection
+- [x] Add journal.scanText tRPC endpoint (LLM vision-based OCR)

@@ -1091,7 +1091,38 @@ Guidelines:
       }),
   }),
 
-  // ─── Community: Referrals ─────────────────────────────────────────────────────────
+  // ─── Journal: Scan Text (OCR via LLM) ────────────────────────────────────────────────────────────────────────────────────
+  journal: router({
+    scanText: publicProcedure
+      .input(z.object({
+        imageBase64: z.string(),
+        mimeType: z.string().default('image/jpeg'),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+        const resp = await invokeLLM({
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:${input.mimeType};base64,${input.imageBase64}` },
+                },
+                {
+                  type: 'text',
+                  text: 'Please extract and transcribe all text visible in this image. Return only the extracted text, preserving line breaks and formatting as closely as possible. If there is no text, return an empty string.',
+                },
+              ],
+            },
+          ],
+        });
+        const text = (resp.choices[0]?.message?.content as string) ?? '';
+        return { text: text.trim() };
+      }),
+  }),
+
+  // ─── Community: Referrals ────────────────────────────────────────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>
       db.getReferralStats(ctx.user.id)
