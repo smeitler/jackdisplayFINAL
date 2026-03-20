@@ -1316,3 +1316,5 @@
 - [x] Fix top bar overlapping status bar in full-screen editor on web (48pt min spacer)
 - [x] Fix format sheet B/I/U/S buttons not firing on web (saved lastKnownSelection on blur, zIndex on sheet)
 - [x] Fix text not rendering bold/italic visually after applying format (simplified overlay renderer, markdown wrapSelection)
+
+- [x] Fix cursor misalignment in journal editor — removed transparent overlay, single visible TextInput with correct cursor position
