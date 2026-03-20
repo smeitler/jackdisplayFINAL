@@ -1165,3 +1165,6 @@
 - [x] Voice check-in full-screen modal: idle mic → listening waveform → analyzing spinner → results (habit cards + journal block + gratitude) → log/save
 - [x] Fix voice-checkin: recording not working on web (needs MediaRecorder, not expo-audio) + Send button does nothing
 - [x] Fix Log Habits button: should navigate to /checkin screen (not journal?action=checkin)
+- [x] Voice check-in: spinner keeps spinning with cycling status text (Transcribing... → Analyzing habits... → Extracting journal...)
+- [x] Voice check-in: show habit prompt card during recording (list all habits + gratitude suggestion + example phrase)
+- [x] Voice check-in: optimize speed by merging two LLM calls into one combined call after Whisper transcription

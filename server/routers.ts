@@ -796,6 +796,87 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
 
         return { results };
       }),
+
+    /**
+     * COMBINED — Transcribe audio + analyze habits + extract journal/gratitude in ONE LLM call.
+     * Faster than calling transcribeAndCategorize + analyzeTranscript separately.
+     */
+    transcribeAndAnalyze: publicProcedure
+      .input(z.object({
+        audioBase64: z.string(),
+        mimeType: z.string().default('audio/webm'),
+        habits: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+        const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+        const { storagePut } = await import('./storage.js');
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+        const ext = input.mimeType.split('/')[1]?.split(';')[0] ?? 'm4a';
+        const userId = ctx.user?.id ?? 'anonymous';
+        const fileKey = `voice-checkin/${userId}/${Date.now()}.${ext}`;
+        // Transcribe + upload in parallel
+        const [storageResult, transcription] = await Promise.all([
+          storagePut(fileKey, audioBuffer, input.mimeType).catch(() => ({ key: fileKey, url: '' })),
+          transcribeAudioBuffer(audioBuffer, input.mimeType, {
+            language: 'en',
+            prompt: 'Daily habit check-in, gratitude, journal entry, reflections',
+          }),
+        ]);
+        if ('error' in transcription) {
+          throw new Error(`Transcription failed: ${transcription.error}`);
+        }
+        const transcript = transcription.text?.trim() ?? '';
+        if (!transcript) {
+          return {
+            transcript: '',
+            journalEntries: [] as string[],
+            gratitudeItems: [] as string[],
+            habitResults: {} as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>,
+            audioUrl: storageResult.url,
+          };
+        }
+        const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
+        const habitSection = habitList
+          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "3-8 word punchy note"}. Only include habits clearly mentioned. Rating: green=did it/crushed, yellow=partial/okay, red=missed/skipped. Habits:\n${habitList}`
+          : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "hit the gym"}}` : '';
+        const llmResp = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim${habitSection}\nRules:\n- Gratitude expressions → gratitudeItems\n- Everything else → journalEntries\n- For habitResults: be generous with inference, match by context\n- Only include habits clearly mentioned or strongly implied\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+            },
+            {
+              role: 'user',
+              content: `Transcript:\n${transcript}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        });
+        let journalEntries: string[] = [];
+        let gratitudeItems: string[] = [];
+        let habitResults: Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> = {};
+        try {
+          const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+          journalEntries = Array.isArray(parsed.journalEntries)
+            ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+            : [];
+          gratitudeItems = Array.isArray(parsed.gratitudeItems)
+            ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+            : [];
+          if (parsed.habitResults && typeof parsed.habitResults === 'object') {
+            habitResults = Object.fromEntries(
+              Object.entries(parsed.habitResults)
+                .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
+                .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '').slice(0, 60) }])
+            ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
+          }
+        } catch {
+          journalEntries = [transcript];
+        }
+        return { transcript, journalEntries, gratitudeItems, habitResults, audioUrl: storageResult.url };
+      }),
   }),
 
   // ─── Morning Practice ────────────────────────────────────────────────────────
