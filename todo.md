@@ -1312,3 +1312,7 @@
 - [x] Toolbar state derivation (active block type and mixed-state inline marks reflect current selection)
 - [x] Block-level paragraph styles (Title/Heading/Subheading/Body change block.type, not just font size)
 - [x] Autosave with debounce (persist 500ms after typing stops, save immediately on close)
+
+- [x] Fix top bar overlapping status bar in full-screen editor on web (48pt min spacer)
+- [x] Fix format sheet B/I/U/S buttons not firing on web (saved lastKnownSelection on blur, zIndex on sheet)
+- [x] Fix text not rendering bold/italic visually after applying format (simplified overlay renderer, markdown wrapSelection)

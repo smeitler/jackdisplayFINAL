@@ -2295,7 +2295,21 @@ function FullScreenJournalEditor({
     pendingMarks: { bold: false, italic: false, underline: false, strike: false },
   });
 
+  // Preserve selection when format sheet opens (opening sheet steals focus on web)
+  const savedToolbarState = useRef<EditorToolbarState>({
+    activeBlockType: 'body',
+    bold: false, italic: false, underline: false, strike: false,
+    pendingMarks: { bold: false, italic: false, underline: false, strike: false },
+  });
+
+  const handleToolbarStateChange = useCallback((state: EditorToolbarState) => {
+    savedToolbarState.current = state;
+    setToolbarState(state);
+  }, []);
+
   const openFmtSheet = useCallback(() => {
+    // Snapshot current toolbar state before opening (focus loss may clear selection)
+    setToolbarState(savedToolbarState.current);
     setShowFmtSheet(true);
   }, []);
 
@@ -2313,8 +2327,8 @@ function FullScreenJournalEditor({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        {/* Status bar spacer */}
-        <View style={{ height: Math.max(modalInsets.top, 44) }} />
+        {/* Status bar spacer — on web insets.top is 0, use 48pt minimum */}
+        <View style={{ height: Math.max(modalInsets.top, Platform.OS === 'web' ? 48 : 44) }} />
         {/* Top navigation bar */}
         <View style={fsStyles.topBar}>
           <Pressable onPress={onClose} style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
@@ -2353,7 +2367,7 @@ function FullScreenJournalEditor({
               ref={editorRef}
               initialValue={value}
               onChange={onChange}
-              onToolbarStateChange={setToolbarState}
+              onToolbarStateChange={handleToolbarStateChange}
               placeholder="Start writing..."
             />
           </ScrollView>
@@ -2499,7 +2513,7 @@ const fsStyles = StyleSheet.create({
   toolbarBtnActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
   aaText: { fontSize: 15, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
   fmtSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12 },
-  fmtSheetContainer: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12 },
+  fmtSheetContainer: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12, zIndex: 100, elevation: 10 },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
   fmtHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
   fmtTitle: { fontSize: 17, fontWeight: '600', color: '#ffffff', flex: 1 },

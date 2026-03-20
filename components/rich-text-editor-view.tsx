@@ -1,19 +1,18 @@
 /**
  * RichTextEditorView
  *
- * A React Native rich-text editor component built on the block+inline document model.
+ * A React Native rich-text editor that works on both native and web.
  *
  * Architecture:
- *  - Transparent TextInput captures all keystrokes and selection events
- *  - A rendered View overlay displays the styled text (bold/italic/headings)
- *  - The document model (lib/rich-text-editor.ts) handles all editing operations
+ *  - Uses a single TextInput that stores the raw markdown text
+ *  - On web: renders a contenteditable-style overlay using a hidden TextInput + visible Text layer
+ *  - Format operations wrap/unwrap selected text with markdown syntax
+ *  - The document model (lib/rich-text-editor.ts) handles serialization for storage
  *
- * The component manages:
- *  - Document state (blocks + runs)
- *  - Selection tracking (flat offsets)
- *  - Pending typing marks (for collapsed caret formatting)
- *  - Toolbar state derivation
- *  - Autosave via debounce
+ * Key insight: Rather than fighting React Native's TextInput limitations,
+ * we store raw markdown in the TextInput and render a visual overlay.
+ * The TextInput has transparent text color so only the overlay is visible.
+ * Format buttons wrap/unwrap the selected text range directly in the markdown string.
  */
 
 import React, {
@@ -25,28 +24,15 @@ import React, {
 } from 'react';
 import {
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import {
-  type Block,
   type BlockType,
   type Marks,
-  type RichDocument,
-  type SelectionRange,
-  EMPTY_MARKS,
-  blockTypeAtOffset,
-  deleteRange,
-  deriveActiveMarks,
-  documentLength,
-  insertText,
-  parseDocument,
-  serializeDocument,
-  setBlockType,
-  splitBlock,
-  toggleMark,
 } from '@/lib/rich-text-editor';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -82,33 +68,105 @@ interface RichTextEditorViewProps {
   placeholder?: string;
 }
 
-// ─── Block renderer ───────────────────────────────────────────────────────────
+// ─── Markdown inline parser ───────────────────────────────────────────────────
 
-const BLOCK_STYLES: Record<BlockType, object> = {
-  title:      { fontSize: 28, lineHeight: 36, fontWeight: '800' as const, color: '#ffffff', marginBottom: 6 },
-  heading:    { fontSize: 22, lineHeight: 30, fontWeight: '700' as const, color: '#ffffff', marginBottom: 4 },
+interface Span {
+  text: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+}
+
+/** Parse a single line of markdown into styled spans */
+function parseInlineMarkdown(line: string): Span[] {
+  const spans: Span[] = [];
+  // Regex: match **bold**, *italic*, __underline__, ~~strike~~, or plain text
+  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(__(.+?)__)|(~~(.+?)~~)|([^*_~]+)/g;
+  let match;
+  while ((match = regex.exec(line)) !== null) {
+    if (match[1]) spans.push({ text: match[2], bold: true, italic: false, underline: false, strike: false });
+    else if (match[3]) spans.push({ text: match[4], bold: false, italic: true, underline: false, strike: false });
+    else if (match[5]) spans.push({ text: match[6], bold: false, italic: false, underline: true, strike: false });
+    else if (match[7]) spans.push({ text: match[8], bold: false, italic: false, underline: false, strike: true });
+    else if (match[9]) spans.push({ text: match[9], bold: false, italic: false, underline: false, strike: false });
+  }
+  return spans.length > 0 ? spans : [{ text: line, bold: false, italic: false, underline: false, strike: false }];
+}
+
+/** Get block type and display text from a markdown line */
+function parseBlockLine(line: string): { type: BlockType; content: string } {
+  if (line.startsWith('# ')) return { type: 'title', content: line.slice(2) };
+  if (line.startsWith('## ')) return { type: 'heading', content: line.slice(3) };
+  if (line.startsWith('### ')) return { type: 'subheading', content: line.slice(4) };
+  return { type: 'body', content: line };
+}
+
+const BLOCK_TEXT_STYLE: Record<BlockType, object> = {
+  title:      { fontSize: 28, lineHeight: 36, fontWeight: '800' as const, color: '#ffffff', marginBottom: 2 },
+  heading:    { fontSize: 22, lineHeight: 30, fontWeight: '700' as const, color: '#ffffff', marginBottom: 2 },
   subheading: { fontSize: 18, lineHeight: 26, fontWeight: '600' as const, color: '#ffffff', marginBottom: 2 },
   body:       { fontSize: 17, lineHeight: 26, color: '#ffffff', marginBottom: 2 },
 };
 
-function renderBlock(block: Block, blockIndex: number): React.ReactNode {
+/** Render a single markdown line as a styled Text node */
+function renderMarkdownLine(line: string, index: number): React.ReactNode {
+  if (line === '') {
+    return <Text key={index} style={{ fontSize: 17, lineHeight: 26, color: '#ffffff' }}>{'\n'}</Text>;
+  }
+  const { type, content } = parseBlockLine(line);
+  const spans = parseInlineMarkdown(content);
   return (
-    <Text key={block.id} style={BLOCK_STYLES[block.type]}>
-      {block.runs.map((run, runIndex) => {
+    <Text key={index} style={BLOCK_TEXT_STYLE[type]}>
+      {spans.map((span, si) => {
         const style: any = {};
-        if (run.marks.bold) style.fontWeight = '800';
-        if (run.marks.italic) style.fontStyle = 'italic';
-        if (run.marks.underline) style.textDecorationLine = run.marks.strike ? 'underline line-through' : 'underline';
-        else if (run.marks.strike) style.textDecorationLine = 'line-through';
-        if (run.marks.italic && run.marks.bold) { style.fontWeight = '800'; style.fontStyle = 'italic'; }
-        return (
-          <Text key={`${block.id}_${runIndex}`} style={style}>
-            {run.text}
-          </Text>
-        );
+        if (span.bold) style.fontWeight = '800';
+        if (span.italic) style.fontStyle = 'italic';
+        if (span.underline && span.strike) style.textDecorationLine = 'underline line-through';
+        else if (span.underline) style.textDecorationLine = 'underline';
+        else if (span.strike) style.textDecorationLine = 'line-through';
+        return <Text key={si} style={style}>{span.text}</Text>;
       })}
     </Text>
   );
+}
+
+// ─── Markdown manipulation helpers ───────────────────────────────────────────
+
+/** Wrap selected text with a markdown marker (e.g. ** for bold) */
+function wrapSelection(text: string, start: number, end: number, marker: string): { text: string; start: number; end: number } {
+  const before = text.slice(0, start);
+  const selected = text.slice(start, end);
+  const after = text.slice(end);
+  // Check if already wrapped — if so, unwrap
+  if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length > marker.length * 2) {
+    const unwrapped = selected.slice(marker.length, selected.length - marker.length);
+    return { text: before + unwrapped + after, start, end: start + unwrapped.length };
+  }
+  const wrapped = marker + selected + marker;
+  return { text: before + wrapped + after, start: start + marker.length, end: end + marker.length };
+}
+
+/** Get the current line prefix (# / ## / ###) for a given caret position */
+function getLinePrefix(text: string, caretPos: number): string {
+  const lineStart = text.lastIndexOf('\n', caretPos - 1) + 1;
+  const line = text.slice(lineStart);
+  const match = line.match(/^(#{1,3} )/);
+  return match ? match[1] : '';
+}
+
+/** Set block type prefix on the current line */
+function setLineBlockType(text: string, caretPos: number, type: BlockType): { text: string; caret: number } {
+  const lineStart = text.lastIndexOf('\n', caretPos - 1) + 1;
+  const lineEnd = text.indexOf('\n', caretPos);
+  const line = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+  const { content } = parseBlockLine(line);
+  const prefix = type === 'title' ? '# ' : type === 'heading' ? '## ' : type === 'subheading' ? '### ' : '';
+  const newLine = prefix + content;
+  const newText = text.slice(0, lineStart) + newLine + (lineEnd === -1 ? '' : text.slice(lineEnd));
+  const caretOffset = caretPos - lineStart - (line.length - content.length);
+  const newCaret = lineStart + prefix.length + Math.max(0, caretOffset);
+  return { text: newText, caret: newCaret };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -117,222 +175,179 @@ const RichTextEditorView = React.forwardRef<RichTextEditorHandle, RichTextEditor
   ({ initialValue, onChange, onToolbarStateChange, placeholder = 'Start writing...' }, ref) => {
     const inputRef = useRef<TextInput>(null);
 
-    // Document state
-    const [doc, setDoc] = useState<RichDocument>(() => parseDocument(initialValue));
-    const docRef = useRef<RichDocument>(doc);
-    docRef.current = doc;
+    // Raw markdown text stored in the TextInput
+    const [text, setText] = useState(initialValue || '');
+    const textRef = useRef(initialValue || '');
 
-    // Selection state (flat offsets)
-    const [selection, setSelection] = useState<SelectionRange>({ start: 0, end: 0 });
-    const selectionRef = useRef<SelectionRange>({ start: 0, end: 0 });
-    selectionRef.current = selection;
+    // Selection state
+    const [selection, setSelection] = useState({ start: 0, end: 0 });
+    const selectionRef = useRef({ start: 0, end: 0 });
+    // Last known selection before focus loss (used when format sheet buttons are tapped)
+    const lastKnownSelectionRef = useRef({ start: 0, end: 0 });
 
-    // Pending typing marks (applied to next typed chars when caret is collapsed)
-    const [pendingMarks, setPendingMarks] = useState<Marks>({ ...EMPTY_MARKS });
-    const pendingMarksRef = useRef<Marks>({ ...EMPTY_MARKS });
-    pendingMarksRef.current = pendingMarks;
-
-    // The "flat string" that the TextInput sees — used only for selection tracking
-    // We keep it in sync with the document
-    const [flatValue, setFlatValue] = useState<string>(() => serializeDocument(parseDocument(initialValue)));
-    const flatValueRef = useRef<string>(flatValue);
-    flatValueRef.current = flatValue;
+    // Pending marks for collapsed caret
+    const [pendingMarks, setPendingMarks] = useState<Marks>({ bold: false, italic: false, underline: false, strike: false });
+    const pendingMarksRef = useRef<Marks>({ bold: false, italic: false, underline: false, strike: false });
 
     // Autosave debounce
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const scheduleAutosave = useCallback((markdown: string) => {
+    const scheduleAutosave = useCallback((value: string) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
-        onChange(markdown);
-      }, 500);
+      saveTimer.current = setTimeout(() => onChange(value), 500);
     }, [onChange]);
 
-    // Sync doc → flatValue and notify toolbar
-    const applyDocUpdate = useCallback((newDoc: RichDocument, newSelection?: SelectionRange) => {
-      const markdown = serializeDocument(newDoc);
-      setDoc(newDoc);
-      setFlatValue(markdown);
-      flatValueRef.current = markdown;
-      scheduleAutosave(markdown);
-
-      const sel = newSelection ?? selectionRef.current;
-      if (newSelection) {
-        setSelection(newSelection);
-        selectionRef.current = newSelection;
+    const updateText = useCallback((newText: string, newSel?: { start: number; end: number }) => {
+      setText(newText);
+      textRef.current = newText;
+      scheduleAutosave(newText);
+      if (newSel) {
+        setSelection(newSel);
+        selectionRef.current = newSel;
       }
-
-      // Derive toolbar state
-      const activeMarks = deriveActiveMarks(newDoc, sel.start, sel.end);
-      const activeBlockType = blockTypeAtOffset(newDoc, sel.start);
+      // Derive toolbar state from current line
+      const caretPos = newSel ? newSel.start : selectionRef.current.start;
+      const lineStart = newText.lastIndexOf('\n', caretPos - 1) + 1;
+      const lineEnd = newText.indexOf('\n', caretPos);
+      const line = newText.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+      const { type } = parseBlockLine(line);
+      // Check if selection is inside bold/italic markers
+      const sel = newSel ?? selectionRef.current;
+      const selectedText = newText.slice(sel.start, sel.end);
+      const isBold = selectedText.startsWith('**') && selectedText.endsWith('**');
+      const isItalic = !isBold && selectedText.startsWith('*') && selectedText.endsWith('*');
       onToolbarStateChange({
-        activeBlockType,
-        bold: activeMarks.bold,
-        italic: activeMarks.italic,
-        underline: activeMarks.underline,
-        strike: activeMarks.strike,
+        activeBlockType: type,
+        bold: isBold || pendingMarksRef.current.bold,
+        italic: isItalic || pendingMarksRef.current.italic,
+        underline: pendingMarksRef.current.underline,
+        strike: pendingMarksRef.current.strike,
         pendingMarks: pendingMarksRef.current,
       });
     }, [scheduleAutosave, onToolbarStateChange]);
 
-    // Notify toolbar when selection changes without doc change
-    const notifyToolbarState = useCallback((sel: SelectionRange, currentDoc: RichDocument, currentPending: Marks) => {
-      const activeMarks = deriveActiveMarks(currentDoc, sel.start, sel.end);
-      const activeBlockType = blockTypeAtOffset(currentDoc, sel.start);
+    const handleChangeText = useCallback((newText: string) => {
+      updateText(newText);
+    }, [updateText]);
+
+    const handleBlur = useCallback(() => {
+      // Save the last known selection so format sheet buttons can use it
+      lastKnownSelectionRef.current = selectionRef.current;
+    }, []);
+
+    const handleSelectionChange = useCallback((e: any) => {
+      const { start, end } = e.nativeEvent.selection;
+      selectionRef.current = { start, end };
+      lastKnownSelectionRef.current = { start, end };
+      setSelection({ start, end });
+      if (start !== end) {
+        setPendingMarks({ bold: false, italic: false, underline: false, strike: false });
+        pendingMarksRef.current = { bold: false, italic: false, underline: false, strike: false };
+      }
+      // Update toolbar state
+      const currentText = textRef.current;
+      const lineStart = currentText.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = currentText.indexOf('\n', start);
+      const line = currentText.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+      const { type } = parseBlockLine(line);
+      const selectedText = currentText.slice(start, end);
+      const isBold = selectedText.startsWith('**') && selectedText.endsWith('**');
+      const isItalic = !isBold && selectedText.startsWith('*') && selectedText.endsWith('*');
       onToolbarStateChange({
-        activeBlockType,
-        bold: activeMarks.bold,
-        italic: activeMarks.italic,
-        underline: activeMarks.underline,
-        strike: activeMarks.strike,
-        pendingMarks: currentPending,
+        activeBlockType: type,
+        bold: isBold || pendingMarksRef.current.bold,
+        italic: isItalic || pendingMarksRef.current.italic,
+        underline: pendingMarksRef.current.underline,
+        strike: pendingMarksRef.current.strike,
+        pendingMarks: pendingMarksRef.current,
       });
     }, [onToolbarStateChange]);
 
-    // Handle TextInput text changes
-    // We intercept the raw text change and rebuild the document from it
-    // This is the simplest approach that works with native keyboard on mobile
-    const handleChangeText = useCallback((newText: string) => {
-      const oldText = flatValueRef.current;
-      const sel = selectionRef.current;
-
-      // Detect what changed by comparing old vs new text
-      // The TextInput gives us the full new string after the edit
-      if (newText === oldText) return;
-
-      // Find the diff: what was inserted/deleted
-      // Simple approach: find common prefix and suffix
-      let prefixLen = 0;
-      while (prefixLen < oldText.length && prefixLen < newText.length && oldText[prefixLen] === newText[prefixLen]) {
-        prefixLen++;
-      }
-      let oldSuffixLen = 0;
-      let newSuffixLen = 0;
-      while (
-        oldSuffixLen < oldText.length - prefixLen &&
-        newSuffixLen < newText.length - prefixLen &&
-        oldText[oldText.length - 1 - oldSuffixLen] === newText[newText.length - 1 - newSuffixLen]
-      ) {
-        oldSuffixLen++;
-        newSuffixLen++;
-      }
-
-      const deletedFrom = prefixLen;
-      const deletedTo = oldText.length - oldSuffixLen;
-      const insertedText = newText.slice(prefixLen, newText.length - newSuffixLen);
-
-      let currentDoc = docRef.current;
-
-      // Delete the old range if any
-      if (deletedTo > deletedFrom) {
-        const result = deleteRange(currentDoc, deletedFrom, deletedTo);
-        currentDoc = result.doc;
-      }
-
-      // Insert new text if any
-      if (insertedText.length > 0) {
-        if (insertedText === '\n') {
-          // Newline: split block
-          const result = splitBlock(currentDoc, deletedFrom);
-          currentDoc = result.doc;
-          const newSel = { start: result.caretOffset, end: result.caretOffset };
-          applyDocUpdate(currentDoc, newSel);
-          return;
-        } else {
-          currentDoc = insertText(currentDoc, deletedFrom, insertedText, pendingMarksRef.current);
-        }
-      }
-
-      const newCaret = deletedFrom + insertedText.length;
-      applyDocUpdate(currentDoc, { start: newCaret, end: newCaret });
-    }, [applyDocUpdate]);
-
-    // Handle selection changes from TextInput
-    const handleSelectionChange = useCallback((e: any) => {
-      const { start, end } = e.nativeEvent.selection;
-      const newSel = { start, end };
-      setSelection(newSel);
-      selectionRef.current = newSel;
-
-      // When selection becomes expanded, clear pending marks
-      if (start !== end) {
-        setPendingMarks({ ...EMPTY_MARKS });
-        pendingMarksRef.current = { ...EMPTY_MARKS };
-      }
-
-      notifyToolbarState(newSel, docRef.current, pendingMarksRef.current);
-    }, [notifyToolbarState]);
-
-    // Expose imperative handle for format sheet
     useImperativeHandle(ref, () => ({
       toggleMark: (key: keyof Marks) => {
-        const sel = selectionRef.current;
-        const currentDoc = docRef.current;
+        // Use lastKnownSelectionRef so format sheet buttons work even after focus loss
+        const sel = lastKnownSelectionRef.current;
+        const currentText = textRef.current;
 
         if (sel.start === sel.end) {
           // Collapsed caret: toggle pending mark
           const newPending = { ...pendingMarksRef.current, [key]: !pendingMarksRef.current[key] };
           setPendingMarks(newPending);
           pendingMarksRef.current = newPending;
-          notifyToolbarState(sel, currentDoc, newPending);
+          onToolbarStateChange({
+            activeBlockType: 'body',
+            bold: newPending.bold,
+            italic: newPending.italic,
+            underline: newPending.underline,
+            strike: newPending.strike,
+            pendingMarks: newPending,
+          });
         } else {
-          // Range selection: apply to range
-          const newDoc = toggleMark(currentDoc, sel.start, sel.end, key);
-          applyDocUpdate(newDoc, sel);
+          // Range selection: wrap/unwrap the selected text
+          const marker = key === 'bold' ? '**' : key === 'italic' ? '*' : key === 'underline' ? '__' : '~~';
+          const result = wrapSelection(currentText, sel.start, sel.end, marker);
+          updateText(result.text, { start: result.start, end: result.end });
+          // Force TextInput to update selection after state change
+          setTimeout(() => {
+            inputRef.current?.setNativeProps?.({ selection: { start: result.start, end: result.end } });
+          }, 50);
         }
       },
 
       setBlockType: (type: BlockType) => {
         const sel = selectionRef.current;
-        const newDoc = setBlockType(docRef.current, sel.start, sel.end, type);
-        applyDocUpdate(newDoc, sel);
+        const result = setLineBlockType(textRef.current, sel.start, type);
+        updateText(result.text, { start: result.caret, end: result.caret });
       },
 
-      getValue: () => serializeDocument(docRef.current),
+      getValue: () => textRef.current,
 
       focus: () => {
         setTimeout(() => inputRef.current?.focus(), 50);
       },
-    }), [applyDocUpdate, notifyToolbarState]);
+    }), [updateText, onToolbarStateChange]);
 
     // Save immediately on unmount
     useEffect(() => {
       return () => {
         if (saveTimer.current) {
           clearTimeout(saveTimer.current);
-          onChange(serializeDocument(docRef.current));
+          onChange(textRef.current);
         }
       };
     }, [onChange]);
 
-    const isEmpty = doc.blocks.length === 1 && doc.blocks[0].runs.every((r) => r.text === '');
+    const isEmpty = text.trim() === '';
+    const lines = text.split('\n');
 
     return (
       <View style={styles.container}>
-        {/* Visual render layer — pointerEvents='none' so taps pass through */}
+        {/* Visual render layer — pointerEvents='none' so taps pass through to TextInput */}
         <View pointerEvents="none" style={styles.renderLayer}>
           {isEmpty ? (
             <Text style={styles.placeholder}>{placeholder}</Text>
           ) : (
-            doc.blocks.map((block, i) => renderBlock(block, i))
+            lines.map((line, i) => renderMarkdownLine(line, i))
           )}
         </View>
 
         {/* Transparent input layer — captures all keystrokes */}
         <TextInput
           ref={inputRef}
-          value={flatValue}
+          value={text}
           onChangeText={handleChangeText}
           onSelectionChange={handleSelectionChange}
+          onBlur={handleBlur}
           selection={selection}
           multiline
           placeholder=""
           style={[
             styles.input,
-            Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: '#ffffff' } as any) : {},
+            Platform.OS === 'web'
+              ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: '#ffffff' } as any)
+              : {},
           ]}
           textAlignVertical="top"
-          autoFocus
           autoCorrect
           autoCapitalize="sentences"
           spellCheck
@@ -355,7 +370,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    gap: 0,
   },
   input: {
     fontSize: 17,
@@ -364,6 +378,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     minHeight: 400,
     padding: 0,
+    backgroundColor: 'transparent',
   },
   placeholder: {
     fontSize: 17,
