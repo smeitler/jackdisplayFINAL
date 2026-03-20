@@ -1184,3 +1184,4 @@
 - [ ] Journal tab redesign: day-view with < Today ▼ > header, date wheel picker, show all day's inputs (habits, voice, notes, gratitude) as cards
 - [ ] Date wheel picker: add year column
 - [ ] Journal day-view: make habits/transcript/gratitude editable inline
+- [x] Journal day-view: match check-in review layout exactly (category icons, grouped rounded cards, compact segmented color buttons, Rate All row, no text labels on buttons)

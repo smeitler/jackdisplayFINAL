@@ -7,6 +7,7 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { CategoryIcon } from "@/components/category-icon";
 import { useColors } from "@/hooks/use-colors";
 import { useApp } from "@/lib/app-context";
 import * as Haptics from "expo-haptics";
@@ -2074,58 +2075,137 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── HABITS — always show all active habits with rating buttons ── */}
-          {habits.filter((h) => h.isActive).length > 0 && (() => {
-            const sortedCats = [...categories].sort((a, b) => a.order - b.order);
-            return (
-              <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>HABITS</Text>
-                {sortedCats.map((cat) => {
-                  const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
-                  if (catHabits.length === 0) return null;
-                  return (
-                    <View key={cat.id} style={{ marginBottom: 10 }}>
-                      <Text style={[dvStyles.catLabel, { color: colors.muted }]}>{cat.label.toUpperCase()}</Text>
-                      {catHabits.map((habit) => {
-                        const currentRating = dvRatings[habit.id] ?? null;
-                        return (
-                          <View key={habit.id} style={dvStyles.habitRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={[dvStyles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
-                              {!!habit.description && (
-                                <Text style={[dvStyles.habitDesc, { color: colors.muted }]}>{habit.description}</Text>
-                              )}
-                            </View>
-                            <View style={dvStyles.ratingBtns}>
-                              {RATINGS_DV.map((r) => {
-                                const isSelected = currentRating === r;
-                                const rColor = RATING_COLORS_DV[r as string];
-                                const rLabel = r === 'green' ? 'Crushed' : r === 'yellow' ? 'Okay' : 'Missed';
-                                return (
-                                  <Pressable
-                                    key={r}
-                                    onPress={() => saveDvRating(habit.id, r)}
-                                    style={({ pressed }) => [dvStyles.ratingBtn, {
-                                      backgroundColor: isSelected ? rColor : colors.background,
-                                      borderColor: isSelected ? rColor : colors.border,
-                                      opacity: pressed ? 0.7 : 1,
-                                    }]}
-                                  >
-                                    <Text style={[dvStyles.ratingBtnText, { color: isSelected ? '#fff' : colors.muted }]}>
-                                      {rLabel}
-                                    </Text>
-                                  </Pressable>
-                                );
-                              })}
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  );
-                })}
+          {/* ── Legend row ── */}
+          {habits.filter((h) => h.isActive).length > 0 && (
+            <View style={[dvStyles.legendRow, { borderBottomColor: colors.border }]}>
+              {(['red', 'yellow', 'green'] as const).map((r) => (
+                <View key={r} style={dvStyles.legendItem}>
+                  <View style={[dvStyles.legendDot, { backgroundColor: RATING_COLORS_DV[r] }]} />
+                  <Text style={[dvStyles.legendText, { color: colors.muted }]}>
+                    {r === 'red' ? 'Missed' : r === 'yellow' ? 'Okay' : 'Crushed it'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* ── Rate All row ── */}
+          {habits.filter((h) => h.isActive).length > 0 && (
+            <View style={[dvStyles.rateAllRow, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+              <Text style={[dvStyles.rateAllLabel, { color: colors.muted }]}>RATE ALL</Text>
+              <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
+                {(['red', 'yellow', 'green'] as const).map((r, i) => (
+                  <Pressable
+                    key={r}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                      const next: Record<string, Rating> = {};
+                      habits.filter((h) => h.isActive).forEach((h) => { next[h.id] = r; });
+                      setDvRatings(next);
+                      submitCheckIn(selectedDate, next);
+                    }}
+                    style={({ pressed }) => [
+                      dvStyles.segment,
+                      i === 0 && dvStyles.segmentFirst,
+                      i === 2 && dvStyles.segmentLast,
+                      { backgroundColor: RATING_COLORS_DV[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  />
+                ))}
               </View>
-            );
+            </View>
+          )}
+
+          {/* ── HABITS grouped by category (check-in review style) ── */}
+          {(() => {
+            const sortedCats = [...categories].sort((a, b) => a.order - b.order);
+            return sortedCats.map((cat) => {
+              const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
+              if (catHabits.length === 0) return null;
+              return (
+                <View key={cat.id} style={dvStyles.ciSection}>
+                  {/* Category header */}
+                  <View style={dvStyles.ciSectionHeader}>
+                    <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
+                    <Text style={[dvStyles.ciSectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
+                    <View style={{ flex: 1 }} />
+                    {/* Rate whole category */}
+                    <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
+                      {(['red', 'yellow', 'green'] as const).map((r, i) => (
+                        <Pressable
+                          key={r}
+                          onPress={() => {
+                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            const next = { ...dvRatings };
+                            catHabits.forEach((h) => { next[h.id] = r; });
+                            setDvRatings(next);
+                            submitCheckIn(selectedDate, next);
+                          }}
+                          style={({ pressed }) => [
+                            dvStyles.segment,
+                            dvStyles.segmentSmall,
+                            i === 0 && dvStyles.segmentFirst,
+                            i === 2 && dvStyles.segmentLast,
+                            { backgroundColor: RATING_COLORS_DV[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Habit rows in rounded card */}
+                  <View style={[dvStyles.ciCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {catHabits.map((habit, idx) => {
+                      const current = dvRatings[habit.id] ?? 'none';
+                      const isLast = idx === catHabits.length - 1;
+                      return (
+                        <View
+                          key={habit.id}
+                          style={[
+                            dvStyles.ciHabitRow,
+                            !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+                          ]}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[dvStyles.ciHabitName, { color: colors.foreground }]}>{habit.name}</Text>
+                            {!!habit.description && (
+                              <Text style={[dvStyles.ciHabitDesc, { color: colors.muted }]}>{habit.description}</Text>
+                            )}
+                          </View>
+                          {/* 3-color segmented button */}
+                          <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
+                            {(['red', 'yellow', 'green'] as const).map((r, i) => {
+                              const isSelected = current === r;
+                              return (
+                                <Pressable
+                                  key={r}
+                                  onPress={() => {
+                                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    const newRating: Rating = dvRatings[habit.id] === r ? 'none' : r;
+                                    const next = { ...dvRatings, [habit.id]: newRating };
+                                    setDvRatings(next);
+                                    submitCheckIn(selectedDate, next);
+                                  }}
+                                  style={({ pressed }) => [
+                                    dvStyles.segment,
+                                    i === 0 && dvStyles.segmentFirst,
+                                    i === 2 && dvStyles.segmentLast,
+                                    {
+                                      backgroundColor: isSelected ? RATING_COLORS_DV[r] : RATING_COLORS_DV[r] + '44',
+                                      opacity: pressed ? 0.75 : 1,
+                                    },
+                                  ]}
+                                />
+                              );
+                            })}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            });
           })()}
 
           {/* ── Voice transcript entries (read-only header, editable body) ── */}
@@ -2377,4 +2457,23 @@ const dvStyles = StyleSheet.create({
   addGratText: { fontSize: 13, fontWeight: '500' },
   saveEntryBtn: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 16 },
   saveEntryText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+  // Check-in review style
+  legendRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 12 },
+  rateAllRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, marginBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  rateAllLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.8 },
+  segmentedBtn: { flexDirection: 'row', borderRadius: 10, overflow: 'hidden', gap: 2, padding: 2 },
+  segment: { width: 30, height: 30, borderRadius: 8 },
+  segmentSmall: { width: 24, height: 24, borderRadius: 6 },
+  segmentFirst: { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  segmentLast: { borderTopRightRadius: 8, borderBottomRightRadius: 8 },
+  ciSection: { marginBottom: 12 },
+  ciSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, paddingVertical: 6 },
+  ciSectionTitle: { fontSize: 15, fontWeight: '700' },
+  ciCard: { borderRadius: 14, borderWidth: 0.5, overflow: 'hidden' },
+  ciHabitRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+  ciHabitName: { fontSize: 15, fontWeight: '500' },
+  ciHabitDesc: { fontSize: 12, marginTop: 2 },
 });
