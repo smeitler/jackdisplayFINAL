@@ -1249,3 +1249,4 @@
 - [x] Layer 3: Quick Actions — pill buttons with outcome-based labels, tap = immediate full-screen player
 - [x] Layer 4: Explore library — structured subcategory rows with horizontal scroll, outcome-based naming
 - [x] All 4 categories (Meditate, Sleep, Move, Focus) get category-specific quick actions and subcategories
+- [x] Pinned favorite appears above Recommended section in Explore tab (not at the bottom)

@@ -579,6 +579,19 @@ export default function WellnessAudioScreen() {
         <Text style={[s.cueSub, { color: colors.muted }]}>{cue.sub}</Text>
       </View>
 
+      {/* Pinned Favorite — shown above Recommended when set */}
+      {pinnedId && (() => {
+        const t = tracks.find((x) => x.id === pinnedId);
+        if (!t) return null;
+        const idx = tracks.findIndex((x) => x.id === pinnedId);
+        return (
+          <View style={s.subSection}>
+            <Text style={[s.subTitle, { color: colors.foreground }]}>⭐ Pinned Favorite</Text>
+            <TrackRow item={t} indexInAll={idx} />
+          </View>
+        );
+      })()}
+
       {/* Layer 2: Recommended */}
       <View style={s.sectionHeader}>
         <Text style={[s.sectionTitle, { color: colors.foreground }]}>Recommended</Text>
@@ -677,18 +690,7 @@ export default function WellnessAudioScreen() {
         );
       })}
 
-      {/* Pinned favorite row */}
-      {pinnedId && (
-        <View style={s.subSection}>
-          <Text style={[s.subTitle, { color: colors.foreground }]}>⭐ Pinned Favorite</Text>
-          {(() => {
-            const t = tracks.find((x) => x.id === pinnedId);
-            if (!t) return null;
-            const idx = tracks.findIndex((x) => x.id === pinnedId);
-            return <TrackRow item={t} indexInAll={idx} />;
-          })()}
-        </View>
-      )}
+
     </ScrollView>
   );
 
