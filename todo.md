@@ -1288,3 +1288,7 @@
 - [x] Fix parseInlineMarkdown to correctly render bold/italic segments visually
 - [x] Reduce journal card minimum height so it fits content tightly (no excessive empty space)
 - [x] Clean up font sheet — remove redundant right-side preview badges (B, I, T, ≡)
+
+- [x] Fix selection lost when Aa tapped — use onPressIn + dvPreFontSheetSelection snapshot before blur
+- [x] Add keepFocused prop to RichTextEditor — TextInput stays in edit mode while font sheet is open
+- [x] Always persist selection in onSelectionChange (remove guard that could skip valid positions)

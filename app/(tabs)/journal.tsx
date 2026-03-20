@@ -2041,6 +2041,7 @@ function RichTextEditor({
   onSelectionChange,
   inputRef,
   bodySelection,
+  keepFocused,
   colors,
 }: {
   value: string;
@@ -2048,9 +2049,13 @@ function RichTextEditor({
   onSelectionChange: (sel: { start: number; end: number }) => void;
   inputRef: React.RefObject<any>;
   bodySelection?: { start: number; end: number };
+  keepFocused?: boolean;
   colors: any;
 }) {
   const [isFocused, setIsFocused] = React.useState(false);
+  // When keepFocused is true (e.g. font sheet open), stay in edit mode so the
+  // TextInput never unmounts and the selection ref is never reset.
+  const showEditor = isFocused || keepFocused;
 
   const handleChangeText = React.useCallback((text: string) => {
     // Auto-continue bullet list when Enter is pressed on a bullet line
@@ -2119,7 +2124,7 @@ function RichTextEditor({
         multiline
         placeholder="Write your entry..."
         placeholderTextColor={colors.muted}
-        style={isFocused ? {
+        style={showEditor ? {
           fontSize: 16,
           lineHeight: 24,
           minHeight: 80,
@@ -2134,7 +2139,7 @@ function RichTextEditor({
         }}
       />
       {/* Preview: rendered markdown, tappable to enter edit mode */}
-      {!isFocused && (
+      {!showEditor && (
         <Pressable
           onPress={() => {
             setIsFocused(true);
@@ -2470,9 +2475,11 @@ export default function JournalScreen() {
   const [dvJournalNote, setDvJournalNote] = useState('');
   // TextInput ref and cursor/selection tracking for formatting
   const dvTextInputRef = useRef<any>(null);
-  // dvSelection stores the LAST known selection — only updated on user-initiated selection changes.
-  // It is NOT reset on blur, so formatting applied from the font sheet uses the correct position.
+  // dvSelection stores the LAST known selection — always updated on onSelectionChange.
   const dvSelection = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  // dvPreFontSheetSelection is saved in onPressIn of the Aa button, BEFORE the TextInput blurs.
+  // This is the authoritative selection used by dvApplyFormat.
+  const dvPreFontSheetSelection = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   // Controlled selection for cursor repositioning after formatting (avoids setNativeProps)
   const [dvBodySelection, setDvBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
   // Gratitude items as individual strings (shown as separate cards)
@@ -2493,6 +2500,8 @@ export default function JournalScreen() {
   const fontSheetAnim = useRef(new Animated.Value(300)).current;
 
   const openFontSheet = useCallback(() => {
+    // Snapshot the current selection before the TextInput blurs
+    dvPreFontSheetSelection.current = { ...dvSelection.current };
     setDvShowFontSheet(true);
     Animated.timing(fontSheetAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
   }, [fontSheetAnim]);
@@ -2673,7 +2682,8 @@ export default function JournalScreen() {
   const dvApplyFormat = useCallback((type: 'bold' | 'italic' | 'heading' | 'bullet') => {
     closeFontSheet();
     const text = dvJournalNote;
-    const { start, end } = dvSelection.current;
+    // Use the selection snapshot taken at Aa button press (before TextInput blur)
+    const { start, end } = dvPreFontSheetSelection.current;
     const hasSelection = start !== end;
     const selectedText = hasSelection ? text.slice(start, end) : '';
 
@@ -2919,13 +2929,13 @@ export default function JournalScreen() {
                 autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
               }}
               onSelectionChange={(sel) => {
-                // Only persist non-zero selections (ignore programmatic focus resets)
-                if (sel.start !== 0 || sel.end !== 0 || dvJournalNote.length === 0) {
-                  dvSelection.current = sel;
-                }
+                // Always persist — keepFocused ensures TextInput never hides when font sheet is open
+                // so there are no spurious {0,0} events from a hidden/remounting input.
+                dvSelection.current = sel;
               }}
               inputRef={dvTextInputRef}
               bodySelection={dvBodySelection}
+              keepFocused={dvShowFontSheet}
               colors={colors}
             />
             {/* Photo thumbnails for this day's primary entry */}
@@ -2990,7 +3000,7 @@ export default function JournalScreen() {
                 <Pressable onPress={() => setDvShowAttachSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                   <IconSymbol name="paperclip" size={22} color={colors.muted} />
                 </Pressable>
-                <Pressable onPress={openFontSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                <Pressable onPressIn={openFontSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                   <Text style={{ fontSize: 16, fontWeight: '700', color: colors.muted, letterSpacing: -0.5 }}>Aa</Text>
                 </Pressable>
               </View>
