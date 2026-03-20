@@ -797,25 +797,8 @@ export default function HomeScreen() {
             </View>
           </View>}
 
-          {/* ── Quick Access Row: Vision Board / Rewards / Calendar / Analytics ── */}
-          <View style={[quickAccessStyles.row]}>
-            {[
-              { label: 'Vision\nBoard', icon: 'sparkles' as const, onPress: () => router.push('/(tabs)/rewards?tab=vision') },
-              { label: 'Rewards', icon: 'trophy.fill' as const, onPress: () => router.push('/(tabs)/rewards') },
-              { label: 'Calendar', icon: 'calendar' as const, onPress: () => router.push('/(tabs)/journal?tab=calendar') },
-              { label: 'Analytics', icon: 'chart.bar.fill' as const, onPress: () => router.push('/(tabs)/settings?section=analytics') },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                onPress={item.onPress}
-                style={[quickAccessStyles.item, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}
-                activeOpacity={0.75}
-              >
-                <IconSymbol name={item.icon} size={22} color={isCalm ? '#F5A623' : colors.primary} />
-                <Text style={[quickAccessStyles.label, { color: isCalm ? '#8B9CC8' : colors.muted }]}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* ── Quick Access Pill Bar ── */}
+          <QuickAccessPills isCalm={isCalm} colors={colors} router={router} />
 
           {/* ── Stats row ── */}
           <View style={styles.statsRow}>
@@ -1039,26 +1022,59 @@ export default function HomeScreen() {
   );
 }
 
-const quickAccessStyles = StyleSheet.create({
-  row: {
+// ─── QuickAccessPills component ─────────────────────────────────────────────
+function QuickAccessPills({ isCalm, colors, router }: { isCalm: boolean; colors: any; router: any }) {
+  const PILLS = [
+    { label: 'Vision Board', onPress: () => router.push('/(tabs)/rewards?tab=vision') },
+    { label: 'Rewards',      onPress: () => router.push('/(tabs)/rewards') },
+    { label: 'Calendar',     onPress: () => router.push('/(tabs)/journal?tab=calendar') },
+    { label: 'Analytics',    onPress: () => router.push('/analytics') },
+  ];
+
+  const trackBg = isCalm ? '#1A2050' : colors.surface;
+  const trackBorder = isCalm ? '#252D6E' : colors.border;
+  const pillActiveBg = isCalm ? '#252D6E' : colors.primary + '22';
+  const pillActiveText = isCalm ? '#FFFFFF' : colors.primary;
+  const pillInactiveText = isCalm ? '#8B9CC8' : colors.muted;
+
+  return (
+    <View style={[pillStyles.track, { backgroundColor: trackBg, borderColor: trackBorder }]}>
+      {PILLS.map((pill, i) => (
+        <TouchableOpacity
+          key={pill.label}
+          onPress={pill.onPress}
+          style={[pillStyles.pill, { backgroundColor: i === 0 ? pillActiveBg : 'transparent' }]}
+          activeOpacity={0.75}
+        >
+          <Text style={[pillStyles.pillText, { color: i === 0 ? pillActiveText : pillInactiveText }]}>
+            {pill.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const pillStyles = StyleSheet.create({
+  track: {
     flexDirection: 'row',
-    gap: 10,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    padding: 3,
     marginBottom: 14,
+    gap: 2,
   },
-  item: {
+  pill: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 0.5,
-    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 11,
   },
-  label: {
+  pillText: {
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 14,
   },
 });
 

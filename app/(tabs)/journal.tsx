@@ -4,6 +4,7 @@ import {
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
   Modal, FlatList, Dimensions, Image, useWindowDimensions,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
@@ -1757,7 +1758,10 @@ function TodayHabitsSection({ colors, onAddJournalEntry }: { colors: any; onAddJ
 export default function JournalScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
-  const [activeTab, setActiveTab] = useState<SubTab>("habits");
+  const params = useLocalSearchParams<{ tab?: string; action?: string }>();
+  const [activeTab, setActiveTab] = useState<SubTab>(
+    params.tab === 'calendar' ? 'journal' : 'habits'
+  );
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);

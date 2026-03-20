@@ -51,6 +51,8 @@ export default function TabLayout() {
     router.push("/(tabs)/journal?action=checkin");
   }
 
+  // Tab layout: Dashboard | Journal | [+ spacer] | Rewards | More
+  // The + button floats absolutely centered over the spacer slot
   return (
     <>
       <Tabs
@@ -73,6 +75,7 @@ export default function TabLayout() {
           },
         }}
       >
+        {/* Slot 1: Dashboard */}
         <Tabs.Screen
           name="index"
           options={{
@@ -80,14 +83,8 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <IconSymbol size={26} name="house.fill" color={color} />,
           }}
         />
-        <Tabs.Screen
-          name="progress"
-          options={{ href: null }}
-        />
-        <Tabs.Screen
-          name="vision"
-          options={{ href: null }}
-        />
+
+        {/* Slot 2: Journal */}
         <Tabs.Screen
           name="journal"
           options={{
@@ -95,16 +92,19 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <IconSymbol size={26} name="book.fill" color={color} />,
           }}
         />
-        {/* Spacer tab — invisible, creates gap for the floating + button */}
+
+        {/* Slot 3: Invisible spacer — the floating + button sits here */}
         <Tabs.Screen
           name="plus-placeholder"
           options={{
             title: "",
-            tabBarIcon: () => null,
             tabBarLabel: () => null,
-            tabBarButton: () => <View style={{ width: 56 }} />,
+            tabBarIcon: () => null,
+            tabBarButton: () => <View style={{ flex: 1 }} />,
           }}
         />
+
+        {/* Slot 4: Rewards */}
         <Tabs.Screen
           name="rewards"
           options={{
@@ -112,13 +112,8 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <IconSymbol size={26} name="diamond.fill" color={color} />,
           }}
         />
-        <Tabs.Screen
-          name="community"
-          options={{
-            title: "Community",
-            tabBarIcon: ({ color }) => <IconSymbol size={26} name="person.3.fill" color={color} />,
-          }}
-        />
+
+        {/* Slot 5: More */}
         <Tabs.Screen
           name="settings"
           options={{
@@ -128,15 +123,17 @@ export default function TabLayout() {
             ),
           }}
         />
+
+        {/* Hidden screens — not shown in tab bar */}
+        <Tabs.Screen name="progress" options={{ href: null }} />
+        <Tabs.Screen name="vision" options={{ href: null }} />
+        <Tabs.Screen name="community" options={{ href: null }} />
       </Tabs>
 
-      {/* Floating center + button — overlaid above the tab bar */}
+      {/* Floating center + button — absolutely centered, sits above the spacer slot */}
       <View
         pointerEvents="box-none"
-        style={[
-          plusBtnStyles.floatWrapper,
-          { bottom: bottomPadding + 4 },
-        ]}
+        style={[plusBtnStyles.floatWrapper, { bottom: bottomPadding + 4 }]}
       >
         <TouchableOpacity
           onPress={openPlusSheet}
