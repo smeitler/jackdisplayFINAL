@@ -1767,7 +1767,7 @@ function jcGenerateMonths(sy: number, sm: number, ey: number, em: number): { yea
   return r;
 }
 
-function JournalCalendarView({ colors }: { colors: any }) {
+function JournalCalendarView({ colors, onDayPress }: { colors: any; onDayPress?: (dateStr: string) => void }) {
   const [calEntries, setCalEntries] = useState<JournalEntry[]>([]);
   const { width: winWidth } = useWindowDimensions();
 
@@ -1855,14 +1855,18 @@ function JournalCalendarView({ colors }: { colors: any }) {
                   const bgColor = photoUri ? '#000' : hasEntries ? colors.primary : colors.surface;
                   const cellOpacity = isFuture ? 0.18 : photoUri ? 1 : hasEntries ? 0.75 : 0.22;
                   return (
-                    <View key={day} style={{
-                      width: cellWidth, height: cellHeight, borderRadius: 4, overflow: 'hidden',
-                      backgroundColor: bgColor, opacity: cellOpacity,
-                      borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
-                    }}>
+                    <Pressable
+                      key={day}
+                      onPress={() => !isFuture && onDayPress?.(dateStr)}
+                      style={({ pressed }) => ({
+                        width: cellWidth, height: cellHeight, borderRadius: 4, overflow: 'hidden',
+                        backgroundColor: bgColor, opacity: isFuture ? 0.18 : pressed ? 0.6 : cellOpacity,
+                        borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
+                      })}
+                    >
                       {photoUri ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
                       <Text style={{ fontSize: 10, fontWeight: '700', lineHeight: 13, color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -2084,9 +2088,11 @@ export default function JournalScreen() {
   const [dvGratItems, setDvGratItems] = useState<string[]>(['', '', '']);
   const dvPrimaryEntryId = useRef<string | null>(null);
 
-  // Sync note/gratitude from the first non-voice entry for the day
+  // Sync note/gratitude from the first non-voice entry, or fall back to the voice entry body
   useEffect(() => {
-    const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'));
+    // Prefer a non-voice entry; fall back to voice entry so transcript shows in JOURNAL ENTRY
+    const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'))
+      ?? dayEntries.find((e) => e.tags?.includes('voice'));
     if (primaryEntry) {
       dvPrimaryEntryId.current = primaryEntry.id;
       const body = primaryEntry.body || '';
@@ -2143,6 +2149,39 @@ export default function JournalScreen() {
       setDvSaving(false);
     }
   }, [userId, selectedDate]);
+
+  // ── Day-view photo picker ────────────────────────────────────────────────
+  const dvPickPhoto = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 0.85,
+      });
+      if (result.canceled || !userId) return;
+      // Ensure there's a primary entry to attach photos to
+      let entryId = dvPrimaryEntryId.current;
+      if (!entryId) {
+        const now = new Date().toISOString();
+        const newEntry: JournalEntry = {
+          id: generateId(), userId, date: selectedDate,
+          createdAt: now, updatedAt: now, title: '', body: '', template: 'blank', attachments: [], tags: [],
+        };
+        const updated = await addEntry(userId, newEntry);
+        dvPrimaryEntryId.current = newEntry.id;
+        setEntries(updated);
+        entryId = newEntry.id;
+      }
+      const newAtts: JournalAttachment[] = result.assets.map((asset) => ({
+        id: generateId(), type: 'photo' as const,
+        uri: asset.uri, mimeType: asset.mimeType || 'image/jpeg',
+      }));
+      const existingEntry = entries.find((e) => e.id === entryId);
+      const merged = [...(existingEntry?.attachments ?? []), ...newAtts];
+      await updateEntryInStore(userId, entryId, { attachments: merged });
+      setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, attachments: merged } : e));
+    } catch (e) { console.warn('dvPickPhoto error:', e); }
+  }, [userId, selectedDate, entries]);
 
   // ── Date wheel picker columns ───────────────────────────────────────────────
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2408,6 +2447,29 @@ export default function JournalScreen() {
               placeholderTextColor={colors.muted}
               style={[dvStyles.entryBodyInput, { color: colors.foreground, minHeight: 80 }]}
             />
+            {/* Photo thumbnails for this day's primary entry */}
+            {dvPrimaryEntryId.current && (() => {
+              const photoAtts = (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo');
+              if (photoAtts.length === 0) return null;
+              return (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {photoAtts.map((att) => (
+                    <Image key={att.id} source={{ uri: att.uri }} style={{ width: 72, height: 72, borderRadius: 8, marginRight: 6 }} />
+                  ))}
+                </ScrollView>
+              );
+            })()}
+            {/* Add photo button */}
+            <Pressable
+              onPress={dvPickPhoto}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 6,
+                marginTop: 10, opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <IconSymbol name="photo.fill" size={16} color={colors.primary} />
+              <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '500' }}>Add Photo</Text>
+            </Pressable>
           </View>
 
           {/* ── GRATEFUL FOR — individual cards ── */}
@@ -2443,21 +2505,7 @@ export default function JournalScreen() {
         </ScrollView>
       )}
 
-      {/* ── FAB ── */}
-      <Pressable
-        onPress={() => openNewEntry(selectedDate)}
-        style={({ pressed }) => [{
-          position: 'absolute', bottom: 24, right: 20,
-          width: 56, height: 56, borderRadius: 28,
-          backgroundColor: colors.primary,
-          alignItems: 'center', justifyContent: 'center',
-          shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25, shadowRadius: 6, elevation: 6,
-          opacity: pressed ? 0.8 : 1,
-        }]}
-      >
-        <IconSymbol name="plus" size={28} color="#fff" />
-      </Pressable>
+      {/* FAB removed — entry is created inline in the day-view */}
 
       {/* ── Entry Editor Modal ── */}
       <EntryEditor
@@ -2486,7 +2534,13 @@ export default function JournalScreen() {
               <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
               <View style={{ width: 40 }} />
             </View>
-            <JournalCalendarView colors={colors} />
+            <JournalCalendarView
+              colors={colors}
+              onDayPress={(dateStr) => {
+                setSelectedDate(dateStr);
+                setCalendarModalVisible(false);
+              }}
+            />
           </View>
         </View>
       </Modal>

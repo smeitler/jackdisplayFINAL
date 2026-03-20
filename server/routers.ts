@@ -845,7 +845,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim${habitSection}\nRules:\n- Gratitude expressions → gratitudeItems\n- Everything else → journalEntries\n- For habitResults: be generous with inference, match by context\n- Only include habits clearly mentioned or strongly implied\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the transcript lightly cleaned up — add punctuation, fix capitalization, and split run-on sentences, but DO NOT change, add, or remove any words. Keep the speaker's exact voice and meaning.${habitSection}\nRules:\n- Gratitude expressions → gratitudeItems\n- Everything else → journalEntries\n- For habitResults: be generous with inference, match by context\n- Only include habits clearly mentioned or strongly implied\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
             },
             {
               role: 'user',

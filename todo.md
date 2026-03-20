@@ -1193,3 +1193,8 @@
 - [x] Home screen: remove calendar section (moved to journal)
 - [x] Journal calendar modal: use full InlineCalendar (photo thumbnails, scrollable months) same as home screen
 - [x] Journal habit rows: editable TextInput for per-habit description (not status fallback text)
+- [x] Voice transcription: lightly clean up with punctuation/capitalization (no word changes)
+- [x] Journal day-view: show voice transcript in JOURNAL ENTRY section after saving voice check-in
+- [x] Journal screen: remove the FAB (floating + button) from bottom-right
+- [x] Journal screen: add photo button in the JOURNAL ENTRY section
+- [x] Journal calendar modal: tapping a day navigates the day-view to that date and closes the modal
