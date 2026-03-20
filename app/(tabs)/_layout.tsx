@@ -1,148 +1,42 @@
-import { Tabs, useRouter, usePathname } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Platform, View, Text, Pressable, Modal, StyleSheet,
-  TouchableOpacity, Animated,
+  Platform, View, Text, Pressable, Modal, StyleSheet, TouchableOpacity,
 } from "react-native";
 import { useColors } from "@/hooks/use-colors";
+import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useAuth } from "@/hooks/use-auth";
 import { useApp } from "@/lib/app-context";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useIsNova } from "@/components/nova-effects";
 import { useIsCalm } from "@/components/calm-effects";
 import * as Haptics from "expo-haptics";
-import { BlurView } from "expo-blur";
 
-// ─── Tab definitions ──────────────────────────────────────────────────────────
-const TABS = [
-  { name: "index",   label: "Dashboard", icon: "house.fill" as const },
-  { name: "journal", label: "Journal",   icon: "book.fill" as const },
-  { name: "__plus__", label: "",         icon: "plus" as const }, // center action
-  { name: "chat",    label: "Chat",      icon: "bubble.left.fill" as const },
-  { name: "settings", label: "More",    icon: "line.3.horizontal.decrease" as const },
-];
-
-// ─── Custom floating pill tab bar ─────────────────────────────────────────────
-function FloatingTabBar({
-  activeRoute,
-  onTabPress,
-  onPlusPress,
-  colors,
-  isNova,
-  isCalm,
-}: {
-  activeRoute: string;
-  onTabPress: (name: string) => void;
-  onPlusPress: () => void;
-  colors: any;
-  isNova: boolean;
-  isCalm: boolean;
-}) {
-  const insets = useSafeAreaInsets();
-  const bottom = Platform.OS === "web" ? 16 : Math.max(insets.bottom, 12);
-
-  const pillBg = isNova
-    ? "rgba(12,8,28,0.92)"
-    : isCalm
-    ? "rgba(10,14,50,0.92)"
-    : "rgba(28,28,32,0.92)";
-
-  return (
-    <View
-      pointerEvents="box-none"
-      style={[tabBarStyles.wrapper, { bottom }]}
-    >
-      <View style={[tabBarStyles.pill, { backgroundColor: pillBg }]}>
-        {/* Blur tint layer */}
-        {Platform.OS !== "web" && (
-          <BlurView
-            intensity={40}
-            tint="dark"
-            style={StyleSheet.absoluteFill}
-          />
-        )}
-
-        {TABS.map((tab) => {
-          if (tab.name === "__plus__") {
-            return (
-              <TouchableOpacity
-                key="plus"
-                onPress={onPlusPress}
-                activeOpacity={0.85}
-                style={tabBarStyles.plusBtn}
-              >
-                <View style={[tabBarStyles.plusInner, { backgroundColor: colors.primary }]}>
-                  <Text style={tabBarStyles.plusIcon}>+</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          }
-
-          const isActive = activeRoute === tab.name;
-          return (
-            <Pressable
-              key={tab.name}
-              onPress={() => onTabPress(tab.name)}
-              style={({ pressed }) => [
-                tabBarStyles.tabItem,
-                isActive && tabBarStyles.tabItemActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <IconSymbol
-                name={tab.icon}
-                size={22}
-                color={isActive ? "#fff" : "rgba(255,255,255,0.45)"}
-              />
-              <Text
-                style={[
-                  tabBarStyles.tabLabel,
-                  { color: isActive ? "#fff" : "rgba(255,255,255,0.45)" },
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// ─── Main layout ──────────────────────────────────────────────────────────────
 export default function TabLayout() {
   const colors = useColors();
   const isNova = useIsNova();
   const isCalm = useIsCalm();
   const insets = useSafeAreaInsets();
+  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
+  const tabBarHeight = 64 + bottomPadding;
   const { isAuthenticated, loading } = useAuth();
   const { isDemoMode } = useApp();
   const router = useRouter();
-  const pathname = usePathname();
   const [plusSheetVisible, setPlusSheetVisible] = useState(false);
 
-  // Derive active tab name from pathname
-  const activeRoute = (() => {
-    if (pathname === "/" || pathname === "/index") return "index";
-    if (pathname.startsWith("/journal")) return "journal";
-    if (pathname.startsWith("/chat")) return "chat";
-    if (pathname.startsWith("/settings")) return "settings";
-    return "index";
-  })();
+  // Dark navy background — matches the reference screenshot aesthetic
+  const tabBarBg = isNova ? "#050510" : isCalm ? "#0D1135" : "#0F1117";
+
+  // Active: bright white. Inactive: soft muted blue-grey
+  const activeColor = "#FFFFFF";
+  const inactiveColor = "rgba(160,170,200,0.55)";
 
   useEffect(() => {
     if (!loading && !isAuthenticated && !isDemoMode) {
       router.replace("/login");
     }
   }, [isAuthenticated, isDemoMode, loading, router]);
-
-  function handleTabPress(name: string) {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (name === "index") router.push("/" as never);
-    else router.push(`/(tabs)/${name}` as never);
-  }
 
   function openPlusSheet() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -167,25 +61,89 @@ export default function TabLayout() {
     router.push(`/checkin?date=${yyyy}-${mm}-${dd}` as never);
   }
 
-  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
-  // Extra bottom padding so screen content doesn't hide behind the floating pill
-  const tabBarHeight = 64 + Math.max(insets.bottom, 12) + 16;
-
   return (
     <>
       <Tabs
         screenOptions={{
+          tabBarActiveTintColor: activeColor,
+          tabBarInactiveTintColor: inactiveColor,
           headerShown: false,
-          // Hide the native tab bar — we render our own
-          tabBarStyle: { display: "none" },
-
+          tabBarButton: HapticTab,
+          tabBarStyle: {
+            paddingTop: 10,
+            paddingBottom: bottomPadding,
+            height: tabBarHeight,
+            backgroundColor: tabBarBg,
+            borderTopWidth: 0,
+            // Subtle top separator
+            borderTopColor: "rgba(255,255,255,0.06)",
+          },
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: "700",
+            letterSpacing: 0.1,
+            marginTop: 2,
+          },
+          tabBarIconStyle: {
+            marginBottom: -2,
+          },
         }}
       >
-        <Tabs.Screen name="index" />
-        <Tabs.Screen name="journal" />
-        <Tabs.Screen name="plus-placeholder" options={{ href: null }} />
-        <Tabs.Screen name="chat" />
-        <Tabs.Screen name="settings" />
+        {/* Dashboard */}
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Dashboard",
+            tabBarIcon: ({ color, focused }) => (
+              <IconSymbol size={focused ? 28 : 26} name="house.fill" color={color} />
+            ),
+          }}
+        />
+
+        {/* Journal */}
+        <Tabs.Screen
+          name="journal"
+          options={{
+            title: "Journal",
+            tabBarIcon: ({ color, focused }) => (
+              <IconSymbol size={focused ? 28 : 26} name="book.fill" color={color} />
+            ),
+          }}
+        />
+
+        {/* Center + spacer — floating button sits here */}
+        <Tabs.Screen
+          name="plus-placeholder"
+          options={{
+            title: "",
+            tabBarLabel: () => null,
+            tabBarIcon: () => null,
+            tabBarButton: () => <View style={{ flex: 1 }} />,
+          }}
+        />
+
+        {/* Chat */}
+        <Tabs.Screen
+          name="chat"
+          options={{
+            title: "Chat",
+            tabBarIcon: ({ color, focused }) => (
+              <IconSymbol size={focused ? 28 : 26} name="bubble.left.fill" color={color} />
+            ),
+          }}
+        />
+
+        {/* More */}
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: "More",
+            tabBarIcon: ({ color, focused }) => (
+              <IconSymbol size={focused ? 28 : 26} name="line.3.horizontal.decrease" color={color} />
+            ),
+          }}
+        />
+
         {/* Hidden screens */}
         <Tabs.Screen name="rewards" options={{ href: null }} />
         <Tabs.Screen name="progress" options={{ href: null }} />
@@ -193,15 +151,19 @@ export default function TabLayout() {
         <Tabs.Screen name="community" options={{ href: null }} />
       </Tabs>
 
-      {/* Floating pill tab bar */}
-      <FloatingTabBar
-        activeRoute={activeRoute}
-        onTabPress={handleTabPress}
-        onPlusPress={openPlusSheet}
-        colors={colors}
-        isNova={isNova}
-        isCalm={isCalm}
-      />
+      {/* Floating center + button */}
+      <View
+        pointerEvents="box-none"
+        style={[plusBtnStyles.floatWrapper, { bottom: bottomPadding + 6 }]}
+      >
+        <TouchableOpacity
+          onPress={openPlusSheet}
+          style={[plusBtnStyles.btn, { backgroundColor: colors.primary }]}
+          activeOpacity={0.85}
+        >
+          <Text style={plusBtnStyles.icon}>+</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Plus Action Sheet */}
       <Modal
@@ -215,11 +177,7 @@ export default function TabLayout() {
           style={[
             sheetStyles.sheet,
             {
-              backgroundColor: isNova
-                ? "#0D0A1E"
-                : isCalm
-                ? "#0D1135"
-                : colors.surface,
+              backgroundColor: isNova ? "#0D0A1E" : isCalm ? "#0D1135" : colors.surface,
             },
           ]}
         >
@@ -229,10 +187,7 @@ export default function TabLayout() {
           <TouchableOpacity
             style={[
               sheetStyles.option,
-              {
-                backgroundColor: colors.primary + "18",
-                borderColor: colors.primary + "44",
-              },
+              { backgroundColor: colors.primary + "18", borderColor: colors.primary + "44" },
             ]}
             onPress={handleVoiceLog}
             activeOpacity={0.8}
@@ -241,9 +196,7 @@ export default function TabLayout() {
               <IconSymbol name="mic.fill" size={24} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[sheetStyles.optionTitle, { color: colors.foreground }]}>
-                Voice Log
-              </Text>
+              <Text style={[sheetStyles.optionTitle, { color: colors.foreground }]}>Voice Log</Text>
               <Text style={[sheetStyles.optionDesc, { color: colors.muted }]}>
                 Record your habits and journal by voice
               </Text>
@@ -254,10 +207,7 @@ export default function TabLayout() {
           <TouchableOpacity
             style={[
               sheetStyles.option,
-              {
-                backgroundColor: colors.success + "18",
-                borderColor: colors.success + "44",
-              },
+              { backgroundColor: colors.success + "18", borderColor: colors.success + "44" },
             ]}
             onPress={handleLogHabits}
             activeOpacity={0.8}
@@ -266,9 +216,7 @@ export default function TabLayout() {
               <IconSymbol name="checkmark.circle.fill" size={24} color={colors.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[sheetStyles.optionTitle, { color: colors.foreground }]}>
-                Log Habits
-              </Text>
+              <Text style={[sheetStyles.optionTitle, { color: colors.foreground }]}>Log Habits</Text>
               <Text style={[sheetStyles.optionDesc, { color: colors.muted }]}>
                 Check in today's habits and progress
               </Text>
@@ -289,80 +237,37 @@ export default function TabLayout() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const tabBarStyles = StyleSheet.create({
-  wrapper: {
+const plusBtnStyles = StyleSheet.create({
+  floatWrapper: {
     position: "absolute",
     left: 0,
     right: 0,
     alignItems: "center",
     pointerEvents: "box-none",
   } as any,
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 36,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    gap: 2,
-    overflow: "hidden",
-    // Shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 28,
-    gap: 3,
-    minHeight: 52,
-  },
-  tabItemActive: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-  plusBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 52,
-  },
-  plusInner: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  btn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
-  plusIcon: {
+  icon: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "300",
-    lineHeight: 32,
+    lineHeight: 34,
     marginTop: -2,
   },
 });
 
 const sheetStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -378,11 +283,7 @@ const sheetStyles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 8,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
+  title: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
   option: {
     flexDirection: "row",
     alignItems: "center",
@@ -398,14 +299,8 @@ const sheetStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  optionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  optionDesc: {
-    fontSize: 13,
-  },
+  optionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 2 },
+  optionDesc: { fontSize: 13 },
   cancelBtn: {
     alignItems: "center",
     paddingVertical: 14,
@@ -413,8 +308,5 @@ const sheetStyles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 4,
   },
-  cancelText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
+  cancelText: { fontSize: 15, fontWeight: "600" },
 });
