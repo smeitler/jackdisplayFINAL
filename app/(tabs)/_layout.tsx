@@ -133,13 +133,13 @@ export default function TabLayout() {
           }}
         />
 
-        {/* More */}
+        {/* You */}
         <Tabs.Screen
           name="settings"
           options={{
-            title: "More",
+            title: "You",
             tabBarIcon: ({ color, focused }) => (
-              <IconSymbol size={focused ? 28 : 26} name="line.3.horizontal.decrease" color={color} />
+              <IconSymbol size={focused ? 28 : 26} name="clipboard.data.fill" color={color} />
             ),
           }}
         />

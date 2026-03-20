@@ -120,6 +120,8 @@ const MAPPING: Record<string, MaterialIconName> = {
   "location.fill": "location-on",
   "tag.fill": "label",
   "magnifyingglass": "search",
+  "clipboard.data.fill": "assignment",
+  "chart.clipboard.fill": "assignment",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;

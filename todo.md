@@ -1205,3 +1205,7 @@
 - [x] Remove character limits on habit note fields: TextInput maxLength and any AI prompt truncation that cuts off descriptions
 - [x] Voice check-in review screen: "Try Again" button should navigate back to the voice recording screen (not a different screen)
 - [x] Voice check-in review screen: gratitude items must be editable (TextInput, not static Text)
+- [x] Rename "More" tab to "You" with clipboard+progress-bars icon
+- [x] You screen: centered "You" title header with gear icon (Settings) top-right
+- [x] You screen: three horizontal sub-tabs — Analytics, Vision Board, Rewards
+- [x] Move analytics from home screen into the Analytics sub-tab of You screen

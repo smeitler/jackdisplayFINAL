@@ -1,1151 +1,1077 @@
-import { ScrollView, Text, View, Pressable, StyleSheet, Switch, Platform, ActivityIndicator, TextInput, Share, Alert } from "react-native";
-import { WheelTimePicker } from "@/components/wheel-time-picker";
-import { useContentMaxWidth } from "@/hooks/use-is-ipad";
-import { useState, useEffect, useRef } from "react";
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
+/**
+ * "You" Tab Screen
+ * Three sub-tabs: Analytics | Vision Board | Rewards
+ * Gear icon (top-right) navigates to the full Settings screen.
+ */
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import {
+  View, Text, Pressable, StyleSheet, Platform, ScrollView,
+  TouchableOpacity, Modal, FlatList, Alert, Image, Dimensions,
+  TextInput, KeyboardAvoidingView, Animated,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { DAY_LABELS, formatAlarmTime } from "@/lib/notifications";
-import * as Haptics from "expo-haptics";
-import { useAuth } from "@/hooks/use-auth";
-import * as Auth from "@/lib/_core/auth";
-import { useThemeContext } from "@/lib/theme-provider";
-import { type AppTheme } from "@/constants/theme";
-import { clearLocalData } from "@/lib/storage";
-import { trpc } from "@/lib/trpc";
-
-import * as WebBrowser from "expo-web-browser";
-import { VoicePickerSection } from "@/components/voice-picker-section";
-import { VoiceJournalSection } from "@/components/voice-journal-section";
-import { MorningPracticeSection } from "@/components/morning-practice-section";
+import { CategoryIcon } from "@/components/category-icon";
 import { useIsCalm } from "@/components/calm-effects";
+import { useIsNova } from "@/components/nova-effects";
+import { Habit, LIFE_AREAS, loadVisionBoard, saveVisionBoard, VisionBoard, loadVisionMotivations, saveVisionMotivations, VisionMotivations } from "@/lib/storage";
+import Svg, { Circle } from "react-native-svg";
+import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as MediaLibrary from "expo-media-library";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useContentMaxWidth } from "@/hooks/use-is-ipad";
+import { formatDisplayDate } from "@/lib/storage";
 
+const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 
-// ─── Jack Alarm Device Pairing Section ─────────────────────────────────────
-function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/hooks/use-colors').useColors> }) {
-  const router = useRouter();
-  const devicesQuery = trpc.devices.list.useQuery();
-  const createTokenMutation = trpc.devices.createPairingToken.useMutation();
-  const removeDeviceMutation = trpc.devices.remove.useMutation({
-    onSuccess: () => devicesQuery.refetch(),
-  });
-  const [pairingToken, setPairingToken] = useState<string | null>(null);
-  const [tokenExpiry, setTokenExpiry] = useState<Date | null>(null);
-  const [showPairingFlow, setShowPairingFlow] = useState(false);
-  const [copied, setCopied] = useState(false);
+// ── Ring sizes ────────────────────────────────────────────────────────────────
+const RING_SIZE = 60;
+const RING_SIZE_SM = 48;
+const DOT_SIZE_LG = 44;
+const DOT_SIZE_SM = 36;
 
-  async function handleGenerateToken() {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+// ── Carousel dimensions ───────────────────────────────────────────────────────
+const { width: SCREEN_W } = Dimensions.get("window");
+const PADDING = 20;
+const CARD_W = SCREEN_W - PADDING * 2;
+const CAROUSEL_H = Math.floor(CARD_W * 0.62);
+
+// ─── Copy a URI to permanent app storage ─────────────────────────────────────
+async function persistUri(uri: string): Promise<string | null> {
+  if (Platform.OS === "web") return uri;
+  const docDir = FileSystem.documentDirectory ?? "";
+  if (uri.startsWith(docDir)) {
     try {
-      const result = await createTokenMutation.mutateAsync();
-      setPairingToken(result.token);
-      setTokenExpiry(new Date(result.expiresAt));
-      setShowPairingFlow(true);
-    } catch (err) {
-      Alert.alert('Error', 'Could not generate pairing token. Please try again.');
-    }
+      const info = await FileSystem.getInfoAsync(uri);
+      if (info.exists) return uri;
+    } catch { /* fall through */ }
+    return null;
   }
-
-  async function handleCopyToken() {
-    if (!pairingToken) return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  let resolvedUri: string | null = null;
+  if (Platform.OS === "ios" && uri.startsWith("ph://")) {
     try {
-      await Share.share({ message: pairingToken, title: 'Jack Alarm Pairing Token' });
-    } catch { /* user cancelled share */ }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+      const assetId = uri.replace("ph://", "").split("/")[0];
+      const assetInfo = await MediaLibrary.getAssetInfoAsync(assetId);
+      if (assetInfo?.localUri) resolvedUri = assetInfo.localUri;
+    } catch { return null; }
+    if (!resolvedUri) return null;
+  } else {
+    resolvedUri = uri;
   }
+  try {
+    const ext = resolvedUri.split(".").pop()?.split("?")[0] ?? "jpg";
+    const dest = `${docDir}vision_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    await FileSystem.copyAsync({ from: resolvedUri, to: dest });
+    return dest;
+  } catch { return null; }
+}
 
-  function handleRemoveDevice(deviceId: number) {
-    if (Platform.OS === 'web') {
-      // Alert.alert callbacks are unreliable on web — use native confirm instead
-      if (window.confirm('Unlink this Jack Alarm from your account? The display will stop receiving your alarms.')) {
-        removeDeviceMutation.mutate({ deviceId });
-      }
-      return;
-    }
-    Alert.alert(
-      'Remove Device',
-      'Unlink this Jack Alarm from your account? The display will stop receiving your alarms.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeDeviceMutation.mutate({ deviceId }),
-        },
-      ]
-    );
-  }
-
-  const devices = devicesQuery.data ?? [];
-
+// ── CircleRing ────────────────────────────────────────────────────────────────
+function CircleRing({ done, goal, size = RING_SIZE, periodLabel }: {
+  done: number; goal: number; size?: number; periodLabel?: string;
+}) {
+  const pct = goal > 0 ? Math.min(done / goal, 1) : 0;
+  const hit = goal > 0 && done >= goal;
+  const ringColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#334155';
+  const textColor = hit ? '#22C55E' : pct >= 0.6 ? '#F59E0B' : pct > 0 ? '#EF4444' : '#9BA1A6';
+  const strokeWidth = size <= 24 ? 2.5 : size <= 48 ? 4 : 5;
+  const r = (size - strokeWidth) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const dash = pct * circumference;
+  const gap = circumference - dash;
+  const fractionText = goal > 0 ? `${done}/${goal}` : '—';
+  const fractionFontSize = size <= 24 ? 7 : size <= 48 ? 12 : 14;
   return (
-    <View style={[{ borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, marginTop: 20, backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 }}>
-        <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22' }}>
-          <IconSymbol name="desktopcomputer" size={18} color={colors.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.foreground }}>Jack Alarm</Text>
-          <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Connect your Jack Alarm display</Text>
-        </View>
-        {devicesQuery.isLoading && <ActivityIndicator size="small" color={colors.muted} />}
-      </View>
-
-      {/* Linked devices list */}
-      {devices.length > 0 && (
-        <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
-          {devices.map((device, idx) => (
-            <View
-              key={device.id}
-              style={[{
-                flexDirection: 'row', alignItems: 'center', gap: 12,
-                paddingHorizontal: 16, paddingVertical: 12,
-                borderTopWidth: idx > 0 ? 1 : 0, borderTopColor: colors.border,
-              }]}
-            >
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: device.lastSeenAt && (Date.now() - new Date(device.lastSeenAt).getTime()) < 10 * 60 * 1000 ? '#22C55E' : colors.muted }} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>Jack Alarm</Text>
-                <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>
-                  {device.lastSeenAt ? `Last seen ${new Date(device.lastSeenAt).toLocaleString()}` : 'Never connected'}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => handleRemoveDevice(device.id)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}
-              >
-                <IconSymbol name="xmark.circle.fill" size={20} color={colors.error ?? '#EF4444'} />
-              </Pressable>
-            </View>
-          ))}
-        </View>
+    <View style={{ alignItems: 'center', gap: 3 }}>
+      {periodLabel && (
+        <Text style={{ fontSize: size <= 48 ? 10 : 11, color: '#9BA1A6', textAlign: 'center' }}>{periodLabel}</Text>
       )}
-
-      {/* Single-device note */}
-      {devices.length > 0 && !showPairingFlow && (
-        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 16, paddingVertical: 10 }}>
-          <Text style={{ fontSize: 12, color: colors.muted, textAlign: 'center' }}>
-            Only one Jack Alarm can be connected at a time. Remove the current device to pair a new one.
-          </Text>
-        </View>
-      )}
-      {/* Pairing flow */}
-      {showPairingFlow && pairingToken ? (
-        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, padding: 16, gap: 12 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>Step 1 — Copy this token:</Text>
-          <Pressable
-            onPress={handleCopyToken}
-            style={({ pressed }) => [{
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-              backgroundColor: colors.background, borderRadius: 10,
-              borderWidth: 1, borderColor: colors.border,
-              padding: 12, opacity: pressed ? 0.7 : 1,
-            }]}
-          >
-            <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: colors.primary, fontVariant: ['tabular-nums'], letterSpacing: 1 }}>
-              {pairingToken}
-            </Text>
-            <IconSymbol name={copied ? 'checkmark.circle.fill' : 'doc.on.doc'} size={20} color={copied ? '#22C55E' : colors.muted} />
-          </Pressable>
-          <Text style={{ fontSize: 13, color: colors.muted, lineHeight: 18 }}>
-            Step 2 — On your Jack Alarm, go to <Text style={{ fontWeight: '700', color: colors.foreground }}>Settings → Pair with App</Text> and enter this token.
-          </Text>
-          {tokenExpiry && (
-            <Text style={{ fontSize: 11, color: colors.muted }}>
-              Token expires at {tokenExpiry.toLocaleTimeString()}
-            </Text>
+      <View style={{ width: size, height: size, position: 'relative' }}>
+        <Svg width={size} height={size}>
+          <Circle cx={cx} cy={cy} r={r} stroke="#334155" strokeWidth={strokeWidth} fill="none" />
+          {pct > 0 && (
+            <Circle
+              cx={cx} cy={cy} r={r}
+              stroke={ringColor} strokeWidth={strokeWidth} fill="none"
+              strokeDasharray={`${dash} ${gap}`}
+              strokeLinecap="round"
+              transform={`rotate(-90 ${cx} ${cy})`}
+            />
           )}
-          <Pressable
-            onPress={() => { setShowPairingFlow(false); setPairingToken(null); devicesQuery.refetch(); }}
-            style={({ pressed }) => [{
-              alignItems: 'center', paddingVertical: 10, borderRadius: 10,
-              backgroundColor: colors.primary + '18', opacity: pressed ? 0.7 : 1,
-            }]}
-          >
-            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Done — Close</Text>
-          </Pressable>
+        </Svg>
+        <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={{ fontSize: fractionFontSize, fontWeight: '700', color: textColor }}>{fractionText}</Text>
         </View>
-      ) : devices.length === 0 ? (
-        <Pressable
-          onPress={handleGenerateToken}
-          disabled={createTokenMutation.isPending}
-          style={({ pressed }) => [{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-            borderTopWidth: 1, borderTopColor: colors.border,
-            paddingVertical: 14, paddingHorizontal: 16,
-            opacity: pressed ? 0.7 : 1,
-          }]}
-        >
-          {createTokenMutation.isPending
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <IconSymbol name="antenna.radiowaves.left.and.right" size={18} color={colors.primary} />
-          }
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Pair Jack Alarm</Text>
-        </Pressable>
-      ) : null}
-      {/* Preview Jack Alarm display button */}
-      <Pressable
-        onPress={() => router.push('/crowpanel-preview' as never)}
-        style={({ pressed }) => [{
-          flexDirection: 'row', alignItems: 'center', gap: 10,
-          borderTopWidth: 1, borderTopColor: colors.border,
-          paddingHorizontal: 16, paddingVertical: 13,
-          opacity: pressed ? 0.7 : 1,
-        }]}
-      >
-        <View style={{ width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '18' }}>
-          <IconSymbol name="desktopcomputer" size={16} color={colors.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>Preview Display UI</Text>
-          <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>See the 800×480 alarm &amp; check-in screens</Text>
-        </View>
-        <IconSymbol name="chevron.right" size={14} color={colors.muted} />
-      </Pressable>
+      </View>
     </View>
   );
 }
 
-const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
-  { id: 'classic',  label: 'Classic',  emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
-  { id: 'buzzer',   label: 'Buzzer',   emoji: '📢', source: require('@/assets/audio/alarm_buzzer.wav') },
-  { id: 'digital',  label: 'Digital',  emoji: '📱', source: require('@/assets/audio/alarm_digital.wav') },
-  { id: 'gentle',   label: 'Gentle',   emoji: '🔔', source: require('@/assets/audio/alarm_gentle.wav') },
-  { id: 'urgent',   label: 'Urgent',   emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav') },
-];
+// ── HabitPillDots (Calm mode) ─────────────────────────────────────────────────
+function HabitPillDots({ p0Done, p1Done, p2Done, goal, p0Label, p1Label, p2Label }: {
+  p0Done: number; p1Done: number; p2Done: number; goal: number;
+  p0Label: string; p1Label: string; p2Label: string;
+}) {
+  function dotColor(done: number, g: number) {
+    if (g <= 0 || done <= 0) return '#1E2A4A';
+    const pct = done / g;
+    if (pct >= 0.8) return '#22C55E';
+    if (pct >= 0.5) return '#F59E0B';
+    return '#EF4444';
+  }
+  function splitLabel(label: string) {
+    const parts = label.toUpperCase().split(' ');
+    if (parts.length === 1) return { top: '', bottom: parts[0] };
+    if (parts[0] === 'THIS') return { top: 'THIS', bottom: parts[1] };
+    if (parts[0] === 'LAST') return { top: 'LAST', bottom: parts[1] };
+    return { top: parts.slice(0, -1).join(' '), bottom: parts[parts.length - 1] };
+  }
+  const dots = [
+    { done: p0Done, label: p0Label, isCurrent: false, size: DOT_SIZE_SM },
+    { done: p1Done, label: p1Label, isCurrent: false, size: DOT_SIZE_SM },
+    { done: p2Done, label: p2Label, isCurrent: true, size: DOT_SIZE_LG },
+  ];
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {dots.map(({ done, label, isCurrent, size }, i) => {
+        const bg = dotColor(done, goal);
+        const fg = goal > 0 && done > 0 ? '#FFFFFF' : '#4A5A7A';
+        const fraction = goal > 0 ? `${done}/${goal}` : '—';
+        const { top, bottom } = splitLabel(label);
+        const labelColor = isCurrent ? '#FFFFFF' : '#5A6A8A';
+        const labelSize = 7;
+        return (
+          <View key={i} style={{ alignItems: 'center', gap: 2 }}>
+            <Text style={{ fontSize: labelSize, fontWeight: isCurrent ? '700' : '400', color: labelColor, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center', width: size + 4 }}>{top}</Text>
+            <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: isCurrent ? 11 : 9, fontWeight: '700', color: fg, textAlign: 'center' }}>{fraction}</Text>
+            </View>
+            <Text style={{ fontSize: labelSize, fontWeight: isCurrent ? '700' : '400', color: labelColor, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center', width: size + 4 }}>{bottom}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
-const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> | null }[] = [
-  { id: 'priming',      label: 'Priming',           emoji: '🔥', description: 'Gratitude · Goals · Visualize', source: null },
-  { id: 'meditation',   label: 'Guided Meditation', emoji: '🧘', description: 'Mindful awareness, 5 min',       source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_bowl_c8bd7151.wav' },
-  { id: 'breathwork',   label: 'Breathwork',        emoji: '🌬️', description: 'Box breathing, 4-4-4-4',         source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_breathing_fd1069a2.wav' },
-  { id: 'visualization',label: 'Visualizations',    emoji: '🎯', description: 'See your goals achieved',        source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_focus_782acd2b.wav' },
-  { id: 'journaling',   label: 'Journaling',        emoji: '📓', description: 'Morning pages, free write',      source: null },
-];
+// ── HabitGoalRow ──────────────────────────────────────────────────────────────
+function HabitGoalRow({ habit, colors, onPress, isCalm = false }: {
+  habit: Habit;
+  colors: ReturnType<typeof useColors>;
+  onPress: () => void;
+  isCalm?: boolean;
+}) {
+  const { getHabitWeeklyDone, getHabitMonthlyDone, getHabitLastWeekDone, getHabitLastMonthDone, getHabitWeekBeforeDone, getHabitMonthBeforeDone } = useApp();
+  const isMonthly = habit.frequencyType === 'monthly';
+  const goal = isMonthly ? (habit.monthlyGoal ?? 0) : (habit.weeklyGoal ?? 0);
+  const p0Done = isMonthly ? getHabitMonthBeforeDone(habit.id) : getHabitWeekBeforeDone(habit.id);
+  const p1Done = isMonthly ? getHabitLastMonthDone(habit.id) : getHabitLastWeekDone(habit.id);
+  const p2Done = isMonthly ? getHabitMonthlyDone(habit.id) : getHabitWeeklyDone(habit.id);
+  const p0Label = isMonthly ? '2 Mo Ago' : '2 Wks';
+  const p1Label = isMonthly ? 'Last Mo' : 'Last Wk';
+  const p2Label = isMonthly ? 'This Mo' : 'This Wk';
+  return (
+    <TouchableOpacity onPress={onPress} style={[aStyles.habitRow, { borderTopColor: colors.border }]} activeOpacity={0.7}>
+      <Text style={[aStyles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
+      <View style={aStyles.habitRight}>
+        {goal > 0 ? (
+          isCalm ? (
+            <HabitPillDots p0Done={p0Done} p1Done={p1Done} p2Done={p2Done} goal={goal} p0Label={p0Label} p1Label={p1Label} p2Label={p2Label} />
+          ) : (
+            <View style={aStyles.ringTriple}>
+              <CircleRing done={p0Done} goal={goal} size={RING_SIZE_SM} periodLabel={p0Label} />
+              <View style={[aStyles.ringDivider, { backgroundColor: colors.border }]} />
+              <CircleRing done={p1Done} goal={goal} size={RING_SIZE_SM} periodLabel={p1Label} />
+              <View style={[aStyles.ringDivider, { backgroundColor: colors.border }]} />
+              <CircleRing done={p2Done} goal={goal} size={RING_SIZE} periodLabel={p2Label} />
+            </View>
+          )
+        ) : (
+          <Text style={[aStyles.noGoalText, { color: colors.muted }]}>{isMonthly ? 'No monthly goal' : 'No weekly goal'}</Text>
+        )}
+        <IconSymbol name="chevron.right" size={13} color={colors.muted} />
+      </View>
+    </TouchableOpacity>
+  );
+}
 
-const THEMES: { id: AppTheme; label: string; preview: string; description: string }[] = [
-  {
-    id: "purple",
-    label: "Purple",
-    preview: "#7B74FF",
-    description: "Dark navy",
-  },
-  {
-    id: "white",
-    label: "White",
-    preview: "#FFFFFF",
-    description: "Pure white",
-  },
-  {
-    id: "black",
-    label: "Black",
-    preview: "#000000",
-    description: "True black",
-  },
-  {
-    id: "punk",
-    label: "Punk",
-    preview: "#FF00FF",
-    description: "Cyberpunk",
-  },
-  {
-    id: "valley",
-    label: "Valley",
-    preview: "#4ADE80",
-    description: "Momentum",
-  },
-  {
-    id: "airy",
-    label: "Airy",
-    preview: "#C084A8",
-    description: "Dreamy",
-  },
-  {
-    id: "nova",
-    label: "Nova ✨",
-    preview: "#A855F7",
-    description: "Galaxy",
-  },
-  {
-    id: "calm",
-    label: "Calm",
-    preview: "#F5A623",
-    description: "Deep navy",
-  },
-];
+// ── GoalCard ──────────────────────────────────────────────────────────────────
+function GoalCard({ cat, habits, rate, colors, onPressGoal, onPressHabit, isCalm = false }: {
+  cat: import('@/lib/storage').CategoryDef;
+  habits: Habit[];
+  rate: number;
+  colors: ReturnType<typeof useColors>;
+  onPressGoal: () => void;
+  onPressHabit: (habitId: string) => void;
+  isCalm?: boolean;
+}) {
+  const pct = Math.min(Math.max(rate, 0), 1);
+  const isOnTrack = pct >= 0.8;
+  const isOkay = pct >= 0.5 && pct < 0.8;
+  const isBehind = pct > 0 && pct < 0.5;
+  const accentColor = isOnTrack ? '#22C55E' : isOkay ? '#F59E0B' : isBehind ? '#EF4444' : colors.muted as string;
+  const lifeAreaDef = cat.lifeArea ? LIFE_AREA_MAP[cat.lifeArea] : null;
+  let deadlineLabel = '';
+  let deadlineColor = colors.muted;
+  if (cat.deadline) {
+    const dl = new Date(cat.deadline + 'T12:00:00');
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const days = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
+    deadlineLabel = days < 0 ? 'Overdue' : days === 0 ? 'Due today' : `${days}d left`;
+    deadlineColor = days < 0 ? '#EF4444' : days <= 7 ? '#F59E0B' : '#6b7280';
+  }
+  return (
+    <View style={[aStyles.goalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <TouchableOpacity onPress={onPressGoal} style={aStyles.goalCardHeader} activeOpacity={0.8}>
+        <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={20} color={accentColor} bgColor={accentColor + '22'} bgSize={38} borderRadius={10} />
+        <View style={{ flex: 1 }}>
+          <Text style={[aStyles.goalCardTitle, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+          {lifeAreaDef && <Text style={[aStyles.goalCardLifeArea, { color: accentColor + 'bb' }]}>{lifeAreaDef.label}</Text>}
+        </View>
+        {deadlineLabel ? (
+          <View style={[aStyles.deadlineTag, { borderColor: deadlineColor + '55', backgroundColor: deadlineColor + '18' }]}>
+            <Text style={[aStyles.deadlineText, { color: deadlineColor }]}>{deadlineLabel}</Text>
+          </View>
+        ) : null}
+        <IconSymbol name="chevron.right" size={14} color={accentColor + '88'} />
+      </TouchableOpacity>
+      <View style={[aStyles.goalCardDivider, { backgroundColor: accentColor + '25' }]} />
+      {habits.length === 0 ? (
+        <Text style={[aStyles.noHabitsText, { color: colors.muted }]}>No habits yet</Text>
+      ) : (
+        habits.map((h) => (
+          <HabitGoalRow key={h.id} habit={h} colors={colors} onPress={() => onPressHabit(h.id)} isCalm={isCalm} />
+        ))
+      )}
+    </View>
+  );
+}
 
-export default function SettingsScreen() {
-  const { alarm, updateAlarm, activeHabits, isDemoMode, exitDemo } = useApp();
+// ── Analytics Tab ─────────────────────────────────────────────────────────────
+function AnalyticsTab() {
   const colors = useColors();
   const isCalm = useIsCalm();
+  const isNova = useIsNova();
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuth();
-  const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
-  const { appTheme, setAppTheme } = useThemeContext();
-  const maxWidth = useContentMaxWidth();
+  const [showLegend, setShowLegend] = useState(false);
+  const { categories, activeHabits, getCategoryRate } = useApp();
+  const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
+  const rateRange = 7;
+  const bgColor = isNova ? '#050510' : isCalm ? '#0D1135' : colors.background;
 
-  const [hour, setHour] = useState(alarm.hour);
-  const [minute, setMinute] = useState(alarm.minute);
-  const [days, setDays] = useState<number[]>(alarm.days);
-  const [enabled, setEnabled] = useState(alarm.isEnabled);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [appearanceExpanded, setAppearanceExpanded] = useState(false);
-  const [soundOpen, setSoundOpen] = useState(false);
-  const [meditationOpen, setMeditationOpen] = useState(false);
-  const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [soundId, setSoundId] = useState(alarm.soundId ?? 'classic');
-  const [meditationId, setMeditationId] = useState<string | undefined>(alarm.meditationId);
-  const [requireCheckin, setRequireCheckin] = useState(alarm.requireCheckin ?? false);
-  const [snoozeMinutes, setSnoozeMinutes] = useState(alarm.snoozeMinutes ?? 10);
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [practiceDurations, setPracticeDurations] = useState<Record<string, number>>(
-    alarm.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 }
+  return (
+    <ScrollView
+      contentContainerStyle={[aStyles.scroll, { backgroundColor: bgColor }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Legend modal */}
+      <Modal visible={showLegend} transparent animationType="fade" onRequestClose={() => setShowLegend(false)}>
+        <Pressable style={aStyles.legendOverlay} onPress={() => setShowLegend(false)}>
+          <View style={[aStyles.legendModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[aStyles.legendModalTitle, { color: colors.foreground }]}>Ring Colors</Text>
+            {(['#22C55E', '#F59E0B', '#EF4444'] as const).map((c, i) => (
+              <View key={c} style={aStyles.legendItem}>
+                <View style={[aStyles.legendDot, { backgroundColor: c }]} />
+                <Text style={[aStyles.legendText, { color: colors.muted }]}>
+                  {i === 0 ? 'Hit — goal reached' : i === 1 ? 'On Track — ≥60% of goal' : 'Behind — <60% of goal'}
+                </Text>
+              </View>
+            ))}
+            <View style={aStyles.legendItem}>
+              <IconSymbol name="crown.fill" size={11} color="#FFD700" />
+              <Text style={[aStyles.legendText, { color: colors.muted }]}>Last period hit</Text>
+            </View>
+            <Text style={[aStyles.legendHint, { color: colors.muted }]}>
+              Rings: left = 2 periods ago, middle = last period, right = current period
+            </Text>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Legend info button row */}
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <Pressable
+          onPress={() => setShowLegend(true)}
+          style={({ pressed }) => [aStyles.legendInfoBtn, { borderColor: isCalm ? '#252D6E' : colors.border, backgroundColor: isCalm ? '#1A2050' : colors.surface, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={[aStyles.legendInfoBtnText, { color: isCalm ? '#8B9CC8' : colors.muted }]}>?</Text>
+        </Pressable>
+      </View>
+
+      {sortedCategories.length === 0 ? (
+        <View style={[aStyles.emptyState, { borderColor: colors.border }]}>
+          <Text style={[aStyles.emptyText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
+        </View>
+      ) : (
+        <View style={aStyles.goalList}>
+          {sortedCategories.map((cat) => {
+            const catHabits = activeHabits.filter((h) => h.category === cat.id);
+            return (
+              <GoalCard
+                key={cat.id}
+                cat={cat}
+                habits={catHabits}
+                rate={getCategoryRate(cat.id, rateRange)}
+                colors={colors}
+                onPressGoal={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push((`/category-detail?categoryId=${cat.id}`) as never);
+                }}
+                onPressHabit={(habitId) => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push((`/habit-detail?habitId=${habitId}`) as never);
+                }}
+                isCalm={isCalm}
+              />
+            );
+          })}
+        </View>
+      )}
+
+      <Pressable
+        onPress={() => router.push('/habits' as never)}
+        style={({ pressed }) => [aStyles.manageBtn, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border, opacity: pressed ? 0.7 : 1 }]}
+      >
+        <IconSymbol name="plus.circle.fill" size={18} color={isCalm ? '#F5A623' : colors.primary} />
+        <Text style={[aStyles.manageBtnText, { color: isCalm ? '#F5A623' : colors.primary }]}>Manage Habits</Text>
+      </Pressable>
+    </ScrollView>
   );
+}
 
+// ─── Photo Carousel ───────────────────────────────────────────────────────────
+function PhotoCarousel({ uris, height, onPhotoPress }: {
+  uris: string[]; height: number; onPhotoPress?: (uri: string, index: number) => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const flatRef = useRef<FlatList>(null);
+  if (uris.length === 0) return null;
+  return (
+    <View style={{ height, borderRadius: 12, overflow: "hidden" }}>
+      <FlatList
+        ref={flatRef}
+        data={uris}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(u, i) => `${u}-${i}`}
+        onMomentumScrollEnd={(e) => {
+          const newIdx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
+          setIndex(newIdx);
+        }}
+        renderItem={({ item, index: i }) => (
+          <Pressable
+            onPress={() => onPhotoPress?.(item, i)}
+            style={({ pressed }) => [{ width: CARD_W, height, opacity: pressed ? 0.9 : 1 }]}
+          >
+            <Image source={{ uri: item }} style={{ width: CARD_W, height }} resizeMode="cover" />
+          </Pressable>
+        )}
+      />
+      {uris.length > 1 && (
+        <View style={vStyles.dotRow}>
+          {uris.map((_, i) => (
+            <View key={i} style={[vStyles.dot, { backgroundColor: i === index ? "#fff" : "rgba(255,255,255,0.45)", width: i === index ? 16 : 6 }]} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
-  // Imperative player ref — created fresh each time, released when done
-  const previewPlayerRef = useRef<AudioPlayer | null>(null);
-  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+// ─── Goal Detail Modal ────────────────────────────────────────────────────────
+function GoalDetailModal({
+  visible, cat, images, motivations, onClose, onAddPhoto, onRemovePhoto,
+  onAddMotivation, onEditMotivation, onDeleteMotivation, colors,
+}: {
+  visible: boolean;
+  cat: { id: string; label: string; emoji: string; lifeArea?: string; deadline?: string };
+  images: string[];
+  motivations: string[];
+  onClose: () => void;
+  onAddPhoto: () => void;
+  onRemovePhoto: (uri: string) => void;
+  onAddMotivation: (text: string) => void;
+  onEditMotivation: (index: number, text: string) => void;
+  onDeleteMotivation: (index: number) => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const [newText, setNewText] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const flatRef = useRef<FlatList>(null);
 
-  function stopPreview() {
-    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    if (previewPlayerRef.current) {
-      try { previewPlayerRef.current.pause(); } catch { /* ignore */ }
-      try { previewPlayerRef.current.remove(); } catch { /* ignore */ }
-      previewPlayerRef.current = null;
-    }
-    setPreviewingId(null);
+  function submitNew() {
+    const t = newText.trim();
+    if (!t) return;
+    onAddMotivation(t);
+    setNewText("");
   }
-
-  function playPreview(id: string, source: string | ReturnType<typeof require> | null) {
-    // Stop any existing preview first
-    stopPreview();
-    // If same id tapped again, just stop (toggle off)
-    if (previewingId === id) return;
-    // No audio source for this option (e.g. Priming, Journaling)
-    if (!source) {
-      setPreviewingId(id);
-      return;
-    }
-    setPreviewingId(id);
-    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const player = createAudioPlayer(source as any);
-      previewPlayerRef.current = player;
-      player.play();
-      previewTimerRef.current = setTimeout(() => {
-        stopPreview();
-      }, 4000);
-    } catch (e) {
-      console.warn('[Preview] Failed to create player:', e);
-      setPreviewingId(null);
-    }
-  }
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => { stopPreview(); };
-  }, []);
-
-  // Sync if alarm changes externally
-  useEffect(() => {
-    setHour(alarm.hour);
-    setMinute(alarm.minute);
-    setDays(alarm.days);
-    setEnabled(alarm.isEnabled);
-    setSoundId(alarm.soundId ?? 'classic');
-    setMeditationId(alarm.meditationId);
-    setPracticeDurations(alarm.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 });
-    setRequireCheckin(alarm.requireCheckin ?? false);
-    setSnoozeMinutes(alarm.snoozeMinutes ?? 10);
-  }, [alarm]);
-
-  function toggleDay(day: number) {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
-  }
-
-  async function handleSave() {
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSaving(true);
-    await updateAlarm({ ...alarm, hour, minute, days, isEnabled: enabled, soundId, meditationId, practiceDurations, requireCheckin, snoozeMinutes });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  function startEdit(i: number) { setEditingIndex(i); setEditText(motivations[i]); }
+  function submitEdit() {
+    if (editingIndex === null) return;
+    const t = editText.trim();
+    if (t) onEditMotivation(editingIndex, t);
+    setEditingIndex(null); setEditText("");
   }
 
   return (
-    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.foreground }]}>More</Text>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={[dStyles.header, { borderBottomColor: colors.border }]}>
+          <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={22} color={colors.primary} bgColor={colors.primary + '22'} bgSize={44} borderRadius={12} />
+          <Text style={[dStyles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>{cat.label}</Text>
+          <Pressable onPress={onClose} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}>
+            <IconSymbol name="xmark.circle.fill" size={26} color={colors.muted} />
+          </Pressable>
         </View>
-
-        {/* Alarm section */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
-              <IconSymbol name="bell.fill" size={18} color={colors.primary} />
-            </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Daily Alarm</Text>
-            <Switch
-              value={enabled}
-              onValueChange={(v) => {
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setEnabled(v);
-              }}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor="#fff"
-            />
-          </View>
-
-          {enabled && (
-            <>
-              {/* Wheel time picker */}
-              <View style={[styles.wheelPickerSection, { borderTopColor: colors.border }]}>
-                <WheelTimePicker
-                  hour={hour}
-                  minute={minute}
-                  onChange={(h, m) => { setHour(h); setMinute(m); }}
-                />
-              </View>
-
-              {/* Day picker */}
-              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
-                <Text style={[styles.pickerLabel, { color: colors.muted }]}>Days</Text>
-                <View style={styles.daysRow}>
-                  {DAY_LABELS.map((label, idx) => {
-                    const isSelected = days.includes(idx);
-                    return (
-                      <Pressable
-                        key={idx}
-                        onPress={() => toggleDay(idx)}
-                        style={({ pressed }) => [
-                          styles.dayBtn,
-                          isSelected && { backgroundColor: colors.primary },
-                          !isSelected && { borderColor: colors.border, borderWidth: 1 },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={[
-                          styles.dayBtnText,
-                          { color: isSelected ? '#fff' : colors.muted },
-                        ]}>
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Alarm Sound Picker — collapsible dropdown */}
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSoundOpen(v => !v);
-                }}
-                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <IconSymbol name="music.note" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Alarm Sound</Text>
-                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
-                    {ALARM_SOUNDS.find(s => s.id === soundId)?.emoji ?? '⏰'}{' '}
-                    {ALARM_SOUNDS.find(s => s.id === soundId)?.label ?? 'Classic'}
-                  </Text>
-                </View>
-                <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-              </Pressable>
-              {soundOpen && (
-                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
-                  {ALARM_SOUNDS.map((sound) => {
-                    const isSelected = soundId === sound.id;
-                    const isPreviewing = previewingId === sound.id;
-                    return (
-                      <Pressable
-                        key={sound.id}
-                        onPress={() => {
-                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSoundId(sound.id);
-                          playPreview(sound.id, sound.source);
-                        }}
-                        style={({ pressed }) => [
-                          styles.dropdownItem,
-                          isSelected && { backgroundColor: colors.primary + '18' },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
-                        <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground, flex: 1 }]}>
-                          {sound.label}
-                        </Text>
-                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                      </Pressable>
-                    );
-                  })}
-                </View>
+        <ScrollView contentContainerStyle={dStyles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <Text style={[dStyles.sectionLabel, { color: colors.muted }]}>WHY THIS MATTERS</Text>
+          {motivations.length === 0 && <Text style={[dStyles.emptyMotive, { color: colors.muted }]}>Add your reasons below — why is this goal important to you?</Text>}
+          {motivations.map((m, i) => (
+            <View key={i} style={[dStyles.motiveRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              {editingIndex === i ? (
+                <TextInput style={[dStyles.motiveEditInput, { color: colors.foreground, borderColor: colors.primary }]} value={editText} onChangeText={setEditText} onSubmitEditing={submitEdit} onBlur={submitEdit} returnKeyType="done" autoFocus multiline />
+              ) : (
+                <Pressable onPress={() => startEdit(i)} style={{ flex: 1, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                  <Text style={[dStyles.motiveBullet, { color: colors.primary }]}>•</Text>
+                  <Text style={[dStyles.motiveText, { color: colors.foreground }]}>{m}</Text>
+                </Pressable>
               )}
-
-              {/* Guided Meditation Picker — collapsible dropdown */}
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setMeditationOpen(v => !v);
-                }}
-                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <IconSymbol name="moon.stars.fill" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>After Alarm</Text>
-                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
-                    {meditationId
-                      ? `${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.emoji ?? ''} ${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.label ?? ''}`
-                      : '🚫 None'}
-                  </Text>
-                </View>
-                <IconSymbol name={meditationOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-              </Pressable>
-              {meditationOpen && (
-                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
-                  {/* None option */}
-                  <Pressable
-                    onPress={() => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setMeditationId(undefined);
-                    }}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      !meditationId && { backgroundColor: colors.primary + '18' },
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <Text style={styles.soundEmoji}>🚫</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.dropdownItemText, { color: !meditationId ? colors.primary : colors.foreground }]}>None</Text>
-                      <Text style={[styles.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
-                    </View>
-                    {!meditationId && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                  </Pressable>
-                  {MEDITATION_OPTIONS.map((med) => {
-                    const isSelected = meditationId === med.id;
-                    const isPreviewing = previewingId === med.id;
-                    const hasDuration = med.id !== 'journaling' && med.id !== 'none';
-                    const currentDuration = practiceDurations[med.id] ?? 10;
-                    return (
-                      <View key={med.id}>
-                        <Pressable
-                          onPress={() => {
-                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setMeditationId(med.id);
-                            playPreview(med.id, med.source ?? null);
-                          }}
-                          style={({ pressed }) => [
-                            styles.dropdownItem,
-                            isSelected && { backgroundColor: colors.primary + '18' },
-                            { opacity: pressed ? 0.7 : 1 },
-                          ]}
-                        >
-                          <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
-                              {med.label}
-                            </Text>
-                            <Text style={[styles.meditationDesc, { color: colors.muted }]}>
-                              {hasDuration ? `${currentDuration} min · ${med.description.split(',').slice(1).join(',').trim() || med.description}` : med.description}
-                            </Text>
-                          </View>
-                          {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                        </Pressable>
-                        {/* Duration chips — shown when this option is selected and supports duration */}
-                        {isSelected && hasDuration && (
-                          <View style={[styles.durationChipRow, { borderTopColor: colors.border }]}>
-                            <Text style={[styles.durationChipLabel, { color: colors.muted }]}>Duration</Text>
-                            <View style={styles.durationChips}>
-                              {[5, 10, 15, 20].map((mins) => (
-                                <Pressable
-                                  key={mins}
-                                  onPress={() => {
-                                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    setPracticeDurations(prev => ({ ...prev, [med.id]: mins }));
-                                  }}
-                                  style={({ pressed }) => [{
-                                    paddingHorizontal: 14,
-                                    paddingVertical: 7,
-                                    borderRadius: 20,
-                                    borderWidth: 1.5,
-                                    borderColor: currentDuration === mins ? colors.primary : colors.border,
-                                    backgroundColor: currentDuration === mins ? colors.primary + '18' : 'transparent',
-                                    opacity: pressed ? 0.7 : 1,
-                                  }]}
-                                >
-                                  <Text style={[{ fontSize: 13, fontWeight: '700', color: currentDuration === mins ? colors.primary : colors.muted }]}>
-                                    {mins} min
-                                  </Text>
-                                </Pressable>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
+              {editingIndex !== i && (
+                <Pressable onPress={() => onDeleteMotivation(i)} style={({ pressed }) => [dStyles.deleteBtn, { opacity: pressed ? 0.5 : 1 }]}>
+                  <IconSymbol name="trash.fill" size={14} color="#EF4444" />
+                </Pressable>
               )}
-              {/* Snooze interval picker */}
-              <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
-                <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Snooze Duration</Text>
-                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                    How long to snooze when alarm is dismissed
-                  </Text>
-                </View>
-              </View>
-              <View style={[{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: 16, paddingVertical: 12 }]}>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  {[5, 10, 15, 20, 30].map((mins) => (
-                    <Pressable
-                      key={mins}
-                      onPress={() => {
-                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSnoozeMinutes(mins);
-                      }}
-                      style={({ pressed }) => [{
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 20,
-                        borderWidth: 1.5,
-                        borderColor: snoozeMinutes === mins ? colors.primary : colors.border,
-                        backgroundColor: snoozeMinutes === mins ? colors.primary + '18' : 'transparent',
-                        opacity: pressed ? 0.7 : 1,
-                      }]}
-                    >
-                      <Text style={[{ fontSize: 14, fontWeight: '700', color: snoozeMinutes === mins ? colors.primary : colors.muted }]}>
-                        {mins} min
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {/* Require check-in toggle */}
-              <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
-                <IconSymbol name="lock.fill" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Require Check-in to Unlock App</Text>
-                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                    Block app access until yesterday's check-in is complete
-                  </Text>
-                </View>
-                <Switch
-                  value={requireCheckin}
-                  onValueChange={(v) => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    setRequireCheckin(v);
-                  }}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              {/* Preview check-in button */}
-              <Pressable
-                onPress={() => router.push('/alarm-preview' as never)}
-                style={({ pressed }) => [{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  borderTopWidth: StyleSheet.hairlineWidth,
-                  borderTopColor: colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                }]}
-              >
-                <IconSymbol name="eye.fill" size={16} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.primary }]}>Preview Check-in Popup</Text>
-                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                    See exactly what appears when your alarm fires
-                  </Text>
-                </View>
-                <IconSymbol name="chevron.right" size={14} color={colors.muted} />
-              </Pressable>
-            </>
-          )}
-        </View>
-
-        {/* Save button */}
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          style={({ pressed }) => [
-            styles.saveBtn,
-            { backgroundColor: saved ? colors.success : colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }] },
-          ]}
-        >
-          <IconSymbol
-            name={saved ? "checkmark.circle.fill" : "bell.fill"}
-            size={18}
-            color="#fff"
-          />
-          <Text style={styles.saveBtnText}>
-            {saving ? 'Saving…' : saved ? 'Alarm Saved!' : 'Save Alarm'}
-          </Text>
-        </Pressable>
-
-        {/* Appearance section — collapsible */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setAppearanceExpanded((v) => !v);
-            }}
-            style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.7 : 1 }]}
-          >
-            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
-              <IconSymbol name="sparkles" size={18} color={colors.primary} />
             </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
-            {/* Active theme preview swatch */}
-            <View style={[styles.activeSwatchSmall, { backgroundColor: THEMES.find(t => t.id === appTheme)?.preview ?? colors.primary, borderColor: colors.border }]} />
-            <Text style={[{ fontSize: 13, color: colors.muted, marginRight: 4 }]}>
-              {THEMES.find(t => t.id === appTheme)?.label ?? ''}
-            </Text>
-            <IconSymbol name={appearanceExpanded ? 'chevron.up' : 'chevron.down'} size={16} color={colors.muted} />
-          </Pressable>
-          {appearanceExpanded && (
-            <View style={[styles.themeRow, { borderTopColor: colors.border }]}>
-              {THEMES.map((theme) => {
-                const isActive = appTheme === theme.id;
-                return (
-                  <Pressable
-                    key={theme.id}
-                    onPress={() => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setAppTheme(theme.id);
-                    }}
-                    style={({ pressed }) => [
-                      styles.themeOption,
-                      {
-                        borderColor: isActive ? colors.primary : colors.border,
-                        backgroundColor: isActive ? colors.primary + '15' : colors.background,
-                        opacity: pressed ? 0.7 : 1,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.themeSwatch,
-                        {
-                          backgroundColor: theme.preview,
-                          borderColor: isActive ? colors.primary : colors.border,
-                        },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.themeLabel,
-                        { color: isActive ? colors.primary : colors.foreground },
-                      ]}
-                    >
-                      {theme.label}
-                    </Text>
-                    {isActive && (
-                      <IconSymbol name="checkmark" size={12} color={colors.primary} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* Habits section */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
-              <IconSymbol name="list.bullet" size={18} color={colors.primary} />
-            </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Habits</Text>
-            <Text style={[styles.habitCountBadge, { color: colors.muted }]}>
-              {activeHabits.length} active
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => router.push('/habits' as never)}
-            style={({ pressed }) => [
-              styles.manageHabitsBtn,
-              { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Text style={[styles.manageHabitsBtnText, { color: colors.primary }]}>
-              Manage Habits
-            </Text>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </Pressable>
-        </View>
-
-        {/* Mind Dump */}
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: '#7B74FF18' }]}>
-              <IconSymbol name="brain" size={18} color="#7B74FF" />
-            </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Mind Dump</Text>
-            <Text style={[styles.habitCountBadge, { color: colors.muted }]}>Capture thoughts</Text>
-          </View>
-          <Pressable
-            onPress={() => router.push('/mind-dump' as never)}
-            style={({ pressed }) => [
-              styles.manageHabitsBtn,
-              { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Text style={[styles.manageHabitsBtnText, { color: '#7B74FF' }]}>
-              Open Mind Dump
-            </Text>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </Pressable>
-        </View>
-
-        {/* Demo Mode banner + Exit button */}
-        {isDemoMode && (
-          <View style={[styles.demoCard, { backgroundColor: '#F59E0B18', borderColor: '#F59E0B' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <Text style={{ fontSize: 18 }}>🎭</Text>
-              <Text style={[styles.sectionTitle, { color: '#F59E0B', flex: 1 }]}>Demo Mode</Text>
-            </View>
-            <Text style={[{ fontSize: 13, color: colors.muted, lineHeight: 18, marginBottom: 14 }]}>
-              You're exploring a demo with sample data. Sign in to save your own goals and habits.
-            </Text>
-            <Pressable
-              onPress={async () => {
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                await exitDemo();
-                router.replace('/login');
-              }}
-              style={({ pressed }) => [{
-                backgroundColor: '#F59E0B',
-                borderRadius: 12,
-                paddingVertical: 12,
-                alignItems: 'center' as const,
-                opacity: pressed ? 0.8 : 1,
-              }]}
-            >
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Exit Demo & Sign In</Text>
+          ))}
+          <View style={[dStyles.addMotiveRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <TextInput style={[dStyles.addMotiveInput, { color: colors.foreground }]} placeholder="Add a reason this goal matters..." placeholderTextColor={colors.muted} value={newText} onChangeText={setNewText} returnKeyType="done" onSubmitEditing={submitNew} multiline={false} />
+            <Pressable onPress={submitNew} style={({ pressed }) => [dStyles.addMotiveBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}>
+              <IconSymbol name="plus" size={16} color="#fff" />
             </Pressable>
           </View>
-        )}
-
-        {/* Account section */}
-        {isAuthenticated && (
-          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
-            <View style={styles.sectionHeader}>
-              <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
-                <IconSymbol name="person.fill" size={18} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account</Text>
-                {user?.email && (
-                  <Text style={[{ fontSize: 12, color: colors.muted }]}>{user.email}</Text>
+          <View style={dStyles.photoHeader}>
+            <Text style={[dStyles.sectionLabel, { color: colors.muted }]}>PHOTOS</Text>
+            <Pressable onPress={onAddPhoto} style={({ pressed }) => [dStyles.addPhotoBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "44", opacity: pressed ? 0.7 : 1 }]}>
+              <IconSymbol name="plus" size={13} color={colors.primary} />
+              <Text style={[dStyles.addPhotoBtnText, { color: colors.primary }]}>Add Photos</Text>
+            </Pressable>
+          </View>
+          {images.length === 0 ? (
+            <Pressable onPress={onAddPhoto} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingVertical: 8 })}>
+              <Text style={[dStyles.emptyMotive, { color: colors.primary }]}>+ Add your first photo</Text>
+            </Pressable>
+          ) : (
+            <>
+              <View style={{ borderRadius: 14, overflow: "hidden", marginBottom: 12 }}>
+                <FlatList ref={flatRef} data={images} horizontal pagingEnabled showsHorizontalScrollIndicator={false} keyExtractor={(u, i) => `detail-${u}-${i}`}
+                  onMomentumScrollEnd={(e) => { const newIdx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_W - PADDING * 2)); setPhotoIndex(newIdx); }}
+                  renderItem={({ item }) => <Image source={{ uri: item }} style={{ width: SCREEN_W - PADDING * 2, height: Math.floor((SCREEN_W - PADDING * 2) * 0.75) }} resizeMode="cover" />}
+                />
+                {images.length > 1 && (
+                  <View style={vStyles.dotRow}>
+                    {images.map((_, i) => <View key={i} style={[vStyles.dot, { backgroundColor: i === photoIndex ? "#fff" : "rgba(255,255,255,0.45)", width: i === photoIndex ? 16 : 6 }]} />)}
+                  </View>
                 )}
               </View>
-            </View>
-            <Pressable
-              onPress={() => {
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push('/settings/blocked-users');
-              }}
-              style={({ pressed }) => [
-                styles.manageHabitsBtn,
-                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <Text style={[styles.manageHabitsBtnText, { color: colors.foreground }]}>Blocked Users</Text>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-            </Pressable>
-            <Pressable
-              onPress={async () => {
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                // Clear all local user data so the next account starts fresh
-                await clearLocalData();
-                await logout();
-                router.replace('/login');
-              }}
-              style={({ pressed }) => [
-                styles.manageHabitsBtn,
-                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <Text style={[styles.manageHabitsBtnText, { color: '#EF4444' }]}>Sign Out</Text>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-            </Pressable>
-          </View>
-        )}
+              <View style={dStyles.thumbStrip}>
+                {images.map((uri, i) => (
+                  <View key={`thumb-${i}`} style={dStyles.thumbWrap}>
+                    <Image source={{ uri }} style={dStyles.thumb} resizeMode="cover" />
+                    <Pressable onPress={() => Alert.alert("Remove Photo", "Remove this photo?", [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: () => onRemovePhoto(uri) }])} style={dStyles.thumbDelete}>
+                      <IconSymbol name="xmark.circle.fill" size={18} color="#fff" />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
 
-        {/* Danger Zone — hidden by default, required by Apple App Store guidelines */}
-        {user && (
-          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
-            <Pressable
-              onPress={() => setDangerZoneExpanded(v => !v)}
-              style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Text style={{ fontSize: 13, color: '#EF4444', fontWeight: '600' }}>
-                {dangerZoneExpanded ? '▲ Hide danger zone' : '▼ Danger zone'}
+// ─── Vision Board Tab ─────────────────────────────────────────────────────────
+function VisionBoardTab() {
+  const { categories, isDemoMode } = useApp();
+  const colors = useColors();
+  const maxWidth = useContentMaxWidth();
+  const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
+  const [board, setBoard] = useState<VisionBoard>({});
+  const [motivations, setMotivations] = useState<VisionMotivations>({});
+  const [detailCatId, setDetailCatId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadVisionBoard().then(async (loaded) => {
+      if (Platform.OS !== "web") {
+        const docDir = FileSystem.documentDirectory ?? "";
+        let needsSave = false;
+        const cleaned: VisionBoard = {};
+        for (const [catId, uris] of Object.entries(loaded)) {
+          const valid: string[] = [];
+          for (const uri of uris) {
+            if (uri.startsWith(docDir)) {
+              try {
+                const info = await FileSystem.getInfoAsync(uri);
+                if (info.exists) valid.push(uri); else needsSave = true;
+              } catch { needsSave = true; }
+            } else { needsSave = true; }
+          }
+          cleaned[catId] = valid;
+        }
+        setBoard(cleaned);
+        if (needsSave) await saveVisionBoard(cleaned);
+      } else { setBoard(loaded); }
+    });
+    loadVisionMotivations().then(setMotivations);
+  }, [isDemoMode]);
+
+  async function updateBoard(newBoard: VisionBoard) { setBoard(newBoard); await saveVisionBoard(newBoard); }
+  async function updateMotivations(newMot: VisionMotivations) { setMotivations(newMot); await saveVisionMotivations(newMot); }
+
+  const pickImage = useCallback(async (catId: string) => {
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") { Alert.alert("Permission needed", "Please allow access to your photo library."); return; }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.8, selectionLimit: 10 });
+    if (!result.canceled && result.assets.length > 0) {
+      const results = await Promise.all(result.assets.map((a) => persistUri(a.uri)));
+      const persistedUris = results.filter((u): u is string => u !== null);
+      if (persistedUris.length === 0) { Alert.alert("Could not save photos", "Unable to copy photos to app storage. Please try again."); return; }
+      const existing = board[catId] ?? [];
+      const updated = { ...board, [catId]: [...existing, ...persistedUris] };
+      await updateBoard(updated);
+      if (persistedUris.length < result.assets.length) Alert.alert("Some photos skipped", `${result.assets.length - persistedUris.length} photo(s) could not be saved and were skipped.`);
+    }
+  }, [board]);
+
+  const removeImage = useCallback(async (catId: string, uri: string) => {
+    const existing = board[catId] ?? [];
+    const updated = { ...board, [catId]: existing.filter((u) => u !== uri) };
+    await updateBoard(updated);
+    if (Platform.OS !== "web" && uri.startsWith(FileSystem.documentDirectory ?? "")) {
+      try { await FileSystem.deleteAsync(uri, { idempotent: true }); } catch { /* ignore */ }
+    }
+  }, [board]);
+
+  const detailCat = detailCatId ? sortedCategories.find((c) => c.id === detailCatId) : null;
+
+  return (
+    <ScrollView contentContainerStyle={vStyles.scroll} showsVerticalScrollIndicator={false}>
+      <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
+        <Text style={[vStyles.pageSubtitle, { color: colors.muted }]}>Tap a goal to add photos and reasons. Swipe photos to browse.</Text>
+        {sortedCategories.map((cat) => {
+          const images = board[cat.id] ?? [];
+          const catMotivations = motivations[cat.id] ?? [];
+          let deadlineLabel: string | null = null;
+          let deadlineColor = colors.muted;
+          if (cat.deadline) {
+            const dl = new Date(cat.deadline + "T12:00:00");
+            const now = new Date(); now.setHours(0, 0, 0, 0);
+            const diffDays = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
+            deadlineLabel = diffDays < 0 ? "Overdue" : diffDays === 0 ? "Due today" : `${diffDays}d left`;
+            deadlineColor = diffDays < 0 ? "#EF4444" : diffDays <= 7 ? "#F59E0B" : colors.muted;
+          }
+          return (
+            <View key={cat.id} style={[vStyles.catSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Pressable onPress={() => setDetailCatId(cat.id)} style={({ pressed }) => [vStyles.catHeader, { opacity: pressed ? 0.75 : 1 }]}>
+                <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={20} color={colors.primary} bgColor={colors.primary + '18'} bgSize={40} borderRadius={10} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[vStyles.catLabel, { color: colors.foreground }]}>{cat.label}</Text>
+                  {deadlineLabel && <Text style={[vStyles.visionDeadline, { color: deadlineColor }]}>{deadlineLabel}</Text>}
+                </View>
+                <View style={vStyles.headerRight}>
+                  <Pressable onPress={() => pickImage(cat.id)} style={({ pressed }) => [vStyles.addBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "44", opacity: pressed ? 0.7 : 1 }]}>
+                    <IconSymbol name="plus" size={13} color={colors.primary} />
+                    <Text style={[vStyles.addBtnText, { color: colors.primary }]}>Photos</Text>
+                  </Pressable>
+                  <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+                </View>
+              </Pressable>
+              {catMotivations.length > 0 && (
+                <Pressable onPress={() => setDetailCatId(cat.id)} style={[vStyles.motivationsPreview, { borderTopColor: colors.border }]}>
+                  <Text style={[vStyles.motiveSectionLabel, { color: colors.muted }]}>WHY THIS MATTERS</Text>
+                  {catMotivations.slice(0, 3).map((m, i) => (
+                    <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 4 }}>
+                      <Text style={[vStyles.motiveBullet, { color: colors.primary }]}>•</Text>
+                      <Text style={[vStyles.motiveText, { color: colors.foreground }]} numberOfLines={2}>{m}</Text>
+                    </View>
+                  ))}
+                  {catMotivations.length > 3 && <Text style={[vStyles.moreText, { color: colors.primary }]}>+{catMotivations.length - 3} more reasons →</Text>}
+                </Pressable>
+              )}
+              {images.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <PhotoCarousel uris={images} height={CAROUSEL_H} onPhotoPress={() => setDetailCatId(cat.id)} />
+                </View>
+              )}
+              {images.length === 0 && catMotivations.length === 0 && (
+                <Pressable onPress={() => setDetailCatId(cat.id)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingTop: 6, paddingBottom: 4 })}>
+                  <Text style={[vStyles.emptyText, { color: colors.primary }]}>Tap to add photos and reasons →</Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        })}
+        <View style={{ height: 40 }} />
+      </View>
+      {detailCat && (
+        <GoalDetailModal
+          visible={detailCatId !== null}
+          cat={detailCat}
+          images={board[detailCat.id] ?? []}
+          motivations={motivations[detailCat.id] ?? []}
+          onClose={() => setDetailCatId(null)}
+          onAddPhoto={() => pickImage(detailCat.id)}
+          onRemovePhoto={(uri) => removeImage(detailCat.id, uri)}
+          onAddMotivation={(text) => { const catMot = motivations[detailCat.id] ?? []; updateMotivations({ ...motivations, [detailCat.id]: [...catMot, text] }); }}
+          onEditMotivation={(index, text) => { const catMot = [...(motivations[detailCat.id] ?? [])]; catMot[index] = text; updateMotivations({ ...motivations, [detailCat.id]: catMot }); }}
+          onDeleteMotivation={(index) => { const catMot = (motivations[detailCat.id] ?? []).filter((_, i) => i !== index); updateMotivations({ ...motivations, [detailCat.id]: catMot }); }}
+          colors={colors}
+        />
+      )}
+    </ScrollView>
+  );
+}
+
+// ─── Rewards Tab ──────────────────────────────────────────────────────────────
+type HabitReward = {
+  habitId: string; habitName: string; habitEmoji: string;
+  rewardName: string; rewardEmoji: string; rewardImageUri?: string;
+  rewardDescription?: string; frequencyType: "weekly" | "monthly";
+  goal: number; currentCount: number; progress: number;
+  isUnlocked: boolean; claimedAt?: string; periodKey: string;
+};
+type ClaimRecord = { habitId: string; periodKey: string; claimedAt: string };
+type Particle = { id: number; x: Animated.Value; y: Animated.Value; rot: Animated.Value; color: string; size: number };
+
+const CLAIMED_KEY = "habit_reward_claims_v1";
+const CONFETTI_COLORS = ["#22C55E", "#F59E0B", "#3B82F6", "#EC4899", "#A855F7", "#EF4444", "#FBBF24"];
+
+function getPeriodKey(frequencyType: "weekly" | "monthly"): string {
+  const now = new Date();
+  if (frequencyType === "monthly") return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function ProgressBar({ progress, color }: { progress: number; color: string }) {
+  const pct = Math.min(Math.max(progress, 0), 1);
+  return (
+    <View style={rStyles.progressTrack}>
+      <View style={[rStyles.progressFill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
+    </View>
+  );
+}
+
+function HabitRewardCard({ item, onClaim, onUnclaim, colors }: {
+  item: HabitReward; onClaim: () => void; onUnclaim: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const accent = item.isUnlocked ? "#22C55E" : colors.primary;
+  const isClaimed = !!item.claimedAt;
+  const remaining = Math.max(0, item.goal - item.currentCount);
+  return (
+    <View style={[rStyles.card, { backgroundColor: colors.surface, borderColor: isClaimed ? "#22C55E" : item.isUnlocked ? "#22C55E" : colors.border, borderWidth: isClaimed || item.isUnlocked ? 1.5 : 1 }]}>
+      <View style={rStyles.cardHeader}>
+        <View style={[rStyles.emojiCircle, { backgroundColor: accent + "22", overflow: 'hidden' }]}>
+          {item.rewardImageUri ? (
+            <Image source={{ uri: item.rewardImageUri }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+          ) : (
+            <Text style={rStyles.emojiText}>{item.rewardEmoji}</Text>
+          )}
+        </View>
+        <View style={rStyles.cardTitleBlock}>
+          <Text style={[rStyles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{item.rewardName}</Text>
+          <Text style={[rStyles.cardHabit, { color: colors.muted }]} numberOfLines={1}>{item.habitName} · {item.frequencyType === "weekly" ? "Weekly" : "Monthly"} goal</Text>
+        </View>
+        {isClaimed ? (
+          <View style={[rStyles.badge, { backgroundColor: "#22C55E22" }]}>
+            <Text style={[rStyles.badgeText, { color: "#22C55E" }]}>Claimed ✓</Text>
+          </View>
+        ) : item.isUnlocked ? (
+          <View style={[rStyles.badge, { backgroundColor: "#22C55E22" }]}>
+            <Text style={[rStyles.badgeText, { color: "#22C55E" }]}>Unlocked!</Text>
+          </View>
+        ) : null}
+      </View>
+      {item.rewardDescription ? <Text style={[rStyles.cardDesc, { color: colors.muted }]}>{item.rewardDescription}</Text> : null}
+      {!isClaimed && (
+        <View style={rStyles.progressSection}>
+          <ProgressBar progress={item.progress} color={accent} />
+          <View style={rStyles.progressLabels}>
+            <Text style={[rStyles.progressCount, { color: accent }]}>{item.currentCount}/{item.goal} {item.frequencyType === "weekly" ? "days this week" : "days this month"}</Text>
+            {!item.isUnlocked && <Text style={[rStyles.progressRemaining, { color: colors.muted }]}>{remaining} to go</Text>}
+          </View>
+        </View>
+      )}
+      {isClaimed ? (
+        <View style={rStyles.cardActions}>
+          <Pressable style={[rStyles.actionBtn, { borderColor: colors.border }]} onPress={onUnclaim}>
+            <Text style={[rStyles.actionBtnText, { color: colors.muted }]}>Unclaim</Text>
+          </Pressable>
+        </View>
+      ) : item.isUnlocked ? (
+        <View style={rStyles.cardActions}>
+          <Pressable style={[rStyles.claimBtn, { backgroundColor: "#22C55E" }]} onPress={onClaim}>
+            <Text style={rStyles.claimBtnText}>🎉 Claim Reward</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function RewardsTab() {
+  const colors = useColors();
+  const { habits, checkIns } = useApp();
+  const [claims, setClaims] = React.useState<ClaimRecord[]>([]);
+  const [filter, setFilter] = React.useState<"all" | "unlocked" | "claimed">("all");
+  const [particles, setParticles] = React.useState<Particle[]>([]);
+  const particleIdRef = React.useRef(0);
+
+  React.useEffect(() => {
+    AsyncStorage.getItem(CLAIMED_KEY).then((raw) => {
+      if (raw) { try { setClaims(JSON.parse(raw)); } catch { /* ignore */ } }
+    });
+  }, []);
+
+  async function saveClaims(updated: ClaimRecord[]) {
+    setClaims(updated);
+    await AsyncStorage.setItem(CLAIMED_KEY, JSON.stringify(updated));
+  }
+
+  const rewardItems: HabitReward[] = React.useMemo(() => {
+    return habits.filter((h) => h.isActive && h.rewardName && (h.weeklyGoal || h.monthlyGoal)).map((h) => {
+      const freqType = h.frequencyType ?? "weekly";
+      const goal = freqType === "monthly" ? (h.monthlyGoal ?? 0) : (h.weeklyGoal ?? 0);
+      const periodKey = getPeriodKey(freqType);
+      const now = new Date();
+      let currentCount = 0;
+      if (freqType === "weekly") {
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+        startOfWeek.setHours(0, 0, 0, 0);
+        currentCount = checkIns.filter((c) => { if (c.habitId !== h.id) return false; const d = new Date(c.date); return d >= startOfWeek && c.rating === "green"; }).length;
+      } else {
+        currentCount = checkIns.filter((c) => { if (c.habitId !== h.id) return false; const d = new Date(c.date); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && c.rating === "green"; }).length;
+      }
+      const isUnlocked = goal > 0 && currentCount >= goal;
+      const claimRecord = claims.find((c) => c.habitId === h.id && c.periodKey === periodKey);
+      return {
+        habitId: h.id, habitName: h.name, habitEmoji: h.emoji ?? "⭐",
+        rewardName: h.rewardName!, rewardEmoji: h.rewardEmoji ?? "🎁",
+        rewardImageUri: h.rewardImageUri, rewardDescription: h.rewardDescription,
+        frequencyType: freqType, goal, currentCount, progress: goal > 0 ? currentCount / goal : 0,
+        isUnlocked, claimedAt: claimRecord?.claimedAt, periodKey,
+      };
+    });
+  }, [habits, checkIns, claims]);
+
+  const filtered = React.useMemo(() => {
+    if (filter === "unlocked") return rewardItems.filter((r) => r.isUnlocked && !r.claimedAt);
+    if (filter === "claimed") return rewardItems.filter((r) => !!r.claimedAt);
+    return rewardItems;
+  }, [rewardItems, filter]);
+
+  const unlockedCount = rewardItems.filter((r) => r.isUnlocked && !r.claimedAt).length;
+  const claimedCount = rewardItems.filter((r) => !!r.claimedAt).length;
+
+  function launchConfetti() {
+    const { width: W, height: H } = Dimensions.get("window");
+    const newParticles: Particle[] = Array.from({ length: 40 }, (_, i) => {
+      const id = ++particleIdRef.current;
+      const x = new Animated.Value(Math.random() * W);
+      const y = new Animated.Value(-20);
+      const rot = new Animated.Value(0);
+      const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+      const size = 8 + Math.random() * 8;
+      Animated.parallel([
+        Animated.timing(y, { toValue: H + 40, duration: 1500 + Math.random() * 1000, useNativeDriver: true }),
+        Animated.timing(rot, { toValue: 720 + Math.random() * 360, duration: 1500 + Math.random() * 1000, useNativeDriver: true }),
+      ]).start(() => setParticles((prev) => prev.filter((p) => p.id !== id)));
+      return { id, x, y, rot, color, size };
+    });
+    setParticles((prev) => [...prev, ...newParticles]);
+  }
+
+  async function handleClaim(item: HabitReward) {
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    launchConfetti();
+    const updated = [...claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey)), { habitId: item.habitId, periodKey: item.periodKey, claimedAt: new Date().toISOString() }];
+    await saveClaims(updated);
+  }
+
+  async function handleUnclaim(item: HabitReward) {
+    Alert.alert("Unclaim Reward", "Are you sure you want to unclaim this reward?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Unclaim", style: "destructive", onPress: async () => { const updated = claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey)); await saveClaims(updated); } },
+    ]);
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Confetti overlay */}
+      {particles.map((p) => (
+        <Animated.View key={p.id} pointerEvents="none" style={{ position: "absolute", left: p.x, width: p.size, height: p.size, borderRadius: 2, backgroundColor: p.color, zIndex: 9999, transform: [{ translateY: p.y }, { rotate: p.rot.interpolate({ inputRange: [0, 720], outputRange: ["0deg", "720deg"] }) }] }} />
+      ))}
+      {rewardItems.length > 0 && (
+        <View style={[rStyles.filterRow, { borderBottomColor: colors.border }]}>
+          {(["all", "unlocked", "claimed"] as const).map((f) => (
+            <Pressable key={f} style={[rStyles.filterTab, filter === f && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]} onPress={() => setFilter(f)}>
+              <Text style={[rStyles.filterTabText, { color: filter === f ? colors.primary : colors.muted }]}>
+                {f === "all" ? `All (${rewardItems.length})` : f === "unlocked" ? `Unlocked (${unlockedCount})` : `Claimed (${claimedCount})`}
               </Text>
             </Pressable>
-            {dangerZoneExpanded && (
-              <View style={[styles.section, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', marginTop: 0 }]}>
-                <View style={[styles.sectionHeader, { backgroundColor: '#FEE2E2' }]}>
-                  <Text style={{ fontSize: 18 }}>⚠️</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#991B1B' }}>Delete Account & All Data</Text>
-                    <Text style={{ fontSize: 12, color: '#B91C1C', marginTop: 2, lineHeight: 17 }}>
-                      This permanently deletes your account, all habits, goals, check-ins, and progress. This action cannot be undone.
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: '#FCA5A5' }}>
-                  <Text style={{ fontSize: 13, color: '#7F1D1D', marginBottom: 8, fontWeight: '600' }}>
-                    Type DELETE to confirm:
-                  </Text>
-                  <TextInput
-                    value={deleteConfirmText}
-                    onChangeText={setDeleteConfirmText}
-                    placeholder="DELETE"
-                    placeholderTextColor="#FCA5A5"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    returnKeyType="done"
-                    style={{
-                      borderWidth: 1.5,
-                      borderColor: deleteConfirmText.trim().toUpperCase() === 'DELETE' ? '#EF4444' : '#FCA5A5',
-                      borderRadius: 10,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      fontSize: 15,
-                      fontWeight: '700',
-                      color: '#991B1B',
-                      backgroundColor: '#FFF',
-                      letterSpacing: 2,
-                    }}
-                  />
-                </View>
-                <Pressable
-                  disabled={deleteConfirmText.trim().toUpperCase() !== 'DELETE' || isDeleting}
-                  onPress={async () => {
-                    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') return;
-                    try {
-                      setIsDeleting(true);
-                      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                      await deleteAccountMutation.mutateAsync();
-                      await Auth.removeSessionToken();
-                      await Auth.clearUserInfo();
-                      await clearLocalData();
-                      router.replace('/login');
-                    } catch (err) {
-                      console.error('[DeleteAccount] Error:', err);
-                      setIsDeleting(false);
-                      Alert.alert('Error', 'Failed to delete account. Please try again.');
-                    }
-                  }}
-                  style={({ pressed }) => ({
-                    margin: 16,
-                    marginTop: 0,
-                    paddingVertical: 14,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    backgroundColor: deleteConfirmText.trim().toUpperCase() === 'DELETE' ? '#EF4444' : '#FCA5A5',
-                    opacity: pressed ? 0.85 : 1,
-                  })}
-                >
-                  {isDeleting ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Permanently Delete My Account</Text>
-                  )}
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Global Voice Picker */}
-        <VoicePickerSection />
-
-        {/* Voice Journal */}
-        <VoiceJournalSection />
-
-        {/* Morning Practice */}
-        <MorningPracticeSection />
-
-        {/* Jack Alarm Device Pairing */}
-        {isAuthenticated && (
-          <DevicePairingSection colors={colors} />
-        )}
-
-        {/* Panel Settings */}
-        {isAuthenticated && (
-          <Pressable
-            onPress={() => router.push('/panel-settings' as never)}
-            style={({ pressed }) => [{
-              flexDirection: 'row', alignItems: 'center', gap: 12,
-              backgroundColor: colors.surface,
-              borderRadius: 16, borderWidth: 1, borderColor: colors.border,
-              padding: 16, marginBottom: 12, opacity: pressed ? 0.8 : 1,
-            }]}
-          >
-            <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22' }}>
-              <IconSymbol name="gearshape.fill" size={18} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>Panel Settings</Text>
-              <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Audio, voice, Low EMF mode</Text>
-            </View>
-            <IconSymbol name="chevron.right" size={18} color={colors.muted} />
-          </Pressable>
-        )}
-
-        {/* Info */}
-        <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <IconSymbol name="info.circle" size={18} color={colors.muted} />
-          <Text style={[styles.infoText, { color: colors.muted }]}>
-            When the alarm fires, open the app to check off what you accomplished the previous day.
-          </Text>
+          ))}
         </View>
+      )}
+      {rewardItems.length === 0 ? (
+        <View style={rStyles.emptyState}>
+          <Text style={rStyles.emptyEmoji}>🎁</Text>
+          <Text style={[rStyles.emptyTitle, { color: colors.foreground }]}>No rewards yet</Text>
+          <Text style={[rStyles.emptyDesc, { color: colors.muted }]}>When you create a habit and set a weekly or monthly goal, your reward will appear here automatically.</Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={rStyles.emptyState}>
+          <Text style={rStyles.emptyEmoji}>{filter === "claimed" ? "🏆" : "⏳"}</Text>
+          <Text style={[rStyles.emptyTitle, { color: colors.foreground }]}>{filter === "claimed" ? "No claimed rewards yet" : "No unlocked rewards yet"}</Text>
+          <Text style={[rStyles.emptyDesc, { color: colors.muted }]}>{filter === "claimed" ? "Claim a reward once you've hit your goal." : "Keep going — hit your habit goal to unlock your reward."}</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => `${item.habitId}-${item.periodKey}`}
+          contentContainerStyle={rStyles.list}
+          renderItem={({ item }) => <HabitRewardCard item={item} onClaim={() => handleClaim(item)} onUnclaim={() => handleUnclaim(item)} colors={colors} />}
+        />
+      )}
+    </View>
+  );
+}
 
-        {/* Privacy & Legal links — required for App Store */}
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 8, marginBottom: 4 }}>
+// ─── Main "You" Screen ────────────────────────────────────────────────────────
+type YouTab = "analytics" | "vision" | "rewards";
+
+export default function YouScreen() {
+  const colors = useColors();
+  const isCalm = useIsCalm();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<YouTab>("analytics");
+
+  const bgColor = isCalm ? '#0D1135' : colors.background;
+  const headerBorderColor = isCalm ? '#252D6E' : colors.border;
+  const tabActiveColor = isCalm ? '#F5A623' : colors.primary;
+  const tabInactiveColor = isCalm ? '#8B9CC8' : colors.muted;
+
+  const TABS: { key: YouTab; label: string }[] = [
+    { key: "analytics", label: "Analytics" },
+    { key: "vision", label: "Vision Board" },
+    { key: "rewards", label: "Rewards" },
+  ];
+
+  return (
+    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
+      {/* Header */}
+      <View style={[youStyles.header, { borderBottomColor: headerBorderColor, backgroundColor: bgColor }]}>
+        <View style={{ width: 40 }} />
+        <Text style={[youStyles.headerTitle, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>You</Text>
+        <Pressable
+          onPress={() => {
+            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/you-settings' as never);
+          }}
+          style={({ pressed }) => [youStyles.gearBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <IconSymbol name="gearshape.fill" size={22} color={isCalm ? '#8B9CC8' : colors.muted} />
+        </Pressable>
+      </View>
+
+      {/* Sub-tab bar */}
+      <View style={[youStyles.tabBar, { borderBottomColor: headerBorderColor, backgroundColor: bgColor }]}>
+        {TABS.map((tab) => (
           <Pressable
-            onPress={() => WebBrowser.openBrowserAsync('https://jackalarm.com/privacy')}
-            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            key={tab.key}
+            style={[youStyles.tab, activeTab === tab.key && { borderBottomColor: tabActiveColor, borderBottomWidth: 2 }]}
+            onPress={() => {
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab(tab.key);
+            }}
           >
-            <Text style={{ fontSize: 12, color: colors.muted, textDecorationLine: 'underline' }}>Privacy Policy</Text>
+            <Text style={[youStyles.tabText, { color: activeTab === tab.key ? tabActiveColor : tabInactiveColor, fontWeight: activeTab === tab.key ? '700' : '500' }]}>
+              {tab.label}
+            </Text>
           </Pressable>
-          <Pressable
-            onPress={() => WebBrowser.openBrowserAsync('https://jackalarm.com/terms')}
-            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-          >
-            <Text style={{ fontSize: 12, color: colors.muted, textDecorationLine: 'underline' }}>Terms of Service</Text>
-          </Pressable>
-        </View>
-        <View style={{ height: 30 }} />
-        </View>
-      </ScrollView>
+        ))}
+      </View>
+
+      {/* Content */}
+      <View style={{ flex: 1, backgroundColor: bgColor }}>
+        {activeTab === "analytics" && <AnalyticsTab />}
+        {activeTab === "vision" && <VisionBoardTab />}
+        {activeTab === "rewards" && <RewardsTab />}
+      </View>
     </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 40 },
-  demoCard: { borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 20 },
-  header: { marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
-  section: { borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12 },
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 16,
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const youStyles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 0.5,
   },
-  sectionIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  sectionTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
-  // Theme selector
-  themeRow: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 16, borderTopWidth: 1,
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    textAlign: "center",
   },
-  themeOption: {
-    width: '47%', alignItems: 'center', gap: 8,
-    paddingVertical: 14, paddingHorizontal: 10,
-    borderRadius: 14, borderWidth: 1.5,
+  gearBtn: {
+    width: 40,
+    alignItems: "flex-end",
+    justifyContent: "center",
   },
-  themeSwatch: {
-    width: 36, height: 36, borderRadius: 18, borderWidth: 1,
+  tabBar: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
   },
-  themeLabel: {
-    fontSize: 13, fontWeight: '600',
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
   },
-  // Alarm
-  timeDisplay: { alignItems: 'center', paddingVertical: 16, borderTopWidth: 1 },
-  timeDisplayText: { fontSize: 42, fontWeight: '700', letterSpacing: -1 },
-  pickerSection: { paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: 1 },
-  wheelPickerSection: { paddingVertical: 16, paddingHorizontal: 16, borderTopWidth: 1, alignItems: 'center' },
-  pickerLabel: { fontSize: 12, fontWeight: '600', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  pickerRow: { gap: 8, paddingRight: 8 },
-  pickerItem: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 10, backgroundColor: 'transparent',
+  tabText: {
+    fontSize: 13,
   },
-  pickerItemText: { fontSize: 14, fontWeight: '600' },
-  daysRow: { flexDirection: 'row', gap: 6 },
-  dayBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-  },
-  dayBtnText: { fontSize: 12, fontWeight: '700' },
-  saveBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 14, paddingVertical: 16,
-  },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  habitCountBadge: { fontSize: 13 },
-  manageHabitsBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1,
-  },
-  manageHabitsBtnText: { fontSize: 15, fontWeight: '600' },
-  infoCard: {
-    flexDirection: 'row', gap: 10, alignItems: 'flex-start',
-    borderRadius: 12, padding: 14, borderWidth: 1, marginTop: 8,
-  },
-  infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  activeSwatchSmall: { width: 16, height: 16, borderRadius: 8, borderWidth: 1, marginRight: 4 },
-  // Sound picker (legacy, kept for soundEmoji)
-  soundPickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  soundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  soundOption: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 9,
-    borderRadius: 12, borderWidth: 1.5,
-    minWidth: '30%',
-  },
-  soundEmoji: { fontSize: 18 },
-  soundLabel: { fontSize: 13, fontWeight: '600', flex: 1 },
-  // Meditation picker
-  meditationSubtitle: { fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 2 },
-  meditationOption: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 12, borderRadius: 12, borderWidth: 1.5,
-  },
-  meditationLabel: { fontSize: 14, fontWeight: '600' },
-  meditationDesc: { fontSize: 12, marginTop: 1 },
-  // Dropdown rows
-  dropdownRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1,
-  },
-  dropdownRowLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  dropdownRowValue: { fontSize: 15, fontWeight: '600', marginTop: 2 },
-  dropdownContent: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 4 },
-  dropdownItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 12, borderRadius: 0,
-  },
-  dropdownItemText: { fontSize: 15, fontWeight: '500' },
-  previewBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, minWidth: 64, alignItems: 'center', justifyContent: 'center' },
-  durationChipRow: { paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 8 },
-  durationChipLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 },
-  durationChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+});
+
+const aStyles = StyleSheet.create({
+  scroll: { padding: 16, paddingBottom: 48, gap: 12 },
+  goalList: { gap: 12, marginBottom: 16 },
+  goalCard: { borderRadius: 16, borderWidth: 0.5, overflow: 'hidden' },
+  goalCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  goalCardTitle: { fontSize: 16, fontWeight: '700' },
+  goalCardLifeArea: { fontSize: 12, fontWeight: '500', marginTop: 1 },
+  goalCardDivider: { height: 1, marginHorizontal: 14 },
+  deadlineTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
+  deadlineText: { fontSize: 11, fontWeight: '600' },
+  noHabitsText: { fontSize: 13, padding: 14, fontStyle: 'italic' },
+  habitRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 0.5, gap: 10 },
+  habitName: { flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 18 },
+  habitRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ringTriple: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ringDivider: { width: 1, height: 32, opacity: 0.4 },
+  noGoalText: { fontSize: 12, fontStyle: 'italic' },
+  emptyState: { borderWidth: 1, borderRadius: 14, borderStyle: 'dashed', padding: 24, alignItems: 'center' },
+  emptyText: { fontSize: 14, textAlign: 'center' },
+  manageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: 14, borderWidth: 0.5, marginTop: 4 },
+  manageBtnText: { fontSize: 15, fontWeight: '600' },
+  legendOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  legendModal: { borderRadius: 16, borderWidth: 0.5, padding: 20, width: '100%', gap: 10 },
+  legendModalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendText: { fontSize: 13 },
+  legendHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
+  legendInfoBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  legendInfoBtnText: { fontSize: 13, fontWeight: '600' },
+});
+
+const vStyles = StyleSheet.create({
+  scroll: { padding: PADDING, paddingBottom: 40 },
+  pageSubtitle: { fontSize: 14, marginBottom: 20 },
+  catSection: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: "hidden", paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
+  catHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  catLabel: { fontSize: 16, fontWeight: "700" },
+  visionDeadline: { fontSize: 12, marginTop: 1 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  addBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  addBtnText: { fontSize: 12, fontWeight: "600" },
+  dotRow: { position: "absolute", bottom: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 4 },
+  dot: { height: 6, borderRadius: 3 },
+  motivationsPreview: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, gap: 4 },
+  motiveSectionLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 },
+  motiveBullet: { fontSize: 14, lineHeight: 20 },
+  motiveText: { fontSize: 14, lineHeight: 20, flex: 1 },
+  moreText: { fontSize: 12, fontWeight: "600", marginTop: 4 },
+  emptyText: { fontSize: 14, fontWeight: "600" },
+});
+
+const dStyles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1 },
+  headerTitle: { flex: 1, fontSize: 18, fontWeight: "700" },
+  scroll: { padding: 20, paddingBottom: 60 },
+  sectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 10, marginTop: 6 },
+  emptyMotive: { fontSize: 14, fontStyle: "italic", marginBottom: 12 },
+  motiveRow: { flexDirection: "row", alignItems: "center", borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, gap: 6 },
+  motiveBullet: { fontSize: 16, lineHeight: 22 },
+  motiveText: { fontSize: 15, lineHeight: 22, flex: 1 },
+  motiveEditInput: { flex: 1, fontSize: 15, lineHeight: 22, borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, minHeight: 36 },
+  deleteBtn: { padding: 6, borderRadius: 8 },
+  addMotiveRow: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingLeft: 12, paddingRight: 6, paddingVertical: 6, marginBottom: 20, gap: 6 },
+  addMotiveInput: { flex: 1, fontSize: 15, minHeight: 36 },
+  addMotiveBtn: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  photoHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  addPhotoBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  addPhotoBtnText: { fontSize: 12, fontWeight: "600" },
+  thumbStrip: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  thumbWrap: { position: "relative" },
+  thumb: { width: 80, height: 80, borderRadius: 10 },
+  thumbDelete: { position: "absolute", top: -6, right: -6, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12 },
+});
+
+const rStyles = StyleSheet.create({
+  filterRow: { flexDirection: "row", paddingHorizontal: 20, borderBottomWidth: 1, marginBottom: 4 },
+  filterTab: { paddingVertical: 10, paddingHorizontal: 4, marginRight: 20, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  filterTabText: { fontSize: 14, fontWeight: "500" },
+  list: { padding: 16, gap: 12, paddingBottom: 40 },
+  card: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 10 },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  emojiCircle: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  emojiText: { fontSize: 22 },
+  cardTitleBlock: { flex: 1 },
+  cardTitle: { fontSize: 16, fontWeight: "600" },
+  cardHabit: { fontSize: 12, marginTop: 2 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  badgeText: { fontSize: 11, fontWeight: "600" },
+  cardDesc: { fontSize: 13, lineHeight: 18 },
+  progressSection: { gap: 6 },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: "#E5E7EB", overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 3 },
+  progressLabels: { flexDirection: "row", justifyContent: "space-between" },
+  progressCount: { fontSize: 12, fontWeight: "600" },
+  progressRemaining: { fontSize: 12 },
+  cardActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  claimBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  claimBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  actionBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
+  actionBtnText: { fontSize: 13, fontWeight: "500" },
+  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 12 },
+  emptyEmoji: { fontSize: 52 },
+  emptyTitle: { fontSize: 20, fontWeight: "700", textAlign: "center" },
+  emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20 },
 });
