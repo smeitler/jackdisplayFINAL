@@ -1240,3 +1240,6 @@
 - [x] Explore tab: shows all tracks; first favorited track pinned at top with a star/pin indicator
 - [x] Favorites tab: shows all tracks the user has starred, persisted via AsyncStorage per category
 - [x] Heart/star button on each track row to toggle favorite; haptic feedback on toggle
+- [x] Full-screen audio player modal: opens when any wellness track is tapped
+- [x] Full-screen player: large category icon, track title/artist, big play/pause button, progress bar with time, prev/next track controls
+- [x] Track list rows show play indicator (waveform/dot) when that track is active; tapping again opens the full-screen player

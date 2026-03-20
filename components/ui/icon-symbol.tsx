@@ -97,6 +97,8 @@ const MAPPING: Record<string, MaterialIconName> = {
   "book.closed.fill": "book",
   "diamond.fill": "diamond",
   "pause.fill": "pause",
+  "backward.end.fill": "skip-previous",
+  "forward.end.fill": "skip-next",
   "arrow.counterclockwise": "replay",
   "self.improvement": "self-improvement",
   "fast.forward": "fast-forward",
