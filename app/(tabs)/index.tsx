@@ -1,5 +1,5 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image } from "react-native";
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image, FlatList } from "react-native";
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
 import { useWindowDimensions } from "react-native";
 import { Animated } from "react-native";
 import { useRouter } from "expo-router";
@@ -634,6 +634,50 @@ export default function HomeScreen() {
   } = useApp();
   const [showLegend, setShowLegend] = useState(false);
   const [showMissedDays, setShowMissedDays] = useState(false);
+  const [widgetIds, setWidgetIds] = useState<string[]>([]);
+  const [editingWidgets, setEditingWidgets] = useState(false);
+  const [widgetLibraryOpen, setWidgetLibraryOpen] = useState(false);
+
+  const WIDGET_STORAGE_KEY = 'daycheck:dashboard:widgets:v1';
+  const DEFAULT_WIDGETS: string[] = ['alarm', 'goals', 'manage_habits', 'daily_quote'];
+
+  // Load widget layout from storage
+  useEffect(() => {
+    AsyncStorage.getItem(WIDGET_STORAGE_KEY).then((raw) => {
+      if (raw) {
+        try { setWidgetIds(JSON.parse(raw)); } catch { setWidgetIds(DEFAULT_WIDGETS); }
+      } else {
+        setWidgetIds(DEFAULT_WIDGETS);
+      }
+    });
+  }, []);
+
+  async function saveWidgets(ids: string[]) {
+    setWidgetIds(ids);
+    await AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(ids));
+  }
+
+  function removeWidget(id: string) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    saveWidgets(widgetIds.filter((w) => w !== id));
+  }
+
+  function addWidget(id: string) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    saveWidgets([...widgetIds, id]);
+    setWidgetLibraryOpen(false);
+  }
+
+  function moveWidget(id: string, dir: 'up' | 'down') {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const idx = widgetIds.indexOf(id);
+    if (idx < 0) return;
+    const next = [...widgetIds];
+    const swap = dir === 'up' ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= next.length) return;
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    saveWidgets(next);
+  }
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
@@ -800,9 +844,6 @@ export default function HomeScreen() {
             </View>
           </View>}
 
-          {/* ── Quick Access Pill Bar ── */}
-          <QuickAccessPills isCalm={isCalm} colors={colors} />
-
           {/* ── Stats row ── */}
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
@@ -817,8 +858,8 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── Today's Focus Card ── */}
-          {(isPendingCheckIn || missedDates.length > 0) ? (
+          {/* ── Today's Focus Card (only shown when there's something to do) ── */}
+          {(isPendingCheckIn || missedDates.length > 0) && (
             <Pressable
               onPress={() => {
                 if (missedDates.length > 0) {
@@ -854,30 +895,6 @@ export default function HomeScreen() {
                 size={18}
                 color={isPendingCheckIn ? 'rgba(255,255,255,0.8)' : '#F59E0B'}
               />
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => handleCheckIn(yesterday)}
-              style={({ pressed }) => [styles.allCaughtUpCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
-            >
-              <View style={styles.allCaughtUpLeft}>
-                <View style={[styles.allCaughtUpIconWrap, { backgroundColor: '#22C55E20' }]}>
-                  <IconSymbol name="checkmark.circle.fill" size={22} color="#22C55E" />
-                </View>
-                <View>
-                  <Text style={[styles.allCaughtUpTitle, { color: colors.foreground }]}>All caught up</Text>
-                  <Text style={[styles.allCaughtUpSub, { color: colors.muted }]}>Tap to edit yesterday's check-in</Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {streak > 0 && (
-                  <View style={styles.allCaughtUpStreak}>
-                    <IconSymbol name="flame.fill" size={14} color="#FF6B35" />
-                    <Text style={styles.allCaughtUpStreakNum}>{streak}</Text>
-                  </View>
-                )}
-                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-              </View>
             </Pressable>
           )}
 
@@ -923,93 +940,96 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          {/* ── Section title ── */}
-          <View style={styles.sectionRow}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Goals</Text>
-            <Pressable
-              onPress={() => setShowLegend(true)}
-              style={[styles.legendInfoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            >
-              <Text style={[styles.legendInfoBtnText, { color: colors.muted }]}>?</Text>
-            </Pressable>
+          {/* ── Customizable Widgets ── */}
+          <WidgetGrid
+            widgetIds={widgetIds}
+            editing={editingWidgets}
+            colors={colors}
+            isCalm={isCalm}
+            streak={streak}
+            totalDaysLogged={totalDaysLogged}
+            categories={categories}
+            sortedCategories={sortedCategories}
+            activeHabits={activeHabits}
+            getCategoryRate={getCategoryRate}
+            rateRange={rateRange}
+            router={router}
+            onRemove={removeWidget}
+            onMoveUp={(id) => moveWidget(id, 'up')}
+            onMoveDown={(id) => moveWidget(id, 'down')}
+          />
+
+          {/* ── Edit Dashboard button ── */}
+          <View style={styles.editDashRow}>
+            {editingWidgets ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => { setWidgetLibraryOpen(true); }}
+                  style={[styles.editDashBtn, { backgroundColor: colors.primary + '22', borderColor: colors.primary + '55' }]}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol name="plus" size={16} color={colors.primary} />
+                  <Text style={[styles.editDashBtnText, { color: colors.primary }]}>Add Widget</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setEditingWidgets(false)}
+                  style={[styles.editDashBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol name="checkmark" size={16} color={colors.foreground} />
+                  <Text style={[styles.editDashBtnText, { color: colors.foreground }]}>Done</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setEditingWidgets(true)}
+                style={[styles.editDashBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                activeOpacity={0.8}
+              >
+                <IconSymbol name="pencil" size={16} color={colors.muted} />
+                <Text style={[styles.editDashBtnText, { color: colors.muted }]}>Edit Dashboard</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* ── Legend modal ── */}
-          <Modal visible={showLegend} transparent animationType="fade" onRequestClose={() => setShowLegend(false)}>
-            <Pressable style={styles.legendOverlay} onPress={() => setShowLegend(false)}>
-              <View style={[styles.legendModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.legendModalTitle, { color: colors.foreground }]}>Ring Colors</Text>
-                {(['#22C55E', '#F59E0B', '#EF4444'] as const).map((c, i) => (
-                  <View key={c} style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: c }]} />
-                    <Text style={[styles.legendText, { color: colors.muted }]}>
-                      {i === 0 ? 'Hit — goal reached' : i === 1 ? 'On Track — ≥60% of goal' : 'Behind — <60% of goal'}
-                    </Text>
-                  </View>
-                ))}
-                <View style={styles.legendItem}>
-                  <IconSymbol name="crown.fill" size={11} color="#FFD700" />
-                  <Text style={[styles.legendText, { color: colors.muted }]}>Last period hit</Text>
-                </View>
-                <Text style={[styles.legendHint, { color: colors.muted }]}>
-                  Rings: left = 2 periods ago, middle = last period, right = current period
-                </Text>
-              </View>
-            </Pressable>
-          </Modal>
-
-          {/* ── Goal cards ── */}
-          {categories.length === 0 ? (
-            <View style={[styles.emptyState, { borderColor: colors.border }]}>
-              <Text style={[styles.emptyText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
-            </View>
-          ) : (
-            <View style={styles.goalList}>
-              {sortedCategories.map((cat) => {
-                const catHabits = activeHabits.filter((h) => h.category === cat.id);
-                return (
-                  <GoalCard
-                    key={cat.id}
-                    cat={cat}
-                    habits={catHabits}
-                    rate={getCategoryRate(cat.id, rateRange)}
-                    colors={colors}
-                    onPressGoal={() => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push((`/category-detail?categoryId=${cat.id}`) as never);
-                    }}
-                    onPressHabit={(habitId) => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push((`/habit-detail?habitId=${habitId}`) as never);
-                    }}
-                    isCalm={isCalm}
-                  />
-                );
-              })}
-            </View>
-          )}
-
-          {/* ── Daily quote ── */}
-          {categories.length > 0 && (
-            <View style={styles.quoteBlock}>
-              <Text style={[styles.quoteText, { color: colors.muted }]}>"{getDailyQuote()}"</Text>
-            </View>
-          )}
-
-          {/* ── Manage habits ── */}
-          <Pressable
-            onPress={() => router.push('/habits' as never)}
-            style={({ pressed }) => [
-              styles.manageBtn,
-              { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
-            ]}
-          >
-            <IconSymbol name="list.bullet" size={18} color={colors.primary} />
-            <Text style={[styles.manageBtnText, { color: colors.foreground }]}>Manage Habits & Goals</Text>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </Pressable>
-
           <View style={{ height: 32 }} />
+
+          {/* ── Widget Library Modal ── */}
+          <Modal visible={widgetLibraryOpen} transparent animationType="slide" onRequestClose={() => setWidgetLibraryOpen(false)}>
+            <Pressable style={styles.legendOverlay} onPress={() => setWidgetLibraryOpen(false)} />
+            <View style={[styles.widgetLibrarySheet, { backgroundColor: isCalm ? '#0D1135' : colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.missedDaysHandle, { backgroundColor: colors.muted + '55' }]} />
+              <Text style={[styles.widgetLibraryTitle, { color: colors.foreground }]}>Add Widget</Text>
+              {ALL_WIDGETS.filter((w) => !widgetIds.includes(w.id)).length === 0 ? (
+                <Text style={[styles.emptyText, { color: colors.muted, textAlign: 'center', paddingVertical: 24 }]}>All widgets are already on your dashboard.</Text>
+              ) : (
+                ALL_WIDGETS.filter((w) => !widgetIds.includes(w.id)).map((w) => (
+                  <TouchableOpacity
+                    key={w.id}
+                    onPress={() => addWidget(w.id)}
+                    style={[styles.widgetLibraryRow, { borderColor: colors.border }]}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.widgetLibraryIcon, { backgroundColor: colors.primary + '18' }]}>
+                      <IconSymbol name={w.icon as any} size={20} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.widgetLibraryLabel, { color: colors.foreground }]}>{w.label}</Text>
+                      <Text style={[styles.widgetLibraryDesc, { color: colors.muted }]}>{w.desc}</Text>
+                    </View>
+                    <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+                  </TouchableOpacity>
+                ))
+              )}
+              <TouchableOpacity
+                onPress={() => setWidgetLibraryOpen(false)}
+                style={[styles.missedDaysClose, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.missedDaysCloseText, { color: colors.foreground }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
         </View>
       </ScrollView>
 
@@ -1027,6 +1047,191 @@ export default function HomeScreen() {
 
 // ─── Calendar helpers (mirrored from journal.tsx) ────────────────────────────
 const MONTH_NAMES_CAL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+// ─── Widget System ───────────────────────────────────────────────────────────
+const ALL_WIDGETS: { id: string; label: string; desc: string; icon: string }[] = [
+  { id: 'alarm',        label: 'Alarm',           desc: 'Your daily alarm time and schedule',    icon: 'alarm.fill' },
+  { id: 'goals',        label: 'Goals',           desc: 'Goal cards with habit progress rings',  icon: 'flag.fill' },
+  { id: 'manage_habits',label: 'Manage Habits',   desc: 'Quick link to manage habits & goals',   icon: 'list.bullet' },
+  { id: 'daily_quote',  label: 'Daily Quote',     desc: 'A motivational quote that rotates daily', icon: 'text.bubble.fill' },
+  { id: 'streak',       label: 'Streak Counter',  desc: 'Your current check-in streak',          icon: 'flame.fill' },
+  { id: 'days_logged',  label: 'Days Logged',     desc: 'Total days you have logged check-ins',  icon: 'calendar' },
+  { id: 'vision_board', label: 'Vision Board',    desc: 'Preview of your vision board images',   icon: 'photo.stack.fill' },
+  { id: 'rewards',      label: 'Rewards',         desc: 'Your reward progress and milestones',   icon: 'gift.fill' },
+];
+
+function WidgetGrid({
+  widgetIds, editing, colors, isCalm, streak, totalDaysLogged,
+  categories, sortedCategories, activeHabits, getCategoryRate, rateRange,
+  router, onRemove, onMoveUp, onMoveDown,
+}: {
+  widgetIds: string[];
+  editing: boolean;
+  colors: any;
+  isCalm: boolean;
+  streak: number;
+  totalDaysLogged: number;
+  categories: any[];
+  sortedCategories: any[];
+  activeHabits: any[];
+  getCategoryRate: (id: string, range: number) => number;
+  rateRange: number;
+  router: any;
+  onRemove: (id: string) => void;
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
+}) {
+  if (widgetIds.length === 0 && !editing) return null;
+
+  function renderWidget(id: string, idx: number) {
+    const wrapStyle = [
+      widgetStyles.widget,
+      editing && { borderColor: colors.primary + '55', borderWidth: 1.5 },
+    ];
+    const editControls = editing ? (
+      <View style={widgetStyles.editRow}>
+        <TouchableOpacity onPress={() => onMoveUp(id)} style={widgetStyles.editBtn} activeOpacity={0.7}>
+          <IconSymbol name="chevron.up" size={14} color={colors.muted} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onMoveDown(id)} style={widgetStyles.editBtn} activeOpacity={0.7}>
+          <IconSymbol name="chevron.down" size={14} color={colors.muted} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onRemove(id)} style={[widgetStyles.editBtn, { backgroundColor: '#EF444420' }]} activeOpacity={0.7}>
+          <IconSymbol name="xmark" size={14} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+    ) : null;
+
+    if (id === 'alarm') {
+      return null; // alarm is always shown above widgets
+    }
+    if (id === 'goals') {
+      return (
+        <View key={id} style={wrapStyle}>
+          {editControls}
+          <View style={widgetStyles.widgetHeader}>
+            <Text style={[widgetStyles.widgetTitle, { color: colors.foreground }]}>Goals</Text>
+          </View>
+          {categories.length === 0 ? (
+            <Text style={[widgetStyles.emptyText, { color: colors.muted }]}>No goals yet — add one in Manage Habits</Text>
+          ) : (
+            <View style={{ gap: 12 }}>
+              {sortedCategories.map((cat: any) => {
+                const catHabits = activeHabits.filter((h: any) => h.category === cat.id);
+                return (
+                  <GoalCard
+                    key={cat.id}
+                    cat={cat}
+                    habits={catHabits}
+                    rate={getCategoryRate(cat.id, rateRange)}
+                    colors={colors}
+                    onPressGoal={() => router.push(`/category-detail?categoryId=${cat.id}` as never)}
+                    onPressHabit={(habitId: string) => router.push(`/habit-detail?habitId=${habitId}` as never)}
+                    isCalm={isCalm}
+                  />
+                );
+              })}
+            </View>
+          )}
+        </View>
+      );
+    }
+    if (id === 'manage_habits') {
+      return (
+        <View key={id} style={wrapStyle}>
+          {editControls}
+          <Pressable
+            onPress={() => router.push('/habits' as never)}
+            style={({ pressed }) => [widgetStyles.manageRow, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <IconSymbol name="list.bullet" size={18} color={colors.primary} />
+            <Text style={[widgetStyles.manageText, { color: colors.foreground }]}>Manage Habits & Goals</Text>
+            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+          </Pressable>
+        </View>
+      );
+    }
+    if (id === 'daily_quote') {
+      return (
+        <View key={id} style={wrapStyle}>
+          {editControls}
+          <Text style={[widgetStyles.quoteText, { color: colors.muted }]}>"{getDailyQuote()}"</Text>
+        </View>
+      );
+    }
+    if (id === 'streak') {
+      return (
+        <View key={id} style={[wrapStyle, widgetStyles.statWidget, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+          {editControls}
+          <IconSymbol name="flame.fill" size={28} color="#FF6B35" />
+          <Text style={[widgetStyles.statValue, { color: colors.foreground }]}>{streak}</Text>
+          <Text style={[widgetStyles.statLabel, { color: colors.muted }]}>Streak</Text>
+        </View>
+      );
+    }
+    if (id === 'days_logged') {
+      return (
+        <View key={id} style={[wrapStyle, widgetStyles.statWidget, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+          {editControls}
+          <IconSymbol name="calendar" size={28} color={isCalm ? '#F5A623' : colors.primary} />
+          <Text style={[widgetStyles.statValue, { color: colors.foreground }]}>{totalDaysLogged}</Text>
+          <Text style={[widgetStyles.statLabel, { color: colors.muted }]}>Days Logged</Text>
+        </View>
+      );
+    }
+    if (id === 'vision_board') {
+      return (
+        <View key={id} style={wrapStyle}>
+          {editControls}
+          <View style={widgetStyles.widgetHeader}>
+            <Text style={[widgetStyles.widgetTitle, { color: colors.foreground }]}>Vision Board</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/settings' as never)} activeOpacity={0.7}>
+              <Text style={[widgetStyles.viewAll, { color: colors.primary }]}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[widgetStyles.emptyText, { color: colors.muted }]}>Your vision board images appear here. Manage them in the You tab.</Text>
+        </View>
+      );
+    }
+    if (id === 'rewards') {
+      return (
+        <View key={id} style={wrapStyle}>
+          {editControls}
+          <View style={widgetStyles.widgetHeader}>
+            <Text style={[widgetStyles.widgetTitle, { color: colors.foreground }]}>Rewards</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/settings' as never)} activeOpacity={0.7}>
+              <Text style={[widgetStyles.viewAll, { color: colors.primary }]}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[widgetStyles.emptyText, { color: colors.muted }]}>Your reward milestones appear here. Manage them in the You tab.</Text>
+        </View>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <View style={{ gap: 14 }}>
+      {widgetIds.map((id, idx) => renderWidget(id, idx))}
+    </View>
+  );
+}
+
+const widgetStyles = StyleSheet.create({
+  widget: { borderRadius: 0, overflow: 'hidden' },
+  editRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 6, marginBottom: 8 },
+  editBtn: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(128,128,128,0.12)' },
+  widgetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  widgetTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
+  viewAll: { fontSize: 13, fontWeight: '600' },
+  emptyText: { fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+  statWidget: { borderRadius: 14, padding: 14, alignItems: 'center', gap: 4, borderWidth: 1 },
+  statValue: { fontSize: 28, fontWeight: '700' },
+  statLabel: { fontSize: 11, fontWeight: '500' },
+  manageRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, padding: 16, borderWidth: 1 },
+  manageText: { flex: 1, fontSize: 15, fontWeight: '600' },
+  quoteText: { fontSize: 13, fontStyle: 'italic', textAlign: 'center', lineHeight: 20, paddingVertical: 8 },
+});
+
 function calGetMonthDays(year: number, month: number): number { return new Date(year, month, 0).getDate(); }
 function calGetFirstDay(year: number, month: number): number { return new Date(year, month - 1, 1).getDay(); }
 function calGenerateMonths(sy: number, sm: number, ey: number, em: number): { year: number; month: number }[] {
@@ -1575,6 +1780,34 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 16, borderWidth: 1,
   },
   manageBtnText: { flex: 1, fontSize: 15, fontWeight: '600' },
+
+  // Edit dashboard row
+  editDashRow: { flexDirection: 'row', gap: 10, marginTop: 16, justifyContent: 'center' },
+  editDashBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 20, paddingHorizontal: 16, paddingVertical: 9,
+    borderWidth: 1,
+  },
+  editDashBtnText: { fontSize: 13, fontWeight: '600' },
+
+  // Widget library sheet
+  widgetLibrarySheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderWidth: 1, borderBottomWidth: 0,
+    padding: 24, paddingBottom: 48, gap: 12,
+    maxHeight: '80%',
+  },
+  widgetLibraryTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  widgetLibraryRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  widgetLibraryIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  widgetLibraryLabel: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  widgetLibraryDesc: { fontSize: 12 },
 
   // Modal overlay
   modalOverlay: {

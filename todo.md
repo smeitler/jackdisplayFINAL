@@ -1209,3 +1209,8 @@
 - [x] You screen: centered "You" title header with gear icon (Settings) top-right
 - [x] You screen: three horizontal sub-tabs — Analytics, Vision Board, Rewards
 - [x] Move analytics from home screen into the Analytics sub-tab of You screen
+- [x] Dashboard: remove Vision Board/Rewards/Analytics tab bar
+- [x] Dashboard: remove Goals section (analytics rings)
+- [x] Dashboard: remove "All caught up" banner
+- [x] Dashboard: keep only alarm card + streak + days-logged stats as default
+- [x] Dashboard: add customizable widget system (add/remove/reorder widgets from a library)
