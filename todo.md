@@ -1278,3 +1278,4 @@
 - [x] Fix Bold/Italic toggling — tapping Bold on already-bold text should remove the markers, not add more
 - [x] Fix setNativeProps cursor crash — use selection prop state instead
 - [x] Fix auto-heading: first line should visually appear large/bold without showing raw markdown syntax
+- [x] Replace two-box journal editor with single seamless TextInput (no Title/Body split)

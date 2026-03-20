@@ -2031,10 +2031,10 @@ function JournalCalendarView({ colors, onDayPress }: { colors: any; onDayPress?:
   );
 }
 // ─── RichTextEditor ────────────────────────────────────────────────────────────────────────────────────
-// Two-TextInput design: a large "title" input (first line) + a "body" input (remaining lines).
-// No raw markdown symbols are ever shown to the user while typing.
-// Bold/Italic are applied as invisible markers only visible in preview mode.
-// The body TextInput ref is exposed via inputRef so dvApplyFormat can target it.
+// Single seamless TextInput — no title/body split.
+// When focused: raw text is editable. When blurred: styled preview renders markdown visually.
+// The first line is always displayed larger/bolder in preview mode.
+// Bold/Italic markers (**text**, *text*) are only visible while editing; they render styled in preview.
 function RichTextEditor({
   value,
   onChange,
@@ -2050,55 +2050,52 @@ function RichTextEditor({
   bodySelection?: { start: number; end: number };
   colors: any;
 }) {
-  // Split value into title (first line) and body (rest)
-  const nlIdx = value.indexOf('\n');
-  const titleValue = nlIdx >= 0 ? value.slice(0, nlIdx) : value;
-  const bodyValue = nlIdx >= 0 ? value.slice(nlIdx + 1) : '';
+  const [isFocused, setIsFocused] = React.useState(false);
 
-  const handleTitleChange = React.useCallback((text: string) => {
-    // Title cannot contain newlines — pressing Enter moves focus to body
-    if (text.includes('\n')) {
-      // Move focus to body
-      inputRef.current?.focus();
-      return;
-    }
-    const newValue = bodyValue.length > 0 ? text + '\n' + bodyValue : text;
-    onChange(newValue);
-  }, [bodyValue, onChange, inputRef]);
-
-  const handleBodyChange = React.useCallback((text: string) => {
-    // Auto-continue bullet list on Enter
-    if (text.length > bodyValue.length && text[text.length - 1] === '\n') {
+  const handleChangeText = React.useCallback((text: string) => {
+    // Auto-continue bullet list when Enter is pressed on a bullet line
+    if (text.length > value.length && text[text.length - 1] === '\n') {
       const beforeNewline = text.slice(0, text.length - 1);
       const lastNL = beforeNewline.lastIndexOf('\n');
       const prevLine = beforeNewline.slice(lastNL + 1);
       if (prevLine.startsWith('- ') && prevLine.length > 2) {
-        const newValue = titleValue + '\n' + text + '- ';
-        onChange(newValue);
+        onChange(text + '- ');
         return;
       }
+      // Empty bullet line — remove the bullet and stop the list
       if (prevLine === '- ') {
-        const trimmed = beforeNewline.slice(0, lastNL + 1) + '\n';
-        onChange(titleValue + '\n' + trimmed);
+        onChange(beforeNewline.slice(0, lastNL + 1) + '\n');
         return;
       }
     }
-    onChange(titleValue + '\n' + text);
-  }, [titleValue, bodyValue, onChange]);
+    onChange(text);
+  }, [value, onChange]);
 
-  // Render body lines with inline markdown styling (bold/italic/bullet)
-  const renderBodyPreview = () => {
-    if (!bodyValue) return null;
-    return bodyValue.split('\n').map((line, idx) => {
+  // Render all lines with inline markdown styling for the preview
+  const renderPreview = () => {
+    if (!value) {
+      return <Text style={{ fontSize: 17, lineHeight: 26, color: colors.muted }}>Write your entry...</Text>;
+    }
+    return value.split('\n').map((line, idx) => {
+      const isFirstLine = idx === 0;
       const isBullet = line.startsWith('- ');
-      const lineContent = isBullet ? line.slice(2) : line;
+      const isHeading = line.startsWith('# ');
+      const lineContent = isBullet ? line.slice(2) : isHeading ? line.slice(2) : line;
       const segments = parseInlineMarkdown(lineContent, colors);
       return (
-        <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 2 }}>
+        <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: isFirstLine || isHeading ? 6 : 2 }}>
           {isBullet && (
-            <Text style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, marginRight: 6, marginTop: 1 }}>•</Text>
+            <Text style={{ fontSize: 16, lineHeight: 24, color: colors.foreground, marginRight: 6, marginTop: 1 }}>•</Text>
           )}
-          <Text style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, flex: 1 }}>
+          <Text
+            style={
+              isFirstLine
+                ? { fontSize: 20, fontWeight: '700', lineHeight: 28, color: colors.foreground, flex: 1 }
+                : isHeading
+                  ? { fontSize: 17, fontWeight: '700', lineHeight: 26, color: colors.foreground, flex: 1 }
+                  : { fontSize: 16, lineHeight: 24, color: colors.foreground, flex: 1 }
+            }
+          >
             {segments}
           </Text>
         </View>
@@ -2106,77 +2103,56 @@ function RichTextEditor({
     });
   };
 
-  const [bodyFocused, setBodyFocused] = React.useState(false);
-
   return (
     <View style={{ minHeight: 120 }}>
-      {/* Title row — always a large styled TextInput, no markdown symbols */}
-      <TextInput
-        value={titleValue}
-        onChangeText={handleTitleChange}
-        placeholder="Title..."
-        placeholderTextColor={colors.muted}
-        returnKeyType="next"
-        onSubmitEditing={() => { inputRef.current?.focus(); }}
-        blurOnSubmit={false}
-        style={{
-          fontSize: 22,
-          fontWeight: '700',
-          lineHeight: 30,
-          color: colors.foreground,
-          marginBottom: 6,
-          padding: 0,
-        }}
-      />
-      {/* Body: show styled preview when not focused, raw TextInput when focused */}
-      {bodyFocused ? (
+      {/* When focused: show the raw TextInput for editing */}
+      {isFocused && (
         <TextInput
           ref={inputRef}
-          value={bodyValue}
-          onChangeText={handleBodyChange}
+          value={value}
+          onChangeText={handleChangeText}
           onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
           selection={bodySelection}
-          onFocus={() => setBodyFocused(true)}
-          onBlur={() => setBodyFocused(false)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           multiline
-          autoFocus={false}
           placeholder="Write your entry..."
           placeholderTextColor={colors.muted}
           style={{
-            fontSize: 15,
-            lineHeight: 22,
-            minHeight: 80,
+            fontSize: 16,
+            lineHeight: 24,
+            minHeight: 120,
             color: colors.foreground,
             textAlignVertical: 'top',
             padding: 0,
           }}
         />
-      ) : (
+      )}
+      {/* When blurred: show styled preview. TextInput stays mounted (hidden) so ref is always valid. */}
+      {!isFocused && (
         <Pressable
           onPress={() => {
-            setBodyFocused(true);
+            setIsFocused(true);
             setTimeout(() => inputRef.current?.focus(), 20);
           }}
-          style={{ minHeight: 80 }}
+          style={{ minHeight: 120 }}
         >
-          {bodyValue.length === 0 ? (
-            <Text style={{ fontSize: 15, lineHeight: 22, color: colors.muted }}>Write your entry...</Text>
-          ) : (
-            renderBodyPreview()
-          )}
-          {/* Keep TextInput mounted but invisible so ref stays valid */}
-          <TextInput
-            ref={inputRef}
-            value={bodyValue}
-            onChangeText={handleBodyChange}
-            onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
-            selection={bodySelection}
-            onFocus={() => setBodyFocused(true)}
-            onBlur={() => setBodyFocused(false)}
-            multiline
-            style={{ height: 0, opacity: 0, position: 'absolute' }}
-          />
+          {renderPreview()}
         </Pressable>
+      )}
+      {/* Hidden TextInput always mounted so ref is valid for dvApplyFormat */}
+      {!isFocused && (
+        <TextInput
+          ref={inputRef}
+          value={value}
+          onChangeText={handleChangeText}
+          onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection)}
+          selection={bodySelection}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          multiline
+          style={{ height: 0, opacity: 0, position: 'absolute', top: 0 }}
+        />
       )}
     </View>
   );
@@ -2681,102 +2657,89 @@ export default function JournalScreen() {
   }, [dvTags, userId, entries]);
 
   // ── Text formatting helper ────────────────────────────────────────────────────────────────────────────────────
-  // Operates on the BODY portion of dvJournalNote (everything after the first newline).
+  // Operates on the full dvJournalNote text (single unified TextInput model).
   // Bold/Italic toggle: if selection is already wrapped, remove the markers; otherwise add them.
   // Uses dvBodySelection state (not setNativeProps) to reposition the cursor.
   const dvApplyFormat = useCallback((type: 'bold' | 'italic' | 'heading' | 'bullet') => {
     setDvShowFontSheet(false);
-    // Extract body portion (after first newline)
-    const fullText = dvJournalNote;
-    const nlIdx = fullText.indexOf('\n');
-    const bodyOffset = nlIdx >= 0 ? nlIdx + 1 : fullText.length;
-    const bodyText = nlIdx >= 0 ? fullText.slice(bodyOffset) : '';
-
+    const text = dvJournalNote;
     const { start, end } = dvSelection.current;
     const hasSelection = start !== end;
-    const selectedText = hasSelection ? bodyText.slice(start, end) : '';
+    const selectedText = hasSelection ? text.slice(start, end) : '';
 
-    let newBody = bodyText;
+    let newText = text;
     let newCursorPos = end;
 
     if (type === 'bold') {
       if (hasSelection) {
-        // Toggle: if already bold, remove markers; otherwise add them
+        // Toggle: if selection includes ** markers, remove them; otherwise add them
         if (selectedText.startsWith('**') && selectedText.endsWith('**') && selectedText.length > 4) {
           const inner = selectedText.slice(2, -2);
-          newBody = bodyText.slice(0, start) + inner + bodyText.slice(end);
+          newText = text.slice(0, start) + inner + text.slice(end);
           newCursorPos = start + inner.length;
-        } else if (bodyText.slice(start - 2, start) === '**' && bodyText.slice(end, end + 2) === '**') {
-          // Selection is inside ** markers
-          newBody = bodyText.slice(0, start - 2) + selectedText + bodyText.slice(end + 2);
+        } else if (text.slice(start - 2, start) === '**' && text.slice(end, end + 2) === '**') {
+          newText = text.slice(0, start - 2) + selectedText + text.slice(end + 2);
           newCursorPos = start - 2 + selectedText.length;
         } else {
-          newBody = bodyText.slice(0, start) + '**' + selectedText + '**' + bodyText.slice(end);
+          newText = text.slice(0, start) + '**' + selectedText + '**' + text.slice(end);
           newCursorPos = end + 4;
         }
       } else {
-        // No selection: insert placeholder or toggle word at cursor
         const insert = '**bold**';
-        newBody = bodyText.slice(0, start) + insert + bodyText.slice(end);
-        newCursorPos = start + 2; // position inside the **
+        newText = text.slice(0, start) + insert + text.slice(end);
+        newCursorPos = start + 2;
       }
     } else if (type === 'italic') {
       if (hasSelection) {
         if (selectedText.startsWith('*') && selectedText.endsWith('*') && selectedText.length > 2 && !selectedText.startsWith('**')) {
           const inner = selectedText.slice(1, -1);
-          newBody = bodyText.slice(0, start) + inner + bodyText.slice(end);
+          newText = text.slice(0, start) + inner + text.slice(end);
           newCursorPos = start + inner.length;
-        } else if (bodyText.slice(start - 1, start) === '*' && bodyText.slice(end, end + 1) === '*' && bodyText.slice(start - 2, start) !== '**') {
-          newBody = bodyText.slice(0, start - 1) + selectedText + bodyText.slice(end + 1);
+        } else if (text.slice(start - 1, start) === '*' && text.slice(end, end + 1) === '*' && text.slice(start - 2, start) !== '**') {
+          newText = text.slice(0, start - 1) + selectedText + text.slice(end + 1);
           newCursorPos = start - 1 + selectedText.length;
         } else {
-          newBody = bodyText.slice(0, start) + '*' + selectedText + '*' + bodyText.slice(end);
+          newText = text.slice(0, start) + '*' + selectedText + '*' + text.slice(end);
           newCursorPos = end + 2;
         }
       } else {
         const insert = '*italic*';
-        newBody = bodyText.slice(0, start) + insert + bodyText.slice(end);
+        newText = text.slice(0, start) + insert + text.slice(end);
         newCursorPos = start + 1;
       }
     } else if (type === 'heading') {
-      // Heading applies to the current line in the body
-      const lineStart = bodyText.lastIndexOf('\n', start - 1) + 1;
-      const lineEnd = bodyText.indexOf('\n', start);
-      const lineText = bodyText.slice(lineStart, lineEnd === -1 ? bodyText.length : lineEnd);
+      const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = text.indexOf('\n', start);
+      const lineText = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
       if (lineText.startsWith('# ')) {
-        newBody = bodyText.slice(0, lineStart) + lineText.slice(2) + bodyText.slice(lineEnd === -1 ? bodyText.length : lineEnd);
+        newText = text.slice(0, lineStart) + lineText.slice(2) + text.slice(lineEnd === -1 ? text.length : lineEnd);
         newCursorPos = Math.max(lineStart, start - 2);
       } else {
-        newBody = bodyText.slice(0, lineStart) + '# ' + lineText + bodyText.slice(lineEnd === -1 ? bodyText.length : lineEnd);
+        newText = text.slice(0, lineStart) + '# ' + lineText + text.slice(lineEnd === -1 ? text.length : lineEnd);
         newCursorPos = start + 2;
       }
     } else if (type === 'bullet') {
-      const lineStart = bodyText.lastIndexOf('\n', start - 1) + 1;
-      const lineEnd = bodyText.indexOf('\n', start);
-      const lineText = bodyText.slice(lineStart, lineEnd === -1 ? bodyText.length : lineEnd);
+      const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = text.indexOf('\n', start);
+      const lineText = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
       if (lineText.startsWith('- ')) {
-        newBody = bodyText.slice(0, lineStart) + lineText.slice(2) + bodyText.slice(lineEnd === -1 ? bodyText.length : lineEnd);
+        newText = text.slice(0, lineStart) + lineText.slice(2) + text.slice(lineEnd === -1 ? text.length : lineEnd);
         newCursorPos = Math.max(lineStart, start - 2);
       } else {
-        newBody = bodyText.slice(0, lineStart) + '- ' + lineText + bodyText.slice(lineEnd === -1 ? bodyText.length : lineEnd);
+        newText = text.slice(0, lineStart) + '- ' + lineText + text.slice(lineEnd === -1 ? text.length : lineEnd);
         newCursorPos = start + 2;
       }
     }
 
-    // Rebuild full text: title + newline + new body
-    const titlePart = nlIdx >= 0 ? fullText.slice(0, nlIdx) : fullText;
-    const newFullText = titlePart + '\n' + newBody;
-    setDvJournalNote(newFullText);
+    setDvJournalNote(newText);
     // Use selection state to reposition cursor (no setNativeProps needed)
     setDvBodySelection({ start: newCursorPos, end: newCursorPos });
-    // Focus the body input
     setTimeout(() => {
       dvTextInputRef.current?.focus();
-      // Clear selection state after a tick so it doesn't lock the cursor
       setTimeout(() => setDvBodySelection(undefined), 100);
     }, 50);
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newFullText, dvGratItems), 800);
+    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(newText, dvGratItems), 800);
   }, [dvJournalNote, dvGratItems, saveDvNoteAndGrat]);
 
   // ── Scan Text (OCR) ───────────────────────────────────────────────────────────────────────────────
