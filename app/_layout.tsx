@@ -109,17 +109,10 @@ export default function RootLayout() {
   );
   const [trpcClient] = useState(() => createTRPCClient());
 
-  // Ensure minimum 8px padding for top and bottom on mobile
+  // Use actual device insets — do NOT override with hardcoded minimums as that
+  // prevents the real notch height from being applied on physical devices.
   const providerInitialMetrics = useMemo(() => {
-    const metrics = initialWindowMetrics ?? { insets: initialInsets, frame: initialFrame };
-    return {
-      ...metrics,
-      insets: {
-        ...metrics.insets,
-        top: Math.max(metrics.insets.top, 16),
-        bottom: Math.max(metrics.insets.bottom, 12),
-      },
-    };
+    return initialWindowMetrics ?? { insets: initialInsets, frame: initialFrame };
   }, [initialInsets, initialFrame]);
 
   const content = (
