@@ -565,7 +565,13 @@ export default function VoiceCheckinScreen() {
   // Derived from results.habitResults; updated when user taps a segment
   const [vcRatings, setVcRatings] = useState<Record<string, "red" | "yellow" | "green" | "none">>({});
 
-  // Sync vcRatings when results arrive
+  // Editable transcript (full text shown in Journal Entry)
+  const [editedTranscript, setEditedTranscript] = useState("");
+
+  // Editable habit descriptions (habitId -> description)
+  const [editedDescriptions, setEditedDescriptions] = useState<Record<string, string>>({});
+
+  // Sync vcRatings, editedTranscript, editedDescriptions when results arrive
   useEffect(() => {
     if (!results) return;
     const map: Record<string, "red" | "yellow" | "green" | "none"> = {};
@@ -573,7 +579,15 @@ export default function VoiceCheckinScreen() {
       map[r.habitId] = r.rating ?? "none";
     }
     setVcRatings(map);
-  }, [results]);
+    // Pre-fill transcript editor with full transcript
+    setEditedTranscript(results.transcript || results.journalEntries.join("\n\n"));
+    // Pre-fill habit descriptions from current habit data
+    const descMap: Record<string, string> = {};
+    for (const h of activeHabits) {
+      descMap[h.id] = h.description ?? "";
+    }
+    setEditedDescriptions(descMap);
+  }, [results, activeHabits]);
 
   // ── Web recorder ──────────────────────────────────────────────────────────
   const webRecorder = useWebRecorder();
@@ -836,11 +850,11 @@ export default function VoiceCheckinScreen() {
         await submitCheckIn(today, ratingsMap, allHabitIds);
       }
 
-      // 2. Save journal entry
+      // 2. Save journal entry (use editedTranscript so user edits are preserved)
       const uid = await getLastUserId();
       const userId = uid || "default";
 
-      let body = results.transcript || results.journalEntries.join("\n\n");
+      let body = editedTranscript || results.transcript || results.journalEntries.join("\n\n");
       if (results.gratitudeItems.length > 0) {
         body +=
           "\n\n🙏 Grateful for:\n" +
@@ -860,7 +874,7 @@ export default function VoiceCheckinScreen() {
         tags: ["voice"],
         gratitudes: results.gratitudeItems,
         transcriptionStatus: "done" as const,
-        transcriptionText: results.transcript,
+        transcriptionText: editedTranscript || results.transcript,
       };
       await addEntry(userId, entry);
 
@@ -874,7 +888,7 @@ export default function VoiceCheckinScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [results, habits, router, vcRatings]);
+  }, [results, habits, router, vcRatings, editedTranscript]);
 
   const handleTryAgain = useCallback(() => {
     setPhase("idle");
@@ -1083,11 +1097,17 @@ export default function VoiceCheckinScreen() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={[classicStyles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
-                            {habit.description ? (
-                              <Text style={[classicStyles.habitDesc, { color: colors.muted }]} numberOfLines={2}>
-                                {habit.description}
-                              </Text>
-                            ) : null}
+                            <TextInput
+                              value={editedDescriptions[habit.id] ?? ""}
+                              onChangeText={(t) =>
+                                setEditedDescriptions((prev) => ({ ...prev, [habit.id]: t }))
+                              }
+                              placeholder="Add a description..."
+                              placeholderTextColor={colors.muted + "66"}
+                              style={[classicStyles.habitDescInput, { color: colors.muted }]}
+                              multiline
+                              returnKeyType="done"
+                            />
                           </View>
                           {/* 3-color segmented button */}
                           <View style={[classicStyles.segmentedBtn, { backgroundColor: colors.border }]}>
@@ -1124,17 +1144,24 @@ export default function VoiceCheckinScreen() {
               );
             })}
 
-            {/* Journal block */}
-            {(results.journalEntries.length > 0 || results.transcript) && (
-              <View style={classicStyles.journalSection}>
-                <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Journal Entry</Text>
-                <View style={[classicStyles.journalBlock, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[classicStyles.journalText, { color: colors.foreground }]}>
-                    {results.journalEntries.length > 0 ? results.journalEntries.join('\n\n') : results.transcript}
-                  </Text>
-                </View>
-              </View>
-            )}
+            {/* Journal block — full transcript, editable */}
+            <View style={classicStyles.journalSection}>
+              <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Journal Entry</Text>
+              <TextInput
+                value={editedTranscript}
+                onChangeText={setEditedTranscript}
+                placeholder="Your voice transcript will appear here..."
+                placeholderTextColor={colors.muted + "66"}
+                style={[
+                  classicStyles.journalBlock,
+                  classicStyles.journalTextInput,
+                  { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
+                ]}
+                multiline
+                scrollEnabled={false}
+                textAlignVertical="top"
+              />
+            </View>
 
             {/* Gratitude */}
             {results.gratitudeItems.length > 0 && (
@@ -1433,5 +1460,7 @@ const classicStyles = StyleSheet.create({
   journalTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 8 },
   journalBlock: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
   journalText: { fontSize: 14, lineHeight: 22 },
+  journalTextInput: { fontSize: 14, lineHeight: 22, minHeight: 120 },
+  habitDescInput: { fontSize: 12, lineHeight: 18, marginTop: 2, paddingVertical: 0, paddingHorizontal: 0 },
   gratitudeItem: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, padding: 12, marginBottom: 6 },
 });

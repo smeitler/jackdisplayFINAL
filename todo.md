@@ -1177,3 +1177,5 @@
 - [x] Fix voice-checkin results: replace HabitResultCard with classic grouped-category layout (segmented red/yellow/green squares)
 - [x] Fix transcription: raise 16MB limit to 100MB, increase body parser limit, set long server timeout
 - [x] Fix transcription: chunk large audio files on client before sending to avoid payload limits
+- [x] Voice check-in results: show editable habit description under each habit name
+- [x] Voice check-in results: Journal Entry shows full transcript (editable TextInput)
