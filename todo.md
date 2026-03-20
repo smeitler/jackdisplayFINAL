@@ -1200,3 +1200,4 @@
 - [x] Journal calendar modal: tapping a day navigates the day-view to that date and closes the modal
 - [x] Tab bar: redesign to floating pill style (dark frosted background, active tab rounded rect highlight, no top border, large icons) with tabs: Dashboard, Journal, + center, Chat, More
 - [x] Tab bar: revert floating pill, use standard full-width dark navy bar with large soft rounded icons and bold active label
+- [x] Voice AI: recalibrate to aggressively extract all habit evidence from transcript, map fragments to correct habits with detailed descriptions and accurate ratings

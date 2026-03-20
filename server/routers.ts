@@ -838,14 +838,14 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         }
         const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
         const habitSection = habitList
-          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "3-8 word punchy note"}. Only include habits clearly mentioned. Rating: green=did it/crushed, yellow=partial/okay, red=missed/skipped. Habits:\n${habitList}`
+          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "specific achievement in 5-12 words"}. Habits:\n${habitList}`
           : '';
-        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "hit the gym"}}` : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "climbed Mount Timpanogos, 5-hour workout"}}` : '';
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the transcript lightly cleaned up — add punctuation, fix capitalization, and split run-on sentences, but DO NOT change, add, or remove any words. Keep the speaker's exact voice and meaning.${habitSection}\nRules:\n- Gratitude expressions → gratitudeItems\n- Everything else → journalEntries\n- For habitResults: be generous with inference, match by context\n- Only include habits clearly mentioned or strongly implied\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the transcript lightly cleaned up — add punctuation, fix capitalization, and split run-on sentences, but DO NOT change, add, or remove any words. Keep the speaker's exact voice and meaning.${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords. Examples: "climbed a mountain" = exercise, "drank lots of water" = hydration, "read for an hour" = reading, "went to bed early" = sleep\n- If the user mentions ANY physical activity (hike, run, walk, gym, sport, climb, swim, bike, workout, exercise) → rate the exercise habit\n- If they mention doing it exceptionally well (5-hour workout, 30-mile run, climbed a mountain) → green (crushed)\n- If they mention doing it partially or okay → yellow\n- If they explicitly say they missed it → red\n- If not mentioned at all → omit (null)\n- The note MUST capture the SPECIFIC achievement from the transcript (e.g. "climbed Mount Timpanogos" not just "did exercise")\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
             },
             {
               role: 'user',
@@ -898,14 +898,14 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         }
         const habitList = input.habits.map((h) => `- ${h.id}: ${h.name}`).join('\n');
         const habitSection = habitList
-          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "3-8 word punchy note"}. Only include habits clearly mentioned. Rating: green=did it/crushed, yellow=partial/okay, red=missed/skipped. Habits:\n${habitList}`
+          ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "specific achievement in 5-12 words"}. Habits:\n${habitList}`
           : '';
-        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "hit the gym"}}` : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "climbed Mount Timpanogos, 5-hour workout"}}` : '';
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim${habitSection}\nRules:\n- Gratitude expressions \u2192 gratitudeItems\n- Everything else \u2192 journalEntries\n- For habitResults: be generous with inference, match by context\n- Only include habits clearly mentioned or strongly implied\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords. Examples: "climbed a mountain" = exercise, "drank lots of water" = hydration, "read for an hour" = reading, "went to bed early" = sleep\n- If the user mentions ANY physical activity (hike, run, walk, gym, sport, climb, swim, bike, workout, exercise) → rate the exercise habit\n- If they mention doing it exceptionally well (5-hour workout, 30-mile run, climbed a mountain) → green (crushed)\n- If they mention doing it partially or okay → yellow\n- If they explicitly say they missed it → red\n- If not mentioned at all → omit (null)\n- The note MUST capture the SPECIFIC achievement from the transcript (e.g. "climbed Mount Timpanogos" not just "did exercise")\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
             },
             {
               role: 'user',
