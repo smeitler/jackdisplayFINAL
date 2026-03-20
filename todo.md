@@ -1191,3 +1191,5 @@
 - [x] Journal header: add fire streak icon (top-left) with consecutive-day count
 - [x] Journal header: add calendar icon (top-right) that opens the analytics calendar
 - [x] Home screen: remove calendar section (moved to journal)
+- [x] Journal calendar modal: use full InlineCalendar (photo thumbnails, scrollable months) same as home screen
+- [x] Journal habit rows: editable TextInput for per-habit description (not status fallback text)

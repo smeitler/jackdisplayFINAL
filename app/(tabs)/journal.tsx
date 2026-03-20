@@ -25,7 +25,7 @@ import {
   JOURNAL_TEMPLATES, generateId, todayDateStr, formatDateLabel, formatTime,
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
-import { getLastUserId, loadHabits, type Habit, type Rating } from "@/lib/storage";
+import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
 import { WheelColumn } from "@/components/wheel-time-picker";
 
@@ -1757,37 +1757,62 @@ function TodayHabitsSection({ colors, onAddJournalEntry }: { colors: any; onAddJ
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── MAIN JOURNAL SCREEN ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── Calendar view for the journal calendar modal ─────────────────────────────
+// ─── Calendar view for the journal calendar modal (matches home screen InlineCalendar) ────────────
+const JC_MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function jcGetMonthDays(year: number, month: number): number { return new Date(year, month, 0).getDate(); }
+function jcGetFirstDay(year: number, month: number): number { return new Date(year, month - 1, 1).getDay(); }
+function jcGenerateMonths(sy: number, sm: number, ey: number, em: number): { year: number; month: number }[] {
+  const r: { year: number; month: number }[] = []; let y = sy; let m = sm;
+  while (y < ey || (y === ey && m <= em)) { r.push({ year: y, month: m }); m++; if (m > 12) { m = 1; y++; } }
+  return r;
+}
+
 function JournalCalendarView({ colors }: { colors: any }) {
-  const { entries } = useApp() as any;
+  const [calEntries, setCalEntries] = useState<JournalEntry[]>([]);
+  const { width: winWidth } = useWindowDimensions();
+
+  useEffect(() => {
+    (async () => {
+      const uid = await getLastUserId();
+      const loaded = await loadEntries(uid || 'default');
+      setCalEntries(loaded);
+    })();
+  }, []);
+
   const today = new Date();
   const todayStr = todayDateStr();
-  const months = useMemo(() => generateMonths(today.getFullYear() - 3, 1, today.getFullYear(), today.getMonth() + 1), []);
-  const todayMonthIndex = useMemo(() => months.findIndex((mo) => mo.year === today.getFullYear() && mo.month === today.getMonth() + 1), [months]);
+  const months = useMemo(() => jcGenerateMonths(today.getFullYear() - 2, 1, today.getFullYear() + 1, 12), []);
+  const todayMonthIndex = useMemo(() => {
+    const y = today.getFullYear(); const m = today.getMonth() + 1;
+    return months.findIndex((mo) => mo.year === y && mo.month === m);
+  }, [months]);
+
   const entryMap = useMemo(() => {
     const map = new Map<string, JournalEntry[]>();
-    if (Array.isArray(entries)) {
-      for (const e of entries) { const list = map.get(e.date) ?? []; list.push(e); map.set(e.date, list); }
-    }
+    for (const e of calEntries) { const list = map.get(e.date) ?? []; list.push(e); map.set(e.date, list); }
     return map;
-  }, [entries]);
-  const { width: winWidth } = useWindowDimensions();
+  }, [calEntries]);
+
   const CELL_GAP = 3;
-  const cellSize = Math.floor(((winWidth > 0 ? winWidth : 390) - 32 - CELL_GAP * 6) / 7);
+  const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - 40 - CELL_GAP * 6) / 7);
+  const cellHeight = cellWidth;
+
   const scrollRef = useRef<ScrollView>(null);
   const [didScroll, setDidScroll] = useState(false);
   const monthOffsets = useRef<number[]>([]);
+
   useEffect(() => {
     if (!didScroll && todayMonthIndex >= 0 && monthOffsets.current[todayMonthIndex] != null) {
       scrollRef.current?.scrollTo({ y: monthOffsets.current[todayMonthIndex], animated: false });
       setDidScroll(true);
     }
   }, [didScroll, todayMonthIndex]);
+
   return (
-    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16 }}>
+    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20, paddingHorizontal: 16 }}>
       {months.map(({ year, month }, monthIndex) => {
-        const daysInMonth = getMonthDays(year, month);
-        const firstDay = getFirstDayOfWeek(year, month);
+        const daysInMonth = jcGetMonthDays(year, month);
+        const firstDay = jcGetFirstDay(year, month);
         const cells: (number | null)[] = [];
         for (let i = 0; i < firstDay; i++) cells.push(null);
         for (let d = 1; d <= daysInMonth; d++) cells.push(d);
@@ -1803,12 +1828,12 @@ function JournalCalendarView({ colors }: { colors: any }) {
             }
           }} style={{ marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, paddingTop: 12, paddingBottom: 6 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{MONTH_NAMES[month - 1]}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{JC_MONTH_NAMES[month - 1]}</Text>
               <Text style={{ fontSize: 12, fontWeight: '500', color: colors.muted }}>{year}</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: CELL_GAP, marginBottom: CELL_GAP }}>
               {['S','M','T','W','T','F','S'].map((d, i) => (
-                <View key={i} style={{ width: cellSize, alignItems: 'center' }}>
+                <View key={i} style={{ width: cellWidth, alignItems: 'center' }}>
                   <Text style={{ fontSize: 9, fontWeight: '600', color: colors.muted }}>{d}</Text>
                 </View>
               ))}
@@ -1816,19 +1841,27 @@ function JournalCalendarView({ colors }: { colors: any }) {
             {rows.map((row, rowIdx) => (
               <View key={rowIdx} style={{ flexDirection: 'row', gap: CELL_GAP, marginBottom: CELL_GAP }}>
                 {row.map((day, colIdx) => {
-                  if (day === null) return <View key={`e-${colIdx}`} style={{ width: cellSize, height: cellSize }} />;
+                  if (day === null) return <View key={`e-${colIdx}`} style={{ width: cellWidth, height: cellHeight }} />;
                   const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                  const hasEntries = (entryMap.get(dateStr) ?? []).length > 0;
+                  const dayEntries = entryMap.get(dateStr) || [];
                   const isToday = dateStr === todayStr;
                   const isFuture = dateStr > todayStr;
+                  const hasEntries = dayEntries.length > 0;
+                  let photoUri: string | null = null;
+                  for (const de of dayEntries) {
+                    const photo = de.attachments?.find((a) => a.type === 'photo');
+                    if (photo) { photoUri = photo.uri; break; }
+                  }
+                  const bgColor = photoUri ? '#000' : hasEntries ? colors.primary : colors.surface;
+                  const cellOpacity = isFuture ? 0.18 : photoUri ? 1 : hasEntries ? 0.75 : 0.22;
                   return (
                     <View key={day} style={{
-                      width: cellSize, height: cellSize, borderRadius: 4,
-                      backgroundColor: hasEntries ? colors.primary : colors.surface,
-                      opacity: isFuture ? 0.15 : hasEntries ? 0.75 : 0.22,
-                      borderWidth: isToday ? 1.5 : 0, borderColor: colors.primary,
+                      width: cellWidth, height: cellHeight, borderRadius: 4, overflow: 'hidden',
+                      backgroundColor: bgColor, opacity: cellOpacity,
+                      borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
                     }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: isToday ? colors.primary : colors.foreground, opacity: 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
+                      {photoUri ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+                      <Text style={{ fontSize: 10, fontWeight: '700', lineHeight: 13, color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
                     </View>
                   );
                 })}
@@ -1991,12 +2024,42 @@ export default function JournalScreen() {
   const [dvRatings, setDvRatings] = useState<Record<string, Rating>>({});
   // Editable entry bodies: entryId -> body text
   const [dvBodies, setDvBodies] = useState<Record<string, string>>({});
+  // Per-habit notes: habitId -> note string (stored in DayNotes as habitId:date)
+  const [dvHabitNotes, setDvHabitNotes] = useState<Record<string, string>>({});
+  const dvHabitNotesRef = useRef<Record<string, string>>({});
+  const habitNoteTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   // Sync dvRatings when dayCheckIns changes
   useEffect(() => {
     const map: Record<string, Rating> = {};
     dayCheckIns.forEach((ci) => { if (ci.rating !== 'none') map[ci.habitId] = ci.rating as Rating; });
     setDvRatings(map);
   }, [dayCheckIns]);
+  // Load habit notes for the selected date
+  useEffect(() => {
+    (async () => {
+      const allNotes = await loadDayNotes();
+      const dayNotes: Record<string, string> = {};
+      Object.keys(allNotes).forEach((key) => {
+        const [hId, d] = key.split(':');
+        if (d === selectedDate) dayNotes[hId] = allNotes[key];
+      });
+      dvHabitNotesRef.current = dayNotes;
+      setDvHabitNotes(dayNotes);
+    })();
+  }, [selectedDate]);
+  const saveDvHabitNote = useCallback((habitId: string, note: string) => {
+    // Update local state immediately
+    const updated = { ...dvHabitNotesRef.current, [habitId]: note };
+    dvHabitNotesRef.current = updated;
+    setDvHabitNotes(updated);
+    // Debounce the AsyncStorage write
+    if (habitNoteTimers.current[habitId]) clearTimeout(habitNoteTimers.current[habitId]);
+    habitNoteTimers.current[habitId] = setTimeout(async () => {
+      const allNotes = await loadDayNotes();
+      allNotes[`${habitId}:${selectedDate}`] = note;
+      await saveDayNotes(allNotes);
+    }, 600);
+  }, [selectedDate]);
   // Sync dvBodies when dayEntries changes
   useEffect(() => {
     const map: Record<string, string> = {};
@@ -2249,9 +2312,16 @@ export default function JournalScreen() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={[dvStyles.ciHabitName, { color: colors.foreground }]}>{habit.name}</Text>
-                            <Text style={[dvStyles.ciHabitDesc, { color: colors.muted }]}>
-                              {habit.description || (current === 'none' ? 'Tap to rate' : current === 'green' ? 'Crushed it!' : current === 'yellow' ? 'Okay' : 'Missed')}
-                            </Text>
+                            <TextInput
+                              style={[dvStyles.ciHabitDesc, { color: colors.muted, padding: 0, margin: 0 }]}
+                              value={dvHabitNotes[habit.id] ?? ''}
+                              onChangeText={(text) => saveDvHabitNote(habit.id, text)}
+                              placeholder={habit.description || 'Add a note...'}
+                              placeholderTextColor={colors.muted + '88'}
+                              multiline
+                              returnKeyType="done"
+                              blurOnSubmit
+                            />
                           </View>
                           {/* 3-color segmented button */}
                           <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
