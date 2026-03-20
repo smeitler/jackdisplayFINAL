@@ -1223,3 +1223,12 @@
 - [x] DEFINITIVE FIX: top safe area overlap on all screens — replaced SafeAreaView with useSafeAreaInsets() + 50px web minimum fallback in ScreenContainer
 - [x] Abbreviate dashboard date format from "Friday, March 20" to "Fri, Mar 20" to prevent truncation
 - [x] Add empty state message when no widgets on dashboard ("Tap Edit Dashboard to customize")
+- [x] Dashboard layout reorder: Alarm → 4 wellness widgets → Streak & Days Logged
+- [x] Build 2×2 wellness widget grid on dashboard: Meditate (orange circle), Sleep (purple moon), Move (green arrows), Focus (blue music note)
+- [x] Each wellness widget taps through to a dedicated audio list screen
+- [x] Build audio catalog screen with sections: Meditate, Sleep, Move, Focus
+- [x] Meditate section: list of guided meditation audio tracks
+- [x] Sleep section: list of sleep sounds / white noise / ambient audio
+- [x] Move section: list of workout / movement audio tracks
+- [x] Focus section: list of focus / concentration audio tracks
+- [x] Source and integrate free audio content for each wellness category

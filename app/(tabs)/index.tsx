@@ -844,20 +844,6 @@ export default function HomeScreen() {
             </View>
           </View>}
 
-          {/* ── Stats row ── */}
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
-              <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
-              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{streak}</Text>
-              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Streak</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
-              <IconSymbol name="calendar" size={16} color={isCalm ? '#F5A623' : colors.primary} />
-              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{totalDaysLogged}</Text>
-              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Days Logged</Text>
-            </View>
-          </View>
-
           {/* ── Today's Focus Card (only shown when there's something to do) ── */}
           {(isPendingCheckIn || missedDates.length > 0) && (
             <Pressable
@@ -939,6 +925,50 @@ export default function HomeScreen() {
               <IconSymbol name="chevron.right" size={14} color={colors.muted} />
             </View>
           </Pressable>
+
+          {/* ── Wellness Audio Grid (2×2) ── */}
+          <View style={styles.wellnessGrid}>
+            {[
+              { key: 'meditate', label: 'Meditate', emoji: '🟠', color: '#FF8C42' },
+              { key: 'sleep', label: 'Sleep', emoji: '🌙', color: '#B07FD0' },
+              { key: 'move', label: 'Move', emoji: '⏩', color: '#22C55E' },
+              { key: 'focus', label: 'Focus', emoji: '🎵', color: '#3B82F6' },
+            ].map((item) => (
+              <Pressable
+                key={item.key}
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/wellness-audio?category=${item.key}` as never);
+                }}
+                style={({ pressed }) => [
+                  styles.wellnessCard,
+                  {
+                    backgroundColor: isCalm ? '#1A2050' : colors.surface,
+                    borderColor: isCalm ? '#252D6E' : colors.border,
+                    opacity: pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+              >
+                <Text style={styles.wellnessEmoji}>{item.emoji}</Text>
+                <Text style={[styles.wellnessLabel, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* ── Stats row ── */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+              <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
+              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{streak}</Text>
+              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Streak</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+              <IconSymbol name="calendar" size={16} color={isCalm ? '#F5A623' : colors.primary} />
+              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{totalDaysLogged}</Text>
+              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Days Logged</Text>
+            </View>
+          </View>
 
           {/* ── Customizable Widgets ── */}
           <WidgetGrid
@@ -1770,6 +1800,23 @@ const styles = StyleSheet.create({
     padding: 24, alignItems: 'center', marginBottom: 24,
   },
   emptyText: { fontSize: 14, textAlign: 'center' },
+
+  // Wellness audio grid (2×2)
+  wellnessGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16,
+  },
+  wellnessCard: {
+    width: '48%' as any, flexGrow: 1, flexBasis: '45%',
+    borderRadius: 16, padding: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1,
+  },
+  wellnessEmoji: {
+    fontSize: 22,
+  },
+  wellnessLabel: {
+    fontSize: 17, fontWeight: '700',
+  },
 
   // Stats row (2 cards now)
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },

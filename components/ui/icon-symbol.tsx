@@ -98,6 +98,10 @@ const MAPPING: Record<string, MaterialIconName> = {
   "diamond.fill": "diamond",
   "pause.fill": "pause",
   "arrow.counterclockwise": "replay",
+  "self.improvement": "self-improvement",
+  "fast.forward": "fast-forward",
+  "nightlight": "nightlight",
+  "spa": "spa",
   // Life area / category icons
   "figure.strengthtraining.traditional": "fitness-center",
   "brain.head.profile.fill": "psychology",
