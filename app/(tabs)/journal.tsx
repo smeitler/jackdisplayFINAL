@@ -2275,11 +2275,12 @@ interface FullScreenJournalEditorProps {
   onPickPhoto: () => void;
   onPickCamera: () => void;
   colors: any;
-  insets: { top: number; bottom: number };
 }
 function FullScreenJournalEditor({
-  visible, value, onChange, onClose, onPickPhoto, onPickCamera, colors, insets,
+  visible, value, onChange, onClose, onPickPhoto, onPickCamera, colors,
 }: FullScreenJournalEditorProps) {
+  // Read insets fresh INSIDE the modal so they are correct on all platforms
+  const modalInsets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const preFmtSel = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
@@ -2289,6 +2290,7 @@ function FullScreenJournalEditor({
   const fmtSheetAnim = useRef(new Animated.Value(360)).current;
 
   const openFmtSheet = useCallback(() => {
+    // Snapshot selection before any blur can happen
     preFmtSel.current = { ...selectionRef.current };
     setShowFmtSheet(true);
     Animated.timing(fmtSheetAnim, { toValue: 0, duration: 240, useNativeDriver: true }).start();
@@ -2396,7 +2398,7 @@ function FullScreenJournalEditor({
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
         {/* Status bar spacer */}
-        <View style={{ height: insets.top }} />
+        <View style={{ height: Math.max(modalInsets.top, 44) }} />
         {/* Top navigation bar */}
         <View style={fsStyles.topBar}>
           <Pressable onPress={onClose} style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
@@ -2444,11 +2446,88 @@ function FullScreenJournalEditor({
               textAlignVertical="top"
             />
           </ScrollView>
+
+          {/* Format sheet — sits ABOVE the toolbar, inside KeyboardAvoidingView so it moves with keyboard */}
+          {showFmtSheet && (
+            <View style={fsStyles.fmtSheetContainer}>
+              {/* Handle */}
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
+                <View style={fsStyles.handle} />
+              </View>
+              {/* Header */}
+              <View style={fsStyles.fmtHeader}>
+                <Text style={fsStyles.fmtTitle}>Format</Text>
+                <Pressable onPress={closeFmtSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}>
+                  <IconSymbol name="xmark" size={20} color="rgba(255,255,255,0.6)" />
+                </Pressable>
+              </View>
+              {/* Paragraph style pills */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>
+                {(['title', 'heading', 'subheading', 'body'] as const).map((style) => (
+                  <Pressable
+                    key={style}
+                    onPress={() => applyParagraphStyle(style)}
+                    style={({ pressed }) => [fsStyles.stylePill, activeStyle === style && fsStyles.stylePillActive, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Text style={[fsStyles.stylePillText, activeStyle === style && fsStyles.stylePillTextActive,
+                      style === 'title' ? { fontSize: 18, fontWeight: '700' } :
+                      style === 'heading' ? { fontSize: 16, fontWeight: '700' } :
+                      style === 'subheading' ? { fontSize: 14, fontWeight: '600' } :
+                      { fontSize: 13 }
+                    ]}>
+                      {style.charAt(0).toUpperCase() + style.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              {/* Inline format row: B I U S */}
+              <View style={fsStyles.fmtRow}>
+                {([
+                  { type: 'bold' as const, label: 'B', extra: { fontWeight: '900' as const } },
+                  { type: 'italic' as const, label: 'I', extra: { fontStyle: 'italic' as const } },
+                  { type: 'underline' as const, label: 'U', extra: { textDecorationLine: 'underline' as const } },
+                  { type: 'strikethrough' as const, label: 'S', extra: { textDecorationLine: 'line-through' as const } },
+                ]).map(({ type, label, extra }) => (
+                  <Pressable key={type} onPress={() => applyInlineFormat(type)} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                    <Text style={[fsStyles.fmtBtnText, extra]}>{label}</Text>
+                  </Pressable>
+                ))}
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="pencil" size={20} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5A623' }} />
+                </Pressable>
+              </View>
+              {/* List / indent row */}
+              <View style={[fsStyles.fmtRow, { paddingBottom: 12 }]}>
+                <Pressable onPress={insertBullet} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="list.bullet.indent" size={20} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+                <Pressable onPress={insertNumbered} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="list.number" size={20} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="text.alignleft" size={20} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="increase.indent" size={20} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="decrease.indent" size={20} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           {/* Keyboard accessory toolbar */}
-          <View style={[fsStyles.toolbar, { paddingBottom: 10 + insets.bottom }]}>
-            {/* Aa — Format sheet */}
+          <View style={[fsStyles.toolbar, { paddingBottom: 10 + modalInsets.bottom }]}>
+            {/* Aa — Toggle format sheet */}
             <Pressable
-              onPressIn={() => { preFmtSel.current = { ...selectionRef.current }; openFmtSheet(); }}
+              onPress={() => {
+                preFmtSel.current = { ...selectionRef.current };
+                if (showFmtSheet) closeFmtSheet(); else openFmtSheet();
+              }}
               style={({ pressed }) => [fsStyles.toolbarBtn, showFmtSheet && fsStyles.toolbarBtnActive, { opacity: pressed ? 0.6 : 1 }]}
             >
               <Text style={fsStyles.aaText}>Aa</Text>
@@ -2489,85 +2568,6 @@ function FullScreenJournalEditor({
             </Pressable>
           </View>
         </KeyboardAvoidingView>
-        {/* Format sheet backdrop */}
-        {showFmtSheet && (
-          <Pressable
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-            onPress={closeFmtSheet}
-          />
-        )}
-        {/* Format sheet — slides up without dismissing keyboard */}
-        {showFmtSheet && (
-          <Animated.View style={[fsStyles.fmtSheet, { paddingBottom: insets.bottom + 8 }, { transform: [{ translateY: fmtSheetAnim }] }]}>
-            {/* Handle */}
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
-              <View style={fsStyles.handle} />
-            </View>
-            {/* Header */}
-            <View style={fsStyles.fmtHeader}>
-              <Text style={fsStyles.fmtTitle}>Format</Text>
-              <Pressable onPress={closeFmtSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-                <IconSymbol name="xmark" size={20} color="rgba(255,255,255,0.6)" />
-              </Pressable>
-            </View>
-            {/* Paragraph style pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>
-              {(['title', 'heading', 'subheading', 'body'] as const).map((style) => (
-                <Pressable
-                  key={style}
-                  onPress={() => applyParagraphStyle(style)}
-                  style={({ pressed }) => [fsStyles.stylePill, activeStyle === style && fsStyles.stylePillActive, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Text style={[fsStyles.stylePillText, activeStyle === style && fsStyles.stylePillTextActive,
-                    style === 'title' ? { fontSize: 18, fontWeight: '700' } :
-                    style === 'heading' ? { fontSize: 16, fontWeight: '700' } :
-                    style === 'subheading' ? { fontSize: 14, fontWeight: '600' } :
-                    { fontSize: 13 }
-                  ]}>
-                    {style.charAt(0).toUpperCase() + style.slice(1)}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            {/* Inline format row: B I U S */}
-            <View style={fsStyles.fmtRow}>
-              {([
-                { type: 'bold' as const, label: 'B', extra: { fontWeight: '900' as const } },
-                { type: 'italic' as const, label: 'I', extra: { fontStyle: 'italic' as const } },
-                { type: 'underline' as const, label: 'U', extra: { textDecorationLine: 'underline' as const } },
-                { type: 'strikethrough' as const, label: 'S', extra: { textDecorationLine: 'line-through' as const } },
-              ]).map(({ type, label, extra }) => (
-                <Pressable key={type} onPress={() => applyInlineFormat(type)} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <Text style={[fsStyles.fmtBtnText, extra]}>{label}</Text>
-                </Pressable>
-              ))}
-              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="pencil" size={20} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5A623' }} />
-              </Pressable>
-            </View>
-            {/* List / indent row */}
-            <View style={[fsStyles.fmtRow, { paddingBottom: 12 }]}>
-              <Pressable onPress={insertBullet} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="list.bullet.indent" size={20} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-              <Pressable onPress={insertNumbered} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="list.number" size={20} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="text.alignleft" size={20} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="increase.indent" size={20} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="decrease.indent" size={20} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-            </View>
-          </Animated.View>
-        )}
       </View>
     </Modal>
   );
@@ -2580,12 +2580,13 @@ const fsStyles = StyleSheet.create({
   topBarGroupBtn: { paddingHorizontal: 12, paddingVertical: 10 },
   topBarDivider: { width: 0.5, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 8 },
   checkBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
-  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0 },
+  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0, ...(Platform.OS === 'web' ? { outlineWidth: 0, outlineStyle: 'none' } as any : {}) },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   toolbarBtnActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
   aaText: { fontSize: 15, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
   fmtSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12 },
+  fmtSheetContainer: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12 },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
   fmtHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
   fmtTitle: { fontSize: 17, fontWeight: '600', color: '#ffffff', flex: 1 },
@@ -3330,7 +3331,6 @@ export default function JournalScreen() {
             onPickPhoto={dvPickPhoto}
             onPickCamera={dvPickCamera}
             colors={colors}
-            insets={insets}
           />
 
           {/* ── Day-view Attach Sheet ── */}

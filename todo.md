@@ -1299,3 +1299,7 @@
 - [x] Add Format sheet to full-screen editor (Title/Heading/Subheading/Body pills + B/I/U/S + list/align)
 - [x] Wire expand button in inline card to open full-screen editor
 - [x] Wire back button and checkmark to save note and close editor
+
+- [x] Fix blue focus outline on TextInput in full-screen editor (web: add outlineWidth: 0 / outlineStyle: none)
+- [x] Fix format sheet not applying formatting — moved sheet inside KeyboardAvoidingView above toolbar, changed Aa to onPress toggle
+- [x] Fix top bar buttons overlapping with device status bar / notch in full-screen editor (read insets inside modal, min 44pt)
