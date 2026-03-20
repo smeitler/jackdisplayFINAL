@@ -1217,3 +1217,4 @@
 - [x] Dashboard header: increase top padding so date/streak/profile row is not squished against status bar
 - [x] Dashboard: change default widget set to empty (no Goals pre-loaded) so users start with a clean dashboard below the alarm
 - [x] Fix screwy/squished top header on Journal, You, and Dashboard screens — replace hardcoded paddingTop with dynamic useSafeAreaInsets().top
+- [x] Fix double safe-area padding on all tab screens — remove manual insets.top additions since ScreenContainer already handles the top edge

@@ -2220,7 +2220,7 @@ export default function JournalScreen() {
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
-      <View style={[dvStyles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={dvStyles.header}>
         {/* Fire streak icon — left */}
         <Pressable
           onPress={() => {}}

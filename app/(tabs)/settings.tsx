@@ -891,7 +891,7 @@ export default function YouScreen() {
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* Header */}
-      <View style={[youStyles.header, { borderBottomColor: headerBorderColor, backgroundColor: bgColor, paddingTop: insets.top + 10 }]}>
+      <View style={[youStyles.header, { borderBottomColor: headerBorderColor, backgroundColor: bgColor }]}>
         <View style={{ width: 40 }} />
         <Text style={[youStyles.headerTitle, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>You</Text>
         <Pressable
@@ -940,6 +940,7 @@ const youStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 0.5,
   },
