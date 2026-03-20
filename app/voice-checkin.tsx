@@ -585,6 +585,20 @@ export default function VoiceCheckinScreen() {
   // tRPC combined mutation (single call = faster)
   const transcribeAndAnalyze = trpc.voiceCheckin.transcribeAndAnalyze.useMutation();
 
+  // ── Auto-start recording on mount ────────────────────────────────────────
+  // Skip the idle "tap to start" step — begin recording immediately when screen opens.
+  const hasAutoStarted = useRef(false);
+  useEffect(() => {
+    if (hasAutoStarted.current) return;
+    hasAutoStarted.current = true;
+    // Small delay so the screen finishes mounting/animating before we request mic
+    const timer = setTimeout(() => {
+      startRecording();
+    }, 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Start recording ──────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     setErrorMsg(null);

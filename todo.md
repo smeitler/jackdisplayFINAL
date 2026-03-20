@@ -1170,3 +1170,4 @@
 - [x] Voice check-in: optimize speed by merging two LLM calls into one combined call after Whisper transcription
 - [x] Check-in screen: show habit description below habit name
 - [x] Check-in screen: larger, more visible red/yellow/green square buttons
+- [x] Voice check-in: auto-start recording on screen open (skip idle tap step)
