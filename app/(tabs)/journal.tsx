@@ -26,6 +26,7 @@ import {
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, type Habit } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
+import { WheelColumn } from "@/components/wheel-time-picker";
 
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
@@ -1862,25 +1863,113 @@ export default function JournalScreen() {
     }
   }
 
-  const SUB_TABS: { key: SubTab; label: string; icon: string }[] = [
-    { key: "habits", label: "Today's Habits", icon: "checkmark.circle.fill" },
-    { key: "journal", label: "Entries", icon: "book.fill" },
-  ];
+  // ── Day-view state ─────────────────────────────────────────────────────────
+  const [selectedDate, setSelectedDate] = useState(todayDateStr());
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const pickerTempDate = useRef(selectedDate);
+  const { habits, checkIns, categories } = useApp();
+
+  const goDay = useCallback((delta: number) => {
+    setSelectedDate((prev) => {
+      const d = new Date(prev + 'T12:00:00');
+      d.setDate(d.getDate() + delta);
+      const next = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return next <= todayDateStr() ? next : prev;
+    });
+  }, []);
+
+  const dayLabel = useMemo(() => {
+    const today = todayDateStr();
+    const yest = new Date(); yest.setDate(yest.getDate() - 1);
+    const yesterdayStr = `${yest.getFullYear()}-${String(yest.getMonth()+1).padStart(2,'0')}-${String(yest.getDate()).padStart(2,'0')}`;
+    if (selectedDate === today) return 'Today';
+    if (selectedDate === yesterdayStr) return 'Yesterday';
+    const d = new Date(selectedDate + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }, [selectedDate]);
+
+  const dayEntries = useMemo(
+    () => entries.filter((e) => e.date === selectedDate).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    [entries, selectedDate]
+  );
+
+  const dayCheckIns = useMemo(
+    () => checkIns.filter((c) => c.date === selectedDate && c.rating !== 'none'),
+    [checkIns, selectedDate]
+  );
+
+  const RATING_COLORS_DV: Record<string, string> = { green: '#22C55E', yellow: '#F59E0B', red: '#EF4444' };
+
+  // ── Date wheel picker columns ───────────────────────────────────────────────
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const pickerMonthRef = useRef(0);
+  const pickerDayRef = useRef(0);
+  const pickerYearRef = useRef(0);
+
+  function initPickerRefs(dateStr: string) {
+    const d = new Date(dateStr + 'T12:00:00');
+    pickerMonthRef.current = d.getMonth();
+    pickerDayRef.current = d.getDate() - 1;
+    pickerYearRef.current = 0; // only current year for now
+  }
+
+  const todayYear = new Date().getFullYear();
+  const todayMonth = new Date().getMonth();
+  const todayDay = new Date().getDate();
+
+  function buildPickerDate(): string {
+    const m = pickerMonthRef.current;
+    const day = pickerDayRef.current + 1;
+    const y = todayYear;
+    return `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+
+  function getDaysInMonth(month: number): number {
+    return new Date(todayYear, month + 1, 0).getDate();
+  }
+
+  const [pickerMonth, setPickerMonth] = useState(0);
+  const [pickerDayCount, setPickerDayCount] = useState(31);
 
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
-      {/* Header — streak top-right, no title */}
-      <View style={[styles.header, { justifyContent: 'flex-end' }]}>
-        <View style={[journalStatStyles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={{ fontSize: 14 }}>🔥</Text>
-          <Text style={[journalStatStyles.val, { color: colors.foreground }]}>{journalStats.streak}</Text>
-          <Text style={[journalStatStyles.lbl, { color: colors.muted }]}>Streak</Text>
-        </View>
+      {/* ── Day-navigation header ── */}
+      <View style={dvStyles.header}>
+        <Pressable
+          onPress={() => goDay(-1)}
+          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.5 : 1 }]}
+        >
+          <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            initPickerRefs(selectedDate);
+            const d = new Date(selectedDate + 'T12:00:00');
+            setPickerMonth(d.getMonth());
+            setPickerDayCount(getDaysInMonth(d.getMonth()));
+            setDatePickerVisible(true);
+          }}
+          style={({ pressed }) => [dvStyles.dayLabelBtn, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={[dvStyles.dayLabel, { color: colors.foreground }]}>{dayLabel}</Text>
+          <IconSymbol name="chevron.down" size={14} color={colors.muted} style={{ marginLeft: 4, marginTop: 2 }} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => goDay(1)}
+          disabled={selectedDate >= todayDateStr()}
+          style={({ pressed }) => [dvStyles.navBtn, {
+            opacity: selectedDate >= todayDateStr() ? 0.25 : pressed ? 0.5 : 1,
+          }]}
+        >
+          <IconSymbol name="chevron.right" size={22} color={colors.foreground} />
+        </Pressable>
       </View>
 
-      {/* Content */}
+      {/* ── Day content ── */}
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
@@ -1889,22 +1978,107 @@ export default function JournalScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          onScroll={handleStatsScroll}
-          scrollEventThrottle={16}
         >
-          <JournalListTab entries={entries} onDelete={handleDeleteEntry} onEdit={openEditEntry} colors={colors} />
+          {/* ── Habit check-in card ── */}
+          {dayCheckIns.length > 0 && (() => {
+            const sortedCats = [...categories].sort((a, b) => a.order - b.order);
+            return (
+              <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>HABITS</Text>
+                {sortedCats.map((cat) => {
+                  const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
+                  const catCIs = dayCheckIns.filter((c) => catHabits.some((h) => h.id === c.habitId));
+                  if (catCIs.length === 0) return null;
+                  return (
+                    <View key={cat.id} style={{ marginBottom: 8 }}>
+                      <Text style={[dvStyles.catLabel, { color: colors.muted }]}>{cat.label.toUpperCase()}</Text>
+                      {catHabits.map((habit) => {
+                        const ci = dayCheckIns.find((c) => c.habitId === habit.id);
+                        if (!ci) return null;
+                        return (
+                          <View key={habit.id} style={dvStyles.habitRow}>
+                            <View style={[dvStyles.ratingDot, { backgroundColor: RATING_COLORS_DV[ci.rating] ?? colors.border }]} />
+                            <Text style={[dvStyles.habitName, { color: colors.foreground, flex: 1 }]}>{habit.name}</Text>
+                            <Text style={[dvStyles.ratingLabel, { color: RATING_COLORS_DV[ci.rating] ?? colors.muted }]}>
+                              {ci.rating === 'green' ? 'Crushed' : ci.rating === 'yellow' ? 'Okay' : 'Missed'}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })()}
+
+          {/* ── Journal / voice entries ── */}
+          {dayEntries.map((entry) => {
+            const isVoice = !!(entry.tags?.includes('voice') || entry.template === 'free-write');
+            const bodyText = entry.body || '';
+            const gratIdx = bodyText.indexOf('\n\n🙏 Grateful for:');
+            const mainBody = gratIdx >= 0 ? bodyText.slice(0, gratIdx).trim() : bodyText.trim();
+            const gratSection = gratIdx >= 0 ? bodyText.slice(gratIdx).trim() : '';
+            return (
+              <Pressable
+                key={entry.id}
+                onPress={() => openEditEntry(entry)}
+                style={({ pressed }) => [dvStyles.card, {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.85 : 1,
+                }]}
+              >
+                <View style={dvStyles.entryHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {isVoice && <IconSymbol name="mic.fill" size={13} color={colors.primary} />}
+                    <Text style={[dvStyles.entryTime, { color: colors.muted }]}>{formatTime(entry.createdAt)}</Text>
+                  </View>
+                  {!!entry.title && (
+                    <Text style={[dvStyles.entryTitle, { color: colors.foreground }]}>{entry.title}</Text>
+                  )}
+                </View>
+                {mainBody.length > 0 && (
+                  <Text style={[dvStyles.entryBody, { color: colors.foreground }]} numberOfLines={10}>
+                    {mainBody}
+                  </Text>
+                )}
+                {gratSection.length > 0 && (
+                  <View style={[dvStyles.gratBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    <Text style={[dvStyles.gratText, { color: colors.muted }]}>{gratSection}</Text>
+                  </View>
+                )}
+                {entry.attachments && entry.attachments.filter(a => a.type === 'audio').map((att, i) => (
+                  <AudioPlaybackRow key={i} uri={att.uri} duration={att.durationMs ? att.durationMs / 1000 : undefined} />
+                ))}
+              </Pressable>
+            );
+          })}
+
+          {/* ── Empty state ── */}
+          {dayCheckIns.length === 0 && dayEntries.length === 0 && (
+            <View style={dvStyles.emptyState}>
+              <Text style={{ fontSize: 40, textAlign: 'center' }}>📋</Text>
+              <Text style={[dvStyles.emptyTitle, { color: colors.foreground }]}>Nothing logged yet</Text>
+              <Text style={[dvStyles.emptySubtitle, { color: colors.muted }]}>
+                {selectedDate === todayDateStr()
+                  ? 'Use Voice Log or Log Habits from the + button, or tap + to write an entry.'
+                  : 'No entries were recorded for this day.'}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       )}
 
-      {/* FAB — lower position, smaller shadow */}
+      {/* ── FAB ── */}
       <Pressable
-        onPress={() => openNewEntry()}
+        onPress={() => openNewEntry(selectedDate)}
         style={({ pressed }) => [{
-          position: "absolute", bottom: 24, right: 20,
+          position: 'absolute', bottom: 24, right: 20,
           width: 56, height: 56, borderRadius: 28,
           backgroundColor: colors.primary,
-          alignItems: "center", justifyContent: "center",
-          shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+          alignItems: 'center', justifyContent: 'center',
+          shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.25, shadowRadius: 6, elevation: 6,
           opacity: pressed ? 0.8 : 1,
         }]}
@@ -1912,7 +2086,7 @@ export default function JournalScreen() {
         <IconSymbol name="plus" size={28} color="#fff" />
       </Pressable>
 
-      {/* Entry Editor Modal */}
+      {/* ── Entry Editor Modal ── */}
       <EntryEditor
         visible={editorVisible}
         entry={editingEntry}
@@ -1922,6 +2096,63 @@ export default function JournalScreen() {
         colors={colors}
         userId={userId}
       />
+
+      {/* ── Date Picker Bottom Sheet ── */}
+      <Modal
+        visible={datePickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDatePickerVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: '#00000066' }}
+          onPress={() => setDatePickerVisible(false)}
+        />
+        <View style={[dvStyles.pickerSheet, { backgroundColor: colors.surface }]}>
+          <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={() => setDatePickerVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+              <IconSymbol name="xmark" size={20} color={colors.muted} />
+            </Pressable>
+            <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Change Date</Text>
+            <Pressable
+              onPress={() => {
+                const chosen = buildPickerDate();
+                if (chosen <= todayDateStr()) setSelectedDate(chosen);
+                setDatePickerVisible(false);
+              }}
+              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+            >
+              <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Done</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            onPress={() => { setSelectedDate(todayDateStr()); setDatePickerVisible(false); }}
+            style={({ pressed }) => [dvStyles.todayBtn, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Today</Text>
+          </Pressable>
+          {/* Month / Day columns */}
+          <View style={{ flexDirection: 'row', height: 144, paddingHorizontal: 16 }}>
+            <WheelColumn
+              items={MONTHS}
+              initialIndex={new Date(selectedDate + 'T12:00:00').getMonth()}
+              onSelect={(idx) => {
+                pickerMonthRef.current = idx;
+                setPickerMonth(idx);
+                setPickerDayCount(getDaysInMonth(idx));
+              }}
+              width={180}
+            />
+            <WheelColumn
+              key={`day-${pickerDayCount}`}
+              items={Array.from({ length: pickerDayCount }, (_, i) => String(i + 1))}
+              initialIndex={Math.min(pickerDayRef.current, pickerDayCount - 1)}
+              onSelect={(idx) => { pickerDayRef.current = idx; }}
+              width={80}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -1940,4 +2171,42 @@ const journalStatStyles = StyleSheet.create({
   },
   val: { fontSize: 15, fontWeight: "700" },
   lbl: { fontSize: 11, fontWeight: "500" },
+});
+
+const dvStyles = StyleSheet.create({
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8,
+  },
+  navBtn: { padding: 10 },
+  dayLabelBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
+  dayLabel: { fontSize: 20, fontWeight: '700' },
+  card: {
+    borderRadius: 14, borderWidth: 0.5, padding: 14, marginBottom: 12,
+  },
+  cardTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
+  catLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 4 },
+  habitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 },
+  ratingDot: { width: 10, height: 10, borderRadius: 5 },
+  habitName: { fontSize: 15, fontWeight: '500' },
+  ratingLabel: { fontSize: 12, fontWeight: '600' },
+  entryHeader: { marginBottom: 6 },
+  entryTime: { fontSize: 12 },
+  entryTitle: { fontSize: 16, fontWeight: '600', marginTop: 2 },
+  entryBody: { fontSize: 15, lineHeight: 22 },
+  gratBox: { borderRadius: 8, borderWidth: 0.5, padding: 10, marginTop: 8 },
+  gratText: { fontSize: 13, lineHeight: 19 },
+  emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '600' },
+  emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24 },
+  pickerSheet: {
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingBottom: 40,
+  },
+  pickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 0.5,
+  },
+  pickerTitle: { fontSize: 17, fontWeight: '600' },
+  todayBtn: { alignSelf: 'center', paddingVertical: 10 },
 });

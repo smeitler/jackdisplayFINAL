@@ -1181,3 +1181,4 @@
 - [x] Voice check-in results: Journal Entry shows full transcript (editable TextInput)
 - [x] Scrolling waveform visualizer (iOS Voice Memos style, bars scroll left, amplitude-driven)
 - [x] AI auto-fills habit descriptions from transcript in results screen
+- [ ] Journal tab redesign: day-view with < Today ▼ > header, date wheel picker, show all day's inputs (habits, voice, notes, gratitude) as cards

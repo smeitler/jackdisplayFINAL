@@ -58,7 +58,7 @@ interface ColumnProps {
   width: number;
 }
 
-function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
+export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
   const colors = useColors();
   const count = items.length;
 
