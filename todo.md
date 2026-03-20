@@ -1163,3 +1163,5 @@
 - [ ] Calm theme home: replace stats bar with 3-month pill bars (red/yellow/green fill)
 - [ ] Calm theme home: remove percentage labels under category goal sections
 - [x] Voice check-in full-screen modal: idle mic → listening waveform → analyzing spinner → results (habit cards + journal block + gratitude) → log/save
+- [x] Fix voice-checkin: recording not working on web (needs MediaRecorder, not expo-audio) + Send button does nothing
+- [x] Fix Log Habits button: should navigate to /checkin screen (not journal?action=checkin)

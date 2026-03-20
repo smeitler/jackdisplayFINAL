@@ -48,7 +48,13 @@ export default function TabLayout() {
 
   function handleLogHabits() {
     closePlusSheet();
-    router.push("/(tabs)/journal?action=checkin");
+    // Navigate to the dedicated check-in screen for today
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    router.push(`/checkin?date=${dateStr}` as never);
   }
 
   // Tab layout: Dashboard | Journal | [+ spacer] | Rewards | More
