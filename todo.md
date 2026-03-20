@@ -1243,3 +1243,9 @@
 - [x] Full-screen audio player modal: opens when any wellness track is tapped
 - [x] Full-screen player: large category icon, track title/artist, big play/pause button, progress bar with time, prev/next track controls
 - [x] Track list rows show play indicator (waveform/dot) when that track is active; tapping again opens the full-screen player
+- [x] Wellness audio screen redesign: 4-layer UX (contextual header, recommended, quick actions, explore library)
+- [x] Layer 1: Contextual header strip — time-based cue (Morning/Afternoon/Night) + streak/last activity
+- [x] Layer 2: Recommended cards — horizontal swipeable, 1 short + 1 medium + 1 long, shows title/duration/outcome
+- [x] Layer 3: Quick Actions — pill buttons with outcome-based labels, tap = immediate full-screen player
+- [x] Layer 4: Explore library — structured subcategory rows with horizontal scroll, outcome-based naming
+- [x] All 4 categories (Meditate, Sleep, Move, Focus) get category-specific quick actions and subcategories
