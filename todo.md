@@ -1292,3 +1292,10 @@
 - [x] Fix selection lost when Aa tapped — use onPressIn + dvPreFontSheetSelection snapshot before blur
 - [x] Add keepFocused prop to RichTextEditor — TextInput stays in edit mode while font sheet is open
 - [x] Always persist selection in onSelectionChange (remove guard that could skip valid positions)
+
+- [x] Replace complex journal entry card with simple inline preview card (text preview + photo thumbnail + expand button)
+- [x] Build full-screen Apple Notes-style journal editor modal (black bg, top bar with back/undo/share/.../checkmark)
+- [x] Add keyboard accessory toolbar to full-screen editor (Aa | checklist | paperclip | compass | magic | more)
+- [x] Add Format sheet to full-screen editor (Title/Heading/Subheading/Body pills + B/I/U/S + list/align)
+- [x] Wire expand button in inline card to open full-screen editor
+- [x] Wire back button and checkmark to save note and close editor

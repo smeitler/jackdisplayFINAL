@@ -2266,6 +2266,338 @@ function DrawCanvas({ colors }: { colors: any }) {
   );
 }
 
+// ─── FullScreenJournalEditor ─────────────────────────────────────────────────────────────────────────────────────────────────────
+interface FullScreenJournalEditorProps {
+  visible: boolean;
+  value: string;
+  onChange: (text: string) => void;
+  onClose: () => void;
+  onPickPhoto: () => void;
+  onPickCamera: () => void;
+  colors: any;
+  insets: { top: number; bottom: number };
+}
+function FullScreenJournalEditor({
+  visible, value, onChange, onClose, onPickPhoto, onPickCamera, colors, insets,
+}: FullScreenJournalEditorProps) {
+  const inputRef = useRef<TextInput>(null);
+  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const preFmtSel = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
+  const [showFmtSheet, setShowFmtSheet] = useState(false);
+  const [activeStyle, setActiveStyle] = useState<'title' | 'heading' | 'subheading' | 'body'>('body');
+  const fmtSheetAnim = useRef(new Animated.Value(360)).current;
+
+  const openFmtSheet = useCallback(() => {
+    preFmtSel.current = { ...selectionRef.current };
+    setShowFmtSheet(true);
+    Animated.timing(fmtSheetAnim, { toValue: 0, duration: 240, useNativeDriver: true }).start();
+  }, [fmtSheetAnim]);
+
+  const closeFmtSheet = useCallback(() => {
+    Animated.timing(fmtSheetAnim, { toValue: 360, duration: 200, useNativeDriver: true }).start(() =>
+      setShowFmtSheet(false)
+    );
+  }, [fmtSheetAnim]);
+
+  useEffect(() => {
+    if (visible) setTimeout(() => inputRef.current?.focus(), 120);
+  }, [visible]);
+
+  const applyInlineFormat = useCallback((type: 'bold' | 'italic' | 'underline' | 'strikethrough') => {
+    const markers: Record<string, string> = { bold: '**', italic: '*', underline: '__', strikethrough: '~~' };
+    const m = markers[type];
+    const { start, end } = preFmtSel.current;
+    const s = Math.min(start, end);
+    const e2 = Math.max(start, end);
+    const selected = value.slice(s, e2);
+    const before = value.slice(0, s);
+    const after = value.slice(e2);
+    let newText: string;
+    let newCursor: number;
+    if (selected.startsWith(m) && selected.endsWith(m) && selected.length > m.length * 2) {
+      const inner = selected.slice(m.length, selected.length - m.length);
+      newText = before + inner + after;
+      newCursor = s + inner.length;
+    } else if (s === e2) {
+      newText = before + m + m + after;
+      newCursor = s + m.length;
+    } else {
+      newText = before + m + selected + m + after;
+      newCursor = s + m.length + selected.length + m.length;
+    }
+    onChange(newText);
+    setBodySelection({ start: newCursor, end: newCursor });
+    closeFmtSheet();
+    setTimeout(() => { inputRef.current?.focus(); setTimeout(() => setBodySelection(undefined), 80); }, 30);
+  }, [value, onChange, closeFmtSheet]);
+
+  const applyParagraphStyle = useCallback((style: 'title' | 'heading' | 'subheading' | 'body') => {
+    const pos = preFmtSel.current.start;
+    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
+    const lineEnd = value.indexOf('\n', pos);
+    const end = lineEnd === -1 ? value.length : lineEnd;
+    const line = value.slice(lineStart, end);
+    const stripped = line.replace(/^(# |## |### )/, '');
+    const prefix: Record<string, string> = { title: '# ', heading: '## ', subheading: '### ', body: '' };
+    const newText = value.slice(0, lineStart) + prefix[style] + stripped + value.slice(end);
+    onChange(newText);
+    setActiveStyle(style);
+    closeFmtSheet();
+    setTimeout(() => { inputRef.current?.focus(); }, 30);
+  }, [value, onChange, closeFmtSheet]);
+
+  const insertBullet = useCallback(() => {
+    const pos = preFmtSel.current.start;
+    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
+    const line = value.slice(lineStart, pos);
+    let newText: string; let newCursor: number;
+    if (line.startsWith('- ')) {
+      newText = value.slice(0, lineStart) + value.slice(lineStart + 2);
+      newCursor = pos - 2;
+    } else {
+      newText = value.slice(0, lineStart) + '- ' + value.slice(lineStart);
+      newCursor = pos + 2;
+    }
+    onChange(newText);
+    setBodySelection({ start: newCursor, end: newCursor });
+    closeFmtSheet();
+    setTimeout(() => { inputRef.current?.focus(); setTimeout(() => setBodySelection(undefined), 80); }, 30);
+  }, [value, onChange, closeFmtSheet]);
+
+  const insertNumbered = useCallback(() => {
+    const pos = preFmtSel.current.start;
+    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
+    const newText = value.slice(0, lineStart) + '1. ' + value.slice(lineStart);
+    const newCursor = pos + 3;
+    onChange(newText);
+    setBodySelection({ start: newCursor, end: newCursor });
+    closeFmtSheet();
+    setTimeout(() => { inputRef.current?.focus(); setTimeout(() => setBodySelection(undefined), 80); }, 30);
+  }, [value, onChange, closeFmtSheet]);
+
+  const handleChangeText = useCallback((text: string) => {
+    if (text.length > value.length && text[text.length - 1] === '\n') {
+      const beforeNL = text.slice(0, text.length - 1);
+      const lastNL = beforeNL.lastIndexOf('\n');
+      const prevLine = beforeNL.slice(lastNL + 1);
+      if (prevLine.startsWith('- ') && prevLine.length > 2) { onChange(text + '- '); return; }
+      if (prevLine === '- ') { onChange(beforeNL.slice(0, lastNL + 1) + '\n'); return; }
+      const nm = prevLine.match(/^(\d+)\. (.+)/);
+      if (nm) { onChange(text + `${parseInt(nm[1], 10) + 1}. `); return; }
+      if (/^\d+\. $/.test(prevLine)) { onChange(beforeNL.slice(0, lastNL + 1) + '\n'); return; }
+    }
+    onChange(text);
+  }, [value, onChange]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        {/* Status bar spacer */}
+        <View style={{ height: insets.top }} />
+        {/* Top navigation bar */}
+        <View style={fsStyles.topBar}>
+          <Pressable onPress={onClose} style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+            <IconSymbol name="chevron.left" size={22} color="#ffffff" />
+          </Pressable>
+          <View style={{ flex: 1 }} />
+          <Pressable style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+            <IconSymbol name="arrow.uturn.backward" size={20} color="#ffffff" />
+          </Pressable>
+          <View style={fsStyles.topBarGroup}>
+            <Pressable style={({ pressed }) => [fsStyles.topBarGroupBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="square.and.arrow.up" size={20} color="#ffffff" />
+            </Pressable>
+            <View style={fsStyles.topBarDivider} />
+            <Pressable style={({ pressed }) => [fsStyles.topBarGroupBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="ellipsis" size={20} color="#ffffff" />
+            </Pressable>
+          </View>
+          <Pressable onPress={onClose} style={({ pressed }) => [fsStyles.checkBtn, { opacity: pressed ? 0.8 : 1 }]}>
+            <IconSymbol name="checkmark" size={20} color="#000000" />
+          </Pressable>
+        </View>
+        {/* Editor + keyboard toolbar */}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <TextInput
+              ref={inputRef}
+              value={value}
+              onChangeText={handleChangeText}
+              onSelectionChange={(e) => { selectionRef.current = e.nativeEvent.selection; }}
+              selection={bodySelection}
+              multiline
+              placeholder="Start writing..."
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              style={fsStyles.textInput}
+              autoFocus
+              textAlignVertical="top"
+            />
+          </ScrollView>
+          {/* Keyboard accessory toolbar */}
+          <View style={[fsStyles.toolbar, { paddingBottom: 10 + insets.bottom }]}>
+            {/* Aa — Format sheet */}
+            <Pressable
+              onPressIn={() => { preFmtSel.current = { ...selectionRef.current }; openFmtSheet(); }}
+              style={({ pressed }) => [fsStyles.toolbarBtn, showFmtSheet && fsStyles.toolbarBtnActive, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Text style={fsStyles.aaText}>Aa</Text>
+            </Pressable>
+            {/* Checklist */}
+            <Pressable
+              onPress={() => {
+                preFmtSel.current = { ...selectionRef.current };
+                const pos = preFmtSel.current.start;
+                const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
+                onChange(value.slice(0, lineStart) + '☐ ' + value.slice(lineStart));
+                setTimeout(() => inputRef.current?.focus(), 30);
+              }}
+              style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <IconSymbol name="checklist" size={22} color="rgba(255,255,255,0.8)" />
+            </Pressable>
+            {/* Table */}
+            <Pressable style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="table.fill" size={22} color="rgba(255,255,255,0.8)" />
+            </Pressable>
+            {/* Paperclip — photo library */}
+            <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="paperclip" size={22} color="rgba(255,255,255,0.8)" />
+            </Pressable>
+            {/* Location */}
+            <Pressable style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="location.circle.fill" size={22} color="rgba(255,255,255,0.8)" />
+            </Pressable>
+            {/* Magic / AI */}
+            <Pressable style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="wand.and.stars" size={22} color="rgba(255,255,255,0.8)" />
+            </Pressable>
+            <View style={{ flex: 1 }} />
+            {/* Camera */}
+            <Pressable onPress={onPickCamera} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <IconSymbol name="camera.fill" size={22} color="rgba(255,255,255,0.8)" />
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+        {/* Format sheet backdrop */}
+        {showFmtSheet && (
+          <Pressable
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onPress={closeFmtSheet}
+          />
+        )}
+        {/* Format sheet — slides up without dismissing keyboard */}
+        {showFmtSheet && (
+          <Animated.View style={[fsStyles.fmtSheet, { paddingBottom: insets.bottom + 8 }, { transform: [{ translateY: fmtSheetAnim }] }]}>
+            {/* Handle */}
+            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
+              <View style={fsStyles.handle} />
+            </View>
+            {/* Header */}
+            <View style={fsStyles.fmtHeader}>
+              <Text style={fsStyles.fmtTitle}>Format</Text>
+              <Pressable onPress={closeFmtSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                <IconSymbol name="xmark" size={20} color="rgba(255,255,255,0.6)" />
+              </Pressable>
+            </View>
+            {/* Paragraph style pills */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>
+              {(['title', 'heading', 'subheading', 'body'] as const).map((style) => (
+                <Pressable
+                  key={style}
+                  onPress={() => applyParagraphStyle(style)}
+                  style={({ pressed }) => [fsStyles.stylePill, activeStyle === style && fsStyles.stylePillActive, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Text style={[fsStyles.stylePillText, activeStyle === style && fsStyles.stylePillTextActive,
+                    style === 'title' ? { fontSize: 18, fontWeight: '700' } :
+                    style === 'heading' ? { fontSize: 16, fontWeight: '700' } :
+                    style === 'subheading' ? { fontSize: 14, fontWeight: '600' } :
+                    { fontSize: 13 }
+                  ]}>
+                    {style.charAt(0).toUpperCase() + style.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {/* Inline format row: B I U S */}
+            <View style={fsStyles.fmtRow}>
+              {([
+                { type: 'bold' as const, label: 'B', extra: { fontWeight: '900' as const } },
+                { type: 'italic' as const, label: 'I', extra: { fontStyle: 'italic' as const } },
+                { type: 'underline' as const, label: 'U', extra: { textDecorationLine: 'underline' as const } },
+                { type: 'strikethrough' as const, label: 'S', extra: { textDecorationLine: 'line-through' as const } },
+              ]).map(({ type, label, extra }) => (
+                <Pressable key={type} onPress={() => applyInlineFormat(type)} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <Text style={[fsStyles.fmtBtnText, extra]}>{label}</Text>
+                </Pressable>
+              ))}
+              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="pencil" size={20} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5A623' }} />
+              </Pressable>
+            </View>
+            {/* List / indent row */}
+            <View style={[fsStyles.fmtRow, { paddingBottom: 12 }]}>
+              <Pressable onPress={insertBullet} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="list.bullet.indent" size={20} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+              <Pressable onPress={insertNumbered} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="list.number" size={20} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="text.alignleft" size={20} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="increase.indent" size={20} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+              <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="decrease.indent" size={20} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+            </View>
+          </Animated.View>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+const fsStyles = StyleSheet.create({
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  topBarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  topBarGroup: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 20, overflow: 'hidden' },
+  topBarGroupBtn: { paddingHorizontal: 12, paddingVertical: 10 },
+  topBarDivider: { width: 0.5, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 8 },
+  checkBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
+  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
+  toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  toolbarBtnActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  aaText: { fontSize: 15, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
+  fmtSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#1c1c1e', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
+  fmtHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
+  fmtTitle: { fontSize: 17, fontWeight: '600', color: '#ffffff', flex: 1 },
+  stylePill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)' },
+  stylePillActive: { backgroundColor: '#F5A623' },
+  stylePillText: { color: '#ffffff' },
+  stylePillTextActive: { color: '#000000' },
+  fmtRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, paddingBottom: 12 },
+  fmtBtn: { width: 52, height: 44, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  fmtBtnText: { fontSize: 18, color: '#ffffff' },
+});
+
 export default function JournalScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
@@ -2495,6 +2827,8 @@ export default function JournalScreen() {
   const [dvShowAudioRecorder, setDvShowAudioRecorder] = useState(false);
   // Draw canvas
   const [dvShowDraw, setDvShowDraw] = useState(false);
+  // Full-screen journal editor
+  const [dvShowFullEditor, setDvShowFullEditor] = useState(false);
   // Font style sheet
   const [dvShowFontSheet, setDvShowFontSheet] = useState(false);
   const fontSheetAnim = useRef(new Animated.Value(300)).current;
@@ -2918,94 +3252,86 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── JOURNAL ENTRY — moved above habit ratings ── */}
-          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
-<RichTextEditor
-              value={dvJournalNote}
-              onChange={(text) => {
-                setDvJournalNote(text);
-                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-              }}
-              onSelectionChange={(sel) => {
-                // Always persist — keepFocused ensures TextInput never hides when font sheet is open
-                // so there are no spurious {0,0} events from a hidden/remounting input.
-                dvSelection.current = sel;
-              }}
-              inputRef={dvTextInputRef}
-              bodySelection={dvBodySelection}
-              keepFocused={dvShowFontSheet}
-              colors={colors}
-            />
-            {/* Photo thumbnails for this day's primary entry */}
+          {/* ── JOURNAL ENTRY — simple preview card, tap to open full-screen editor ── */}
+          <Pressable
+            onPress={() => setDvShowFullEditor(true)}
+            style={({ pressed }) => [dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
+              <Pressable
+                onPress={() => setDvShowFullEditor(true)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
+              >
+                <IconSymbol name="square.and.pencil" size={18} color={colors.primary} />
+              </Pressable>
+            </View>
+            {/* Preview: first 2 lines of text */}
+            {dvJournalNote ? (
+              <Text
+                numberOfLines={3}
+                style={{ fontSize: 15, lineHeight: 22, color: colors.foreground }}
+              >
+                {dvJournalNote.replace(/^(# |## |### |- )/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')}
+              </Text>
+            ) : (
+              <Text style={{ fontSize: 15, lineHeight: 22, color: colors.muted, fontStyle: 'italic' }}>
+                Tap to write your entry...
+              </Text>
+            )}
+            {/* Photo thumbnail strip */}
             {dvPrimaryEntryId.current && (() => {
               const photoAtts = (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo');
               if (photoAtts.length === 0) return null;
               return (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                  {photoAtts.map((att) => (
-                    <Image key={att.id} source={{ uri: att.uri }} style={{ width: 72, height: 72, borderRadius: 8, marginRight: 6 }} />
+                <View style={{ flexDirection: 'row', marginTop: 10, gap: 6 }}>
+                  {photoAtts.slice(0, 4).map((att, i) => (
+                    <View key={att.id} style={{ position: 'relative' }}>
+                      <Image source={{ uri: att.uri }} style={{ width: 56, height: 56, borderRadius: 8 }} />
+                      {i === 3 && photoAtts.length > 4 && (
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>+{photoAtts.length - 4}</Text>
+                        </View>
+                      )}
+                    </View>
                   ))}
-                </ScrollView>
+                </View>
               );
             })()}
             {/* Tag chips */}
             {dvTags.length > 0 && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                 {dvTags.map((tag) => (
-                  <Pressable
+                  <View
                     key={tag}
-                    onPress={() => setDvTags((prev) => prev.filter((t) => t !== tag))}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '22', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
                   >
                     <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>#{tag}</Text>
-                    <IconSymbol name="xmark" size={10} color={colors.primary} />
-                  </Pressable>
+                  </View>
                 ))}
               </View>
             )}
-            {/* Tag input */}
-            {dvShowTagInput && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                <TextInput
-                  value={dvTagInput}
-                  onChangeText={setDvTagInput}
-                  placeholder="Add tag..."
-                  placeholderTextColor={colors.muted}
-                  autoFocus
-                  returnKeyType="done"
-                  onSubmitEditing={() => dvAddTag(dvTagInput)}
-                  style={{ flex: 1, fontSize: 14, color: colors.foreground, borderBottomWidth: 1, borderBottomColor: colors.primary, paddingVertical: 4 }}
-                />
-                <Pressable onPress={() => dvAddTag(dvTagInput)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-                  <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Add</Text>
-                </Pressable>
-              </View>
-            )}
-            {/* Bottom toolbar: ↓ dismiss | photo | paperclip | Aa */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-              {/* Left: dismiss keyboard */}
-              <Pressable
-                onPress={() => Keyboard.dismiss()}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 6 })}
-              >
-                <IconSymbol name="chevron.down" size={20} color={colors.muted} />
-              </Pressable>
-              {/* Right: photo + paperclip + Aa */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                <Pressable onPress={dvPickPhoto} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
-                  <IconSymbol name="photo.fill" size={22} color={colors.muted} />
-                </Pressable>
-                <Pressable onPress={() => setDvShowAttachSheet(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
-                  <IconSymbol name="paperclip" size={22} color={colors.muted} />
-                </Pressable>
-                <Pressable onPressIn={openFontSheet} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: colors.muted, letterSpacing: -0.5 }}>Aa</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
+          </Pressable>
+          {/* ── Full-screen journal editor ── */}
+          <FullScreenJournalEditor
+            visible={dvShowFullEditor}
+            value={dvJournalNote}
+            onChange={(text) => {
+              setDvJournalNote(text);
+              if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+              autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+            }}
+            onClose={() => {
+              setDvShowFullEditor(false);
+              // Final save when closing
+              if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+              saveDvNoteAndGrat(dvJournalNote, dvGratItems);
+            }}
+            onPickPhoto={dvPickPhoto}
+            onPickCamera={dvPickCamera}
+            colors={colors}
+            insets={insets}
+          />
 
           {/* ── Day-view Attach Sheet ── */}
           <Modal visible={dvShowAttachSheet} transparent animationType="slide" onRequestClose={() => setDvShowAttachSheet(false)}>

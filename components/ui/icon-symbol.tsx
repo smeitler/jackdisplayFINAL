@@ -140,6 +140,21 @@ const MAPPING: Record<string, MaterialIconName> = {
   "italic": "format-italic",
   "textformat.size": "format-size",
   "list.bullet.indent": "format-list-bulleted",
+  // Full-screen editor toolbar
+  "arrow.uturn.backward": "undo",
+  "arrow.uturn.forward": "redo",
+  "checklist": "checklist",
+  "table.fill": "table-chart",
+  "location.circle.fill": "my-location",
+  "wand.and.stars": "auto-fix-high",
+  "square.and.pencil": "note-add",
+  "underline": "format-underlined",
+  "strikethrough": "format-strikethrough",
+  "text.alignleft": "format-align-left",
+  "list.number": "format-list-numbered",
+  "increase.indent": "format-indent-increase",
+  "decrease.indent": "format-indent-decrease",
+  "arrow.up.left.and.arrow.down.right": "open-in-full",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;
