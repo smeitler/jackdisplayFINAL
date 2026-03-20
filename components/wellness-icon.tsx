@@ -3,9 +3,14 @@
  *
  * Flat SVG icons for the four wellness categories.
  * Each icon is a single-color flat design, sized to fit the wellness card.
+ *
+ * Meditate → Peace symbol (circle + vertical + two diagonal lines)
+ * Sleep    → Crescent moon with stars
+ * Move     → Dumbbell
+ * Focus    → Music note
  */
 
-import Svg, { Path, Circle, Ellipse, G, Rect, Line, Polygon } from "react-native-svg";
+import Svg, { Path, Circle, Line, G } from "react-native-svg";
 
 type WellnessCategory = "meditate" | "sleep" | "move" | "focus";
 
@@ -15,39 +20,20 @@ interface WellnessIconProps {
   color?: string;
 }
 
-// ── Meditate: seated lotus silhouette ────────────────────────────────────────
+// ── Meditate: Peace symbol ────────────────────────────────────────────────────
+// Classic ☮ — outer circle, vertical line down from centre, two diagonal lines
 function MeditateIcon({ size = 28, color = "#FF8C42" }: { size?: number; color?: string }) {
+  const sw = size * 0.1; // stroke width scales with size
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Head */}
-      <Circle cx="12" cy="4.5" r="2" fill={color} />
-      {/* Body / torso */}
-      <Path
-        d="M12 7.5C10 7.5 8.5 9 8 11H16C15.5 9 14 7.5 12 7.5Z"
-        fill={color}
-      />
-      {/* Left arm resting on knee */}
-      <Path
-        d="M8 11C6.5 11.5 5 12.5 4.5 14H8.5L8 11Z"
-        fill={color}
-      />
-      {/* Right arm resting on knee */}
-      <Path
-        d="M16 11C17.5 11.5 19 12.5 19.5 14H15.5L16 11Z"
-        fill={color}
-      />
-      {/* Crossed legs / base */}
-      <Path
-        d="M4.5 14C4 15.5 4.5 17 6 17.5L9 16L12 17L15 16L18 17.5C19.5 17 20 15.5 19.5 14H4.5Z"
-        fill={color}
-      />
-      {/* Ground line */}
-      <Path
-        d="M5 19.5H19"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
+      {/* Outer circle */}
+      <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={sw} />
+      {/* Vertical line: top centre → bottom centre */}
+      <Line x1="12" y1="3" x2="12" y2="21" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+      {/* Bottom-left diagonal: centre → lower-left */}
+      <Line x1="12" y1="12" x2="4.5" y2="19.5" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+      {/* Bottom-right diagonal: centre → lower-right */}
+      <Line x1="12" y1="12" x2="19.5" y2="19.5" stroke={color} strokeWidth={sw} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -75,49 +61,21 @@ function SleepIcon({ size = 28, color = "#B07FD0" }: { size?: number; color?: st
   );
 }
 
-// ── Move: running figure ──────────────────────────────────────────────────────
+// ── Move: Dumbbell ────────────────────────────────────────────────────────────
 function MoveIcon({ size = 28, color = "#22C55E" }: { size?: number; color?: string }) {
+  const sw = size * 0.11;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Head */}
-      <Circle cx="14.5" cy="3.5" r="2" fill={color} />
-      {/* Torso */}
-      <Path
-        d="M13 6L10 12L13 13L11 19"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* Forward arm */}
-      <Path
-        d="M13 8L17 10"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      {/* Back arm */}
-      <Path
-        d="M11 10L8 8"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      {/* Forward leg */}
-      <Path
-        d="M11 19L14 22"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      {/* Back leg */}
-      <Path
-        d="M13 13L9 16L7 20"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      {/* Left outer plate */}
+      <Line x1="3" y1="9" x2="3" y2="15" stroke={color} strokeWidth={sw * 2.2} strokeLinecap="round" />
+      {/* Left inner collar */}
+      <Line x1="6" y1="8" x2="6" y2="16" stroke={color} strokeWidth={sw * 1.5} strokeLinecap="round" />
+      {/* Bar */}
+      <Line x1="6" y1="12" x2="18" y2="12" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+      {/* Right inner collar */}
+      <Line x1="18" y1="8" x2="18" y2="16" stroke={color} strokeWidth={sw * 1.5} strokeLinecap="round" />
+      {/* Right outer plate */}
+      <Line x1="21" y1="9" x2="21" y2="15" stroke={color} strokeWidth={sw * 2.2} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -126,7 +84,7 @@ function MoveIcon({ size = 28, color = "#22C55E" }: { size?: number; color?: str
 function FocusIcon({ size = 28, color = "#3B82F6" }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Single music note */}
+      {/* Stem + flag */}
       <Path
         d="M9 18V5L21 3V16"
         stroke={color}
@@ -134,9 +92,9 @@ function FocusIcon({ size = 28, color = "#3B82F6" }: { size?: number; color?: st
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Note head (bottom of stem) */}
+      {/* Bottom note head */}
       <Circle cx="6" cy="18" r="3" fill={color} />
-      {/* Note head (top) */}
+      {/* Top note head */}
       <Circle cx="18" cy="16" r="3" fill={color} />
     </Svg>
   );
