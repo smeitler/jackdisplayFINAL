@@ -13,12 +13,13 @@
  *   - Web: MediaRecorder API (proven to work in checkin.tsx)
  *   - Native (iOS/Android): expo-audio useAudioRecorder
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
   Easing,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,6 +39,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { CategoryIcon } from "@/components/category-icon";
 import { useColors } from "@/hooks/use-colors";
 import { useApp } from "@/lib/app-context";
 import { trpc } from "@/lib/trpc";
@@ -541,13 +543,37 @@ const cardStyles = StyleSheet.create({
 export default function VoiceCheckinScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { habits } = useApp();
+  const { habits, activeHabits, categories } = useApp();
+  const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
+  const habitsByCategory = useMemo(() => {
+    const map: Record<string, typeof activeHabits> = {};
+    for (const cat of categories) map[cat.id] = [];
+    for (const h of activeHabits) {
+      if (!map[h.category]) map[h.category] = [];
+      map[h.category].push(h);
+    }
+    return map;
+  }, [activeHabits, categories]);
 
   // Start directly in listening phase — idle screen never renders
   const [phase, setPhase] = useState<Phase>("listening");
   const [results, setResults] = useState<ParsedResults | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Flat ratings map for the classic check-in UI (habitId -> rating)
+  // Derived from results.habitResults; updated when user taps a segment
+  const [vcRatings, setVcRatings] = useState<Record<string, "red" | "yellow" | "green" | "none">>({});
+
+  // Sync vcRatings when results arrive
+  useEffect(() => {
+    if (!results) return;
+    const map: Record<string, "red" | "yellow" | "green" | "none"> = {};
+    for (const r of results.habitResults) {
+      map[r.habitId] = r.rating ?? "none";
+    }
+    setVcRatings(map);
+  }, [results]);
 
   // ── Web recorder ──────────────────────────────────────────────────────────
   const webRecorder = useWebRecorder();
@@ -733,10 +759,10 @@ export default function VoiceCheckinScreen() {
       const today = todayDateStr();
       const allHabitIds = habits.map((h) => h.id);
 
-      // 1. Save habit check-ins
+      // 1. Save habit check-ins (use vcRatings which reflects user edits)
       const ratingsMap: Record<string, Rating> = {};
-      for (const r of results.habitResults) {
-        if (r.rating) ratingsMap[r.habitId] = r.rating as Rating;
+      for (const [habitId, rating] of Object.entries(vcRatings)) {
+        if (rating && rating !== 'none') ratingsMap[habitId] = rating as Rating;
       }
       if (Object.keys(ratingsMap).length > 0) {
         await submitCheckIn(today, ratingsMap, allHabitIds);
@@ -780,7 +806,7 @@ export default function VoiceCheckinScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [results, habits, router]);
+  }, [results, habits, router, vcRatings]);
 
   const handleTryAgain = useCallback(() => {
     setPhase("idle");
@@ -876,128 +902,226 @@ export default function VoiceCheckinScreen() {
         </ScrollView>
       )}
 
-      {/* ANALYZING phase */}
-      {phase === "analyzing" && (
-        <View style={phaseStyles.center}>
-          <SpinningDots color={colors.primary} />
-          <Text style={[phaseStyles.analyzeTitle, { color: colors.foreground }]}>
-            Processing...
-          </Text>
-          <CyclingStatusText color={colors.muted} />
-          <Text style={[phaseStyles.analyzeNote, { color: colors.muted + "88" }]}>
-            This usually takes 10–20 seconds
-          </Text>
-        </View>
-      )}
+      {/* ANALYZING phase — always mounted so spinner never resets */}
+      <View
+        style={[
+          phaseStyles.center,
+          { display: phase === "analyzing" ? "flex" : "none" },
+        ]}
+        pointerEvents={phase === "analyzing" ? "auto" : "none"}
+      >
+        <SpinningDots color={colors.primary} />
+        <Text style={[phaseStyles.analyzeTitle, { color: colors.foreground }]}>
+          Processing...
+        </Text>
+        <CyclingStatusText color={colors.muted} />
+        <Text style={[phaseStyles.analyzeNote, { color: colors.muted + "88" }]}>
+          This usually takes 10–20 seconds
+        </Text>
+      </View>
 
-      {/* RESULTS phase */}
+      {/* RESULTS phase — classic grouped-category layout */}
       {phase === "results" && results && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={resultsStyles.container}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Habit cards */}
-          {results.habitResults.length > 0 && (
-            <View style={resultsStyles.section}>
-              <Text style={[resultsStyles.sectionTitle, { color: colors.foreground }]}>
-                Habits
-              </Text>
-              {results.habitResults.map((item) => (
-                <HabitResultCard
-                  key={item.habitId}
-                  item={item}
-                  onRatingChange={handleRatingChange}
-                  onNoteChange={handleNoteChange}
-                  colors={colors}
+        <>
+          {/* Legend row */}
+          <View style={[classicStyles.legendRow, { borderBottomColor: colors.border }]}>
+            {(['red', 'yellow', 'green'] as const).map((r) => (
+              <View key={r} style={classicStyles.legendItem}>
+                <View style={[classicStyles.legendDot, { backgroundColor: RATING_COLORS[r] }]} />
+                <Text style={[classicStyles.legendText, { color: colors.muted }]}>
+                  {r === 'red' ? 'Missed' : r === 'yellow' ? 'Okay' : 'Crushed it'}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Rate All row */}
+          <View style={[classicStyles.rateAllRow, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <Text style={[classicStyles.rateAllLabel, { color: colors.muted }]}>Rate All</Text>
+            <View style={[classicStyles.segmentedBtn, { backgroundColor: colors.border }]}>
+              {(['red', 'yellow', 'green'] as const).map((r, i) => (
+                <Pressable
+                  key={r}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                    const next: Record<string, 'red' | 'yellow' | 'green' | 'none'> = {};
+                    for (const h of activeHabits) next[h.id] = r;
+                    setVcRatings(next);
+                  }}
+                  style={({ pressed }) => [
+                    classicStyles.segment,
+                    i === 0 && classicStyles.segmentFirst,
+                    i === 2 && classicStyles.segmentLast,
+                    { backgroundColor: RATING_COLORS[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
+                  ]}
                 />
               ))}
             </View>
-          )}
+          </View>
 
-          {/* No habits detected */}
-          {results.habitResults.length === 0 && (
-            <View
-              style={[
-                resultsStyles.emptyHabits,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <Text style={[resultsStyles.emptyText, { color: colors.muted }]}>
-                No specific habits were detected. Your journal entry and gratitude items are saved below.
-              </Text>
-            </View>
-          )}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={classicStyles.scroll}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Grouped habits by category */}
+            {sortedCategories.map((cat) => {
+              const catHabits = habitsByCategory[cat.id] ?? [];
+              if (catHabits.length === 0) return null;
+              return (
+                <View key={cat.id} style={classicStyles.section}>
+                  {/* Category header */}
+                  <View style={classicStyles.sectionHeader}>
+                    <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
+                    <Text style={[classicStyles.sectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
+                    <View style={{ flex: 1 }} />
+                    {/* Rate whole category */}
+                    <View style={[classicStyles.segmentedBtn, { backgroundColor: colors.border }]}>
+                      {(['red', 'yellow', 'green'] as const).map((r, i) => (
+                        <Pressable
+                          key={r}
+                          onPress={() => {
+                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            setVcRatings((prev) => {
+                              const next = { ...prev };
+                              for (const h of catHabits) next[h.id] = r;
+                              return next;
+                            });
+                          }}
+                          style={({ pressed }) => [
+                            classicStyles.segment,
+                            classicStyles.segmentSmall,
+                            i === 0 && classicStyles.segmentFirst,
+                            i === 2 && classicStyles.segmentLast,
+                            { backgroundColor: RATING_COLORS[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
 
-          {/* Journal block */}
-          {(results.journalEntries.length > 0 || results.transcript) && (
-            <View style={resultsStyles.section}>
-              <Text style={[resultsStyles.sectionTitle, { color: colors.foreground }]}>
-                Journal Entry
-              </Text>
-              <View
-                style={[
-                  resultsStyles.journalBlock,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[resultsStyles.journalText, { color: colors.foreground }]}>
-                  {results.journalEntries.length > 0
-                    ? results.journalEntries.join("\n\n")
-                    : results.transcript}
-                </Text>
-              </View>
-            </View>
-          )}
+                  {/* Habit rows */}
+                  <View style={[classicStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {catHabits.map((habit, idx) => {
+                      const current = vcRatings[habit.id] ?? 'none';
+                      const isLast = idx === catHabits.length - 1;
+                      return (
+                        <View
+                          key={habit.id}
+                          style={[
+                            classicStyles.habitRow,
+                            !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+                          ]}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[classicStyles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
+                            {habit.description ? (
+                              <Text style={[classicStyles.habitDesc, { color: colors.muted }]} numberOfLines={2}>
+                                {habit.description}
+                              </Text>
+                            ) : null}
+                          </View>
+                          {/* 3-color segmented button */}
+                          <View style={[classicStyles.segmentedBtn, { backgroundColor: colors.border }]}>
+                            {(['red', 'yellow', 'green'] as const).map((r, i) => {
+                              const isSelected = current === r;
+                              return (
+                                <Pressable
+                                  key={r}
+                                  onPress={() => {
+                                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    setVcRatings((prev) => ({
+                                      ...prev,
+                                      [habit.id]: prev[habit.id] === r ? 'none' : r,
+                                    }));
+                                  }}
+                                  style={({ pressed }) => [
+                                    classicStyles.segment,
+                                    i === 0 && classicStyles.segmentFirst,
+                                    i === 2 && classicStyles.segmentLast,
+                                    {
+                                      backgroundColor: isSelected ? RATING_COLORS[r] : RATING_COLORS[r] + '44',
+                                      opacity: pressed ? 0.75 : 1,
+                                    },
+                                  ]}
+                                />
+                              );
+                            })}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
 
-          {/* Gratitude */}
-          {results.gratitudeItems.length > 0 && (
-            <View style={resultsStyles.section}>
-              <Text style={[resultsStyles.sectionTitle, { color: colors.foreground }]}>
-                Grateful For
-              </Text>
-              {results.gratitudeItems.map((g, i) => (
-                <View
-                  key={i}
-                  style={[
-                    resultsStyles.gratitudeItem,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  <Text style={[resultsStyles.gratitudeText, { color: colors.foreground }]}>
-                    {g}
+            {/* Journal block */}
+            {(results.journalEntries.length > 0 || results.transcript) && (
+              <View style={classicStyles.journalSection}>
+                <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Journal Entry</Text>
+                <View style={[classicStyles.journalBlock, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[classicStyles.journalText, { color: colors.foreground }]}>
+                    {results.journalEntries.length > 0 ? results.journalEntries.join('\n\n') : results.transcript}
                   </Text>
                 </View>
-              ))}
-            </View>
-          )}
+              </View>
+            )}
 
-          {/* Action buttons */}
-          <View style={resultsStyles.actions}>
-            <TouchableOpacity
-              style={[resultsStyles.tryAgainBtn, { borderColor: colors.border }]}
-              onPress={handleTryAgain}
-              activeOpacity={0.7}
-            >
-              <Text style={[resultsStyles.tryAgainText, { color: colors.muted }]}>
-                Try Again
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                resultsStyles.logBtn,
-                { backgroundColor: colors.primary, opacity: isSaving ? 0.6 : 1 },
-              ]}
-              onPress={handleLog}
-              disabled={isSaving}
-              activeOpacity={0.85}
-            >
-              <Text style={resultsStyles.logText}>
-                {isSaving ? "Saving..." : "Log"}
-              </Text>
-            </TouchableOpacity>
+            {/* Gratitude */}
+            {results.gratitudeItems.length > 0 && (
+              <View style={classicStyles.journalSection}>
+                <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Grateful For</Text>
+                {results.gratitudeItems.map((g, i) => (
+                  <View key={i} style={[classicStyles.gratitudeItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[classicStyles.journalText, { color: colors.foreground }]}>{g}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={{ height: 16 }} />
+          </ScrollView>
+
+          {/* Footer: tally + save */}
+          <View style={[classicStyles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            {(() => {
+              const rated = Object.values(vcRatings).filter((r) => r !== 'none');
+              const green = rated.filter((r) => r === 'green').length;
+              const yellow = rated.filter((r) => r === 'yellow').length;
+              const red = rated.filter((r) => r === 'red').length;
+              return rated.length > 0 ? (
+                <View style={classicStyles.tally}>
+                  {green  > 0 && <View style={[classicStyles.tallyPill, { backgroundColor: '#22C55E18' }]}><Text style={[classicStyles.tallyText, { color: '#22C55E' }]}>{green} crushed</Text></View>}
+                  {yellow > 0 && <View style={[classicStyles.tallyPill, { backgroundColor: '#F59E0B18' }]}><Text style={[classicStyles.tallyText, { color: '#F59E0B' }]}>{yellow} okay</Text></View>}
+                  {red    > 0 && <View style={[classicStyles.tallyPill, { backgroundColor: '#EF444418' }]}><Text style={[classicStyles.tallyText, { color: '#EF4444' }]}>{red} missed</Text></View>}
+                  <Text style={[classicStyles.tallyOf, { color: colors.muted }]}>{rated.length}/{activeHabits.length}</Text>
+                </View>
+              ) : null;
+            })()}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable
+                onPress={handleTryAgain}
+                style={({ pressed }) => [
+                  classicStyles.tryAgainBtn,
+                  { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={[classicStyles.tryAgainText, { color: colors.muted }]}>Try Again</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleLog}
+                disabled={isSaving}
+                style={({ pressed }) => [
+                  classicStyles.saveBtn,
+                  { flex: 1, backgroundColor: colors.primary, opacity: isSaving ? 0.6 : pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+                ]}
+              >
+                <Text style={classicStyles.saveBtnText}>{isSaving ? 'Saving...' : 'Save Review'}</Text>
+              </Pressable>
+            </View>
           </View>
-        </ScrollView>
+        </>
       )}
 
       {/* DONE phase */}
@@ -1173,4 +1297,73 @@ const doneStyles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { fontSize: 24, fontWeight: "700" },
+});
+
+// ─── Classic check-in styles (mirrors checkin.tsx) ────────────────────────────
+const classicStyles = StyleSheet.create({
+  legendRow: {
+    flexDirection: 'row', justifyContent: 'center', gap: 20,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 12, fontWeight: '500' },
+
+  rateAllRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rateAllLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
+
+  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
+  section: { marginBottom: 18 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
+
+  card: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  habitRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 13, gap: 12,
+  },
+  habitName: { fontSize: 15, fontWeight: '600' },
+  habitDesc: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+
+  segmentedBtn: {
+    flexDirection: 'row', borderRadius: 11, overflow: 'hidden', gap: 2, padding: 2,
+  },
+  segment: { width: 40, height: 38, borderRadius: 9 },
+  segmentFirst: { borderTopLeftRadius: 9, borderBottomLeftRadius: 9 },
+  segmentLast: { borderTopRightRadius: 9, borderBottomRightRadius: 9 },
+  segmentSmall: { width: 32, height: 28 },
+
+  footer: {
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28,
+    borderTopWidth: StyleSheet.hairlineWidth, gap: 10,
+  },
+  tally: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tallyPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20,
+  },
+  tallyText: { fontSize: 13, fontWeight: '700' },
+  tallyOf: { fontSize: 12, marginLeft: 4 },
+
+  tryAgainBtn: {
+    alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20,
+    borderRadius: 14, borderWidth: 1,
+  },
+  tryAgainText: { fontSize: 15, fontWeight: '600' },
+  saveBtn: {
+    borderRadius: 14, paddingVertical: 15,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+
+  journalSection: { marginBottom: 18 },
+  journalTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 8 },
+  journalBlock: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
+  journalText: { fontSize: 14, lineHeight: 22 },
+  gratitudeItem: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, padding: 12, marginBottom: 6 },
 });

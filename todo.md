@@ -1171,3 +1171,7 @@
 - [x] Check-in screen: show habit description below habit name
 - [x] Check-in screen: larger, more visible red/yellow/green square buttons
 - [x] Voice check-in: auto-start recording on screen open (skip idle tap step)
+- [ ] Fix voice-checkin: analyzing spinner stops spinning (must keep spinning until results arrive)
+- [ ] Fix voice-checkin: results screen should use classic check-in UI (grouped categories + red/yellow/green squares)
+- [x] Fix voice-checkin spinner: always mounted so Animated.loop never resets
+- [x] Fix voice-checkin results: replace HabitResultCard with classic grouped-category layout (segmented red/yellow/green squares)
