@@ -45,7 +45,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useApp } from "@/lib/app-context";
 import { trpc } from "@/lib/trpc";
 import { addEntry, generateId, todayDateStr } from "@/lib/journal-store";
-import { getLastUserId, submitCheckIn, type Rating } from "@/lib/storage";
+import { getLastUserId, submitCheckIn, loadDayNotes, saveDayNotes, type Rating } from "@/lib/storage";
 
 /// ─── Scrolling Waveform (iOS Voice Memos style) ─────────────────────────────
 // Renders a horizontal scrolling waveform with bars flowing left.
@@ -1028,7 +1028,19 @@ export default function VoiceCheckinScreen() {
         await submitCheckIn(today, ratingsMap, allHabitIds);
       }
 
-      // 2. Save journal entry (use editedTranscript so user edits are preserved)
+      // 2. Save AI-generated habit notes (descriptions) so journal day-view can display them
+      const aiHabitNotes = results.habitResults
+        .filter((r) => r.note && r.note.trim())
+        .map((r) => ({ habitId: r.habitId, note: r.note.trim() }));
+      if (aiHabitNotes.length > 0) {
+        const allNotes = await loadDayNotes();
+        for (const { habitId, note } of aiHabitNotes) {
+          allNotes[`${habitId}:${today}`] = note;
+        }
+        await saveDayNotes(allNotes);
+      }
+
+      // 3. Save journal entry (use editedTranscript so user edits are preserved)
       const uid = await getLastUserId();
       const userId = uid || "default";
 
