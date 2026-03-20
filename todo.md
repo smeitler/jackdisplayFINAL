@@ -1185,3 +1185,9 @@
 - [ ] Date wheel picker: add year column
 - [ ] Journal day-view: make habits/transcript/gratitude editable inline
 - [x] Journal day-view: match check-in review layout exactly (category icons, grouped rounded cards, compact segmented color buttons, Rate All row, no text labels on buttons)
+- [x] Journal day-view: remove Rate All row
+- [x] Journal day-view: always show habit descriptions on each row
+- [x] Journal day-view: auto-save journal text and gratitude on keystroke (remove Save Entry button)
+- [x] Journal header: add fire streak icon (top-left) with consecutive-day count
+- [x] Journal header: add calendar icon (top-right) that opens the analytics calendar
+- [x] Home screen: remove calendar section (moved to journal)

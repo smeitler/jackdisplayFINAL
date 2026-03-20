@@ -1345,13 +1345,11 @@ function InlineAnalytics({ colors, isCalm }: { colors: any; isCalm: boolean }) {
 
 // ─── QuickAccessPills component ─────────────────────────────────────────────
 function QuickAccessPills({ isCalm, colors }: { isCalm: boolean; colors: any }) {
-  type Section = 'vision' | 'rewards' | 'calendar' | 'analytics';
+   type Section = 'vision' | 'rewards' | 'analytics';
   const [active, setActive] = useState<Section>('vision');
-
   const PILLS: { label: string; key: Section }[] = [
     { label: 'Vision Board', key: 'vision' },
     { label: 'Rewards',      key: 'rewards' },
-    { label: 'Calendar',     key: 'calendar' },
     { label: 'Analytics',    key: 'analytics' },
   ];
 
@@ -1387,7 +1385,6 @@ function QuickAccessPills({ isCalm, colors }: { isCalm: boolean; colors: any }) 
         <View style={[pillSectionStyles.sectionBox, { backgroundColor: isCalm ? '#111830' : colors.background }]}>
           {active === 'vision'   && <InlineVisionBoard colors={colors} />}
           {active === 'rewards'  && <InlineRewards colors={colors} />}
-          {active === 'calendar' && <InlineCalendar colors={colors} />}
         </View>
       )}
     </View>

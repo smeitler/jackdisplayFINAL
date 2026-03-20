@@ -1757,6 +1757,90 @@ function TodayHabitsSection({ colors, onAddJournalEntry }: { colors: any; onAddJ
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── MAIN JOURNAL SCREEN ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── Calendar view for the journal calendar modal ─────────────────────────────
+function JournalCalendarView({ colors }: { colors: any }) {
+  const { entries } = useApp() as any;
+  const today = new Date();
+  const todayStr = todayDateStr();
+  const months = useMemo(() => generateMonths(today.getFullYear() - 3, 1, today.getFullYear(), today.getMonth() + 1), []);
+  const todayMonthIndex = useMemo(() => months.findIndex((mo) => mo.year === today.getFullYear() && mo.month === today.getMonth() + 1), [months]);
+  const entryMap = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    if (Array.isArray(entries)) {
+      for (const e of entries) { const list = map.get(e.date) ?? []; list.push(e); map.set(e.date, list); }
+    }
+    return map;
+  }, [entries]);
+  const { width: winWidth } = useWindowDimensions();
+  const CELL_GAP = 3;
+  const cellSize = Math.floor(((winWidth > 0 ? winWidth : 390) - 32 - CELL_GAP * 6) / 7);
+  const scrollRef = useRef<ScrollView>(null);
+  const [didScroll, setDidScroll] = useState(false);
+  const monthOffsets = useRef<number[]>([]);
+  useEffect(() => {
+    if (!didScroll && todayMonthIndex >= 0 && monthOffsets.current[todayMonthIndex] != null) {
+      scrollRef.current?.scrollTo({ y: monthOffsets.current[todayMonthIndex], animated: false });
+      setDidScroll(true);
+    }
+  }, [didScroll, todayMonthIndex]);
+  return (
+    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16 }}>
+      {months.map(({ year, month }, monthIndex) => {
+        const daysInMonth = getMonthDays(year, month);
+        const firstDay = getFirstDayOfWeek(year, month);
+        const cells: (number | null)[] = [];
+        for (let i = 0; i < firstDay; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        while (cells.length % 7 !== 0) cells.push(null);
+        const rows: (number | null)[][] = [];
+        for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+        return (
+          <View key={`${year}-${month}`} onLayout={(e) => {
+            monthOffsets.current[monthIndex] = e.nativeEvent.layout.y;
+            if (monthIndex === todayMonthIndex && !didScroll) {
+              scrollRef.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
+              setDidScroll(true);
+            }
+          }} style={{ marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, paddingTop: 12, paddingBottom: 6 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{MONTH_NAMES[month - 1]}</Text>
+              <Text style={{ fontSize: 12, fontWeight: '500', color: colors.muted }}>{year}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: CELL_GAP, marginBottom: CELL_GAP }}>
+              {['S','M','T','W','T','F','S'].map((d, i) => (
+                <View key={i} style={{ width: cellSize, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 9, fontWeight: '600', color: colors.muted }}>{d}</Text>
+                </View>
+              ))}
+            </View>
+            {rows.map((row, rowIdx) => (
+              <View key={rowIdx} style={{ flexDirection: 'row', gap: CELL_GAP, marginBottom: CELL_GAP }}>
+                {row.map((day, colIdx) => {
+                  if (day === null) return <View key={`e-${colIdx}`} style={{ width: cellSize, height: cellSize }} />;
+                  const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                  const hasEntries = (entryMap.get(dateStr) ?? []).length > 0;
+                  const isToday = dateStr === todayStr;
+                  const isFuture = dateStr > todayStr;
+                  return (
+                    <View key={day} style={{
+                      width: cellSize, height: cellSize, borderRadius: 4,
+                      backgroundColor: hasEntries ? colors.primary : colors.surface,
+                      opacity: isFuture ? 0.15 : hasEntries ? 0.75 : 0.22,
+                      borderWidth: isToday ? 1.5 : 0, borderColor: colors.primary,
+                    }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: isToday ? colors.primary : colors.foreground, opacity: 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 export default function JournalScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
@@ -1868,7 +1952,9 @@ export default function JournalScreen() {
   const [selectedDate, setSelectedDate] = useState(todayDateStr());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const pickerTempDate = useRef(selectedDate);
-  const { habits, checkIns, categories, submitCheckIn } = useApp();
+  const { habits, checkIns, categories, submitCheckIn, streak } = useApp();
+  const [calendarModalVisible, setCalendarModalVisible] = useState(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goDay = useCallback((delta: number) => {
     setSelectedDate((prev) => {
@@ -2031,35 +2117,55 @@ export default function JournalScreen() {
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
       <View style={dvStyles.header}>
+        {/* Fire streak icon — left */}
         <Pressable
-          onPress={() => goDay(-1)}
-          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.5 : 1 }]}
+          onPress={() => {}}
+          style={({ pressed }) => [dvStyles.navBtn, { flexDirection: 'row', alignItems: 'center', gap: 3, opacity: pressed ? 0.7 : 1 }]}
         >
-          <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+          <IconSymbol name="flame.fill" size={20} color="#F59E0B" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#F59E0B' }}>{streak}</Text>
         </Pressable>
 
-        <Pressable
-          onPress={() => {
-            initPickerRefs(selectedDate);
-            const d = new Date(selectedDate + 'T12:00:00');
-            setPickerMonth(d.getMonth());
-            setPickerDayCount(getDaysInMonth(d.getMonth()));
-            setDatePickerVisible(true);
-          }}
-          style={({ pressed }) => [dvStyles.dayLabelBtn, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Text style={[dvStyles.dayLabel, { color: colors.foreground }]}>{dayLabel}</Text>
-          <IconSymbol name="chevron.down" size={14} color={colors.muted} style={{ marginLeft: 4, marginTop: 2 }} />
-        </Pressable>
+        {/* Day nav: left arrow + label + right arrow */}
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <Pressable
+            onPress={() => goDay(-1)}
+            style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.5 : 1 }]}
+          >
+            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+          </Pressable>
 
+          <Pressable
+            onPress={() => {
+              initPickerRefs(selectedDate);
+              const d = new Date(selectedDate + 'T12:00:00');
+              setPickerMonth(d.getMonth());
+              setPickerDayCount(getDaysInMonth(d.getMonth()));
+              setDatePickerVisible(true);
+            }}
+            style={({ pressed }) => [dvStyles.dayLabelBtn, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Text style={[dvStyles.dayLabel, { color: colors.foreground }]}>{dayLabel}</Text>
+            <IconSymbol name="chevron.down" size={14} color={colors.muted} style={{ marginLeft: 4, marginTop: 2 }} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => goDay(1)}
+            disabled={selectedDate >= todayDateStr()}
+            style={({ pressed }) => [dvStyles.navBtn, {
+              opacity: selectedDate >= todayDateStr() ? 0.25 : pressed ? 0.5 : 1,
+            }]}
+          >
+            <IconSymbol name="chevron.right" size={22} color={colors.foreground} />
+          </Pressable>
+        </View>
+
+        {/* Calendar icon — right */}
         <Pressable
-          onPress={() => goDay(1)}
-          disabled={selectedDate >= todayDateStr()}
-          style={({ pressed }) => [dvStyles.navBtn, {
-            opacity: selectedDate >= todayDateStr() ? 0.25 : pressed ? 0.5 : 1,
-          }]}
+          onPress={() => setCalendarModalVisible(true)}
+          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
-          <IconSymbol name="chevron.right" size={22} color={colors.foreground} />
+          <IconSymbol name="calendar" size={22} color={colors.primary} />
         </Pressable>
       </View>
 
@@ -2089,32 +2195,7 @@ export default function JournalScreen() {
             </View>
           )}
 
-          {/* ── Rate All row ── */}
-          {habits.filter((h) => h.isActive).length > 0 && (
-            <View style={[dvStyles.rateAllRow, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-              <Text style={[dvStyles.rateAllLabel, { color: colors.muted }]}>RATE ALL</Text>
-              <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
-                {(['red', 'yellow', 'green'] as const).map((r, i) => (
-                  <Pressable
-                    key={r}
-                    onPress={() => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                      const next: Record<string, Rating> = {};
-                      habits.filter((h) => h.isActive).forEach((h) => { next[h.id] = r; });
-                      setDvRatings(next);
-                      submitCheckIn(selectedDate, next);
-                    }}
-                    style={({ pressed }) => [
-                      dvStyles.segment,
-                      i === 0 && dvStyles.segmentFirst,
-                      i === 2 && dvStyles.segmentLast,
-                      { backgroundColor: RATING_COLORS_DV[r] + (pressed ? 'CC' : '88'), opacity: pressed ? 0.8 : 1 },
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
+          {/* Rate All row removed per user request */}
 
           {/* ── HABITS grouped by category (check-in review style) ── */}
           {(() => {
@@ -2168,9 +2249,9 @@ export default function JournalScreen() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={[dvStyles.ciHabitName, { color: colors.foreground }]}>{habit.name}</Text>
-                            {!!habit.description && (
-                              <Text style={[dvStyles.ciHabitDesc, { color: colors.muted }]}>{habit.description}</Text>
-                            )}
+                            <Text style={[dvStyles.ciHabitDesc, { color: colors.muted }]}>
+                              {habit.description || (current === 'none' ? 'Tap to rate' : current === 'green' ? 'Crushed it!' : current === 'yellow' ? 'Okay' : 'Missed')}
+                            </Text>
                           </View>
                           {/* 3-color segmented button */}
                           <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
@@ -2242,12 +2323,16 @@ export default function JournalScreen() {
             );
           })}
 
-          {/* ── JOURNAL ENTRY — always visible, editable ── */}
+          {/* ── JOURNAL ENTRY — always visible, auto-saves on keystroke ── */}
           <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
             <TextInput
               value={dvJournalNote}
-              onChangeText={setDvJournalNote}
+              onChangeText={(text) => {
+                setDvJournalNote(text);
+                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+              }}
               multiline
               placeholder="What happened today? How are you feeling?"
               placeholderTextColor={colors.muted}
@@ -2265,6 +2350,8 @@ export default function JournalScreen() {
                   const updated = [...dvGratItems];
                   updated[idx] = text;
                   setDvGratItems(updated);
+                  if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                  autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(dvJournalNote, updated), 800);
                 }}
                 placeholder={`Grateful for...`}
                 placeholderTextColor={colors.muted}
@@ -2282,18 +2369,7 @@ export default function JournalScreen() {
             <Text style={[dvStyles.addGratText, { color: colors.muted }]}>+ Add another</Text>
           </Pressable>
 
-          {/* ── SAVE ENTRY button ── */}
-          <Pressable
-            onPress={() => saveDvNoteAndGrat(dvJournalNote, dvGratItems)}
-            disabled={dvSaving}
-            style={({ pressed }) => [dvStyles.saveEntryBtn, {
-              backgroundColor: colors.primary,
-              opacity: dvSaving ? 0.6 : pressed ? 0.85 : 1,
-              transform: [{ scale: pressed ? 0.97 : 1 }],
-            }]}
-          >
-            <Text style={dvStyles.saveEntryText}>{dvSaving ? 'Saving...' : 'Save Entry'}</Text>
-          </Pressable>
+          {/* Save Entry button removed — auto-saves on keystroke */}
         </ScrollView>
       )}
 
@@ -2323,6 +2399,27 @@ export default function JournalScreen() {
         colors={colors}
         userId={userId}
       />
+
+      {/* ── Calendar Modal ── */}
+      <Modal
+        visible={calendarModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCalendarModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' }}>
+          <View style={[dvStyles.pickerSheet, { backgroundColor: colors.surface, maxHeight: '85%' }]}>
+            <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border }]}>
+              <Pressable onPress={() => setCalendarModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                <IconSymbol name="xmark" size={20} color={colors.muted} />
+              </Pressable>
+              <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
+              <View style={{ width: 40 }} />
+            </View>
+            <JournalCalendarView colors={colors} />
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Date Picker Bottom Sheet ── */}
       <Modal
