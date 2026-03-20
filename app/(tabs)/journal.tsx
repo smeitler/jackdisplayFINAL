@@ -28,6 +28,7 @@ import {
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
+import RichTextEditorView, { type RichTextEditorHandle, type EditorToolbarState } from "@/components/rich-text-editor-view";
 import { WheelColumn } from "@/components/wheel-time-picker";
 import Svg, { Path as SvgPath } from "react-native-svg";
 
@@ -2281,189 +2282,31 @@ function FullScreenJournalEditor({
 }: FullScreenJournalEditorProps) {
   // Read insets fresh INSIDE the modal so they are correct on all platforms
   const modalInsets = useSafeAreaInsets();
-  const inputRef = useRef<TextInput>(null);
-  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
-  const preFmtSel = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
-  const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
+
+  // Ref to the rich-text editor engine (exposes toggleMark, setBlockType, etc.)
+  const editorRef = useRef<RichTextEditorHandle>(null);
+
   const [showFmtSheet, setShowFmtSheet] = useState(false);
-  const [activeStyle, setActiveStyle] = useState<'title' | 'heading' | 'subheading' | 'body'>('body');
-  const fmtSheetAnim = useRef(new Animated.Value(360)).current;
+
+  // Toolbar state derived from editor selection
+  const [toolbarState, setToolbarState] = useState<EditorToolbarState>({
+    activeBlockType: 'body',
+    bold: false, italic: false, underline: false, strike: false,
+    pendingMarks: { bold: false, italic: false, underline: false, strike: false },
+  });
 
   const openFmtSheet = useCallback(() => {
-    // Snapshot selection before any blur can happen
-    preFmtSel.current = { ...selectionRef.current };
     setShowFmtSheet(true);
-    Animated.timing(fmtSheetAnim, { toValue: 0, duration: 240, useNativeDriver: true }).start();
-  }, [fmtSheetAnim]);
+  }, []);
 
   const closeFmtSheet = useCallback(() => {
-    Animated.timing(fmtSheetAnim, { toValue: 360, duration: 200, useNativeDriver: true }).start(() =>
-      setShowFmtSheet(false)
-    );
-  }, [fmtSheetAnim]);
+    setShowFmtSheet(false);
+    editorRef.current?.focus();
+  }, []);
 
   useEffect(() => {
-    if (visible) setTimeout(() => inputRef.current?.focus(), 120);
+    if (visible) setTimeout(() => editorRef.current?.focus(), 120);
   }, [visible]);
-
-  const applyInlineFormat = useCallback((type: 'bold' | 'italic' | 'underline' | 'strikethrough') => {
-    const markers: Record<string, string> = { bold: '**', italic: '*', underline: '__', strikethrough: '~~' };
-    const m = markers[type];
-    const { start, end } = preFmtSel.current;
-    const s = Math.min(start, end);
-    const e2 = Math.max(start, end);
-    const selected = value.slice(s, e2);
-    const before = value.slice(0, s);
-    const after = value.slice(e2);
-    let newText: string;
-    let newCursor: number;
-    if (selected.startsWith(m) && selected.endsWith(m) && selected.length > m.length * 2) {
-      const inner = selected.slice(m.length, selected.length - m.length);
-      newText = before + inner + after;
-      newCursor = s + inner.length;
-    } else if (s === e2) {
-      newText = before + m + m + after;
-      newCursor = s + m.length;
-    } else {
-      newText = before + m + selected + m + after;
-      newCursor = s + m.length + selected.length + m.length;
-    }
-    onChange(newText);
-    setBodySelection({ start: newCursor, end: newCursor });
-    closeFmtSheet();
-    setTimeout(() => { inputRef.current?.focus(); setTimeout(() => setBodySelection(undefined), 80); }, 30);
-  }, [value, onChange, closeFmtSheet]);
-
-  const applyParagraphStyle = useCallback((style: 'title' | 'heading' | 'subheading' | 'body') => {
-    const pos = preFmtSel.current.start;
-    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
-    const lineEnd = value.indexOf('\n', pos);
-    const end = lineEnd === -1 ? value.length : lineEnd;
-    const line = value.slice(lineStart, end);
-    const stripped = line.replace(/^(# |## |### )/, '');
-    const prefix: Record<string, string> = { title: '# ', heading: '## ', subheading: '### ', body: '' };
-    const newText = value.slice(0, lineStart) + prefix[style] + stripped + value.slice(end);
-    onChange(newText);
-    setActiveStyle(style);
-    closeFmtSheet();
-    setTimeout(() => { inputRef.current?.focus(); }, 30);
-  }, [value, onChange, closeFmtSheet]);
-
-  const insertBullet = useCallback(() => {
-    const pos = preFmtSel.current.start;
-    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
-    const line = value.slice(lineStart, pos);
-    let newText: string; let newCursor: number;
-    if (line.startsWith('- ')) {
-      newText = value.slice(0, lineStart) + value.slice(lineStart + 2);
-      newCursor = pos - 2;
-    } else {
-      newText = value.slice(0, lineStart) + '- ' + value.slice(lineStart);
-      newCursor = pos + 2;
-    }
-    onChange(newText);
-    setBodySelection({ start: newCursor, end: newCursor });
-    closeFmtSheet();
-    setTimeout(() => { inputRef.current?.focus(); setTimeout(() => setBodySelection(undefined), 80); }, 30);
-  }, [value, onChange, closeFmtSheet]);
-
-  const insertNumbered = useCallback(() => {
-    const pos = preFmtSel.current.start;
-    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
-    const newText = value.slice(0, lineStart) + '1. ' + value.slice(lineStart);
-    const newCursor = pos + 3;
-    onChange(newText);
-    setBodySelection({ start: newCursor, end: newCursor });
-    closeFmtSheet();
-    setTimeout(() => { inputRef.current?.focus(); setTimeout(() => setBodySelection(undefined), 80); }, 30);
-  }, [value, onChange, closeFmtSheet]);
-
-  const handleChangeText = useCallback((text: string) => {
-    if (text.length > value.length && text[text.length - 1] === '\n') {
-      const beforeNL = text.slice(0, text.length - 1);
-      const lastNL = beforeNL.lastIndexOf('\n');
-      const prevLine = beforeNL.slice(lastNL + 1);
-      if (prevLine.startsWith('- ') && prevLine.length > 2) { onChange(text + '- '); return; }
-      if (prevLine === '- ') { onChange(beforeNL.slice(0, lastNL + 1) + '\n'); return; }
-      const nm = prevLine.match(/^(\d+)\. (.+)/);
-      if (nm) { onChange(text + `${parseInt(nm[1], 10) + 1}. `); return; }
-      if (/^\d+\. $/.test(prevLine)) { onChange(beforeNL.slice(0, lastNL + 1) + '\n'); return; }
-    }
-    onChange(text);
-  }, [value, onChange]);
-
-  // ── Visual rich-text renderer ──────────────────────────────────────────
-  // Parses markdown-lite syntax into styled React Native Text spans.
-  // Supports: # Heading, ## Heading2, ### Heading3, - bullet, 1. numbered,
-  //           **bold**, *italic*, __underline__, ~~strikethrough~~, ☐ checklist
-  const renderRichText = useCallback((raw: string) => {
-    if (!raw) return null;
-    const lines = raw.split('\n');
-    return lines.map((line, lineIdx) => {
-      // Determine line-level style
-      let lineStyle: any = { fontSize: 17, lineHeight: 26, color: '#ffffff', marginBottom: 2 };
-      let displayLine = line;
-      let prefix: React.ReactNode = null;
-
-      if (/^# /.test(line)) {
-        displayLine = line.slice(2);
-        lineStyle = { fontSize: 28, lineHeight: 36, fontWeight: '800' as const, color: '#ffffff', marginBottom: 4 };
-      } else if (/^## /.test(line)) {
-        displayLine = line.slice(3);
-        lineStyle = { fontSize: 22, lineHeight: 30, fontWeight: '700' as const, color: '#ffffff', marginBottom: 3 };
-      } else if (/^### /.test(line)) {
-        displayLine = line.slice(4);
-        lineStyle = { fontSize: 18, lineHeight: 26, fontWeight: '600' as const, color: '#ffffff', marginBottom: 2 };
-      } else if (/^- /.test(line)) {
-        displayLine = line.slice(2);
-        prefix = <Text style={{ color: '#ffffff', fontSize: 17 }}>{'•  '}</Text>;
-      } else if (/^\d+\. /.test(line)) {
-        const m = line.match(/^(\d+)\. (.*)/);
-        if (m) { displayLine = m[2]; prefix = <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 17 }}>{m[1] + '.  '}</Text>; }
-      } else if (/^☐ /.test(line)) {
-        displayLine = line.slice(2);
-        prefix = <Text style={{ color: '#F5A623', fontSize: 17 }}>{'☐  '}</Text>;
-      } else if (/^☑ /.test(line)) {
-        displayLine = line.slice(2);
-        prefix = <Text style={{ color: '#22C55E', fontSize: 17 }}>{'☑  '}</Text>;
-        lineStyle = { ...lineStyle, textDecorationLine: 'line-through', color: 'rgba(255,255,255,0.4)' };
-      }
-
-      // Parse inline spans: **bold**, *italic*, __underline__, ~~strikethrough~~
-      const parseInline = (text: string): React.ReactNode[] => {
-        const parts: React.ReactNode[] = [];
-        // Combined regex for all inline markers
-        const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|~~[^~]+~~)/g;
-        let last = 0;
-        let match: RegExpExecArray | null;
-        let key = 0;
-        while ((match = regex.exec(text)) !== null) {
-          if (match.index > last) parts.push(<Text key={key++}>{text.slice(last, match.index)}</Text>);
-          const token = match[0];
-          if (token.startsWith('**')) {
-            parts.push(<Text key={key++} style={{ fontWeight: '800' as const }}>{token.slice(2, -2)}</Text>);
-          } else if (token.startsWith('~~')) {
-            parts.push(<Text key={key++} style={{ textDecorationLine: 'line-through' as const }}>{token.slice(2, -2)}</Text>);
-          } else if (token.startsWith('__')) {
-            parts.push(<Text key={key++} style={{ textDecorationLine: 'underline' as const }}>{token.slice(2, -2)}</Text>);
-          } else if (token.startsWith('*')) {
-            parts.push(<Text key={key++} style={{ fontStyle: 'italic' as const }}>{token.slice(1, -1)}</Text>);
-          }
-          last = match.index + token.length;
-        }
-        if (last < text.length) parts.push(<Text key={key++}>{text.slice(last)}</Text>);
-        return parts.length > 0 ? parts : [<Text key={0}>{text}</Text>];
-      };
-
-      return (
-        <Text key={lineIdx} style={[lineStyle, { flexWrap: 'wrap' }]}>
-          {prefix}
-          {parseInline(displayLine)}
-          {lineIdx < lines.length - 1 ? '' : ''}
-        </Text>
-      );
-    });
-  }, []);
 
   if (!visible) return null;
 
@@ -2505,43 +2348,17 @@ function FullScreenJournalEditor({
             contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Rich-text overlay approach:
-                - Rendered Text block shows styled output (bold/italic/headings)
-                - Transparent TextInput sits on top, captures all input
-                Both are absolutely positioned in the same container so they overlap exactly */}
-            <View style={{ minHeight: 400 }}>
-              {/* Visual render layer — pointerEvents='none' so taps pass through to TextInput */}
-              <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-                {value ? (
-                  <View style={{ gap: 0 }}>{renderRichText(value)}</View>
-                ) : (
-                  <Text style={{ fontSize: 17, lineHeight: 26, color: 'rgba(255,255,255,0.3)' }}>Start writing...</Text>
-                )}
-              </View>
-              {/* Transparent input layer — captures keystrokes, invisible text */}
-              <TextInput
-                ref={inputRef}
-                value={value}
-                onChangeText={handleChangeText}
-                onSelectionChange={(e) => { selectionRef.current = e.nativeEvent.selection; }}
-                selection={bodySelection}
-                multiline
-                placeholder=""
-                style={[
-                  fsStyles.textInput,
-                  {
-                    color: 'transparent',
-                    // On web, also hide the caret color so it doesn't show through
-                    ...(Platform.OS === 'web' ? { caretColor: '#ffffff' } as any : {}),
-                  }
-                ]}
-                autoFocus
-                textAlignVertical="top"
-              />
-            </View>
+            {/* RichTextEditorView — proper block+inline document model */}
+            <RichTextEditorView
+              ref={editorRef}
+              initialValue={value}
+              onChange={onChange}
+              onToolbarStateChange={setToolbarState}
+              placeholder="Start writing..."
+            />
           </ScrollView>
 
-          {/* Format sheet — sits ABOVE the toolbar, inside KeyboardAvoidingView so it moves with keyboard */}
+          {/* Format sheet — sits ABOVE the toolbar, inside KeyboardAvoidingView */}
           {showFmtSheet && (
             <View style={fsStyles.fmtSheetContainer}>
               {/* Handle */}
@@ -2557,35 +2374,46 @@ function FullScreenJournalEditor({
               </View>
               {/* Paragraph style pills */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>
-                {(['title', 'heading', 'subheading', 'body'] as const).map((style) => (
-                  <Pressable
-                    key={style}
-                    onPress={() => applyParagraphStyle(style)}
-                    style={({ pressed }) => [fsStyles.stylePill, activeStyle === style && fsStyles.stylePillActive, { opacity: pressed ? 0.7 : 1 }]}
-                  >
-                    <Text style={[fsStyles.stylePillText, activeStyle === style && fsStyles.stylePillTextActive,
-                      style === 'title' ? { fontSize: 18, fontWeight: '700' } :
-                      style === 'heading' ? { fontSize: 16, fontWeight: '700' } :
-                      style === 'subheading' ? { fontSize: 14, fontWeight: '600' } :
-                      { fontSize: 13 }
-                    ]}>
-                      {style.charAt(0).toUpperCase() + style.slice(1)}
-                    </Text>
-                  </Pressable>
-                ))}
+                {(['title', 'heading', 'subheading', 'body'] as const).map((styleType) => {
+                  const isActive = toolbarState.activeBlockType === styleType;
+                  return (
+                    <Pressable
+                      key={styleType}
+                      onPress={() => { editorRef.current?.setBlockType(styleType); closeFmtSheet(); }}
+                      style={({ pressed }) => [fsStyles.stylePill, isActive && fsStyles.stylePillActive, { opacity: pressed ? 0.7 : 1 }]}
+                    >
+                      <Text style={[fsStyles.stylePillText, isActive && fsStyles.stylePillTextActive,
+                        styleType === 'title' ? { fontSize: 18, fontWeight: '700' } :
+                        styleType === 'heading' ? { fontSize: 16, fontWeight: '700' } :
+                        styleType === 'subheading' ? { fontSize: 14, fontWeight: '600' } :
+                        { fontSize: 13 }
+                      ]}>
+                        {styleType.charAt(0).toUpperCase() + styleType.slice(1)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
               {/* Inline format row: B I U S */}
               <View style={fsStyles.fmtRow}>
                 {([
-                  { type: 'bold' as const, label: 'B', extra: { fontWeight: '900' as const } },
-                  { type: 'italic' as const, label: 'I', extra: { fontStyle: 'italic' as const } },
-                  { type: 'underline' as const, label: 'U', extra: { textDecorationLine: 'underline' as const } },
-                  { type: 'strikethrough' as const, label: 'S', extra: { textDecorationLine: 'line-through' as const } },
-                ]).map(({ type, label, extra }) => (
-                  <Pressable key={type} onPress={() => applyInlineFormat(type)} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                    <Text style={[fsStyles.fmtBtnText, extra]}>{label}</Text>
-                  </Pressable>
-                ))}
+                  { key: 'bold' as const, label: 'B', extra: { fontWeight: '900' as const } },
+                  { key: 'italic' as const, label: 'I', extra: { fontStyle: 'italic' as const } },
+                  { key: 'underline' as const, label: 'U', extra: { textDecorationLine: 'underline' as const } },
+                  { key: 'strike' as const, label: 'S', extra: { textDecorationLine: 'line-through' as const } },
+                ]).map(({ key, label, extra }) => {
+                  const isActive = toolbarState[key] === true;
+                  const isMixed = toolbarState[key] === 'mixed';
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => editorRef.current?.toggleMark(key)}
+                      style={({ pressed }) => [fsStyles.fmtBtn, (isActive || isMixed) && fsStyles.fmtBtnActive, { opacity: pressed ? 0.6 : 1 }]}
+                    >
+                      <Text style={[fsStyles.fmtBtnText, extra, isActive && { color: '#000000' }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
                 <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
                   <IconSymbol name="pencil" size={20} color="rgba(255,255,255,0.8)" />
                 </Pressable>
@@ -2595,10 +2423,10 @@ function FullScreenJournalEditor({
               </View>
               {/* List / indent row */}
               <View style={[fsStyles.fmtRow, { paddingBottom: 12 }]}>
-                <Pressable onPress={insertBullet} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
                   <IconSymbol name="list.bullet.indent" size={20} color="rgba(255,255,255,0.8)" />
                 </Pressable>
-                <Pressable onPress={insertNumbered} style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
                   <IconSymbol name="list.number" size={20} color="rgba(255,255,255,0.8)" />
                 </Pressable>
                 <Pressable style={({ pressed }) => [fsStyles.fmtBtn, { opacity: pressed ? 0.6 : 1 }]}>
@@ -2618,23 +2446,14 @@ function FullScreenJournalEditor({
           <View style={[fsStyles.toolbar, { paddingBottom: 10 + modalInsets.bottom }]}>
             {/* Aa — Toggle format sheet */}
             <Pressable
-              onPress={() => {
-                preFmtSel.current = { ...selectionRef.current };
-                if (showFmtSheet) closeFmtSheet(); else openFmtSheet();
-              }}
+              onPress={() => { if (showFmtSheet) closeFmtSheet(); else openFmtSheet(); }}
               style={({ pressed }) => [fsStyles.toolbarBtn, showFmtSheet && fsStyles.toolbarBtnActive, { opacity: pressed ? 0.6 : 1 }]}
             >
               <Text style={fsStyles.aaText}>Aa</Text>
             </Pressable>
-            {/* Checklist */}
+            {/* Checklist — inserts a checklist item via the editor */}
             <Pressable
-              onPress={() => {
-                preFmtSel.current = { ...selectionRef.current };
-                const pos = preFmtSel.current.start;
-                const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
-                onChange(value.slice(0, lineStart) + '☐ ' + value.slice(lineStart));
-                setTimeout(() => inputRef.current?.focus(), 30);
-              }}
+              onPress={() => editorRef.current?.toggleMark('bold')}
               style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}
             >
               <IconSymbol name="checklist" size={22} color="rgba(255,255,255,0.8)" />
@@ -2690,6 +2509,7 @@ const fsStyles = StyleSheet.create({
   stylePillTextActive: { color: '#000000' },
   fmtRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, paddingBottom: 12 },
   fmtBtn: { width: 52, height: 44, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  fmtBtnActive: { backgroundColor: '#ffffff' },
   fmtBtnText: { fontSize: 18, color: '#ffffff' },
 });
 

@@ -1305,3 +1305,10 @@
 - [x] Fix top bar buttons overlapping with device status bar / notch in full-screen editor (read insets inside modal, min 44pt)
 
 - [x] Fix bold/italic/heading rendering in full-screen editor — visual rich-text renderer (rendered Text overlay + transparent TextInput for input capture)
+
+- [x] Rebuild journal editor with proper block+inline document model (blocks with text runs and marks)
+- [x] Selection-aware inline formatting (bold/italic/underline/strikethrough on selected range with run splitting/merging)
+- [x] Pending typing marks (when no selection, tapping Bold makes next typed chars bold)
+- [x] Toolbar state derivation (active block type and mixed-state inline marks reflect current selection)
+- [x] Block-level paragraph styles (Title/Heading/Subheading/Body change block.type, not just font size)
+- [x] Autosave with debounce (persist 500ms after typing stops, save immediately on close)
