@@ -2392,6 +2392,79 @@ function FullScreenJournalEditor({
     onChange(text);
   }, [value, onChange]);
 
+  // ── Visual rich-text renderer ──────────────────────────────────────────
+  // Parses markdown-lite syntax into styled React Native Text spans.
+  // Supports: # Heading, ## Heading2, ### Heading3, - bullet, 1. numbered,
+  //           **bold**, *italic*, __underline__, ~~strikethrough~~, ☐ checklist
+  const renderRichText = useCallback((raw: string) => {
+    if (!raw) return null;
+    const lines = raw.split('\n');
+    return lines.map((line, lineIdx) => {
+      // Determine line-level style
+      let lineStyle: any = { fontSize: 17, lineHeight: 26, color: '#ffffff', marginBottom: 2 };
+      let displayLine = line;
+      let prefix: React.ReactNode = null;
+
+      if (/^# /.test(line)) {
+        displayLine = line.slice(2);
+        lineStyle = { fontSize: 28, lineHeight: 36, fontWeight: '800' as const, color: '#ffffff', marginBottom: 4 };
+      } else if (/^## /.test(line)) {
+        displayLine = line.slice(3);
+        lineStyle = { fontSize: 22, lineHeight: 30, fontWeight: '700' as const, color: '#ffffff', marginBottom: 3 };
+      } else if (/^### /.test(line)) {
+        displayLine = line.slice(4);
+        lineStyle = { fontSize: 18, lineHeight: 26, fontWeight: '600' as const, color: '#ffffff', marginBottom: 2 };
+      } else if (/^- /.test(line)) {
+        displayLine = line.slice(2);
+        prefix = <Text style={{ color: '#ffffff', fontSize: 17 }}>{'•  '}</Text>;
+      } else if (/^\d+\. /.test(line)) {
+        const m = line.match(/^(\d+)\. (.*)/);
+        if (m) { displayLine = m[2]; prefix = <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 17 }}>{m[1] + '.  '}</Text>; }
+      } else if (/^☐ /.test(line)) {
+        displayLine = line.slice(2);
+        prefix = <Text style={{ color: '#F5A623', fontSize: 17 }}>{'☐  '}</Text>;
+      } else if (/^☑ /.test(line)) {
+        displayLine = line.slice(2);
+        prefix = <Text style={{ color: '#22C55E', fontSize: 17 }}>{'☑  '}</Text>;
+        lineStyle = { ...lineStyle, textDecorationLine: 'line-through', color: 'rgba(255,255,255,0.4)' };
+      }
+
+      // Parse inline spans: **bold**, *italic*, __underline__, ~~strikethrough~~
+      const parseInline = (text: string): React.ReactNode[] => {
+        const parts: React.ReactNode[] = [];
+        // Combined regex for all inline markers
+        const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|~~[^~]+~~)/g;
+        let last = 0;
+        let match: RegExpExecArray | null;
+        let key = 0;
+        while ((match = regex.exec(text)) !== null) {
+          if (match.index > last) parts.push(<Text key={key++}>{text.slice(last, match.index)}</Text>);
+          const token = match[0];
+          if (token.startsWith('**')) {
+            parts.push(<Text key={key++} style={{ fontWeight: '800' as const }}>{token.slice(2, -2)}</Text>);
+          } else if (token.startsWith('~~')) {
+            parts.push(<Text key={key++} style={{ textDecorationLine: 'line-through' as const }}>{token.slice(2, -2)}</Text>);
+          } else if (token.startsWith('__')) {
+            parts.push(<Text key={key++} style={{ textDecorationLine: 'underline' as const }}>{token.slice(2, -2)}</Text>);
+          } else if (token.startsWith('*')) {
+            parts.push(<Text key={key++} style={{ fontStyle: 'italic' as const }}>{token.slice(1, -1)}</Text>);
+          }
+          last = match.index + token.length;
+        }
+        if (last < text.length) parts.push(<Text key={key++}>{text.slice(last)}</Text>);
+        return parts.length > 0 ? parts : [<Text key={0}>{text}</Text>];
+      };
+
+      return (
+        <Text key={lineIdx} style={[lineStyle, { flexWrap: 'wrap' }]}>
+          {prefix}
+          {parseInline(displayLine)}
+          {lineIdx < lines.length - 1 ? '' : ''}
+        </Text>
+      );
+    });
+  }, []);
+
   if (!visible) return null;
 
   return (
@@ -2432,19 +2505,40 @@ function FullScreenJournalEditor({
             contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
             keyboardShouldPersistTaps="handled"
           >
-            <TextInput
-              ref={inputRef}
-              value={value}
-              onChangeText={handleChangeText}
-              onSelectionChange={(e) => { selectionRef.current = e.nativeEvent.selection; }}
-              selection={bodySelection}
-              multiline
-              placeholder="Start writing..."
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              style={fsStyles.textInput}
-              autoFocus
-              textAlignVertical="top"
-            />
+            {/* Rich-text overlay approach:
+                - Rendered Text block shows styled output (bold/italic/headings)
+                - Transparent TextInput sits on top, captures all input
+                Both are absolutely positioned in the same container so they overlap exactly */}
+            <View style={{ minHeight: 400 }}>
+              {/* Visual render layer — pointerEvents='none' so taps pass through to TextInput */}
+              <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
+                {value ? (
+                  <View style={{ gap: 0 }}>{renderRichText(value)}</View>
+                ) : (
+                  <Text style={{ fontSize: 17, lineHeight: 26, color: 'rgba(255,255,255,0.3)' }}>Start writing...</Text>
+                )}
+              </View>
+              {/* Transparent input layer — captures keystrokes, invisible text */}
+              <TextInput
+                ref={inputRef}
+                value={value}
+                onChangeText={handleChangeText}
+                onSelectionChange={(e) => { selectionRef.current = e.nativeEvent.selection; }}
+                selection={bodySelection}
+                multiline
+                placeholder=""
+                style={[
+                  fsStyles.textInput,
+                  {
+                    color: 'transparent',
+                    // On web, also hide the caret color so it doesn't show through
+                    ...(Platform.OS === 'web' ? { caretColor: '#ffffff' } as any : {}),
+                  }
+                ]}
+                autoFocus
+                textAlignVertical="top"
+              />
+            </View>
           </ScrollView>
 
           {/* Format sheet — sits ABOVE the toolbar, inside KeyboardAvoidingView so it moves with keyboard */}

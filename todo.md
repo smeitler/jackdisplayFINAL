@@ -1303,3 +1303,5 @@
 - [x] Fix blue focus outline on TextInput in full-screen editor (web: add outlineWidth: 0 / outlineStyle: none)
 - [x] Fix format sheet not applying formatting — moved sheet inside KeyboardAvoidingView above toolbar, changed Aa to onPress toggle
 - [x] Fix top bar buttons overlapping with device status bar / notch in full-screen editor (read insets inside modal, min 44pt)
+
+- [x] Fix bold/italic/heading rendering in full-screen editor — visual rich-text renderer (rendered Text overlay + transparent TextInput for input capture)
