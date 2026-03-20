@@ -33,7 +33,7 @@ export default function TabLayout() {
   }, [isAuthenticated, isDemoMode, loading, router]);
 
   function openPlusSheet() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPlusSheetVisible(true);
   }
 
@@ -43,13 +43,11 @@ export default function TabLayout() {
 
   function handleVoiceLog() {
     closePlusSheet();
-    // Navigate to journal tab and trigger voice recording
     router.push("/(tabs)/journal?action=voice");
   }
 
   function handleLogHabits() {
     closePlusSheet();
-    // Navigate to journal tab and trigger habit check-in
     router.push("/(tabs)/journal?action=checkin");
   }
 
@@ -97,22 +95,14 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <IconSymbol size={26} name="book.fill" color={color} />,
           }}
         />
-        {/* Center + button — rendered as a non-navigating tab placeholder */}
+        {/* Spacer tab — invisible, creates gap for the floating + button */}
         <Tabs.Screen
           name="plus-placeholder"
           options={{
-            href: null,
-            tabBarButton: () => (
-              <View style={plusBtnStyles.wrapper}>
-                <TouchableOpacity
-                  onPress={openPlusSheet}
-                  style={[plusBtnStyles.btn, { backgroundColor: colors.primary }]}
-                  activeOpacity={0.85}
-                >
-                  <Text style={plusBtnStyles.icon}>+</Text>
-                </TouchableOpacity>
-              </View>
-            ),
+            title: "",
+            tabBarIcon: () => null,
+            tabBarLabel: () => null,
+            tabBarButton: () => <View style={{ width: 56 }} />,
           }}
         />
         <Tabs.Screen
@@ -139,6 +129,23 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
+
+      {/* Floating center + button — overlaid above the tab bar */}
+      <View
+        pointerEvents="box-none"
+        style={[
+          plusBtnStyles.floatWrapper,
+          { bottom: bottomPadding + 4 },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={openPlusSheet}
+          style={[plusBtnStyles.btn, { backgroundColor: colors.primary }]}
+          activeOpacity={0.85}
+        >
+          <Text style={plusBtnStyles.icon}>+</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Plus Action Sheet */}
       <Modal
@@ -196,30 +203,30 @@ export default function TabLayout() {
 }
 
 const plusBtnStyles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
+  floatWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 4,
-  },
+    pointerEvents: 'box-none',
+  } as any,
   btn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 6,
-    marginBottom: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   icon: {
     color: '#fff',
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '300',
-    lineHeight: 32,
+    lineHeight: 34,
     marginTop: -2,
   },
 });
