@@ -1253,3 +1253,5 @@
 - [x] Fix alarm card tap on dashboard — navigate to you-settings (alarm config)
 - [x] Journal screen reorder: journal entry (with photo attachment) appears above habit rating buttons (Missed/OK/Crushed It)
 - [x] Journal entry section includes a photo attachment button (image picker)
+- [x] Pinned favorite section header: replace "⭐ Pinned Favorite" text with a pin icon only
+- [x] Favorites tab: add explicit pin button on each track row so user can choose which one is pinned to Explore

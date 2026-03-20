@@ -128,6 +128,8 @@ const MAPPING: Record<string, MaterialIconName> = {
   "magnifyingglass": "search",
   "clipboard.data.fill": "assignment",
   "chart.clipboard.fill": "assignment",
+  "pin.fill": "push-pin",
+  "pin": "push-pin",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;

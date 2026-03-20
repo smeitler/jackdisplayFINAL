@@ -435,10 +435,14 @@ export default function WellnessAudioScreen() {
 
   const [activeTab, setActiveTab] = useState<TabKey>('explore');
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(favKey(cat)).then((raw) => {
       if (raw) { try { setFavoriteIds(JSON.parse(raw)); } catch {} }
+    });
+    AsyncStorage.getItem(`wellness_pinned_${cat}`).then((raw) => {
+      if (raw) setPinnedId(raw);
     });
   }, [cat]);
 
@@ -447,6 +451,20 @@ export default function WellnessAudioScreen() {
     setFavoriteIds((prev) => {
       const next = prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId];
       AsyncStorage.setItem(favKey(cat), JSON.stringify(next));
+      // If unfavoriting the pinned track, unpin it
+      if (!next.includes(trackId)) {
+        setPinnedId((p) => { if (p === trackId) { AsyncStorage.removeItem(`wellness_pinned_${cat}`); return null; } return p; });
+      }
+      return next;
+    });
+  }, [cat]);
+
+  const togglePin = useCallback(async (trackId: string) => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPinnedId((prev) => {
+      const next = prev === trackId ? null : trackId;
+      if (next) AsyncStorage.setItem(`wellness_pinned_${cat}`, next);
+      else AsyncStorage.removeItem(`wellness_pinned_${cat}`);
       return next;
     });
   }, [cat]);
@@ -534,8 +552,7 @@ export default function WellnessAudioScreen() {
     startTrack(tracks[ni]);
   }, [playerTrackIndex, tracks, startTrack]);
 
-  // ── Derived ───────────────────────────────────────────────────────────────────
-  const pinnedId = favoriteIds[0] ?? null;
+  // ── Derived ─────────────────────────────────────────────
   const favoritesList = favoriteIds.map((id) => tracks.find((t) => t.id === id)).filter(Boolean) as AudioTrack[];
   const recommendedTracks = recommended.map((id) => tracks.find((t) => t.id === id)).filter(Boolean) as AudioTrack[];
   const cue = getContextualCue(cat);
@@ -586,7 +603,9 @@ export default function WellnessAudioScreen() {
         const idx = tracks.findIndex((x) => x.id === pinnedId);
         return (
           <View style={s.subSection}>
-            <Text style={[s.subTitle, { color: colors.foreground }]}>⭐ Pinned Favorite</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <IconSymbol name="pin.fill" size={16} color={color} />
+            </View>
             <TrackRow item={t} indexInAll={idx} />
           </View>
         );
@@ -694,7 +713,7 @@ export default function WellnessAudioScreen() {
     </ScrollView>
   );
 
-  // ── Favorites tab ─────────────────────────────────────────────────────────────
+   // ── Favorites tab ─────────────────────────────────────────────
   const FavoritesContent = () =>
     favoritesList.length === 0 ? (
       <View style={s.emptyWrap}>
@@ -708,7 +727,27 @@ export default function WellnessAudioScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
           const idx = tracks.findIndex((t) => t.id === item.id);
-          return <TrackRow item={item} indexInAll={idx} />;
+          const isPinned = pinnedId === item.id;
+          return (
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: 16 }}>
+              <View style={{ flex: 1 }}>
+                <TrackRow item={item} indexInAll={idx} />
+              </View>
+              <Pressable
+                onPress={() => togglePin(item.id)}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  marginLeft: 4,
+                  padding: 6,
+                  borderRadius: 8,
+                  backgroundColor: isPinned ? color + '22' : 'transparent',
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <IconSymbol name={isPinned ? 'pin.fill' : 'pin'} size={18} color={isPinned ? color : colors.muted} />
+              </Pressable>
+            </View>
+          );
         }}
         contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
