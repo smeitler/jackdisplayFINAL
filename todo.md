@@ -1168,3 +1168,5 @@
 - [x] Voice check-in: spinner keeps spinning with cycling status text (Transcribing... → Analyzing habits... → Extracting journal...)
 - [x] Voice check-in: show habit prompt card during recording (list all habits + gratitude suggestion + example phrase)
 - [x] Voice check-in: optimize speed by merging two LLM calls into one combined call after Whisper transcription
+- [x] Check-in screen: show habit description below habit name
+- [x] Check-in screen: larger, more visible red/yellow/green square buttons

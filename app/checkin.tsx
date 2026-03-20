@@ -1348,6 +1348,11 @@ export default function CheckInScreen() {
                           <Text style={[styles.habitName, { color: colors.foreground }]}>
                             {habit.name}
                           </Text>
+                          {habit.description ? (
+                            <Text style={[styles.habitDescription, { color: colors.muted }]} numberOfLines={2}>
+                              {habit.description}
+                            </Text>
+                          ) : null}
                           {habit.teamId && teamNameMap[habit.teamId] && (
                             <View style={[styles.teamBadge, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
                               <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
@@ -1397,7 +1402,7 @@ export default function CheckInScreen() {
                                 isFirst && styles.segmentFirst,
                                 isLastSeg && styles.segmentLast,
                                 {
-                                  backgroundColor: isSelected ? col : col + '28',
+                                  backgroundColor: isSelected ? col : col + '44',
                                   opacity: pressed ? 0.75 : 1,
                                 },
                               ]}
@@ -1579,7 +1584,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   habitNumText: { fontSize: 12, fontWeight: '700' },
-  habitName: { fontSize: 15, lineHeight: 20 },
+  habitName: { fontSize: 15, lineHeight: 20, fontWeight: '500' },
+  habitDescription: { fontSize: 12, lineHeight: 17, marginTop: 2, opacity: 0.75 },
   teamBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1600,13 +1606,13 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   segment: {
-    width: 36,
-    height: 34,
-    borderRadius: 8,
+    width: 40,
+    height: 38,
+    borderRadius: 9,
   },
   segmentFirst: { borderTopLeftRadius: 9, borderBottomLeftRadius: 9 },
   segmentLast:  { borderTopRightRadius: 9, borderBottomRightRadius: 9 },
-  segmentSmall: { width: 28, height: 26 },
+  segmentSmall: { width: 32, height: 28 },
 
   rateAllRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
