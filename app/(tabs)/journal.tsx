@@ -5,6 +5,7 @@ import {
   Modal, FlatList, Dimensions, Image, useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { CategoryIcon } from "@/components/category-icon";
@@ -973,7 +974,7 @@ function EntryEditor({
 }
 
 const editorStyles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, paddingTop: 56 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 0.5 },
   datePicker: { borderBottomWidth: 0.5, paddingVertical: 4 },
   templateToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderRadius: 10, marginBottom: 12 },
   templateGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
@@ -1881,6 +1882,7 @@ function JournalCalendarView({ colors, onDayPress }: { colors: any; onDayPress?:
 export default function JournalScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ tab?: string; action?: string }>();
   const [activeTab, setActiveTab] = useState<SubTab>(
     params.tab === 'calendar' ? 'journal' : 'habits'
@@ -2218,7 +2220,7 @@ export default function JournalScreen() {
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
-      <View style={dvStyles.header}>
+      <View style={[dvStyles.header, { paddingTop: insets.top + 10 }]}>
         {/* Fire streak icon — left */}
         <Pressable
           onPress={() => {}}

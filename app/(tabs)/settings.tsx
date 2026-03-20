@@ -10,6 +10,7 @@ import {
   TextInput, KeyboardAvoidingView, Animated,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -873,6 +874,7 @@ export default function YouScreen() {
   const colors = useColors();
   const isCalm = useIsCalm();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<YouTab>("analytics");
 
   const bgColor = isCalm ? '#0D1135' : colors.background;
@@ -889,7 +891,7 @@ export default function YouScreen() {
   return (
     <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* Header */}
-      <View style={[youStyles.header, { borderBottomColor: headerBorderColor, backgroundColor: bgColor }]}>
+      <View style={[youStyles.header, { borderBottomColor: headerBorderColor, backgroundColor: bgColor, paddingTop: insets.top + 10 }]}>
         <View style={{ width: 40 }} />
         <Text style={[youStyles.headerTitle, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>You</Text>
         <Pressable
@@ -938,7 +940,6 @@ const youStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 0.5,
   },
