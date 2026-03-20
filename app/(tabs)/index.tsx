@@ -951,9 +951,7 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                <View style={[styles.wellnessIconWrap, { backgroundColor: item.color + '22' }]}>
-                  <WellnessIcon category={item.key as any} size={24} color={item.color} />
-                </View>
+                <WellnessIcon category={item.key as any} size={36} color={item.color} />
                 <Text style={[styles.wellnessLabel, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{item.label}</Text>
               </Pressable>
             ))}

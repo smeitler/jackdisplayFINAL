@@ -338,9 +338,7 @@ export default function WellnessAudioScreen() {
 
       {/* Category hero */}
       <View style={[styles.hero, { backgroundColor: meta.color + '12' }]}>
-        <View style={[styles.heroIconWrap, { backgroundColor: meta.color + '22' }]}>
-          <WellnessIcon category={cat} size={40} color={meta.color} />
-        </View>
+        <WellnessIcon category={cat} size={56} color={meta.color} />
         <Text style={[styles.heroTitle, { color: colors.foreground }]}>{meta.label}</Text>
         <Text style={[styles.heroDesc, { color: colors.muted }]}>{meta.description}</Text>
       </View>

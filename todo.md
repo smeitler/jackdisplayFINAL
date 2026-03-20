@@ -1233,3 +1233,4 @@
 - [x] Focus section: list of focus / concentration audio tracks
 - [x] Source and integrate free audio content for each wellness category
 - [x] Replace emoji icons on wellness cards with flat SVG icons (Meditate: lotus/person, Sleep: moon, Move: lightning/run, Focus: music note)
+- [x] Wellness card icons: remove tinted background, show icon only at larger size with bold brand color
