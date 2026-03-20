@@ -1235,3 +1235,4 @@
 - [x] Replace emoji icons on wellness cards with flat SVG icons (Meditate: lotus/person, Sleep: moon, Move: lightning/run, Focus: music note)
 - [x] Wellness card icons: remove tinted background, show icon only at larger size with bold brand color
 - [x] Meditate icon: replace with large peace symbol (circle + lines); Move icon: replace with dumbbell icon
+- [x] Use uploaded PNG icons for wellness cards: zen.png (Meditate), fast-forward.png (Move), music.png (Focus), tinted to brand colors
