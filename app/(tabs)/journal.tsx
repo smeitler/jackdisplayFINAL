@@ -2277,7 +2277,7 @@ interface FullScreenJournalEditorProps {
   colors: any;
 }
 function FullScreenJournalEditor({
-  visible, value, onChange, onClose, onPickPhoto, onPickCamera,
+  visible, value, onChange, onClose, onPickPhoto, onPickCamera, colors,
 }: FullScreenJournalEditorProps) {
   const modalInsets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -2321,8 +2321,8 @@ function FullScreenJournalEditor({
             <IconSymbol name="chevron.left" size={22} color="#ffffff" />
           </Pressable>
           <View style={{ flex: 1 }} />
-          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { opacity: pressed ? 0.8 : 1 }]}>
-            <IconSymbol name="checkmark" size={20} color="#000000" />
+          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { backgroundColor: colors?.primary ?? '#6C63FF', opacity: pressed ? 0.8 : 1 }]}>
+            <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
         </View>
         {/* Editor + keyboard toolbar */}
@@ -2357,17 +2357,13 @@ function FullScreenJournalEditor({
             />
           </ScrollView>
 
-          {/* Keyboard accessory toolbar — photo buttons only */}
+          {/* Keyboard accessory toolbar — photo library button only */}
           <View style={[fsStyles.toolbar, { paddingBottom: 10 + modalInsets.bottom }]}>
-            {/* Photo library */}
+            {/* Photos */}
             <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="paperclip" size={22} color="rgba(255,255,255,0.8)" />
+              <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
             </Pressable>
             <View style={{ flex: 1 }} />
-            {/* Camera */}
-            <Pressable onPress={onPickCamera} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="camera.fill" size={22} color="rgba(255,255,255,0.8)" />
-            </Pressable>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -2378,7 +2374,7 @@ function FullScreenJournalEditor({
 const fsStyles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   topBarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-  checkBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5A623', alignItems: 'center', justifyContent: 'center' },
+  checkBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
@@ -3038,33 +3034,48 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── JOURNAL ENTRY — simple preview card, tap to open full-screen editor ── */}
-          <Pressable
-            onPress={() => setDvShowFullEditor(true)}
-            style={({ pressed }) => [dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 }]}
-          >
+          {/* ── JOURNAL ENTRY — taller card with inline TextInput and photo icon ── */}
+          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {/* Card header: title on left, photo icon + expand icon on right */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
-              <Pressable
-                onPress={() => setDvShowFullEditor(true)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
-              >
-                <IconSymbol name="square.and.pencil" size={18} color={colors.primary} />
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {/* Photo library button */}
+                <Pressable
+                  onPress={dvPickPhoto}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
+                >
+                  <IconSymbol name="photo.stack.fill" size={18} color={colors.primary} />
+                </Pressable>
+                {/* Expand to full-screen editor */}
+                <Pressable
+                  onPress={() => setDvShowFullEditor(true)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
+                >
+                  <IconSymbol name="arrow.up.left.and.arrow.down.right" size={16} color={colors.muted} />
+                </Pressable>
+              </View>
             </View>
-            {/* Preview: first 2 lines of text */}
-            {dvJournalNote ? (
-              <Text
-                numberOfLines={3}
-                style={{ fontSize: 15, lineHeight: 22, color: colors.foreground }}
-              >
-                {dvJournalNote.replace(/^(# |## |### |- )/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')}
-              </Text>
-            ) : (
-              <Text style={{ fontSize: 15, lineHeight: 22, color: colors.muted, fontStyle: 'italic' }}>
-                Tap to write your entry...
-              </Text>
-            )}
+            {/* Inline TextInput — taller, direct typing */}
+            <TextInput
+              value={dvJournalNote}
+              onChangeText={(text) => {
+                setDvJournalNote(text);
+                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+              }}
+              multiline
+              placeholder="What's on your mind today?"
+              placeholderTextColor={colors.muted}
+              style={[
+                { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 100, textAlignVertical: 'top' },
+                Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
+              ]}
+              textAlignVertical="top"
+              autoCorrect
+              autoCapitalize="sentences"
+              scrollEnabled={false}
+            />
             {/* Photo thumbnail strip */}
             {dvPrimaryEntryId.current && (() => {
               const photoAtts = (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo');
@@ -3097,7 +3108,7 @@ export default function JournalScreen() {
                 ))}
               </View>
             )}
-          </Pressable>
+          </View>
           {/* ── Full-screen journal editor ── */}
           <FullScreenJournalEditor
             visible={dvShowFullEditor}

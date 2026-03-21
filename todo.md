@@ -1347,3 +1347,8 @@
 - [x] Rewrite coach landing page (chat tab) using $100M Offers framework: personalized headline, dream hook, 4 deliverables, guarantee, concrete testimonial, CTA with tagline
 - [x] Update AI pitch prompt to follow framework structure: personal open → bridge → promise → close (4–6 sentences)
 - [x] Update pitch/checkout screen: personalized promise with user name, guarantee card inside pricing block
+
+- [ ] Journal card on Today screen: make it taller so user can type directly from that view
+- [ ] Journal card on Today screen: add photo library icon (not camera) to upload photos; show thumbnail on right if photo attached
+- [ ] Full-screen editor: replace paperclip with photo library icon; replace camera icon with photo library icon; remove paperclip
+- [ ] Full-screen editor: fix yellow checkmark button — change to app primary color (purple/blue)
