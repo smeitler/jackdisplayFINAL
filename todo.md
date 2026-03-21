@@ -1334,3 +1334,7 @@
 - [x] After last form question, generate AI-powered personalized pitch based on user's answers (short, compelling, specific to their goals/obstacles)
 - [x] Add pitch loading screen while AI generates the response
 - [x] Show pitch screen before success screen, with "Claim Your Spot" CTA
+
+- [x] Generate personalized ElevenLabs TTS audio in parallel with AI pitch (starts during loading screen, ready by pitch screen)
+- [x] Add audio player to pitch/checkout screen ("We made this for you, [Name]")
+- [x] Add payment CTA to pitch/checkout screen (pricing card + "Start My Coaching Journey" CTA)

@@ -1158,6 +1158,7 @@ Guidelines:
           input.coachingStyle ? `Preferred coaching style: ${input.coachingStyle}` : '',
         ].filter(Boolean).join('\n');
 
+        // Step 1: Generate the pitch text
         const resp = await invokeLLM({
           messages: [
             {
@@ -1179,8 +1180,23 @@ Write in second person ("you"). Tone: warm, direct, confident — like a mentor 
           ],
         });
 
-        const pitch = (resp.choices[0]?.message?.content as string) ?? '';
-        return { pitch: pitch.trim() };
+        const pitch = ((resp.choices[0]?.message?.content as string) ?? '').trim();
+
+        // Step 2: Generate TTS audio in parallel — intro line + pitch text
+        // The intro is spoken first: "[Name], we made this for you."
+        const firstName = input.firstName?.trim() || 'Friend';
+        const spokenText = `${firstName}... we made this for you.\n\n${pitch}`;
+
+        let audioUrl: string | null = null;
+        try {
+          const { generateAndStoreAudio, VOICES } = await import('./audioService.js');
+          audioUrl = await generateAndStoreAudio(spokenText, 'affirmation', VOICES.rachel);
+        } catch (audioErr) {
+          // Audio generation is non-critical — pitch still shows without it
+          console.error('[Coach] TTS generation failed:', audioErr);
+        }
+
+        return { pitch, audioUrl };
       }),
   }),
 

@@ -9,6 +9,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
+import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 interface FormData {
@@ -249,11 +250,14 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [screen, setScreen] = useState<ScreenState>("form");
   const [pitch, setPitch] = useState("");
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
   const [pitchError, setPitchError] = useState("");
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const generatePitchMutation = trpc.coach.generatePitch.useMutation();
+  const nativePlayer = useAudioPlayer(audioUrl ?? undefined);
 
   const q = QUESTIONS[step];
   const progress = (step + 1) / TOTAL;
@@ -314,6 +318,7 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
         coachingStyle: form.coachingStyle,
       });
       setPitch(result.pitch);
+      setAudioUrl(result.audioUrl ?? null);
       setScreen("pitch");
     } catch (err) {
       // If AI fails, skip to success screen
@@ -327,6 +332,8 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
     setForm(EMPTY);
     setScreen("form");
     setPitch("");
+    setAudioUrl(null);
+    setAudioPlaying(false);
     setPitchError("");
     onClose();
   }
@@ -387,46 +394,115 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
           </View>
         )}
 
-        {/* ── AI Pitch screen ─────────────────────────────────────────────── */}
+        {/* ── AI Pitch + Checkout screen ──────────────────────────────────── */}
         {screen === "pitch" && (
-          <ScrollView
-            contentContainerStyle={[st.pitchScroll, { paddingBottom: insets.bottom + 100 }]}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Eyebrow */}
-            <Text style={[st.pitchEyebrow, { color: colors.primary }]}>
-              A MESSAGE FOR YOU
-            </Text>
-
-            {/* Pitch text */}
-            <Text style={[st.pitchText, { color: colors.foreground }]}>
-              {pitch}
-            </Text>
-
-            {/* Divider */}
-            <View style={[st.divider, { backgroundColor: colors.border }]} />
-
-            {/* Social proof */}
-            <Text style={[st.pitchQuote, { color: colors.muted }]}>
-              "Working with an accountability coach was the single best investment I made in myself. Within 90 days I'd hit goals I'd been chasing for years."
-            </Text>
-            <Text style={[st.pitchQuoteAuthor, { color: colors.muted }]}>
-              — Marcus T., client since 2023
-            </Text>
-          </ScrollView>
-        )}
-
-        {/* ── Pitch CTA button ─────────────────────────────────────────────── */}
-        {screen === "pitch" && (
-          <View style={[st.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
-            <Pressable
-              onPress={() => setScreen("success")}
-              style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, flex: 1 }]}
+          <>
+            <ScrollView
+              contentContainerStyle={[st.pitchScroll, { paddingBottom: insets.bottom + 120 }]}
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={st.ctaBtnText}>Claim My Spot</Text>
-              <IconSymbol name="arrow.right" size={18} color="#ffffff" />
-            </Pressable>
-          </View>
+              {/* Eyebrow */}
+              <Text style={[st.pitchEyebrow, { color: colors.primary }]}>
+                WE MADE THIS FOR YOU, {(form.firstName || "FRIEND").toUpperCase()}
+              </Text>
+
+              {/* Audio player */}
+              {audioUrl && (
+                <View style={[st.audioCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Pressable
+                    onPress={async () => {
+                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      if (Platform.OS === "web") {
+                        // Web: use HTML5 audio element
+                        const audioEl = document.getElementById("coach-pitch-audio") as HTMLAudioElement | null;
+                        if (audioEl) {
+                          if (audioEl.paused) { audioEl.play(); setAudioPlaying(true); }
+                          else { audioEl.pause(); setAudioPlaying(false); }
+                        }
+                      } else {
+                        // Native: use expo-audio
+                        await setAudioModeAsync({ playsInSilentMode: true });
+                        if (audioPlaying) {
+                          nativePlayer.pause();
+                          setAudioPlaying(false);
+                        } else {
+                          nativePlayer.play();
+                          setAudioPlaying(true);
+                        }
+                      }
+                    }}
+                    style={({ pressed }) => [st.playBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+                  >
+                    <IconSymbol
+                      name={audioPlaying ? "pause.fill" : "play.fill"}
+                      size={22}
+                      color="#ffffff"
+                    />
+                  </Pressable>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.audioTitle, { color: colors.foreground }]}>
+                      Your personal message
+                    </Text>
+                    <Text style={[st.audioSub, { color: colors.muted }]}>
+                      Tap to listen
+                    </Text>
+                  </View>
+                  {/* Hidden HTML5 audio element for web */}
+                  {Platform.OS === "web" && (
+                    // @ts-ignore — web-only
+                    <audio
+                      id="coach-pitch-audio"
+                      src={audioUrl}
+                      onEnded={() => setAudioPlaying(false)}
+                      style={{ display: "none" }}
+                    />
+                  )}
+                </View>
+              )}
+
+              {/* Pitch text */}
+              <Text style={[st.pitchText, { color: colors.foreground }]}>
+                {pitch}
+              </Text>
+
+              {/* Divider */}
+              <View style={[st.divider, { backgroundColor: colors.border }]} />
+
+              {/* Pricing card */}
+              <View style={[st.pricingCard, { backgroundColor: colors.surface, borderColor: colors.primary + "40" }]}>
+                <Text style={[st.pricingLabel, { color: colors.muted }]}>ACCOUNTABILITY COACHING</Text>
+                <View style={st.pricingRow}>
+                  <Text style={[st.pricingAmount, { color: colors.foreground }]}>$297</Text>
+                  <Text style={[st.pricingPer, { color: colors.muted }]}>/month</Text>
+                </View>
+                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Weekly 1:1 coaching calls</Text>
+                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Daily check-ins via the app</Text>
+                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Personalized action plan</Text>
+                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Cancel anytime</Text>
+              </View>
+
+              {/* Social proof */}
+              <Text style={[st.pitchQuote, { color: colors.muted }]}>
+                "Working with an accountability coach was the single best investment I made in myself. Within 90 days I'd hit goals I'd been chasing for years."
+              </Text>
+              <Text style={[st.pitchQuoteAuthor, { color: colors.muted }]}>
+                — Marcus T., client since 2023
+              </Text>
+            </ScrollView>
+
+            {/* Bottom CTA */}
+            <View style={[st.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  setScreen("success");
+                }}
+                style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, flex: 1 }]}
+              >
+                <Text style={st.ctaBtnText}>Start My Coaching Journey →</Text>
+              </Pressable>
+            </View>
+          </>
         )}
 
         {/* ── Success screen ──────────────────────────────────────────────── */}
@@ -738,6 +814,64 @@ const st = StyleSheet.create({
   pitchQuoteAuthor: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  // Audio player card
+  audioCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 28,
+  },
+  playBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  audioSub: {
+    fontSize: 13,
+  },
+  // Pricing card
+  pricingCard: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 28,
+    gap: 8,
+  },
+  pricingLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  pricingRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+    marginBottom: 12,
+  },
+  pricingAmount: {
+    fontSize: 40,
+    fontWeight: "800",
+    letterSpacing: -1,
+  },
+  pricingPer: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  pricingFeature: {
+    fontSize: 14,
+    lineHeight: 22,
   },
   // Success screen
   successWrap: {
