@@ -1356,3 +1356,10 @@
 - [x] Journal card photo thumbnails support drag-to-reorder (long press + drag) to set which photo shows on calendar
 - [x] Reordering persists to storage so calendar always reflects the chosen first photo
 - [x] Fix photo URI persistence: copy picked images to permanent documentDirectory so they survive app restarts and always show in journal card, full-screen editor, and calendar
+- [x] Journal card: photo strip moved above text area (not below)
+- [x] Journal card: per-photo × delete button on each thumbnail
+- [x] Journal card: auto-save "✓ Saved" indicator fades in after text is persisted
+- [x] Journal card: character count shown in footer when text is present
+- [x] Journal card: removed "Drag ★ to set cover" clutter text
+- [x] Expand button: full-screen editor replaced with slide-up bottom sheet (pageSheet presentation)
+- [x] Bottom sheet editor: drag handle at top, character count in toolbar, swipe-down to dismiss

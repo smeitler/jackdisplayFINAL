@@ -2293,9 +2293,10 @@ function DrawCanvas({ colors }: { colors: any }) {
 interface DraggablePhotoStripProps {
   photos: JournalAttachment[];
   onReorder: (reordered: JournalAttachment[]) => void;
+  onDelete?: (id: string) => void;
   colors: any;
 }
-function DraggablePhotoStrip({ photos, onReorder, colors }: DraggablePhotoStripProps) {
+function DraggablePhotoStrip({ photos, onReorder, onDelete, colors }: DraggablePhotoStripProps) {
   const THUMB = 60;
   const GAP = 8;
   const [order, setOrder] = useState<JournalAttachment[]>(photos);
@@ -2370,12 +2371,18 @@ function DraggablePhotoStrip({ photos, onReorder, colors }: DraggablePhotoStripP
                 <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>+{overflow}</Text>
               </View>
             )}
+            {/* Delete button — only shown when not dragging */}
+            {onDelete && dragging === null && (
+              <Pressable
+                onPress={() => onDelete(att.id)}
+                style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}
+              >
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', lineHeight: 12 }}>×</Text>
+              </Pressable>
+            )}
           </Animated.View>
         );
       })}
-      {photos.length > 1 && dragging === null && (
-        <Text style={{ fontSize: 10, color: colors.muted, flex: 1, lineHeight: 13 }}>{'Drag ★ to\nset cover'}</Text>
-      )}
     </View>
   );
 }
@@ -2422,19 +2429,16 @@ function FullScreenJournalEditor({
     onClose();
   }, [onClose, onChange, text]);
 
-  if (!visible) return null;
-
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose} transparent={false}>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        {/* Status bar spacer */}
-        <View style={{ height: Math.max(modalInsets.top, Platform.OS === 'web' ? 48 : 44) }} />
+        {/* Drag handle */}
+        <View style={{ alignItems: 'center', paddingTop: Math.max(modalInsets.top, 16), paddingBottom: 4 }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' }} />
+        </View>
         {/* Top navigation bar */}
         <View style={fsStyles.topBar}>
-          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-            <IconSymbol name="chevron.left" size={22} color="#ffffff" />
-          </Pressable>
-          <View style={{ flex: 1 }} />
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginLeft: 40 }}>Journal Entry</Text>
           <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { backgroundColor: colors?.primary ?? '#6C63FF', opacity: pressed ? 0.8 : 1 }]}>
             <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
@@ -2478,6 +2482,8 @@ function FullScreenJournalEditor({
               <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
             </Pressable>
             <View style={{ flex: 1 }} />
+            {/* Character count */}
+            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length}</Text>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -2723,8 +2729,13 @@ export default function JournalScreen() {
   const [dvShowAudioRecorder, setDvShowAudioRecorder] = useState(false);
   // Draw canvas
   const [dvShowDraw, setDvShowDraw] = useState(false);
-  // Full-screen journal editor
+  // Full-screen journal editor (bottom sheet)
   const [dvShowFullEditor, setDvShowFullEditor] = useState(false);
+  // Auto-save indicator: shows "Saved" briefly after text is persisted
+  const [dvSaved, setDvSaved] = useState(false);
+  const dvSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether to hide the drag-to-set-cover hint (shown once, then hidden)
+  const [dvHideDragHint, setDvHideDragHint] = useState(false);
   // Font style sheet
   const [dvShowFontSheet, setDvShowFontSheet] = useState(false);
   const fontSheetAnim = useRef(new Animated.Value(300)).current;
@@ -2808,6 +2819,10 @@ export default function JournalScreen() {
       }
     } finally {
       setDvSaving(false);
+      // Show "Saved" indicator briefly
+      setDvSaved(true);
+      if (dvSavedTimer.current) clearTimeout(dvSavedTimer.current);
+      dvSavedTimer.current = setTimeout(() => setDvSaved(false), 2000);
     }
   }, [userId, selectedDate]);
 
@@ -3156,84 +3171,103 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── JOURNAL ENTRY — taller card with inline TextInput and photo icon ── */}
-          <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {/* Card header: title on left, photo icon + expand icon on right */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                {/* Photo library button */}
-                <Pressable
-                  onPress={dvPickPhoto}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
-                >
-                  <IconSymbol name="photo.stack.fill" size={18} color={colors.primary} />
-                </Pressable>
-                {/* Expand to full-screen editor */}
-                <Pressable
-                  onPress={() => setDvShowFullEditor(true)}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
-                >
-                  <IconSymbol name="arrow.up.left.and.arrow.down.right" size={16} color={colors.muted} />
-                </Pressable>
-              </View>
-            </View>
-            {/* Inline TextInput — taller, direct typing */}
-            <TextInput
-              value={dvJournalNote}
-              onChangeText={(text) => {
-                setDvJournalNote(text);
-                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-              }}
-              multiline
-              placeholder="What's on your mind today?"
-              placeholderTextColor={colors.muted}
-              style={[
-                { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 100, textAlignVertical: 'top' },
-                Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
-              ]}
-              textAlignVertical="top"
-              autoCorrect
-              autoCapitalize="sentences"
-              scrollEnabled={false}
-            />
-            {/* Draggable photo thumbnail strip — first photo = calendar cover */}
-            {(() => {
-              const photoAtts = dvPrimaryEntryId.current
-                ? (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo')
-                : [];
-              if (photoAtts.length === 0) return null;
-              return (
-                <DraggablePhotoStrip
-                  photos={photoAtts}
-                  colors={colors}
-                  onReorder={async (reordered) => {
-                    if (!dvPrimaryEntryId.current || !userId) return;
-                    // Merge reordered photos back with non-photo attachments
-                    const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
-                    const nonPhotos = allAtts.filter((a) => a.type !== 'photo');
-                    const merged = [...reordered, ...nonPhotos];
-                    await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
-                    setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
-                  }}
-                />
-              );
-            })()}
-            {/* Tag chips */}
-            {dvTags.length > 0 && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {dvTags.map((tag) => (
-                  <View
-                    key={tag}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '22', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
-                  >
-                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>#{tag}</Text>
+          {/* ── JOURNAL ENTRY — improved card ── */}
+          {(() => {
+            const photoAtts = dvPrimaryEntryId.current
+              ? (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo')
+              : [];
+            const handleDeletePhoto = async (photoId: string) => {
+              if (!dvPrimaryEntryId.current || !userId) return;
+              const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
+              const merged = allAtts.filter((a) => a.id !== photoId);
+              await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
+              setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
+            };
+            return (
+              <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                {/* Card header: title + saved indicator on left, photo icon + expand on right */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
+                    {dvSaved && (
+                      <Text style={{ fontSize: 11, color: colors.success, fontWeight: '500' }}>✓ Saved</Text>
+                    )}
                   </View>
-                ))}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {/* Photo library button */}
+                    <Pressable
+                      onPress={dvPickPhoto}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
+                    >
+                      <IconSymbol name="photo.stack.fill" size={18} color={colors.primary} />
+                    </Pressable>
+                    {/* Expand to bottom-sheet editor */}
+                    <Pressable
+                      onPress={() => setDvShowFullEditor(true)}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
+                    >
+                      <IconSymbol name="arrow.up.left.and.arrow.down.right" size={16} color={colors.muted} />
+                    </Pressable>
+                  </View>
+                </View>
+                {/* Photo strip — above text, with delete buttons */}
+                {photoAtts.length > 0 && (
+                  <DraggablePhotoStrip
+                    photos={photoAtts}
+                    colors={colors}
+                    onDelete={handleDeletePhoto}
+                    onReorder={async (reordered) => {
+                      if (!dvPrimaryEntryId.current || !userId) return;
+                      const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
+                      const nonPhotos = allAtts.filter((a) => a.type !== 'photo');
+                      const merged = [...reordered, ...nonPhotos];
+                      await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
+                      setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
+                    }}
+                  />
+                )}
+                {/* Inline TextInput — direct typing */}
+                <TextInput
+                  value={dvJournalNote}
+                  onChangeText={(text) => {
+                    setDvJournalNote(text);
+                    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+                  }}
+                  multiline
+                  placeholder="What's on your mind today?"
+                  placeholderTextColor={colors.muted}
+                  style={[
+                    { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 110, textAlignVertical: 'top', marginTop: photoAtts.length > 0 ? 10 : 0 },
+                    Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
+                  ]}
+                  textAlignVertical="top"
+                  autoCorrect
+                  autoCapitalize="sentences"
+                  scrollEnabled={false}
+                />
+                {/* Footer: character count */}
+                {dvJournalNote.length > 0 && (
+                  <Text style={{ fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 }}>
+                    {dvJournalNote.length} chars
+                  </Text>
+                )}
+                {/* Tag chips */}
+                {dvTags.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {dvTags.map((tag) => (
+                      <View
+                        key={tag}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '22', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
+                      >
+                        <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>#{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
-            )}
-          </View>
+            );
+          })()}
           {/* ── Full-screen journal editor ── */}
           <FullScreenJournalEditor
             visible={dvShowFullEditor}
