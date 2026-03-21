@@ -33,6 +33,9 @@ const MAPPING: Record<string, MaterialIconName> = {
   "xmark": "close",
   "flag.fill": "flag",
   "person.fill.xmark": "person-remove",
+  "person.fill.checkmark": "how-to-reg",
+  "chart.line.uptrend.xyaxis": "trending-up",
+  "calendar.badge.checkmark": "event-available",
   "xmark.circle.fill": "cancel",
   // Content
   "heart.fill": "favorite",

@@ -1323,3 +1323,5 @@
 - [x] Keep only the photo (camera/library) buttons in the keyboard toolbar
 - [x] Make editor scroll fluidly as user types (ScrollView wrapping TextInput with scrollEnabled=false)
 - [x] Remove RichTextEditorView import (no longer needed in journal.tsx)
+
+- [x] Replace AI chat tab with accountability coach sign-up landing page (promo/encourage sign-up, no actual chat)
