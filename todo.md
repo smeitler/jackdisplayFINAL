@@ -1328,3 +1328,5 @@
 
 - [x] Build multi-step accountability coach application form (goals, challenges, lifestyle, commitment, contact)
 - [x] Wire "Apply for a Coach" CTA button to open the form modal
+
+- [x] Rebuild coach application form as Typeform-style one-question-per-screen flow with smooth transitions
