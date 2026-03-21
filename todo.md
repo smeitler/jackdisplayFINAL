@@ -1355,3 +1355,4 @@
 - [x] Calendar shows first photo in the ordered list for each day (not necessarily the first uploaded)
 - [x] Journal card photo thumbnails support drag-to-reorder (long press + drag) to set which photo shows on calendar
 - [x] Reordering persists to storage so calendar always reflects the chosen first photo
+- [x] Fix photo URI persistence: copy picked images to permanent documentDirectory so they survive app restarts and always show in journal card, full-screen editor, and calendar

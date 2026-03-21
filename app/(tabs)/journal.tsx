@@ -37,6 +37,29 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
 // ─── Sub-tab type ────────────────────────────────────────────────────────────
 type SubTab = "habits" | "journal";
 
+// ─── Permanent URI helper ────────────────────────────────────────────────────
+// Copies a picked asset URI to the app's permanent documentDirectory so it
+// remains accessible across app restarts. On web (no FileSystem), returns the
+// original URI unchanged.
+async function copyToDocuments(uri: string, ext = 'jpg'): Promise<string> {
+  if (Platform.OS === 'web') return uri;
+  try {
+    const dir = FileSystem.documentDirectory + 'journal_media/';
+    // Ensure directory exists
+    const dirInfo = await FileSystem.getInfoAsync(dir);
+    if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    // Derive extension from URI if possible
+    const match = uri.match(/\.([a-zA-Z0-9]+)(\?|$)/);
+    const finalExt = match ? match[1].toLowerCase() : ext;
+    const dest = dir + generateId() + '.' + finalExt;
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    return dest;
+  } catch (e) {
+    console.warn('copyToDocuments failed, using original URI:', e);
+    return uri;
+  }
+}
+
 // ─── Web MediaRecorder Hook ──────────────────────────────────────────────────
 function useWebRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -544,11 +567,13 @@ function EntryEditor({
       });
       if (result.canceled) return;
       for (const asset of result.assets) {
+        const isVideo = asset.type === "video";
+        const permUri = await copyToDocuments(asset.uri, isVideo ? 'mp4' : 'jpg');
         const att: JournalAttachment = {
           id: generateId(),
-          type: asset.type === "video" ? "video" : "photo",
-          uri: asset.uri,
-          mimeType: asset.mimeType || (asset.type === "video" ? "video/mp4" : "image/jpeg"),
+          type: isVideo ? "video" : "photo",
+          uri: permUri,
+          mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
           durationMs: asset.duration ? asset.duration * 1000 : undefined,
         };
         setAttachments((prev) => [...prev, att]);
@@ -581,7 +606,8 @@ function EntryEditor({
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.85 });
       if (result.canceled) return;
       for (const asset of result.assets) {
-        setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: asset.uri, mimeType: asset.mimeType || "image/jpeg" }]);
+        const permUri = await copyToDocuments(asset.uri, 'jpg');
+        setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: permUri, mimeType: asset.mimeType || "image/jpeg" }]);
       }
     } catch (e) { console.warn("Camera error:", e); }
   }
@@ -594,7 +620,8 @@ function EntryEditor({
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["videos"], videoMaxDuration: 120, quality: 0.8 });
       if (result.canceled) return;
       for (const asset of result.assets) {
-        setAttachments((prev) => [...prev, { id: generateId(), type: "video", uri: asset.uri, mimeType: asset.mimeType || "video/mp4", durationMs: asset.duration ? asset.duration * 1000 : undefined }]);
+        const permUri = await copyToDocuments(asset.uri, 'mp4');
+        setAttachments((prev) => [...prev, { id: generateId(), type: "video", uri: permUri, mimeType: asset.mimeType || "video/mp4", durationMs: asset.duration ? asset.duration * 1000 : undefined }]);
       }
     } catch (e) { console.warn("Video error:", e); }
   }
@@ -621,8 +648,9 @@ function EntryEditor({
           if (status !== "granted") { Alert.alert("Camera permission required"); return; }
           const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9 });
           if (result.canceled) return;
-          const asset = result.assets[0];
-          setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: asset.uri, mimeType: asset.mimeType || "image/jpeg", name: "Scanned text" }]);
+              const asset = result.assets[0];
+          const permUri = await copyToDocuments(asset.uri, 'jpg');
+          setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: permUri, mimeType: asset.mimeType || "image/jpeg", name: "Scanned text" }]);
         } catch {}
       }},
       { text: "Cancel", style: "cancel" },
@@ -639,7 +667,8 @@ function EntryEditor({
           const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.95 });
           if (result.canceled) return;
           const asset = result.assets[0];
-          setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: asset.uri, mimeType: asset.mimeType || "image/jpeg", name: "Scanned document" }]);
+          const permUri2 = await copyToDocuments(asset.uri, 'jpg');
+          setAttachments((prev) => [...prev, { id: generateId(), type: "photo", uri: permUri2, mimeType: asset.mimeType || "image/jpeg", name: "Scanned document" }]);
         } catch {}
       }},
       { text: "Cancel", style: "cancel" },
@@ -2804,10 +2833,14 @@ export default function JournalScreen() {
         setEntries(updated);
         entryId = newEntry.id;
       }
-      const newAtts: JournalAttachment[] = result.assets.map((asset) => ({
-        id: generateId(), type: 'photo' as const,
-        uri: asset.uri, mimeType: asset.mimeType || 'image/jpeg',
-      }));
+      // Copy each picked photo to permanent app storage so URIs survive app restarts
+      const newAtts: JournalAttachment[] = await Promise.all(
+        result.assets.map(async (asset) => ({
+          id: generateId(), type: 'photo' as const,
+          uri: await copyToDocuments(asset.uri, 'jpg'),
+          mimeType: asset.mimeType || 'image/jpeg',
+        }))
+      );
       const existingEntry = entries.find((e) => e.id === entryId);
       const merged = [...(existingEntry?.attachments ?? []), ...newAtts];
       await updateEntryInStore(userId, entryId, { attachments: merged });
@@ -2831,7 +2864,9 @@ export default function JournalScreen() {
         setEntries(updated);
         entryId = newEntry.id;
       }
-      const newAtts: JournalAttachment[] = result.assets.map((a) => ({ id: generateId(), type: 'photo' as const, uri: a.uri, mimeType: a.mimeType || 'image/jpeg' }));
+      const newAtts: JournalAttachment[] = await Promise.all(
+        result.assets.map(async (a) => ({ id: generateId(), type: 'photo' as const, uri: await copyToDocuments(a.uri, 'jpg'), mimeType: a.mimeType || 'image/jpeg' }))
+      );
       const existing = entries.find((e) => e.id === entryId);
       const merged = [...(existing?.attachments ?? []), ...newAtts];
       await updateEntryInStore(userId, entryId, { attachments: merged });
@@ -2854,7 +2889,9 @@ export default function JournalScreen() {
         setEntries(updated);
         entryId = newEntry.id;
       }
-      const newAtts: JournalAttachment[] = result.assets.map((a) => ({ id: generateId(), type: 'video' as const, uri: a.uri, mimeType: a.mimeType || 'video/mp4' }));
+      const newAtts: JournalAttachment[] = await Promise.all(
+        result.assets.map(async (a) => ({ id: generateId(), type: 'video' as const, uri: await copyToDocuments(a.uri, 'mp4'), mimeType: a.mimeType || 'video/mp4' }))
+      );
       const existing = entries.find((e) => e.id === entryId);
       const merged = [...(existing?.attachments ?? []), ...newAtts];
       await updateEntryInStore(userId, entryId, { attachments: merged });
