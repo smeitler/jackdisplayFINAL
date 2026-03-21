@@ -1366,3 +1366,6 @@
 - [x] Fix X delete buttons cut off: moved X outside overflow:hidden container into outer wrapper View
 - [x] Fix photos not showing in journal card and calendar: replaced all RN Image with ExpoImage (memory-disk cache, contentFit)
 - [x] Move photo strip back below the text area (user preference)
+- [x] Bottom sheet editor: fix top content cut off (safe area / drag handle spacing)
+- [x] Bottom sheet editor: add photo strip (drag-to-reorder + × delete) at bottom above toolbar
+- [x] Bottom sheet editor: wire photos prop so it shows current entry's photos

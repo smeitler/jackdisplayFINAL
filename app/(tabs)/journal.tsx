@@ -5,7 +5,7 @@ import {
   Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard, PanResponder,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { CategoryIcon } from "@/components/category-icon";
@@ -2298,11 +2298,11 @@ function DrawCanvas({ colors }: { colors: any }) {
 // Long-press a thumbnail to start dragging; release to drop and save new order.
 interface DraggablePhotoStripProps {
   photos: JournalAttachment[];
-  onReorder: (reordered: JournalAttachment[]) => void;
+  onReorder?: (reordered: JournalAttachment[]) => void;
   onDelete?: (id: string) => void;
   colors: any;
 }
-function DraggablePhotoStrip({ photos, onReorder, onDelete, colors }: DraggablePhotoStripProps) {
+function DraggablePhotoStrip({ photos, onReorder = () => {}, onDelete, colors }: DraggablePhotoStripProps) {
   const THUMB = 60;
   const GAP = 8;
   const [order, setOrder] = useState<JournalAttachment[]>(photos);
@@ -2412,12 +2412,15 @@ interface FullScreenJournalEditorProps {
   onClose: () => void;
   onPickPhoto: () => void;
   onPickCamera: () => void;
+  photos?: JournalAttachment[];
+  onDeletePhoto?: (id: string) => void;
+  onReorderPhotos?: (reordered: JournalAttachment[]) => void;
   colors: any;
 }
 function FullScreenJournalEditor({
-  visible, value, onChange, onClose, onPickPhoto, onPickCamera, colors,
+  visible, value, onChange, onClose, onPickPhoto, onPickCamera,
+  photos = [], onDeletePhoto, onReorderPhotos, colors,
 }: FullScreenJournalEditorProps) {
-  const modalInsets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState(value);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2448,9 +2451,10 @@ function FullScreenJournalEditor({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose} transparent={false}>
-      <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        {/* Drag handle */}
-        <View style={{ alignItems: 'center', paddingTop: Math.max(modalInsets.top, 16), paddingBottom: 4 }}>
+      {/* SafeAreaView handles the notch/status-bar area inside pageSheet */}
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }} edges={['top', 'left', 'right']}>
+        {/* Drag handle — always visible at top */}
+        <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' }} />
         </View>
         {/* Top navigation bar */}
@@ -2468,7 +2472,7 @@ function FullScreenJournalEditor({
         >
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: photos.length > 0 ? 8 : 40 }}
             keyboardShouldPersistTaps="handled"
           >
             <TextInput
@@ -2492,18 +2496,32 @@ function FullScreenJournalEditor({
             />
           </ScrollView>
 
-          {/* Keyboard accessory toolbar — photo library button only */}
-          <View style={[fsStyles.toolbar, { paddingBottom: 10 + modalInsets.bottom }]}>
-            {/* Photos */}
-            <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-              <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-            <View style={{ flex: 1 }} />
-            {/* Character count */}
-            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length}</Text>
-          </View>
+          {/* Photo strip — shown above toolbar when photos exist */}
+          {photos.length > 0 && (
+            <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
+              <DraggablePhotoStrip
+                photos={photos}
+                colors={{ muted: 'rgba(255,255,255,0.4)', primary: colors?.primary ?? '#6C63FF' }}
+                onDelete={onDeletePhoto}
+                onReorder={onReorderPhotos}
+              />
+            </View>
+          )}
+
+          {/* Keyboard accessory toolbar */}
+          <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'rgba(28,28,30,0.98)' }}>
+            <View style={fsStyles.toolbar}>
+              {/* Photos */}
+              <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+              <View style={{ flex: 1 }} />
+              {/* Character count */}
+              <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
+            </View>
+          </SafeAreaView>
         </KeyboardAvoidingView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -3303,6 +3321,26 @@ export default function JournalScreen() {
             onPickPhoto={dvPickPhoto}
             onPickCamera={dvPickCamera}
             colors={colors}
+            photos={(
+              dvPrimaryEntryId.current
+                ? entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments.filter((a) => a.type === 'photo') ?? []
+                : []
+            )}
+            onDeletePhoto={async (id) => {
+              if (!dvPrimaryEntryId.current || !userId) return;
+              const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
+              const updated = allAtts.filter((a) => a.id !== id);
+              await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: updated });
+              setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: updated } : e));
+            }}
+            onReorderPhotos={async (reordered) => {
+              if (!dvPrimaryEntryId.current || !userId) return;
+              const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
+              const nonPhotos = allAtts.filter((a) => a.type !== 'photo');
+              const merged = [...reordered, ...nonPhotos];
+              await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
+              setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
+            }}
           />
 
           {/* ── Day-view Attach Sheet ── */}
