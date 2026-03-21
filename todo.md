@@ -1338,3 +1338,8 @@
 - [x] Generate personalized ElevenLabs TTS audio in parallel with AI pitch (starts during loading screen, ready by pitch screen)
 - [x] Add audio player to pitch/checkout screen ("We made this for you, [Name]")
 - [x] Add payment CTA to pitch/checkout screen (pricing card + "Start My Coaching Journey" CTA)
+
+- [x] Remove ElevenLabs TTS audio from coach form (no more audio generation, just text pitch — faster)
+- [x] Add specific habit question to coach form: exactly what habit are they starting or stopping (narrow/specific)
+- [x] Rewrite pitch/checkout page using 8-week Sprint framework: kickoff workshop + daily check-ins + coach voice feedback + weekly strategy memo, $297 for 8 weeks, fully customized to their answers
+- [x] Update server AI prompt to generate pitch based on Sprint framework (not generic coaching pitch)

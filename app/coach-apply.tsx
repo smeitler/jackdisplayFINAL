@@ -9,7 +9,6 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
-import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 interface FormData {
@@ -17,27 +16,24 @@ interface FormData {
   lastName: string;
   email: string;
   age: string;
+  specificHabit: string;
+  habitDirection: string;
   primaryGoals: string[];
-  goalTimeline: string;
   whyNow: string;
   biggestChallenges: string[];
-  triedBefore: string;
   whatStopped: string;
-  dailyRoutine: string;
   workSchedule: string;
-  supportSystem: string;
   hoursPerWeek: string;
-  investmentReadiness: string;
   coachingStyle: string;
   additionalInfo: string;
 }
 
 const EMPTY: FormData = {
   firstName: "", lastName: "", email: "", age: "",
-  primaryGoals: [], goalTimeline: "", whyNow: "",
-  biggestChallenges: [], triedBefore: "", whatStopped: "",
-  dailyRoutine: "", workSchedule: "", supportSystem: "",
-  hoursPerWeek: "", investmentReadiness: "", coachingStyle: "",
+  specificHabit: "", habitDirection: "",
+  primaryGoals: [], whyNow: "",
+  biggestChallenges: [], whatStopped: "",
+  workSchedule: "", hoursPerWeek: "", coachingStyle: "",
   additionalInfo: "",
 };
 
@@ -66,49 +62,50 @@ const QUESTIONS: Question[] = [
     id: "email",
     type: "email",
     question: "What's your email address?",
-    subtitle: "We'll use this to reach you for your intro call.",
+    subtitle: "We'll use this to reach you about your spot.",
     placeholder: "you@example.com",
     required: true,
   },
   {
-    id: "age",
-    type: "number",
-    question: "How old are you?",
-    placeholder: "28",
-    required: false,
+    id: "habitDirection",
+    type: "chips-single",
+    question: "Are you trying to start something or stop something?",
+    subtitle: "Be honest — both are valid.",
+    options: ["Start a new habit", "Stop a bad habit", "Both"],
+    required: true,
+  },
+  {
+    id: "specificHabit",
+    type: "textarea",
+    question: "What is the exact habit?",
+    subtitle: "Don't say 'get healthy' — say exactly what you want to do or stop doing. The more specific, the better.",
+    placeholder: "e.g. Wake up at 6am every day without hitting snooze\ne.g. Stop scrolling my phone in bed after 10pm\ne.g. Work out for 30 minutes every morning before work",
+    required: true,
   },
   {
     id: "primaryGoals",
     type: "chips-multi",
-    question: "What are you trying to achieve?",
+    question: "What does nailing this habit unlock for you?",
     subtitle: "Select everything that applies.",
     options: [
-      "Build consistent habits", "Lose weight / get fit", "Grow my business",
-      "Improve mental health", "Advance my career", "Improve relationships",
-      "Financial freedom", "Quit a bad habit", "Find my purpose", "Other",
+      "More energy & health", "Weight loss / fitness", "Business growth",
+      "Mental clarity & focus", "Career advancement", "Better relationships",
+      "Financial progress", "Confidence & self-worth", "Less stress", "Other",
     ],
     required: true,
   },
   {
-    id: "goalTimeline",
-    type: "chips-single",
-    question: "What's your ideal timeline?",
-    subtitle: "When do you want to see real results?",
-    options: ["1 month", "3 months", "6 months", "1 year", "Ongoing"],
-    required: false,
-  },
-  {
     id: "whyNow",
     type: "textarea",
-    question: "Why is this important to you right now?",
-    subtitle: "What's driving you to make a change at this moment in your life?",
+    question: "Why is this the moment you're finally doing it?",
+    subtitle: "Something shifted. What was it?",
     placeholder: "Be honest — the more you share, the better we can help...",
     required: false,
   },
   {
     id: "biggestChallenges",
     type: "chips-multi",
-    question: "What's been holding you back?",
+    question: "What's been stopping you until now?",
     subtitle: "Select your biggest obstacles.",
     options: [
       "Lack of motivation", "No clear plan", "Procrastination",
@@ -118,33 +115,18 @@ const QUESTIONS: Question[] = [
     required: false,
   },
   {
-    id: "triedBefore",
-    type: "textarea",
-    question: "Have you tried working toward this goal before?",
-    subtitle: "What did you try? What worked, what didn't?",
-    placeholder: "Tell us about your past attempts...",
-    required: false,
-  },
-  {
     id: "whatStopped",
     type: "textarea",
-    question: "What stopped you from reaching your goal in the past?",
-    subtitle: "Honesty here helps us help you.",
+    question: "You've probably tried before. What happened?",
+    subtitle: "What did you try? Why didn't it stick?",
     placeholder: "Be real with us — no judgment...",
-    required: false,
-  },
-  {
-    id: "dailyRoutine",
-    type: "textarea",
-    question: "Describe your typical day.",
-    subtitle: "Walk us through a weekday from morning to night.",
-    placeholder: "Wake up at 7am, commute, work until 6pm...",
     required: false,
   },
   {
     id: "workSchedule",
     type: "chips-single",
     question: "What best describes your work situation?",
+    subtitle: "This helps us understand your daily structure.",
     options: [
       "9–5 office job", "Remote / flexible", "Shift work",
       "Self-employed", "Student", "Stay-at-home parent",
@@ -152,42 +134,22 @@ const QUESTIONS: Question[] = [
     required: false,
   },
   {
-    id: "supportSystem",
-    type: "textarea",
-    question: "Do you have a support system?",
-    subtitle: "Tell us about the people in your corner — family, friends, partner.",
-    placeholder: "My partner is supportive but...",
-    required: false,
-  },
-  {
     id: "hoursPerWeek",
     type: "chips-single",
-    question: "How many hours per week can you commit?",
-    subtitle: "Be realistic — consistency beats intensity.",
-    options: ["1–2 hrs/week", "3–5 hrs/week", "6–10 hrs/week", "10+ hrs/week"],
-    required: false,
-  },
-  {
-    id: "investmentReadiness",
-    type: "chips-single",
-    question: "How do you feel about investing in coaching?",
-    options: [
-      "I'm exploring options",
-      "I'm ready to invest in myself",
-      "Budget is a concern",
-      "I'm fully committed, cost isn't an issue",
-    ],
+    question: "How many minutes per day can you realistically commit?",
+    subtitle: "Be honest — 2 minutes beats 0 minutes every time.",
+    options: ["2–5 min/day", "10–15 min/day", "20–30 min/day", "1+ hour/day"],
     required: false,
   },
   {
     id: "coachingStyle",
     type: "chips-single",
-    question: "What coaching style works best for you?",
-    subtitle: "There's no wrong answer — we match you to your coach.",
+    question: "How do you want your coach to show up?",
+    subtitle: "There's no wrong answer.",
     options: [
-      "Gentle & supportive",
+      "Warm & encouraging",
       "Direct & no-nonsense",
-      "Data-driven & structured",
+      "Structured & data-driven",
       "Flexible & intuitive",
     ],
     required: false,
@@ -196,7 +158,7 @@ const QUESTIONS: Question[] = [
     id: "additionalInfo",
     type: "textarea",
     question: "Anything else we should know?",
-    subtitle: "Health conditions, past experiences, specific concerns, or what you're most excited about.",
+    subtitle: "Health conditions, past experiences, or what you're most excited about.",
     placeholder: "Share anything that feels important...",
     required: false,
   },
@@ -250,19 +212,14 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [screen, setScreen] = useState<ScreenState>("form");
   const [pitch, setPitch] = useState("");
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioPlaying, setAudioPlaying] = useState(false);
-  const [pitchError, setPitchError] = useState("");
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const generatePitchMutation = trpc.coach.generatePitch.useMutation();
-  const nativePlayer = useAudioPlayer(audioUrl ?? undefined);
 
   const q = QUESTIONS[step];
   const progress = (step + 1) / TOTAL;
 
-  // Animate transition between questions
   function animateToNext(forward: boolean, callback: () => void) {
     const outX = forward ? -30 : 30;
     const inX = forward ? 30 : -30;
@@ -289,10 +246,7 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   }
 
   function goBack() {
-    if (screen === "pitch") {
-      setScreen("success");
-      return;
-    }
+    if (screen === "pitch") { setScreen("form"); return; }
     if (step > 0) {
       animateToNext(false, () => setStep((s) => s - 1));
     } else {
@@ -302,14 +256,13 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
 
   async function handleSubmit() {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Show loading screen while AI generates the pitch
     setScreen("loading");
-    setPitchError("");
     try {
       const result = await generatePitchMutation.mutateAsync({
         firstName: form.firstName,
+        specificHabit: form.specificHabit,
+        habitDirection: form.habitDirection,
         primaryGoals: form.primaryGoals,
-        goalTimeline: form.goalTimeline,
         whyNow: form.whyNow,
         biggestChallenges: form.biggestChallenges,
         whatStopped: form.whatStopped,
@@ -318,11 +271,8 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
         coachingStyle: form.coachingStyle,
       });
       setPitch(result.pitch);
-      setAudioUrl(result.audioUrl ?? null);
       setScreen("pitch");
-    } catch (err) {
-      // If AI fails, skip to success screen
-      setPitchError("Something went wrong generating your pitch.");
+    } catch {
       setScreen("success");
     }
   }
@@ -332,13 +282,9 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
     setForm(EMPTY);
     setScreen("form");
     setPitch("");
-    setAudioUrl(null);
-    setAudioPlaying(false);
-    setPitchError("");
     onClose();
   }
 
-  // Field updaters
   const setField = useCallback((key: keyof FormData, val: string) => {
     setForm((f) => ({ ...f, [key]: val }));
   }, []);
@@ -360,7 +306,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
       <View style={[st.root, { backgroundColor: colors.background }]}>
-        {/* Status bar spacer */}
         <View style={{ height: topPad }} />
 
         {/* Top bar */}
@@ -368,33 +313,32 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
           <Pressable onPress={goBack} style={({ pressed }) => [st.iconBtn, { backgroundColor: colors.surface, opacity: pressed ? 0.6 : 1 }]}>
             <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
           </Pressable>
-
-          {screen === "form" && (
+          {screen === "form" ? (
             <View style={[st.progressTrack, { backgroundColor: colors.border }]}>
               <View style={[st.progressFill, { width: `${progress * 100}%` as any, backgroundColor: colors.primary }]} />
             </View>
+          ) : (
+            <View style={{ flex: 1 }} />
           )}
-          {screen !== "form" && <View style={{ flex: 1 }} />}
-
           <Pressable onPress={handleClose} style={({ pressed }) => [st.iconBtn, { opacity: pressed ? 0.6 : 1 }]}>
             <IconSymbol name="xmark" size={18} color={colors.muted} />
           </Pressable>
         </View>
 
-        {/* ── Loading screen ──────────────────────────────────────────────── */}
+        {/* ── Loading ──────────────────────────────────────────────────────── */}
         {screen === "loading" && (
           <View style={st.centeredWrap}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[st.loadingTitle, { color: colors.foreground }]}>
-              Analyzing your application...
+              Building your Sprint plan...
             </Text>
             <Text style={[st.loadingSubtitle, { color: colors.muted }]}>
-              Our AI is crafting a personalized message just for you.
+              Reviewing your answers and crafting something specific to you.
             </Text>
           </View>
         )}
 
-        {/* ── AI Pitch + Checkout screen ──────────────────────────────────── */}
+        {/* ── Pitch / Checkout ─────────────────────────────────────────────── */}
         {screen === "pitch" && (
           <>
             <ScrollView
@@ -402,95 +346,78 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
               showsVerticalScrollIndicator={false}
             >
               {/* Eyebrow */}
-              <Text style={[st.pitchEyebrow, { color: colors.primary }]}>
-                WE MADE THIS FOR YOU, {(form.firstName || "FRIEND").toUpperCase()}
+              <Text style={[st.eyebrow, { color: colors.primary }]}>
+                YOUR 8-WEEK SPRINT PLAN, {(form.firstName || "FRIEND").toUpperCase()}
               </Text>
 
-              {/* Audio player */}
-              {audioUrl && (
-                <View style={[st.audioCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Pressable
-                    onPress={async () => {
-                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      if (Platform.OS === "web") {
-                        // Web: use HTML5 audio element
-                        const audioEl = document.getElementById("coach-pitch-audio") as HTMLAudioElement | null;
-                        if (audioEl) {
-                          if (audioEl.paused) { audioEl.play(); setAudioPlaying(true); }
-                          else { audioEl.pause(); setAudioPlaying(false); }
-                        }
-                      } else {
-                        // Native: use expo-audio
-                        await setAudioModeAsync({ playsInSilentMode: true });
-                        if (audioPlaying) {
-                          nativePlayer.pause();
-                          setAudioPlaying(false);
-                        } else {
-                          nativePlayer.play();
-                          setAudioPlaying(true);
-                        }
-                      }
-                    }}
-                    style={({ pressed }) => [st.playBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
-                  >
-                    <IconSymbol
-                      name={audioPlaying ? "pause.fill" : "play.fill"}
-                      size={22}
-                      color="#ffffff"
-                    />
-                  </Pressable>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[st.audioTitle, { color: colors.foreground }]}>
-                      Your personal message
-                    </Text>
-                    <Text style={[st.audioSub, { color: colors.muted }]}>
-                      Tap to listen
-                    </Text>
-                  </View>
-                  {/* Hidden HTML5 audio element for web */}
-                  {Platform.OS === "web" && (
-                    // @ts-ignore — web-only
-                    <audio
-                      id="coach-pitch-audio"
-                      src={audioUrl}
-                      onEnded={() => setAudioPlaying(false)}
-                      style={{ display: "none" }}
-                    />
-                  )}
-                </View>
-              )}
-
-              {/* Pitch text */}
+              {/* Personalized pitch */}
               <Text style={[st.pitchText, { color: colors.foreground }]}>
                 {pitch}
               </Text>
 
-              {/* Divider */}
               <View style={[st.divider, { backgroundColor: colors.border }]} />
 
-              {/* Pricing card */}
-              <View style={[st.pricingCard, { backgroundColor: colors.surface, borderColor: colors.primary + "40" }]}>
-                <Text style={[st.pricingLabel, { color: colors.muted }]}>ACCOUNTABILITY COACHING</Text>
+              {/* What's included */}
+              <Text style={[st.sectionTitle, { color: colors.foreground }]}>What you get</Text>
+
+              <View style={[st.featureCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={st.featureRow}>
+                  <View style={[st.featureDot, { backgroundColor: colors.primary }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.featureTitle, { color: colors.foreground }]}>One Live Group Kickoff Workshop</Text>
+                    <Text style={[st.featureSub, { color: colors.muted }]}>60-minute Zoom. Lock in your goals, build your plan inside the app, and get clear on exactly what you're doing for 8 weeks.</Text>
+                  </View>
+                </View>
+                <View style={st.featureRow}>
+                  <View style={[st.featureDot, { backgroundColor: colors.primary }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.featureTitle, { color: colors.foreground }]}>Daily Check-Ins (2–3 min)</Text>
+                    <Text style={[st.featureSub, { color: colors.muted }]}>Open the app, check off your habit, answer two quick prompts. That's it. No homework, no fluff.</Text>
+                  </View>
+                </View>
+                <View style={st.featureRow}>
+                  <View style={[st.featureDot, { backgroundColor: colors.primary }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.featureTitle, { color: colors.foreground }]}>Personal Voice Feedback from Your Coach</Text>
+                    <Text style={[st.featureSub, { color: colors.muted }]}>Mon–Fri, your coach reviews your data and sends you a 1–2 minute voice memo. Specific, actionable, personal.</Text>
+                  </View>
+                </View>
+                <View style={[st.featureRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                  <View style={[st.featureDot, { backgroundColor: colors.primary }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.featureTitle, { color: colors.foreground }]}>Weekly Strategy Summary</Text>
+                    <Text style={[st.featureSub, { color: colors.muted }]}>Every week, your coach identifies the pattern in your data and tells you exactly what to adjust for the next 7 days.</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Promise */}
+              <View style={[st.promiseCard, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
+                <Text style={[st.promiseText, { color: colors.foreground }]}>
+                  "In 8 weeks you will be the person who shows up for their goals — not just writes them down."
+                </Text>
+              </View>
+
+              {/* Pricing */}
+              <View style={[st.pricingCard, { backgroundColor: colors.surface, borderColor: colors.primary + "50" }]}>
+                <Text style={[st.pricingLabel, { color: colors.muted }]}>8-WEEK ACCOUNTABILITY SPRINT</Text>
                 <View style={st.pricingRow}>
                   <Text style={[st.pricingAmount, { color: colors.foreground }]}>$297</Text>
-                  <Text style={[st.pricingPer, { color: colors.muted }]}>/month</Text>
+                  <Text style={[st.pricingPer, { color: colors.muted }]}> one-time</Text>
                 </View>
-                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Weekly 1:1 coaching calls</Text>
-                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Daily check-ins via the app</Text>
-                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Personalized action plan</Text>
-                <Text style={[st.pricingFeature, { color: colors.muted }]}>✓ Cancel anytime</Text>
+                <Text style={[st.pricingNote, { color: colors.muted }]}>
+                  One kickoff call. Tight structure. Everything else happens inside the app.
+                </Text>
               </View>
 
               {/* Social proof */}
-              <Text style={[st.pitchQuote, { color: colors.muted }]}>
-                "Working with an accountability coach was the single best investment I made in myself. Within 90 days I'd hit goals I'd been chasing for years."
+              <Text style={[st.quote, { color: colors.muted }]}>
+                "I'd been trying to build this habit for two years. Eight weeks with a coach and I haven't missed a day since."
               </Text>
-              <Text style={[st.pitchQuoteAuthor, { color: colors.muted }]}>
-                — Marcus T., client since 2023
-              </Text>
+              <Text style={[st.quoteAuthor, { color: colors.muted }]}>— Marcus T., Sprint graduate</Text>
             </ScrollView>
 
-            {/* Bottom CTA */}
+            {/* CTA */}
             <View style={[st.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
               <Pressable
                 onPress={() => {
@@ -499,21 +426,22 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                 }}
                 style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, flex: 1 }]}
               >
-                <Text style={st.ctaBtnText}>Start My Coaching Journey →</Text>
+                <Text style={st.ctaBtnText}>Claim My Spot — $297</Text>
+                <IconSymbol name="arrow.right" size={18} color="#ffffff" />
               </Pressable>
             </View>
           </>
         )}
 
-        {/* ── Success screen ──────────────────────────────────────────────── */}
+        {/* ── Success ──────────────────────────────────────────────────────── */}
         {screen === "success" && (
           <View style={st.successWrap}>
             <View style={[st.successCircle, { backgroundColor: colors.success + "20" }]}>
               <IconSymbol name="checkmark.circle.fill" size={64} color={colors.success} />
             </View>
-            <Text style={[st.successTitle, { color: colors.foreground }]}>Application Received!</Text>
+            <Text style={[st.successTitle, { color: colors.foreground }]}>You're in!</Text>
             <Text style={[st.successSub, { color: colors.muted }]}>
-              Our coaching team will review your application and reach out within 24–48 hours to schedule your free intro call.
+              We'll reach out within 24 hours with your kickoff workshop details and next steps.
             </Text>
             <Pressable
               onPress={handleClose}
@@ -524,29 +452,22 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
           </View>
         )}
 
-        {/* ── Form screen ─────────────────────────────────────────────────── */}
+        {/* ── Form ─────────────────────────────────────────────────────────── */}
         {screen === "form" && (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-            <Animated.View
-              style={[st.questionWrap, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}
-            >
+            <Animated.View style={[st.questionWrap, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}>
               <ScrollView
                 contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 80 }]}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {/* Step counter */}
                 <Text style={[st.counter, { color: colors.muted }]}>{step + 1} / {TOTAL}</Text>
-
-                {/* Question */}
                 <Text style={[st.questionText, { color: colors.foreground }]}>{q.question}</Text>
                 {q.subtitle && (
                   <Text style={[st.subtitle, { color: colors.muted }]}>{q.subtitle}</Text>
                 )}
 
-                {/* Input area */}
                 <View style={st.inputArea}>
-                  {/* Name pair */}
                   {q.type === "name" && (
                     <View style={{ gap: 12 }}>
                       <TextInput
@@ -570,7 +491,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                     </View>
                   )}
 
-                  {/* Email */}
                   {q.type === "email" && (
                     <TextInput
                       value={form[q.id as keyof FormData] as string}
@@ -586,7 +506,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                     />
                   )}
 
-                  {/* Number */}
                   {q.type === "number" && (
                     <TextInput
                       value={form[q.id as keyof FormData] as string}
@@ -601,7 +520,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                     />
                   )}
 
-                  {/* Textarea */}
                   {q.type === "textarea" && (
                     <TextInput
                       value={form[q.id as keyof FormData] as string}
@@ -616,7 +534,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                     />
                   )}
 
-                  {/* Chips multi */}
                   {q.type === "chips-multi" && (
                     <View style={st.chipsWrap}>
                       {q.options!.map((opt) => (
@@ -631,7 +548,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                     </View>
                   )}
 
-                  {/* Chips single */}
                   {q.type === "chips-single" && (
                     <View style={st.chipsWrap}>
                       {q.options!.map((opt) => (
@@ -649,7 +565,6 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
               </ScrollView>
             </Animated.View>
 
-            {/* Bottom Continue button */}
             <View style={[st.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
               <Pressable
                 onPress={goNext}
@@ -698,9 +613,7 @@ const st = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  questionWrap: {
-    flex: 1,
-  },
+  questionWrap: { flex: 1 },
   scroll: {
     padding: 24,
     paddingTop: 32,
@@ -724,9 +637,7 @@ const st = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 28,
   },
-  inputArea: {
-    gap: 12,
-  },
+  inputArea: { gap: 12 },
   textInput: {
     borderWidth: 1.5,
     borderRadius: 14,
@@ -742,9 +653,7 @@ const st = StyleSheet.create({
     fontSize: 16,
     minHeight: 140,
   },
-  chipsWrap: {
-    gap: 10,
-  },
+  chipsWrap: { gap: 10 },
   bottomBar: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -764,7 +673,7 @@ const st = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
   },
-  // Loading screen
+  // Loading
   centeredWrap: {
     flex: 1,
     alignItems: "center",
@@ -788,65 +697,77 @@ const st = StyleSheet.create({
     paddingTop: 24,
     gap: 0,
   },
-  pitchEyebrow: {
-    fontSize: 12,
+  eyebrow: {
+    fontSize: 11,
     fontWeight: "800",
     letterSpacing: 2,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   pitchText: {
     fontSize: 20,
     lineHeight: 32,
     fontWeight: "400",
     letterSpacing: -0.2,
-    marginBottom: 36,
+    marginBottom: 32,
   },
   divider: {
     height: 1,
     marginBottom: 28,
   },
-  pitchQuote: {
-    fontSize: 15,
-    lineHeight: 24,
-    fontStyle: "italic",
-    marginBottom: 8,
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 16,
   },
-  pitchQuoteAuthor: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  // Audio player card
-  audioCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+  featureCard: {
     borderWidth: 1,
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 28,
+    padding: 20,
+    marginBottom: 24,
+    gap: 0,
   },
-  playBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
+  featureRow: {
+    flexDirection: "row",
+    gap: 14,
+    paddingBottom: 16,
+    marginBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128,128,128,0.2)",
   },
-  audioTitle: {
+  featureDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 6,
+  },
+  featureTitle: {
     fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 2,
+    fontWeight: "700",
+    marginBottom: 4,
   },
-  audioSub: {
-    fontSize: 13,
+  featureSub: {
+    fontSize: 14,
+    lineHeight: 21,
   },
-  // Pricing card
-  pricingCard: {
-    borderWidth: 1.5,
+  promiseCard: {
+    borderWidth: 1,
     borderRadius: 16,
     padding: 20,
-    marginBottom: 28,
-    gap: 8,
+    marginBottom: 24,
+  },
+  promiseText: {
+    fontSize: 17,
+    lineHeight: 26,
+    fontWeight: "500",
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  pricingCard: {
+    borderWidth: 2,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    gap: 6,
   },
   pricingLabel: {
     fontSize: 11,
@@ -857,11 +778,10 @@ const st = StyleSheet.create({
   pricingRow: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 4,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   pricingAmount: {
-    fontSize: 40,
+    fontSize: 44,
     fontWeight: "800",
     letterSpacing: -1,
   },
@@ -869,11 +789,22 @@ const st = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  pricingFeature: {
+  pricingNote: {
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 21,
   },
-  // Success screen
+  quote: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontStyle: "italic",
+    marginBottom: 6,
+  },
+  quoteAuthor: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  // Success
   successWrap: {
     flex: 1,
     alignItems: "center",

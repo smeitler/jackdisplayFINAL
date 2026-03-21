@@ -1127,8 +1127,9 @@ Guidelines:
     generatePitch: publicProcedure
       .input(z.object({
         firstName: z.string(),
+        specificHabit: z.string(),
+        habitDirection: z.string(),
         primaryGoals: z.array(z.string()),
-        goalTimeline: z.string(),
         whyNow: z.string(),
         biggestChallenges: z.array(z.string()),
         whatStopped: z.string(),
@@ -1148,8 +1149,9 @@ Guidelines:
 
         const userContext = [
           `Name: ${input.firstName || 'this person'}`,
-          `Goals: ${goalsList}`,
-          input.goalTimeline ? `Timeline: ${input.goalTimeline}` : '',
+          input.habitDirection ? `They want to: ${input.habitDirection}` : '',
+          input.specificHabit ? `Exact habit: ${input.specificHabit}` : '',
+          `Goals this unlocks: ${goalsList}`,
           input.whyNow ? `Why now: ${input.whyNow}` : '',
           `Biggest challenges: ${challengesList}`,
           input.whatStopped ? `What stopped them before: ${input.whatStopped}` : '',
@@ -1158,17 +1160,16 @@ Guidelines:
           input.coachingStyle ? `Preferred coaching style: ${input.coachingStyle}` : '',
         ].filter(Boolean).join('\n');
 
-        // Step 1: Generate the pitch text
         const resp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a world-class accountability coach and copywriter. Your job is to write a SHORT, PUNCHY, DEEPLY PERSONAL pitch to someone who just filled out a coaching application. The pitch must:
+              content: `You are a world-class accountability coach and copywriter. Your job is to write a SHORT, PUNCHY, DEEPLY PERSONAL pitch to someone who just filled out a coaching application for an 8-week accountability sprint program. The pitch must:
 - Address them by first name
-- Directly reference their SPECIFIC goals and challenges (not generic)
-- Acknowledge the exact reason they've struggled before and reframe it
-- Show them why NOW is the right moment
-- Make them feel SEEN and understood
+- Reference their EXACT habit (not vague — use the specific habit they described)
+- Acknowledge the exact reason they've struggled before and reframe it as something the sprint solves
+- Show them why having a coach watching their data and sending daily voice feedback changes everything
+- Make them feel SEEN and understood — like you read their mind
 - End with a single powerful sentence that creates urgency
 - Be 4–6 sentences MAX. No bullet points. No fluff. Pure conviction.
 Write in second person ("you"). Tone: warm, direct, confident — like a mentor who believes in them more than they believe in themselves.`,
@@ -1182,21 +1183,7 @@ Write in second person ("you"). Tone: warm, direct, confident — like a mentor 
 
         const pitch = ((resp.choices[0]?.message?.content as string) ?? '').trim();
 
-        // Step 2: Generate TTS audio in parallel — intro line + pitch text
-        // The intro is spoken first: "[Name], we made this for you."
-        const firstName = input.firstName?.trim() || 'Friend';
-        const spokenText = `${firstName}... we made this for you.\n\n${pitch}`;
-
-        let audioUrl: string | null = null;
-        try {
-          const { generateAndStoreAudio, VOICES } = await import('./audioService.js');
-          audioUrl = await generateAndStoreAudio(spokenText, 'affirmation', VOICES.rachel);
-        } catch (audioErr) {
-          // Audio generation is non-critical — pitch still shows without it
-          console.error('[Coach] TTS generation failed:', audioErr);
-        }
-
-        return { pitch, audioUrl };
+        return { pitch };
       }),
   }),
 
