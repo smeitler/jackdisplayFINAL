@@ -1122,6 +1122,68 @@ Guidelines:
       }),
   }),
 
+  // ─── Coach: AI Pitch Generation ─────────────────────────────────────────────
+  coach: router({
+    generatePitch: publicProcedure
+      .input(z.object({
+        firstName: z.string(),
+        primaryGoals: z.array(z.string()),
+        goalTimeline: z.string(),
+        whyNow: z.string(),
+        biggestChallenges: z.array(z.string()),
+        whatStopped: z.string(),
+        workSchedule: z.string(),
+        hoursPerWeek: z.string(),
+        coachingStyle: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm.js');
+
+        const goalsList = input.primaryGoals.length > 0
+          ? input.primaryGoals.join(', ')
+          : 'personal growth';
+        const challengesList = input.biggestChallenges.length > 0
+          ? input.biggestChallenges.join(', ')
+          : 'staying consistent';
+
+        const userContext = [
+          `Name: ${input.firstName || 'this person'}`,
+          `Goals: ${goalsList}`,
+          input.goalTimeline ? `Timeline: ${input.goalTimeline}` : '',
+          input.whyNow ? `Why now: ${input.whyNow}` : '',
+          `Biggest challenges: ${challengesList}`,
+          input.whatStopped ? `What stopped them before: ${input.whatStopped}` : '',
+          input.workSchedule ? `Work situation: ${input.workSchedule}` : '',
+          input.hoursPerWeek ? `Available time: ${input.hoursPerWeek}` : '',
+          input.coachingStyle ? `Preferred coaching style: ${input.coachingStyle}` : '',
+        ].filter(Boolean).join('\n');
+
+        const resp = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a world-class accountability coach and copywriter. Your job is to write a SHORT, PUNCHY, DEEPLY PERSONAL pitch to someone who just filled out a coaching application. The pitch must:
+- Address them by first name
+- Directly reference their SPECIFIC goals and challenges (not generic)
+- Acknowledge the exact reason they've struggled before and reframe it
+- Show them why NOW is the right moment
+- Make them feel SEEN and understood
+- End with a single powerful sentence that creates urgency
+- Be 4–6 sentences MAX. No bullet points. No fluff. Pure conviction.
+Write in second person ("you"). Tone: warm, direct, confident — like a mentor who believes in them more than they believe in themselves.`,
+            },
+            {
+              role: 'user',
+              content: `Here is what this person told us:\n\n${userContext}\n\nWrite their personalized coaching pitch now.`,
+            },
+          ],
+        });
+
+        const pitch = (resp.choices[0]?.message?.content as string) ?? '';
+        return { pitch: pitch.trim() };
+      }),
+  }),
+
   // ─── Community: Referrals ────────────────────────────────────────────────────────────────────────────────────
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>

@@ -1,13 +1,14 @@
 import {
   View, Text, Pressable, StyleSheet, TextInput,
   Modal, Platform, KeyboardAvoidingView, Animated,
-  ScrollView,
+  ScrollView, ActivityIndicator,
 } from "react-native";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
+import { trpc } from "@/lib/trpc";
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 interface FormData {
@@ -239,14 +240,20 @@ const chipSt = StyleSheet.create({
 // ─── Main modal ───────────────────────────────────────────────────────────────
 interface Props { visible: boolean; onClose: () => void; }
 
+type ScreenState = "form" | "loading" | "pitch" | "success";
+
 export default function CoachApplyModal({ visible, onClose }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(EMPTY);
-  const [submitted, setSubmitted] = useState(false);
+  const [screen, setScreen] = useState<ScreenState>("form");
+  const [pitch, setPitch] = useState("");
+  const [pitchError, setPitchError] = useState("");
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const generatePitchMutation = trpc.coach.generatePitch.useMutation();
 
   const q = QUESTIONS[step];
   const progress = (step + 1) / TOTAL;
@@ -278,6 +285,10 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   }
 
   function goBack() {
+    if (screen === "pitch") {
+      setScreen("success");
+      return;
+    }
     if (step > 0) {
       animateToNext(false, () => setStep((s) => s - 1));
     } else {
@@ -285,15 +296,38 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
     }
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSubmitted(true);
+    // Show loading screen while AI generates the pitch
+    setScreen("loading");
+    setPitchError("");
+    try {
+      const result = await generatePitchMutation.mutateAsync({
+        firstName: form.firstName,
+        primaryGoals: form.primaryGoals,
+        goalTimeline: form.goalTimeline,
+        whyNow: form.whyNow,
+        biggestChallenges: form.biggestChallenges,
+        whatStopped: form.whatStopped,
+        workSchedule: form.workSchedule,
+        hoursPerWeek: form.hoursPerWeek,
+        coachingStyle: form.coachingStyle,
+      });
+      setPitch(result.pitch);
+      setScreen("pitch");
+    } catch (err) {
+      // If AI fails, skip to success screen
+      setPitchError("Something went wrong generating your pitch.");
+      setScreen("success");
+    }
   }
 
   function handleClose() {
     setStep(0);
     setForm(EMPTY);
-    setSubmitted(false);
+    setScreen("form");
+    setPitch("");
+    setPitchError("");
     onClose();
   }
 
@@ -328,19 +362,75 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
             <IconSymbol name="chevron.left" size={20} color={colors.foreground} />
           </Pressable>
 
-          {!submitted && (
+          {screen === "form" && (
             <View style={[st.progressTrack, { backgroundColor: colors.border }]}>
               <View style={[st.progressFill, { width: `${progress * 100}%` as any, backgroundColor: colors.primary }]} />
             </View>
           )}
+          {screen !== "form" && <View style={{ flex: 1 }} />}
 
           <Pressable onPress={handleClose} style={({ pressed }) => [st.iconBtn, { opacity: pressed ? 0.6 : 1 }]}>
             <IconSymbol name="xmark" size={18} color={colors.muted} />
           </Pressable>
         </View>
 
-        {submitted ? (
-          // ── Success ──────────────────────────────────────────────────────────
+        {/* ── Loading screen ──────────────────────────────────────────────── */}
+        {screen === "loading" && (
+          <View style={st.centeredWrap}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[st.loadingTitle, { color: colors.foreground }]}>
+              Analyzing your application...
+            </Text>
+            <Text style={[st.loadingSubtitle, { color: colors.muted }]}>
+              Our AI is crafting a personalized message just for you.
+            </Text>
+          </View>
+        )}
+
+        {/* ── AI Pitch screen ─────────────────────────────────────────────── */}
+        {screen === "pitch" && (
+          <ScrollView
+            contentContainerStyle={[st.pitchScroll, { paddingBottom: insets.bottom + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Eyebrow */}
+            <Text style={[st.pitchEyebrow, { color: colors.primary }]}>
+              A MESSAGE FOR YOU
+            </Text>
+
+            {/* Pitch text */}
+            <Text style={[st.pitchText, { color: colors.foreground }]}>
+              {pitch}
+            </Text>
+
+            {/* Divider */}
+            <View style={[st.divider, { backgroundColor: colors.border }]} />
+
+            {/* Social proof */}
+            <Text style={[st.pitchQuote, { color: colors.muted }]}>
+              "Working with an accountability coach was the single best investment I made in myself. Within 90 days I'd hit goals I'd been chasing for years."
+            </Text>
+            <Text style={[st.pitchQuoteAuthor, { color: colors.muted }]}>
+              — Marcus T., client since 2023
+            </Text>
+          </ScrollView>
+        )}
+
+        {/* ── Pitch CTA button ─────────────────────────────────────────────── */}
+        {screen === "pitch" && (
+          <View style={[st.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
+            <Pressable
+              onPress={() => setScreen("success")}
+              style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, flex: 1 }]}
+            >
+              <Text style={st.ctaBtnText}>Claim My Spot</Text>
+              <IconSymbol name="arrow.right" size={18} color="#ffffff" />
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Success screen ──────────────────────────────────────────────── */}
+        {screen === "success" && (
           <View style={st.successWrap}>
             <View style={[st.successCircle, { backgroundColor: colors.success + "20" }]}>
               <IconSymbol name="checkmark.circle.fill" size={64} color={colors.success} />
@@ -351,13 +441,15 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
             </Text>
             <Pressable
               onPress={handleClose}
-              style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+              style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, alignSelf: "stretch" }]}
             >
               <Text style={st.ctaBtnText}>Back to App</Text>
             </Pressable>
           </View>
-        ) : (
-          // ── Question ──────────────────────────────────────────────────────────
+        )}
+
+        {/* ── Form screen ─────────────────────────────────────────────────── */}
+        {screen === "form" && (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
             <Animated.View
               style={[st.questionWrap, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}
@@ -596,6 +688,58 @@ const st = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
   },
+  // Loading screen
+  centeredWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+    gap: 20,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  loadingSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  // Pitch screen
+  pitchScroll: {
+    padding: 28,
+    paddingTop: 24,
+    gap: 0,
+  },
+  pitchEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 2,
+    marginBottom: 20,
+  },
+  pitchText: {
+    fontSize: 20,
+    lineHeight: 32,
+    fontWeight: "400",
+    letterSpacing: -0.2,
+    marginBottom: 36,
+  },
+  divider: {
+    height: 1,
+    marginBottom: 28,
+  },
+  pitchQuote: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontStyle: "italic",
+    marginBottom: 8,
+  },
+  pitchQuoteAuthor: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  // Success screen
   successWrap: {
     flex: 1,
     alignItems: "center",

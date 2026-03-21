@@ -1330,3 +1330,7 @@
 - [x] Wire "Apply for a Coach" CTA button to open the form modal
 
 - [x] Rebuild coach application form as Typeform-style one-question-per-screen flow with smooth transitions
+
+- [x] After last form question, generate AI-powered personalized pitch based on user's answers (short, compelling, specific to their goals/obstacles)
+- [x] Add pitch loading screen while AI generates the response
+- [x] Show pitch screen before success screen, with "Claim Your Spot" CTA
