@@ -1343,3 +1343,7 @@
 - [x] Add specific habit question to coach form: exactly what habit are they starting or stopping (narrow/specific)
 - [x] Rewrite pitch/checkout page using 8-week Sprint framework: kickoff workshop + daily check-ins + coach voice feedback + weekly strategy memo, $297 for 8 weeks, fully customized to their answers
 - [x] Update server AI prompt to generate pitch based on Sprint framework (not generic coaching pitch)
+
+- [x] Rewrite coach landing page (chat tab) using $100M Offers framework: personalized headline, dream hook, 4 deliverables, guarantee, concrete testimonial, CTA with tagline
+- [x] Update AI pitch prompt to follow framework structure: personal open → bridge → promise → close (4–6 sentences)
+- [x] Update pitch/checkout screen: personalized promise with user name, guarantee card inside pricing block

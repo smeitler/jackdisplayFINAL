@@ -394,7 +394,7 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
               {/* Promise */}
               <View style={[st.promiseCard, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
                 <Text style={[st.promiseText, { color: colors.foreground }]}>
-                  "In 8 weeks you will be the person who shows up for their goals — not just writes them down."
+                  In 8 weeks, {form.firstName || "you"} will be the person who shows up for their goals — not just writes them down.
                 </Text>
               </View>
 
@@ -408,11 +408,16 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                 <Text style={[st.pricingNote, { color: colors.muted }]}>
                   One kickoff call. Tight structure. Everything else happens inside the app.
                 </Text>
+                <View style={[st.divider, { backgroundColor: colors.border, marginVertical: 12 }]} />
+                <Text style={[st.guaranteeTitle, { color: colors.foreground }]}>100% Results Guarantee</Text>
+                <Text style={[st.guaranteeText, { color: colors.muted }]}>
+                  Show up, do your daily check-ins, and listen to your coach's feedback. If after 8 weeks you don't feel meaningfully more consistent and in control of your habits, email us and we'll refund your Sprint.
+                </Text>
               </View>
 
               {/* Social proof */}
               <Text style={[st.quote, { color: colors.muted }]}>
-                "I'd been trying to build this habit for two years. Eight weeks with a coach and I haven't missed a day since."
+                "I'd been trying to build this habit for two years. Eight weeks with a coach and I haven't missed a day in the 3 months since."
               </Text>
               <Text style={[st.quoteAuthor, { color: colors.muted }]}>— Marcus T., Sprint graduate</Text>
             </ScrollView>
@@ -792,6 +797,17 @@ const st = StyleSheet.create({
   pricingNote: {
     fontSize: 14,
     lineHeight: 21,
+  },
+  guaranteeTitle: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    textAlign: "center" as const,
+    marginBottom: 4,
+  },
+  guaranteeText: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center" as const,
   },
   quote: {
     fontSize: 15,
