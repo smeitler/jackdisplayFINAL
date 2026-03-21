@@ -1,11 +1,13 @@
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Linking,
+  View, Text, ScrollView, Pressable, StyleSheet,
 } from "react-native";
+import { useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
+import CoachApplyModal from "@/app/coach-apply";
 
 const BENEFITS = [
   {
@@ -32,11 +34,11 @@ const BENEFITS = [
 
 export default function CoachScreen() {
   const colors = useColors();
+  const [applyVisible, setApplyVisible] = useState(false);
 
   function handleCTA() {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // TODO: replace with actual sign-up URL or in-app form
-    Linking.openURL("mailto:coach@jackdisplay.com?subject=Accountability%20Coach%20Sign-Up");
+    setApplyVisible(true);
   }
 
   return (
@@ -101,6 +103,8 @@ export default function CoachScreen() {
           Limited spots available · Free intro call included
         </Text>
       </ScrollView>
+
+      <CoachApplyModal visible={applyVisible} onClose={() => setApplyVisible(false)} />
     </ScreenContainer>
   );
 }

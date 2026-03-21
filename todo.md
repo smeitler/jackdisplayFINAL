@@ -1325,3 +1325,6 @@
 - [x] Remove RichTextEditorView import (no longer needed in journal.tsx)
 
 - [x] Replace AI chat tab with accountability coach sign-up landing page (promo/encourage sign-up, no actual chat)
+
+- [x] Build multi-step accountability coach application form (goals, challenges, lifestyle, commitment, contact)
+- [x] Wire "Apply for a Coach" CTA button to open the form modal
