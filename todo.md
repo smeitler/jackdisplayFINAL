@@ -1363,3 +1363,6 @@
 - [x] Journal card: removed "Drag ★ to set cover" clutter text
 - [x] Expand button: full-screen editor replaced with slide-up bottom sheet (pageSheet presentation)
 - [x] Bottom sheet editor: drag handle at top, character count in toolbar, swipe-down to dismiss
+- [x] Fix X delete buttons cut off: moved X outside overflow:hidden container into outer wrapper View
+- [x] Fix photos not showing in journal card and calendar: replaced all RN Image with ExpoImage (memory-disk cache, contentFit)
+- [x] Move photo strip back below the text area (user preference)

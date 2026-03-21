@@ -30,6 +30,7 @@ import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type
 import { useIsCalm } from "@/components/calm-effects";
 import { WheelColumn } from "@/components/wheel-time-picker";
 import Svg, { Path as SvgPath } from "react-native-svg";
+import { Image as ExpoImage } from "expo-image";
 
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
@@ -1240,10 +1241,11 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
                     </View>
                   </View>
                   {firstPhoto && (
-                    <Image
+                    <ExpoImage
                       source={{ uri: firstPhoto.uri }}
                       style={{ width: 56, height: 56, borderRadius: 8, marginLeft: 10 }}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                   )}
                 </View>
@@ -1436,10 +1438,11 @@ function CalendarTab({ entries, onDayPress, colors }: {
                       >
                         {/* Photo fills entire cell */}
                         {photoUri ? (
-                          <Image
+                          <ExpoImage
                             source={{ uri: photoUri }}
                             style={StyleSheet.absoluteFill}
-                            resizeMode="cover"
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
                           />
                         ) : null}
                         {/* Date number */}
@@ -1545,10 +1548,11 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
           {expandedPhoto && (
             <>
               {/* Full photo */}
-              <Image
+              <ExpoImage
                 source={{ uri: expandedPhoto.uri }}
                 style={{ width: screenW, height: screenW, alignSelf: "center" }}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="memory-disk"
               />
               {/* Entry info below photo */}
               <View style={{
@@ -1611,10 +1615,11 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
               onPress={() => setExpandedPhoto(att)}
               style={({ pressed }) => [{ width: photoSize, marginBottom: 2, opacity: pressed ? 0.8 : 1 }]}
             >
-              <Image
+              <ExpoImage
                 source={{ uri: att.uri }}
                 style={{ width: photoSize, height: photoSize, borderRadius: 4 }}
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="memory-disk"
               />
               <Text style={{ fontSize: 9, color: colors.muted, marginTop: 2, textAlign: "center" }} numberOfLines={1}>
                 {niceDate(att.entryDate)}
@@ -1698,10 +1703,11 @@ function MediaTab({ entries, colors }: { entries: JournalEntry[]; colors: any })
               >
                 {/* Photo thumbnail header — tappable */}
                 {isPhoto && (
-                  <Image
+                  <ExpoImage
                     source={{ uri: att.uri }}
                     style={{ width: "100%", height: 200 }}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
                   />
                 )}
 
@@ -2037,7 +2043,7 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colo
                         borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
                       })}
                     >
-                      {photoUri ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+                      {photoUri ? <ExpoImage source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
                       <Text style={{ fontSize: 10, fontWeight: '700', lineHeight: 13, color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
                     </Pressable>
                   );
@@ -2346,41 +2352,52 @@ function DraggablePhotoStrip({ photos, onReorder, onDelete, colors }: DraggableP
   const overflow = photos.length - 5;
 
   return (
-    <View style={{ flexDirection: 'row', marginTop: 10, gap: GAP, alignItems: 'center' }}>
+    // paddingTop gives space for the X button that sits above each thumbnail
+    <View style={{ flexDirection: 'row', marginTop: 10, gap: GAP, alignItems: 'flex-end', paddingTop: onDelete ? 10 : 0 }}>
       {visible.map((att, i) => {
         const isDragged = dragging === i;
-        // Attach pan handlers only; set dragStartIndex on touch start via onTouchStart
         return (
-          <Animated.View
+          // Outer wrapper: overflow visible so the X badge is not clipped
+          <View
             key={att.id}
-            onTouchStart={() => { dragStartIndex.current = i; }}
-            {...panResponder.panHandlers}
-            style={[
-              { position: 'relative', borderRadius: 8, overflow: 'hidden' },
-              isDragged && { transform: [{ scale: 1.08 }], zIndex: 10, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
-            ]}
+            style={{ position: 'relative' }}
           >
-            <Image source={{ uri: att.uri }} style={{ width: THUMB, height: THUMB, borderRadius: 8 }} />
-            {i === 0 && (
-              <View style={{ position: 'absolute', top: 3, left: 3, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 2 }}>
-                <Text style={{ fontSize: 9, color: '#FFD700', fontWeight: '700' }}>★</Text>
-              </View>
-            )}
-            {i === 4 && overflow > 0 && (
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>+{overflow}</Text>
-              </View>
-            )}
-            {/* Delete button — only shown when not dragging */}
+            <Animated.View
+              onTouchStart={() => { dragStartIndex.current = i; }}
+              {...panResponder.panHandlers}
+              style={[
+                { borderRadius: 8 },
+                isDragged && { transform: [{ scale: 1.08 }], zIndex: 10, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+              ]}
+            >
+              {/* ExpoImage — reliable rendering without overflow:hidden */}
+              <ExpoImage
+                source={{ uri: att.uri }}
+                style={{ width: THUMB, height: THUMB, borderRadius: 8 }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+              {i === 0 && (
+                <View style={{ position: 'absolute', top: 3, left: 3, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 9, color: '#FFD700', fontWeight: '700' }}>★</Text>
+                </View>
+              )}
+              {i === 4 && overflow > 0 && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>+{overflow}</Text>
+                </View>
+              )}
+            </Animated.View>
+            {/* Delete button sits OUTSIDE the Animated.View so it is never clipped */}
             {onDelete && dragging === null && (
               <Pressable
                 onPress={() => onDelete(att.id)}
-                style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}
+                style={{ position: 'absolute', top: -8, right: -8, width: 20, height: 20, borderRadius: 10, backgroundColor: '#333', borderWidth: 1.5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', zIndex: 30 }}
               >
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', lineHeight: 12 }}>×</Text>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', lineHeight: 14 }}>×</Text>
               </Pressable>
             )}
-          </Animated.View>
+          </View>
         );
       })}
     </View>
@@ -3210,7 +3227,33 @@ export default function JournalScreen() {
                     </Pressable>
                   </View>
                 </View>
-                {/* Photo strip — above text, with delete buttons */}
+                {/* Inline TextInput — direct typing */}
+                <TextInput
+                  value={dvJournalNote}
+                  onChangeText={(text) => {
+                    setDvJournalNote(text);
+                    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+                  }}
+                  multiline
+                  placeholder="What's on your mind today?"
+                  placeholderTextColor={colors.muted}
+                  style={[
+                    { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 110, textAlignVertical: 'top' },
+                    Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
+                  ]}
+                  textAlignVertical="top"
+                  autoCorrect
+                  autoCapitalize="sentences"
+                  scrollEnabled={false}
+                />
+                {/* Footer: character count */}
+                {dvJournalNote.length > 0 && (
+                  <Text style={{ fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 }}>
+                    {dvJournalNote.length} chars
+                  </Text>
+                )}
+                {/* Photo strip — BELOW text, with delete buttons and drag-to-reorder */}
                 {photoAtts.length > 0 && (
                   <DraggablePhotoStrip
                     photos={photoAtts}
@@ -3225,32 +3268,6 @@ export default function JournalScreen() {
                       setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
                     }}
                   />
-                )}
-                {/* Inline TextInput — direct typing */}
-                <TextInput
-                  value={dvJournalNote}
-                  onChangeText={(text) => {
-                    setDvJournalNote(text);
-                    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-                  }}
-                  multiline
-                  placeholder="What's on your mind today?"
-                  placeholderTextColor={colors.muted}
-                  style={[
-                    { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 110, textAlignVertical: 'top', marginTop: photoAtts.length > 0 ? 10 : 0 },
-                    Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
-                  ]}
-                  textAlignVertical="top"
-                  autoCorrect
-                  autoCapitalize="sentences"
-                  scrollEnabled={false}
-                />
-                {/* Footer: character count */}
-                {dvJournalNote.length > 0 && (
-                  <Text style={{ fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 }}>
-                    {dvJournalNote.length} chars
-                  </Text>
                 )}
                 {/* Tag chips */}
                 {dvTags.length > 0 && (
