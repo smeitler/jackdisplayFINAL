@@ -1352,3 +1352,6 @@
 - [ ] Journal card on Today screen: add photo library icon (not camera) to upload photos; show thumbnail on right if photo attached
 - [ ] Full-screen editor: replace paperclip with photo library icon; replace camera icon with photo library icon; remove paperclip
 - [ ] Full-screen editor: fix yellow checkmark button — change to app primary color (purple/blue)
+- [x] Calendar shows first photo in the ordered list for each day (not necessarily the first uploaded)
+- [x] Journal card photo thumbnails support drag-to-reorder (long press + drag) to set which photo shows on calendar
+- [x] Reordering persists to storage so calendar always reflects the chosen first photo

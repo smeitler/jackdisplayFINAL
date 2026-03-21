@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
-  Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard,
+  Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard, PanResponder,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1920,17 +1920,8 @@ function jcGenerateMonths(sy: number, sm: number, ey: number, em: number): { yea
   return r;
 }
 
-function JournalCalendarView({ colors, onDayPress }: { colors: any; onDayPress?: (dateStr: string) => void }) {
-  const [calEntries, setCalEntries] = useState<JournalEntry[]>([]);
+function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colors: any; onDayPress?: (dateStr: string) => void; entries: JournalEntry[] }) {
   const { width: winWidth } = useWindowDimensions();
-
-  useEffect(() => {
-    (async () => {
-      const uid = await getLastUserId();
-      const loaded = await loadEntries(uid || 'default');
-      setCalEntries(loaded);
-    })();
-  }, []);
 
   const today = new Date();
   const todayStr = todayDateStr();
@@ -2262,6 +2253,100 @@ function DrawCanvas({ colors }: { colors: any }) {
           </Pressable>
         </View>
       </View>
+    </View>
+  );
+}
+
+// ─── DraggablePhotoStrip ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Renders photo thumbnails in a horizontal row with drag-to-reorder.
+// The first photo in the list is the "calendar photo" (shown with a star badge).
+// Long-press a thumbnail to start dragging; release to drop and save new order.
+interface DraggablePhotoStripProps {
+  photos: JournalAttachment[];
+  onReorder: (reordered: JournalAttachment[]) => void;
+  colors: any;
+}
+function DraggablePhotoStrip({ photos, onReorder, colors }: DraggablePhotoStripProps) {
+  const THUMB = 60;
+  const GAP = 8;
+  const [order, setOrder] = useState<JournalAttachment[]>(photos);
+  const [dragging, setDragging] = useState<number | null>(null);
+  // Use refs so PanResponder callbacks always see the latest values without stale closures
+  const orderRef = useRef<JournalAttachment[]>(photos);
+  const onReorderRef = useRef(onReorder);
+  const dragStartIndex = useRef(0);
+
+  useEffect(() => { orderRef.current = order; }, [order]);
+  useEffect(() => { onReorderRef.current = onReorder; }, [onReorder]);
+  // Keep in sync when parent changes (e.g. new photo added)
+  useEffect(() => { setOrder(photos); orderRef.current = photos; }, [photos]);
+
+  // Single stable PanResponder — reads index from dragStartIndex ref
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 6,
+      onPanResponderGrant: () => {
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setDragging(dragStartIndex.current);
+      },
+      onPanResponderMove: (_, gs) => {
+        const slotWidth = THUMB + GAP;
+        const rawSlot = dragStartIndex.current + Math.round(gs.dx / slotWidth);
+        const targetSlot = Math.max(0, Math.min(orderRef.current.length - 1, rawSlot));
+        if (targetSlot !== dragStartIndex.current) {
+          const next = [...orderRef.current];
+          const [moved] = next.splice(dragStartIndex.current, 1);
+          next.splice(targetSlot, 0, moved);
+          orderRef.current = next;
+          dragStartIndex.current = targetSlot;
+          setOrder([...next]);
+          setDragging(targetSlot);
+        }
+      },
+      onPanResponderRelease: () => {
+        setDragging(null);
+        onReorderRef.current(orderRef.current);
+      },
+      onPanResponderTerminate: () => { setDragging(null); },
+    })
+  ).current;
+
+  const visible = order.slice(0, 5);
+  const overflow = photos.length - 5;
+
+  return (
+    <View style={{ flexDirection: 'row', marginTop: 10, gap: GAP, alignItems: 'center' }}>
+      {visible.map((att, i) => {
+        const isDragged = dragging === i;
+        // Attach pan handlers only; set dragStartIndex on touch start via onTouchStart
+        return (
+          <Animated.View
+            key={att.id}
+            onTouchStart={() => { dragStartIndex.current = i; }}
+            {...panResponder.panHandlers}
+            style={[
+              { position: 'relative', borderRadius: 8, overflow: 'hidden' },
+              isDragged && { transform: [{ scale: 1.08 }], zIndex: 10, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+            ]}
+          >
+            <Image source={{ uri: att.uri }} style={{ width: THUMB, height: THUMB, borderRadius: 8 }} />
+            {i === 0 && (
+              <View style={{ position: 'absolute', top: 3, left: 3, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 9, color: '#FFD700', fontWeight: '700' }}>★</Text>
+              </View>
+            )}
+            {i === 4 && overflow > 0 && (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>+{overflow}</Text>
+              </View>
+            )}
+          </Animated.View>
+        );
+      })}
+      {photos.length > 1 && dragging === null && (
+        <Text style={{ fontSize: 10, color: colors.muted, flex: 1, lineHeight: 13 }}>{'Drag ★ to\nset cover'}</Text>
+      )}
     </View>
   );
 }
@@ -3076,23 +3161,26 @@ export default function JournalScreen() {
               autoCapitalize="sentences"
               scrollEnabled={false}
             />
-            {/* Photo thumbnail strip */}
-            {dvPrimaryEntryId.current && (() => {
-              const photoAtts = (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo');
+            {/* Draggable photo thumbnail strip — first photo = calendar cover */}
+            {(() => {
+              const photoAtts = dvPrimaryEntryId.current
+                ? (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo')
+                : [];
               if (photoAtts.length === 0) return null;
               return (
-                <View style={{ flexDirection: 'row', marginTop: 10, gap: 6 }}>
-                  {photoAtts.slice(0, 4).map((att, i) => (
-                    <View key={att.id} style={{ position: 'relative' }}>
-                      <Image source={{ uri: att.uri }} style={{ width: 56, height: 56, borderRadius: 8 }} />
-                      {i === 3 && photoAtts.length > 4 && (
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>+{photoAtts.length - 4}</Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </View>
+                <DraggablePhotoStrip
+                  photos={photoAtts}
+                  colors={colors}
+                  onReorder={async (reordered) => {
+                    if (!dvPrimaryEntryId.current || !userId) return;
+                    // Merge reordered photos back with non-photo attachments
+                    const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
+                    const nonPhotos = allAtts.filter((a) => a.type !== 'photo');
+                    const merged = [...reordered, ...nonPhotos];
+                    await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
+                    setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
+                  }}
+                />
               );
             })()}
             {/* Tag chips */}
@@ -3517,6 +3605,7 @@ export default function JournalScreen() {
             </View>
             <JournalCalendarView
               colors={colors}
+              entries={entries}
               onDayPress={(dateStr) => {
                 setSelectedDate(dateStr);
                 setCalendarModalVisible(false);
