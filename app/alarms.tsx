@@ -2,7 +2,8 @@
  * Alarms Screen — Dedicated full-screen alarm manager
  *
  * - Lists all alarms (up to 4) with toggle, time, days, label
- * - Add / Edit bottom sheet with scroll-wheel time picker + day toggles + label input
+ * - Add / Edit full-screen modal with WheelTimePicker (same as Settings)
+ * - Ritual setup: Alarm Sound, After Alarm, Snooze Duration, Require Check-in
  * - Delete with confirmation
  * - Enforces MAX_ALARMS = 4 limit
  */
@@ -16,9 +17,9 @@ import {
   ScrollView,
   Modal,
   TextInput,
-  FlatList,
+  Switch,
   Platform,
-  Animated,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,155 +27,127 @@ import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useApp } from '@/lib/app-context';
 import { AlarmEntry, MAX_ALARMS, DEFAULT_ALARM } from '@/lib/storage';
-import { scheduleAlarm, cancelAlarm, requestNotificationPermissions, formatAlarmTime } from '@/lib/notifications';
+import { scheduleAlarm, cancelAlarm, DAY_LABELS, formatAlarmTime } from '@/lib/notifications';
+import { WheelTimePicker } from '@/components/wheel-time-picker';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);   // 1–12
-const MINUTES = Array.from({ length: 60 }, (_, i) => i);      // 0–59
-const PERIODS = ['AM', 'PM'];
 const DAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const DAY_FULL  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAY_MAP   = [0, 1, 2, 3, 4, 5, 6]; // index → day number (0=Sun)
+const DAY_MAP   = [0, 1, 2, 3, 4, 5, 6];
 
-const ITEM_H = 48;
+const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
+  { id: 'classic',  label: 'Classic',  emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
+  { id: 'buzzer',   label: 'Buzzer',   emoji: '📢', source: require('@/assets/audio/alarm_buzzer.wav') },
+  { id: 'digital',  label: 'Digital',  emoji: '📱', source: require('@/assets/audio/alarm_digital.wav') },
+  { id: 'gentle',   label: 'Gentle',   emoji: '🔔', source: require('@/assets/audio/alarm_gentle.wav') },
+  { id: 'urgent',   label: 'Urgent',   emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav') },
+];
 
-// ─── Scroll Picker ────────────────────────────────────────────────────────────
+const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> | null }[] = [
+  { id: 'priming',       label: 'Priming',           emoji: '🔥', description: 'Gratitude · Goals · Visualize', source: null },
+  { id: 'meditation',    label: 'Guided Meditation',  emoji: '🧘', description: 'Mindful awareness, 5 min',       source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_bowl_c8bd7151.wav' },
+  { id: 'breathwork',    label: 'Breathwork',         emoji: '🌬️', description: 'Box breathing, 4-4-4-4',         source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_breathing_fd1069a2.wav' },
+  { id: 'visualization', label: 'Visualizations',     emoji: '🎯', description: 'See your goals achieved',        source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/meditation_focus_782acd2b.wav' },
+  { id: 'journaling',    label: 'Journaling',         emoji: '📓', description: 'Morning pages, free write',      source: null },
+];
 
-function ScrollPicker({
-  items,
-  selectedIndex,
-  onSelect,
-  color,
-  width = 64,
-  formatItem,
-}: {
-  items: (string | number)[];
-  selectedIndex: number;
-  onSelect: (index: number) => void;
-  color: string;
-  width?: number;
-  formatItem?: (item: string | number) => string;
-}) {
-  const colors = useColors();
-  const scrollRef = useRef<ScrollView>(null);
-  const VISIBLE = 3;
-  const PAD = ITEM_H * Math.floor(VISIBLE / 2);
+const ALARM_COLOR = '#6C63FF';
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: false });
-  }, [selectedIndex]);
+// ─── Add/Edit Full-Screen Modal ───────────────────────────────────────────────
 
-  return (
-    <View style={{ width, height: ITEM_H * VISIBLE, overflow: 'hidden' }}>
-      {/* Selection highlight */}
-      <View style={[sp.highlight, { top: PAD, borderColor: color + '60', backgroundColor: color + '12' }]} />
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_H}
-        decelerationRate="fast"
-        contentContainerStyle={{ paddingVertical: PAD }}
-        onMomentumScrollEnd={(e) => {
-          const idx = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
-          const clamped = Math.max(0, Math.min(items.length - 1, idx));
-          onSelect(clamped);
-        }}
-      >
-        {items.map((item, i) => (
-          <Pressable key={i} onPress={() => {
-            onSelect(i);
-            scrollRef.current?.scrollTo({ y: i * ITEM_H, animated: true });
-          }}>
-            <View style={sp.item}>
-              <Text style={[sp.itemText, {
-                color: i === selectedIndex ? color : colors.muted,
-                fontWeight: i === selectedIndex ? '700' : '400',
-                fontSize: i === selectedIndex ? 22 : 17,
-              }]}>
-                {formatItem ? formatItem(item) : String(item).padStart(2, '0')}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-const sp = StyleSheet.create({
-  highlight: {
-    position: 'absolute', left: 0, right: 0, height: ITEM_H,
-    borderRadius: 10, borderWidth: 1.5, zIndex: 1, pointerEvents: 'none',
-  } as any,
-  item: { height: ITEM_H, alignItems: 'center', justifyContent: 'center' },
-  itemText: { letterSpacing: 0.5 },
-});
-
-// ─── Add/Edit Sheet ───────────────────────────────────────────────────────────
-
-function AlarmEditSheet({
+function AlarmEditModal({
   visible,
   alarm,
   onSave,
   onDelete,
   onClose,
-  color,
 }: {
   visible: boolean;
   alarm: AlarmEntry | null;
   onSave: (entry: AlarmEntry) => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
-  color: string;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const isNew = !alarm;
 
-  // Convert 24h to 12h for picker
-  function to12h(h: number) {
-    const period = h >= 12 ? 1 : 0;
-    const hour12 = h % 12 === 0 ? 12 : h % 12;
-    return { hourIdx: HOURS.indexOf(hour12), minuteIdx: h % 1 === 0 ? (alarm?.minute ?? 0) : 0, periodIdx: period };
-  }
+  // Time state
+  const [hour, setHour]     = useState(alarm?.hour ?? DEFAULT_ALARM.hour);
+  const [minute, setMinute] = useState(alarm?.minute ?? DEFAULT_ALARM.minute);
 
-  const init = alarm ?? { ...DEFAULT_ALARM, id: `alarm_${Date.now()}`, label: '' };
-  const init12 = to12h(init.hour);
+  // Ritual state
+  const [days, setDays]                   = useState<number[]>(alarm?.days ?? DEFAULT_ALARM.days);
+  const [label, setLabel]                 = useState(alarm?.label ?? '');
+  const [soundId, setSoundId]             = useState(alarm?.soundId ?? 'classic');
+  const [meditationId, setMeditationId]   = useState<string | undefined>(alarm?.meditationId);
+  const [requireCheckin, setRequireCheckin] = useState(alarm?.requireCheckin ?? false);
+  const [snoozeMinutes, setSnoozeMinutes] = useState(alarm?.snoozeMinutes ?? 10);
+  const [practiceDurations, setPracticeDurations] = useState<Record<string, number>>(
+    alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 }
+  );
 
-  const [hourIdx, setHourIdx]     = useState(init12.hourIdx < 0 ? 0 : init12.hourIdx);
-  const [minuteIdx, setMinuteIdx] = useState(init.minute);
-  const [periodIdx, setPeriodIdx] = useState(init12.periodIdx);
-  const [days, setDays]           = useState<number[]>(init.days);
-  const [label, setLabel]         = useState(init.label ?? '');
+  // UI state
+  const [soundOpen, setSoundOpen]         = useState(false);
+  const [meditationOpen, setMeditationOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [previewingId, setPreviewingId]   = useState<string | null>(null);
+
+  const previewPlayerRef = useRef<AudioPlayer | null>(null);
+  const previewTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Re-sync when alarm changes
   useEffect(() => {
     if (!visible) return;
-    const src = alarm ?? { ...DEFAULT_ALARM, id: `alarm_${Date.now()}`, label: '' };
-    const s12 = to12h(src.hour);
-    setHourIdx(s12.hourIdx < 0 ? 0 : s12.hourIdx);
-    setMinuteIdx(src.minute);
-    setPeriodIdx(s12.periodIdx);
-    setDays(src.days);
-    setLabel(src.label ?? '');
+    setHour(alarm?.hour ?? DEFAULT_ALARM.hour);
+    setMinute(alarm?.minute ?? DEFAULT_ALARM.minute);
+    setDays(alarm?.days ?? DEFAULT_ALARM.days);
+    setLabel(alarm?.label ?? '');
+    setSoundId(alarm?.soundId ?? 'classic');
+    setMeditationId(alarm?.meditationId);
+    setRequireCheckin(alarm?.requireCheckin ?? false);
+    setSnoozeMinutes(alarm?.snoozeMinutes ?? 10);
+    setPracticeDurations(alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 });
+    setSoundOpen(false);
+    setMeditationOpen(false);
     setShowDeleteConfirm(false);
+    stopPreview();
   }, [visible, alarm?.id]);
 
-  function get24h() {
-    const h12 = HOURS[hourIdx];
-    const period = PERIODS[periodIdx];
-    if (period === 'AM') return h12 === 12 ? 0 : h12;
-    return h12 === 12 ? 12 : h12 + 12;
+  useEffect(() => {
+    return () => { stopPreview(); };
+  }, []);
+
+  function stopPreview() {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    if (previewPlayerRef.current) {
+      try { previewPlayerRef.current.pause(); } catch {}
+      try { previewPlayerRef.current.remove(); } catch {}
+      previewPlayerRef.current = null;
+    }
+    setPreviewingId(null);
+  }
+
+  function playPreview(id: string, source: string | ReturnType<typeof require> | null) {
+    stopPreview();
+    if (previewingId === id) return;
+    if (!source) { setPreviewingId(id); return; }
+    setPreviewingId(id);
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const player = createAudioPlayer(source as any);
+      previewPlayerRef.current = player;
+      player.play();
+      previewTimerRef.current = setTimeout(() => { stopPreview(); }, 4000);
+    } catch { setPreviewingId(null); }
   }
 
   function toggleDay(day: number) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
+    setDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
   }
 
   function handleSave() {
@@ -182,148 +155,386 @@ function AlarmEditSheet({
     const entry: AlarmEntry = {
       ...(alarm ?? { ...DEFAULT_ALARM }),
       id: alarm?.id ?? `alarm_${Date.now()}`,
-      hour: get24h(),
-      minute: minuteIdx,
+      hour,
+      minute,
       days,
       label: label.trim() || undefined,
       isEnabled: true,
+      soundId,
+      meditationId,
+      requireCheckin,
+      snoozeMinutes,
+      practiceDurations,
       notificationIds: alarm?.notificationIds ?? [],
     };
     onSave(entry);
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={es.overlay} onPress={onClose}>
-        <Pressable style={[es.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
-          {/* Handle */}
-          <View style={[es.handle, { backgroundColor: colors.border }]} />
-
-          {/* Title */}
-          <Text style={[es.title, { color: colors.foreground }]}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={[em.container, { backgroundColor: colors.background }]}>
+        {/* Header */}
+        <View style={[em.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [em.cancelBtn, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Text style={[em.cancelText, { color: colors.muted }]}>Cancel</Text>
+          </Pressable>
+          <Text style={[em.title, { color: colors.foreground }]}>
             {isNew ? 'New Alarm' : 'Edit Alarm'}
           </Text>
-
-          {/* Time Picker */}
-          <View style={es.pickerRow}>
-            <ScrollPicker
-              items={HOURS}
-              selectedIndex={hourIdx}
-              onSelect={setHourIdx}
-              color={color}
-              width={72}
-              formatItem={(v) => String(v)}
-            />
-            <Text style={[es.colon, { color: colors.foreground }]}>:</Text>
-            <ScrollPicker
-              items={MINUTES}
-              selectedIndex={minuteIdx}
-              onSelect={setMinuteIdx}
-              color={color}
-              width={72}
-              formatItem={(v) => String(v).padStart(2, '0')}
-            />
-            <ScrollPicker
-              items={PERIODS}
-              selectedIndex={periodIdx}
-              onSelect={setPeriodIdx}
-              color={color}
-              width={64}
-              formatItem={(v) => String(v)}
-            />
-          </View>
-
-          {/* Day Toggles */}
-          <Text style={[es.sectionLabel, { color: colors.muted }]}>REPEAT</Text>
-          <View style={es.daysRow}>
-            {DAY_SHORT.map((d, i) => {
-              const dayNum = DAY_MAP[i];
-              const active = days.includes(dayNum);
-              return (
-                <Pressable
-                  key={i}
-                  onPress={() => toggleDay(dayNum)}
-                  style={[es.dayBtn, {
-                    backgroundColor: active ? color : colors.background,
-                    borderColor: active ? color : colors.border,
-                  }]}
-                >
-                  <Text style={[es.dayBtnText, { color: active ? '#fff' : colors.muted }]}>{d}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Label */}
-          <Text style={[es.sectionLabel, { color: colors.muted }]}>LABEL (OPTIONAL)</Text>
-          <TextInput
-            value={label}
-            onChangeText={setLabel}
-            placeholder="e.g. Morning, Gym, Evening"
-            placeholderTextColor={colors.muted}
-            maxLength={24}
-            returnKeyType="done"
-            style={[es.labelInput, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
-          />
-
-          {/* Save */}
           <Pressable
             onPress={handleSave}
-            style={({ pressed }) => [es.saveBtn, { backgroundColor: color, opacity: pressed ? 0.85 : 1 }]}
+            style={({ pressed }) => [em.saveBtn, { backgroundColor: ALARM_COLOR, opacity: pressed ? 0.85 : 1 }]}
           >
-            <Text style={es.saveBtnText}>{isNew ? 'Add Alarm' : 'Save Changes'}</Text>
+            <Text style={em.saveBtnText}>{isNew ? 'Add' : 'Save'}</Text>
           </Pressable>
+        </View>
 
-          {/* Delete (edit only) */}
-          {!isNew && !showDeleteConfirm && (
+        <ScrollView
+          contentContainerStyle={[em.scroll, { paddingBottom: insets.bottom + 40 }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="always"
+        >
+          {/* ── Time Picker ── */}
+          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[em.wheelWrap, { borderBottomColor: colors.border }]}>
+              <WheelTimePicker
+                hour={hour}
+                minute={minute}
+                onChange={(h, m) => { setHour(h); setMinute(m); }}
+              />
+            </View>
+
+            {/* Day picker */}
+            <View style={em.daySection}>
+              <Text style={[em.sectionLabel, { color: colors.muted }]}>REPEAT</Text>
+              <View style={em.daysRow}>
+                {DAY_SHORT.map((d, i) => {
+                  const dayNum = DAY_MAP[i];
+                  const active = days.includes(dayNum);
+                  return (
+                    <Pressable
+                      key={i}
+                      onPress={() => toggleDay(dayNum)}
+                      style={[em.dayBtn, {
+                        backgroundColor: active ? ALARM_COLOR : colors.background,
+                        borderColor: active ? ALARM_COLOR : colors.border,
+                      }]}
+                    >
+                      <Text style={[em.dayBtnText, { color: active ? '#fff' : colors.muted }]}>{d}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Label */}
+            <View style={[em.labelSection, { borderTopColor: colors.border }]}>
+              <Text style={[em.sectionLabel, { color: colors.muted }]}>LABEL (OPTIONAL)</Text>
+              <TextInput
+                value={label}
+                onChangeText={setLabel}
+                placeholder="e.g. Morning, Gym, Evening"
+                placeholderTextColor={colors.muted}
+                maxLength={24}
+                returnKeyType="done"
+                style={[em.labelInput, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              />
+            </View>
+          </View>
+
+          {/* ── Ritual Setup ── */}
+          <Text style={[em.groupLabel, { color: colors.muted }]}>RITUAL SETUP</Text>
+          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+
+            {/* Alarm Sound */}
             <Pressable
-              onPress={() => setShowDeleteConfirm(true)}
-              style={({ pressed }) => [es.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSoundOpen(v => !v);
+              }}
+              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
             >
-              <Text style={[es.deleteBtnText, { color: colors.error ?? '#EF4444' }]}>Delete Alarm</Text>
+              <IconSymbol name="music.note" size={16} color={colors.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Alarm Sound</Text>
+                <Text style={[em.dropdownValue, { color: colors.foreground }]}>
+                  {ALARM_SOUNDS.find(s => s.id === soundId)?.emoji ?? '⏰'}{' '}
+                  {ALARM_SOUNDS.find(s => s.id === soundId)?.label ?? 'Classic'}
+                </Text>
+              </View>
+              <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
             </Pressable>
-          )}
-          {!isNew && showDeleteConfirm && (
-            <View style={es.confirmRow}>
-              <Text style={[es.confirmText, { color: colors.muted }]}>Delete this alarm?</Text>
-              <Pressable
-                onPress={() => { onDelete?.(alarm!.id); onClose(); }}
-                style={({ pressed }) => [es.confirmYes, { backgroundColor: '#EF444420', opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }}>Delete</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setShowDeleteConfirm(false)}
-                style={({ pressed }) => [es.confirmNo, { backgroundColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Text style={{ color: colors.foreground, fontWeight: '600', fontSize: 14 }}>Cancel</Text>
-              </Pressable>
+            {soundOpen && (
+              <View style={[em.dropdownContent, { borderBottomColor: colors.border }]}>
+                {ALARM_SOUNDS.map((sound) => {
+                  const isSelected = soundId === sound.id;
+                  const isPreviewing = previewingId === sound.id;
+                  return (
+                    <Pressable
+                      key={sound.id}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSoundId(sound.id);
+                        playPreview(sound.id, sound.source);
+                      }}
+                      style={({ pressed }) => [
+                        em.dropdownItem,
+                        isSelected && { backgroundColor: ALARM_COLOR + '18' },
+                        { opacity: pressed ? 0.7 : 1 },
+                      ]}
+                    >
+                      <Text style={em.itemEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
+                      <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground, flex: 1 }]}>
+                        {sound.label}
+                      </Text>
+                      {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* After Alarm */}
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setMeditationOpen(v => !v);
+              }}
+              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <IconSymbol name="moon.stars.fill" size={16} color={colors.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>After Alarm</Text>
+                <Text style={[em.dropdownValue, { color: colors.foreground }]}>
+                  {meditationId
+                    ? `${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.emoji ?? ''} ${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.label ?? ''}`
+                    : '🚫 None'}
+                </Text>
+              </View>
+              <IconSymbol name={meditationOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+            </Pressable>
+            {meditationOpen && (
+              <View style={[em.dropdownContent, { borderBottomColor: colors.border }]}>
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMeditationId(undefined);
+                  }}
+                  style={({ pressed }) => [
+                    em.dropdownItem,
+                    !meditationId && { backgroundColor: ALARM_COLOR + '18' },
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Text style={em.itemEmoji}>🚫</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[em.dropdownItemText, { color: !meditationId ? ALARM_COLOR : colors.foreground }]}>None</Text>
+                    <Text style={[em.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
+                  </View>
+                  {!meditationId && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                </Pressable>
+                {MEDITATION_OPTIONS.map((med) => {
+                  const isSelected = meditationId === med.id;
+                  const isPreviewing = previewingId === med.id;
+                  const hasDuration = med.id !== 'journaling' && med.id !== 'none';
+                  const currentDuration = practiceDurations[med.id] ?? 10;
+                  return (
+                    <View key={med.id}>
+                      <Pressable
+                        onPress={() => {
+                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setMeditationId(med.id);
+                          playPreview(med.id, med.source ?? null);
+                        }}
+                        style={({ pressed }) => [
+                          em.dropdownItem,
+                          isSelected && { backgroundColor: ALARM_COLOR + '18' },
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text style={em.itemEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground }]}>
+                            {med.label}
+                          </Text>
+                          <Text style={[em.meditationDesc, { color: colors.muted }]}>
+                            {hasDuration ? `${currentDuration} min · ${med.description.split(',').slice(1).join(',').trim() || med.description}` : med.description}
+                          </Text>
+                        </View>
+                        {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                      </Pressable>
+                      {isSelected && hasDuration && (
+                        <View style={[em.durationChipRow, { borderTopColor: colors.border }]}>
+                          <Text style={[em.durationChipLabel, { color: colors.muted }]}>Duration</Text>
+                          <View style={em.durationChips}>
+                            {[5, 10, 15, 20].map((mins) => (
+                              <Pressable
+                                key={mins}
+                                onPress={() => {
+                                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  setPracticeDurations(prev => ({ ...prev, [med.id]: mins }));
+                                }}
+                                style={({ pressed }) => [{
+                                  paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5,
+                                  borderColor: currentDuration === mins ? ALARM_COLOR : colors.border,
+                                  backgroundColor: currentDuration === mins ? ALARM_COLOR + '18' : 'transparent',
+                                  opacity: pressed ? 0.7 : 1,
+                                }]}
+                              >
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: currentDuration === mins ? ALARM_COLOR : colors.muted }}>
+                                  {mins} min
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Snooze Duration */}
+            <View style={[em.dropdownRow, { borderBottomColor: colors.border }]}>
+              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Snooze Duration</Text>
+                <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
+                  How long to snooze when alarm is dismissed
+                </Text>
+              </View>
+            </View>
+            <View style={[em.chipRow, { borderBottomColor: colors.border }]}>
+              {[5, 10, 15, 20, 30].map((mins) => (
+                <Pressable
+                  key={mins}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSnoozeMinutes(mins);
+                  }}
+                  style={({ pressed }) => [{
+                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
+                    borderColor: snoozeMinutes === mins ? ALARM_COLOR : colors.border,
+                    backgroundColor: snoozeMinutes === mins ? ALARM_COLOR + '18' : 'transparent',
+                    opacity: pressed ? 0.7 : 1,
+                  }]}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: snoozeMinutes === mins ? ALARM_COLOR : colors.muted }}>
+                    {mins} min
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Require Check-in */}
+            <View style={[em.dropdownRow, { borderBottomWidth: 0 }]}>
+              <IconSymbol name="lock.fill" size={16} color={colors.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Require Check-in to Unlock App</Text>
+                <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
+                  Block app access until yesterday's check-in is complete
+                </Text>
+              </View>
+              <Switch
+                value={requireCheckin}
+                onValueChange={(v) => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setRequireCheckin(v);
+                }}
+                trackColor={{ false: colors.border, true: ALARM_COLOR }}
+                thumbColor="#fff"
+              />
+            </View>
+          </View>
+
+          {/* ── Delete ── */}
+          {!isNew && (
+            <View style={em.deleteSection}>
+              {!showDeleteConfirm ? (
+                <Pressable
+                  onPress={() => setShowDeleteConfirm(true)}
+                  style={({ pressed }) => [em.deleteBtn, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Text style={[em.deleteBtnText, { color: colors.error ?? '#EF4444' }]}>Delete Alarm</Text>
+                </Pressable>
+              ) : (
+                <View style={em.confirmRow}>
+                  <Text style={[em.confirmText, { color: colors.muted }]}>Delete this alarm?</Text>
+                  <Pressable
+                    onPress={() => { onDelete?.(alarm!.id); onClose(); }}
+                    style={({ pressed }) => [em.confirmYes, { backgroundColor: '#EF444420', opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }}>Delete</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setShowDeleteConfirm(false)}
+                    style={({ pressed }) => [em.confirmNo, { backgroundColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Text style={{ color: colors.foreground, fontWeight: '600', fontSize: 14 }}>Cancel</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           )}
-        </Pressable>
-      </Pressable>
+        </ScrollView>
+      </View>
     </Modal>
   );
 }
 
-const es = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 12 },
-  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
-  pickerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 24 },
-  colon: { fontSize: 28, fontWeight: '700', marginHorizontal: 2, marginBottom: 4 },
+const em = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  cancelBtn: { paddingVertical: 6, paddingHorizontal: 4, minWidth: 60 },
+  cancelText: { fontSize: 16 },
+  title: { fontSize: 17, fontWeight: '700' },
+  saveBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 10, minWidth: 60, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 8 },
+  section: {
+    borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 8,
+  },
+  groupLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 6, marginTop: 4, paddingHorizontal: 4 },
+  wheelWrap: { paddingVertical: 16, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  daySection: { paddingHorizontal: 16, paddingVertical: 14 },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 10 },
-  daysRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  daysRow: { flexDirection: 'row', gap: 8 },
   dayBtn: { flex: 1, height: 38, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   dayBtnText: { fontSize: 13, fontWeight: '700' },
+  labelSection: { paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth },
   labelInput: {
-    height: 44, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12,
-    fontSize: 15, marginBottom: 20,
+    height: 44, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 15,
   },
-  saveBtn: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  deleteBtn: { alignItems: 'center', paddingVertical: 12 },
+  dropdownRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dropdownLabel: { fontSize: 12, fontWeight: '600', marginBottom: 1 },
+  dropdownValue: { fontSize: 14, fontWeight: '500' },
+  dropdownContent: { borderBottomWidth: StyleSheet.hairlineWidth },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  dropdownItemText: { fontSize: 15, fontWeight: '500' },
+  itemEmoji: { fontSize: 20, width: 28, textAlign: 'center' },
+  meditationDesc: { fontSize: 12, marginTop: 1 },
+  durationChipRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  durationChipLabel: { fontSize: 12, fontWeight: '600', marginRight: 4 },
+  durationChips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  chipRow: {
+    flexDirection: 'row', gap: 8, flexWrap: 'wrap',
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  deleteSection: { marginTop: 8 },
+  deleteBtn: { alignItems: 'center', paddingVertical: 16 },
   deleteBtnText: { fontSize: 15, fontWeight: '600' },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   confirmText: { flex: 1, fontSize: 14 },
@@ -337,22 +548,19 @@ function AlarmCard({
   alarm,
   onToggle,
   onEdit,
-  color,
 }: {
   alarm: AlarmEntry;
   onToggle: () => void;
   onEdit: () => void;
-  color: string;
 }) {
   const colors = useColors();
-  const sortedDays = [...alarm.days].sort((a, b) => a - b);
 
   return (
     <Pressable
       onPress={onEdit}
       style={({ pressed }) => [ac.card, {
         backgroundColor: colors.surface,
-        borderColor: alarm.isEnabled ? color + '55' : colors.border,
+        borderColor: alarm.isEnabled ? ALARM_COLOR + '55' : colors.border,
         opacity: pressed ? 0.85 : 1,
       }]}
     >
@@ -375,20 +583,27 @@ function AlarmCard({
               const active = alarm.days.includes(DAY_MAP[i]);
               return (
                 <View key={i} style={[ac.dayChip, {
-                  backgroundColor: active ? color + '22' : 'transparent',
-                  borderColor: active ? color : colors.border,
+                  backgroundColor: active ? ALARM_COLOR + '22' : 'transparent',
+                  borderColor: active ? ALARM_COLOR : colors.border,
                 }]}>
-                  <Text style={[ac.dayChipText, { color: active ? color : colors.muted }]}>{d}</Text>
+                  <Text style={[ac.dayChipText, { color: active ? ALARM_COLOR : colors.muted }]}>{d}</Text>
                 </View>
               );
             })}
           </View>
         )}
+        {/* Ritual badge */}
+        {alarm.meditationId && (
+          <Text style={[ac.ritualBadge, { color: ALARM_COLOR }]}>
+            {MEDITATION_OPTIONS.find(m => m.id === alarm.meditationId)?.emoji}{' '}
+            {MEDITATION_OPTIONS.find(m => m.id === alarm.meditationId)?.label}
+          </Text>
+        )}
       </View>
       {/* Toggle */}
       <Pressable
         onPress={(e) => { e.stopPropagation(); onToggle(); }}
-        style={[ac.toggle, { backgroundColor: alarm.isEnabled ? color : colors.border }]}
+        style={[ac.toggle, { backgroundColor: alarm.isEnabled ? ALARM_COLOR : colors.border }]}
       >
         <View style={[ac.toggleThumb, { alignSelf: alarm.isEnabled ? 'flex-end' : 'flex-start' }]} />
       </Pressable>
@@ -409,13 +624,12 @@ const ac = StyleSheet.create({
   daysRow: { flexDirection: 'row', gap: 5 },
   dayChip: { width: 26, height: 26, borderRadius: 8, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   dayChipText: { fontSize: 11, fontWeight: '700' },
+  ritualBadge: { fontSize: 12, fontWeight: '600', marginTop: 6 },
   toggle: { width: 48, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center' },
   toggleThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-
-const ALARM_COLOR = '#6C63FF';
 
 export default function AlarmsScreen() {
   const router = useRouter();
@@ -424,26 +638,26 @@ export default function AlarmsScreen() {
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 50) : insets.top;
 
   const { alarms, updateAlarms } = useApp();
-  const [sheetVisible, setSheetVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [editingAlarm, setEditingAlarm] = useState<AlarmEntry | null>(null);
 
   function openAdd() {
     if (alarms.length >= MAX_ALARMS) {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert('Max Alarms Reached', 'You can have up to 4 alarms. Disable or delete one to add a new alarm.');
       return;
     }
     setEditingAlarm(null);
-    setSheetVisible(true);
+    setModalVisible(true);
   }
 
   function openEdit(alarm: AlarmEntry) {
     setEditingAlarm(alarm);
-    setSheetVisible(true);
+    setModalVisible(true);
   }
 
   async function handleSave(entry: AlarmEntry) {
-    setSheetVisible(false);
-    // Schedule notifications
+    setModalVisible(false);
     let updated = { ...entry };
     if (Platform.OS !== 'web') {
       try {
@@ -502,7 +716,6 @@ export default function AlarmsScreen() {
           <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
         </Pressable>
         <Text style={[s.headerTitle, { color: colors.foreground }]}>Alarms</Text>
-        {/* Add button */}
         {alarms.length < MAX_ALARMS ? (
           <Pressable
             onPress={openAdd}
@@ -533,7 +746,7 @@ export default function AlarmsScreen() {
       >
         {alarms.length === 0 ? (
           <View style={s.emptyState}>
-            <Text style={[s.emptyIcon]}>⏰</Text>
+            <Text style={s.emptyIcon}>⏰</Text>
             <Text style={[s.emptyTitle, { color: colors.foreground }]}>No alarms yet</Text>
             <Text style={[s.emptySub, { color: colors.muted }]}>
               Tap "+ Add" to set your first alarm
@@ -551,7 +764,6 @@ export default function AlarmsScreen() {
               <AlarmCard
                 key={alarm.id}
                 alarm={alarm}
-                color={ALARM_COLOR}
                 onToggle={() => handleToggle(alarm)}
                 onEdit={() => openEdit(alarm)}
               />
@@ -576,14 +788,13 @@ export default function AlarmsScreen() {
         )}
       </ScrollView>
 
-      {/* Add/Edit Sheet */}
-      <AlarmEditSheet
-        visible={sheetVisible}
+      {/* Add/Edit Modal */}
+      <AlarmEditModal
+        visible={modalVisible}
         alarm={editingAlarm}
         onSave={handleSave}
         onDelete={handleDelete}
-        onClose={() => setSheetVisible(false)}
-        color={ALARM_COLOR}
+        onClose={() => setModalVisible(false)}
       />
     </View>
   );
@@ -616,9 +827,7 @@ const s = StyleSheet.create({
   },
   addCardText: { fontSize: 16, fontWeight: '700' },
   addCardSub: { fontSize: 12 },
-  maxBanner: {
-    borderRadius: 12, borderWidth: 1, padding: 14,
-  },
+  maxBanner: { borderRadius: 12, borderWidth: 1, padding: 14 },
   maxBannerText: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 8 },
   emptyIcon: { fontSize: 56 },

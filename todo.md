@@ -1387,3 +1387,6 @@
 - [x] Alarms panel: Edit existing alarm (same sheet pre-filled)
 - [x] Alarms panel: Delete alarm with confirmation
 - [x] Home screen Alarms section: "+  Add" and alarm card taps open the new Alarms panel (not Settings)
+
+- [x] Alarms panel: fix scroll picker snap-to-number (copy calibration from you-settings)
+- [x] Alarms panel: add per-alarm ritual setup settings (same fields as existing alarm settings)
