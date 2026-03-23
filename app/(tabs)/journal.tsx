@@ -2432,6 +2432,7 @@ function FullScreenJournalEditor({
   const [text, setText] = useState(value);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
+  const [toolbarHeight, setToolbarHeight] = useState(80);
 
   // Sync value prop when entry changes
   useEffect(() => { setText(value); }, [value]);
@@ -2482,7 +2483,7 @@ function FullScreenJournalEditor({
         >
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: photos.length > 0 ? 80 : 120 }}
+            contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: toolbarHeight + 24 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
             alwaysBounceVertical
@@ -2521,8 +2522,8 @@ function FullScreenJournalEditor({
             </View>
           )}
 
-          {/* Keyboard accessory toolbar */}
-          <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'rgba(28,28,30,0.98)' }}>
+          {/* Keyboard accessory toolbar — measure height so ScrollView paddingBottom matches */}
+          <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'rgba(28,28,30,0.98)' }} onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}>
             <View style={fsStyles.toolbar}>
               {/* Photos */}
               <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
