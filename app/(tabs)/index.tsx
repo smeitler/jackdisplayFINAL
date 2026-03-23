@@ -698,11 +698,13 @@ function AlarmCardFull({
 
 /** Half-width alarm card — used in 2×2 grid when 3 or 4 alarms are present */
 function AlarmCardGrid({
-  alarm, colors, formatAlarmTime, onToggle, onPress,
+  alarm, colors, formatAlarmTime, DAY_LABELS, DAY_MAP, onToggle, onPress,
 }: {
   alarm: import('@/lib/storage').AlarmEntry;
   colors: AlarmColors;
   formatAlarmTime: (h: number, m: number) => string;
+  DAY_LABELS: string[];
+  DAY_MAP: number[];
   onToggle: () => void;
   onPress: () => void;
 }) {
@@ -743,6 +745,22 @@ function AlarmCardGrid({
       <Text style={[styles.alarmTimeGrid, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
         {formatAlarmTime(alarm.hour, alarm.minute)}
       </Text>
+      {/* Day chips */}
+      {alarm.days && alarm.days.length > 0 && (
+        <View style={{ flexDirection: 'row', gap: 3, marginTop: 6, flexWrap: 'wrap' }}>
+          {DAY_LABELS.map((d, i) => {
+            const active = alarm.days!.includes(DAY_MAP[i]);
+            return (
+              <View key={i} style={[styles.alarmDayChipGrid, {
+                backgroundColor: active ? colors.primary + '25' : 'transparent',
+                borderColor: active ? colors.primary : colors.border,
+              }]}>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: active ? colors.primary : colors.muted }}>{d}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -838,6 +856,8 @@ function AlarmsSection({
               alarm={alarm}
               colors={colors}
               formatAlarmTime={formatAlarmTime}
+              DAY_LABELS={DAY_LABELS}
+              DAY_MAP={DAY_MAP}
               onToggle={() => toggleAlarm(alarm.id)}
               onPress={() => router.push('/alarms' as never)}
             />
@@ -1917,6 +1937,7 @@ const styles = StyleSheet.create({
     minHeight: 90,
   },
   alarmTimeGrid: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, lineHeight: 26 },
+  alarmDayChipGrid: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Section header
   sectionRow: {
