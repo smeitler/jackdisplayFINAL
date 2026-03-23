@@ -2477,12 +2477,9 @@ function FullScreenJournalEditor({
             <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
         </View>
-        {/* Editor + keyboard toolbar */}
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
-        >
+        {/* Editor + keyboard toolbar — no KeyboardAvoidingView; toolbar has SafeAreaView bottom
+             which naturally moves up with the keyboard, no offset calculation needed. */}
+        <View style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: toolbarHeight + 24 }}
@@ -2542,7 +2539,7 @@ function FullScreenJournalEditor({
               <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
             </View>
           </SafeAreaView>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );
