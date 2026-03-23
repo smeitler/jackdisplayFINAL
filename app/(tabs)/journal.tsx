@@ -2421,10 +2421,12 @@ interface FullScreenJournalEditorProps {
   onDeletePhoto?: (id: string) => void;
   onReorderPhotos?: (reordered: JournalAttachment[]) => void;
   colors: any;
+  /** When true, the TextInput is non-editable (voice/multi-segment read-only view) */
+  readOnly?: boolean;
 }
 function FullScreenJournalEditor({
   visible, value, onChange, onClose, onPickPhoto, onPickCamera,
-  photos = [], onDeletePhoto, onReorderPhotos, colors,
+  photos = [], onDeletePhoto, onReorderPhotos, colors, readOnly = false,
 }: FullScreenJournalEditorProps) {
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState(value);
@@ -2485,20 +2487,21 @@ function FullScreenJournalEditor({
             <TextInput
               ref={inputRef}
               value={text}
-              onChangeText={handleChangeText}
+              onChangeText={readOnly ? undefined : handleChangeText}
+              editable={!readOnly}
               multiline
-              placeholder="Start writing..."
+              placeholder={readOnly ? '' : 'Start writing...'}
               placeholderTextColor="rgba(255,255,255,0.3)"
               style={[
                 fsStyles.textInput,
                 Platform.OS === 'web'
-                  ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: '#ffffff' } as any)
+                  ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: readOnly ? 'transparent' : '#ffffff' } as any)
                   : {},
               ]}
               textAlignVertical="top"
-              autoCorrect
-              autoCapitalize="sentences"
-              spellCheck
+              autoCorrect={!readOnly}
+              autoCapitalize={readOnly ? 'none' : 'sentences'}
+              spellCheck={!readOnly}
               scrollEnabled={false}
             />
           </ScrollView>
@@ -2759,8 +2762,11 @@ export default function JournalScreen() {
   }, [userId]);
 
   // ── Always-visible journal note + gratitude fields ─────────────────────────
-  // These represent the "primary" entry for the day (or a new one to be created)
+  // dvJournalNote = RAW editable text for the primary entry (no display headers/dividers).
+  // dvDisplayNote = formatted read-only display string (has 🎙/✏️ headers + ─── dividers).
+  // NEVER save dvDisplayNote to storage — only dvJournalNote goes to AsyncStorage.
   const [dvJournalNote, setDvJournalNote] = useState('');
+  const [dvDisplayNote, setDvDisplayNote] = useState('');
   // TextInput ref and cursor/selection tracking for formatting
   const dvTextInputRef = useRef<any>(null);
   // dvSelection stores the LAST known selection — always updated on onSelectionChange.
@@ -2817,81 +2823,81 @@ export default function JournalScreen() {
     if (dayEntries.length === 0) {
       dvPrimaryEntryId.current = null;
       setDvJournalNote('');
+      setDvDisplayNote('');
       setDvGratItems(['', '', '']);
       return;
     }
+
     // Primary entry = first non-voice entry (editable), or first voice entry if no manual entry exists.
     const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'))
       ?? dayEntries[0];
     dvPrimaryEntryId.current = primaryEntry.id;
 
     const allGratItems: string[] = [];
-    const bodyParts: string[] = [];
+    const displayParts: string[] = [];
 
     // Sort entries oldest-first
     const sorted = [...dayEntries].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+    // Helper: strip baked-in display headers from a body string.
+    // These were accidentally written to storage by a previous bug where dvDisplayNote
+    // (formatted with 🎙/✏️ headers) was saved instead of the raw body.
+    function stripDisplayHeaders(raw: string): string {
+      // Remove lines that look like "🎙 9:56 AM" or "✏️ 10:22 AM" at the start of the text or after a newline
+      return raw
+        .replace(/^[🎙✏️]\s+\d{1,2}:\d{2}\s*[APap][Mm]\n?/gm, '')
+        // Also remove the ───────────── dividers that were baked in
+        .replace(/─────────────/g, '')
+        .trim();
+    }
+
     for (const entry of sorted) {
-      const body = entry.body || '';
+      const rawBody = entry.body || '';
       const isVoice = entry.tags?.includes('voice');
 
       // Strip gratitude section from the bottom
-      const gratIdx = body.indexOf('\n\n🙏 Grateful for:');
-      const mainBody = (gratIdx >= 0 ? body.slice(0, gratIdx).trim() : body.trim()).replace(/^# /, '');
-      const gratRaw = gratIdx >= 0 ? body.slice(gratIdx + 2).trim() : '';
+      const gratIdx = rawBody.indexOf('\n\n🙏 Grateful for:');
+      const bodyWithoutGrat = (gratIdx >= 0 ? rawBody.slice(0, gratIdx).trim() : rawBody.trim()).replace(/^# /, '');
+      const gratRaw = gratIdx >= 0 ? rawBody.slice(gratIdx + 2).trim() : '';
       const rawLines = gratRaw.replace(/^🙏 Grateful for:\n?/, '').split('\n').filter(Boolean);
       const items = rawLines.map((l) => l.replace(/^\d+\.\s*/, '').replace(/^[-•]\s*/, '').trim()).filter(Boolean);
       items.forEach((it) => { if (!allGratItems.includes(it)) allGratItems.push(it); });
 
+      // Clean any baked-in display headers from the stored body
+      const mainBody = stripDisplayHeaders(bodyWithoutGrat);
       if (!mainBody) continue;
 
-      // Voice entries may contain multiple check-ins appended with ── HH:MM AM ── separators.
-      // Split on those separators so each segment gets its own header instead of one header
-      // covering the entire blob (which caused duplicate-looking headers).
+      // Build the display version: split on ── HH:MM AM ── separators (written by voice-checkin)
       const SEPARATOR_RE = /\n{0,2}──\s+([\d:]+\s*[APap][Mm])\s+──\n{0,2}/g;
-      const segments: Array<{ time: string; text: string }> = [];
-      let lastIndex = 0;
-      let match: RegExpExecArray | null;
-      // First segment uses the entry's own createdAt time
+      const parts = mainBody.split(SEPARATOR_RE);
+      // parts with capture group: [text0, time1, text1, time2, text2, ...]
       const firstTimeLabel = new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      while ((match = SEPARATOR_RE.exec(mainBody)) !== null) {
-        const segText = mainBody.slice(lastIndex, match.index).trim();
-        if (segText) segments.push({ time: segments.length === 0 ? firstTimeLabel : segments[segments.length - 1].time, text: segText });
-        // The separator itself contains the time for the NEXT segment
-        segments.push({ time: match[1], text: '' }); // placeholder — filled by next iteration
-        lastIndex = match.index + match[0].length;
-      }
-      // Remaining text after last separator
-      const tail = mainBody.slice(lastIndex).trim();
 
-      if (segments.length === 0) {
+      if (parts.length === 1) {
         // No separators — single segment
-        const timeLabel = new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        const header = isVoice ? `🎙 ${timeLabel}` : `✏️ ${timeLabel}`;
-        bodyParts.push(`${header}\n${mainBody}`);
+        const header = isVoice ? `🎙 ${firstTimeLabel}` : `✏️ ${firstTimeLabel}`;
+        displayParts.push(`${header}\n${mainBody}`);
       } else {
-        // Rebuild segments: odd-indexed placeholders get the tail or next real text
-        // Simpler approach: re-split cleanly
-        const parts = mainBody.split(SEPARATOR_RE);
-        // split with capture group: [text0, time1, text1, time2, text2, ...]
-        // parts[0] = text before first sep, parts[1] = captured time1, parts[2] = text after first sep, ...
-        const cleanParts: Array<{ time: string; text: string; isVoice: boolean }> = [];
-        cleanParts.push({ time: firstTimeLabel, text: (parts[0] || '').trim(), isVoice: !!isVoice });
+        // Multiple segments
+        const seg0Text = (parts[0] || '').trim();
+        if (seg0Text) displayParts.push(`${isVoice ? '🎙' : '✏️'} ${firstTimeLabel}\n${seg0Text}`);
         for (let pi = 1; pi < parts.length; pi += 2) {
           const segTime = parts[pi] || '';
           const segText = (parts[pi + 1] || '').trim();
-          if (segText) cleanParts.push({ time: segTime, text: segText, isVoice: true });
-        }
-        for (const seg of cleanParts) {
-          if (!seg.text) continue;
-          const header = seg.isVoice ? `🎙 ${seg.time}` : `✏️ ${seg.time}`;
-          bodyParts.push(`${header}\n${seg.text}`);
+          if (segText) displayParts.push(`🎙 ${segTime}\n${segText}`);
         }
       }
     }
 
-    const combinedBody = bodyParts.join('\n\n─────────────\n\n');
-    setDvJournalNote(combinedBody);
+    // dvDisplayNote = formatted display string (READ-ONLY, never saved to storage)
+    setDvDisplayNote(displayParts.join('\n\n─────────────\n\n'));
+
+    // dvJournalNote = RAW editable text for the primary entry only (no headers, no dividers)
+    // This is what gets saved back to AsyncStorage.
+    const primaryBody = primaryEntry.body || '';
+    const primaryGratIdx = primaryBody.indexOf('\n\n🙏 Grateful for:');
+    const primaryMainBody = (primaryGratIdx >= 0 ? primaryBody.slice(0, primaryGratIdx).trim() : primaryBody.trim()).replace(/^# /, '');
+    setDvJournalNote(stripDisplayHeaders(primaryMainBody));
 
     while (allGratItems.length < 3) allGratItems.push('');
     setDvGratItems(allGratItems);
@@ -3322,17 +3328,17 @@ export default function JournalScreen() {
                     </Pressable>
                   </View>
                 </View>
-                {/* Inline TextInput — editable when single entry, read-only (tap to expand) when multiple entries or multiple voice segments */}
-                {(dayEntries.length > 1 || dvJournalNote.includes('🎙') || dvJournalNote.includes('✏️')) ? (
-                  // Multiple entries: show read-only preview, tap expands to full editor
+                {/* Inline TextInput — editable when single entry, read-only (tap to expand) when multiple entries or voice segments */}
+                {dvDisplayNote ? (
+                  // Has display-formatted text (voice entry or multiple entries): show read-only preview
                   <Pressable onPress={() => setDvShowFullEditor(true)} style={{ minHeight: 110 }}>
                     <Text
                       numberOfLines={8}
                       style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, textAlignVertical: 'top' }}
                     >
-                      {dvJournalNote || ''}
+                      {dvDisplayNote}
                     </Text>
-                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 6 }}>Tap to expand and edit ↗</Text>
+                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 6 }}>Tap to expand ↗</Text>
                   </Pressable>
                 ) : (
                   <TextInput
@@ -3355,10 +3361,10 @@ export default function JournalScreen() {
                     scrollEnabled={false}
                   />
                 )}
-                {/* Footer: character count */}
-                {dvJournalNote.length > 0 && (
+                {/* Footer: character count — show raw note length (not display-formatted) */}
+                {(dvJournalNote.length > 0 || dvDisplayNote.length > 0) && (
                   <Text style={{ fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 }}>
-                    {dvJournalNote.length} chars
+                    {dvJournalNote.length || dvDisplayNote.length} chars
                   </Text>
                 )}
                 {/* Photo strip — BELOW text, with delete buttons and drag-to-reorder */}
@@ -3394,19 +3400,27 @@ export default function JournalScreen() {
             );
           })()}
           {/* ── Full-screen journal editor ── */}
+          {/* When dvDisplayNote is set, the entry has voice segments — show read-only display text.
+               When only dvJournalNote, it's a single editable manual entry. */}
           <FullScreenJournalEditor
             visible={dvShowFullEditor}
-            value={dvJournalNote}
+            value={dvDisplayNote || dvJournalNote}
             onChange={(text) => {
-              setDvJournalNote(text);
-              if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-              autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+              // Only allow saves when editing a plain manual entry (no display headers)
+              if (!dvDisplayNote) {
+                setDvJournalNote(text);
+                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+              }
             }}
+            readOnly={!!dvDisplayNote}
             onClose={() => {
               setDvShowFullEditor(false);
-              // Final save when closing
-              if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-              saveDvNoteAndGrat(dvJournalNote, dvGratItems);
+              // Final save only for plain manual entries
+              if (!dvDisplayNote) {
+                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                saveDvNoteAndGrat(dvJournalNote, dvGratItems);
+              }
             }}
             onPickPhoto={dvPickPhoto}
             onPickCamera={dvPickCamera}
