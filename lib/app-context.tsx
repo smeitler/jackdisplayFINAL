@@ -641,14 +641,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const activeIds = state.habits.filter((h) => h.isActive).map((h) => h.id);
     const now = new Date().toISOString();
 
-    // Build new entries (skip 'none')
-    const newEntries: CheckInEntry[] = activeIds
-      .filter((id) => ratingsMap[id] && ratingsMap[id] !== 'none')
-      .map((id) => ({ date, habitId: id, rating: ratingsMap[id] as Rating, loggedAt: now }));
+    // Keep existing ratings for this date that are NOT being overridden by the new submission.
+    // This supports multiple check-ins per day: a second voice check-in only updates the habits
+    // it explicitly mentions, leaving previously-rated habits untouched.
+    const existingForDate = state.checkIns.filter((e) => e.date === date);
+    const existingOtherDates = state.checkIns.filter((e) => e.date !== date);
 
-    // Merge with existing (remove old entries for this date)
-    const existing = state.checkIns.filter((e) => e.date !== date);
-    const updated = [...existing, ...newEntries];
+    // Build a merged map: start with existing ratings for this date, then overlay new ones
+    const mergedMap: Record<string, CheckInEntry> = {};
+    for (const e of existingForDate) {
+      mergedMap[e.habitId] = e;
+    }
+    // New ratings override existing ones for the same habit
+    for (const id of activeIds) {
+      const r = ratingsMap[id];
+      if (r && r !== 'none') {
+        mergedMap[id] = { date, habitId: id, rating: r as Rating, loggedAt: now };
+      }
+    }
+
+    const newEntries = Object.values(mergedMap);
+    const updated = [...existingOtherDates, ...newEntries];
 
     // Persist both check-ins and lastCheckIn date to AsyncStorage atomically
     await Promise.all([

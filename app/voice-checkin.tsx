@@ -44,7 +44,7 @@ import { CategoryIcon } from "@/components/category-icon";
 import { useColors } from "@/hooks/use-colors";
 import { useApp } from "@/lib/app-context";
 import { trpc } from "@/lib/trpc";
-import { addEntry, generateId, todayDateStr } from "@/lib/journal-store";
+import { addEntry, loadEntries, updateEntry, generateId, todayDateStr } from "@/lib/journal-store";
 import { getLastUserId, loadDayNotes, saveDayNotes, type Rating } from "@/lib/storage";
 
 /// ─── Scrolling Waveform (iOS Voice Memos style) ─────────────────────────────
@@ -1043,33 +1043,58 @@ export default function VoiceCheckinScreen() {
         await saveDayNotes(allNotes);
       }
 
-      // 3. Save journal entry (use editedTranscript so user edits are preserved)
+      // 3. Save journal entry — append to existing today entry with timestamp separator,
+      //    or create a new one if none exists yet.
       const uid = await getLastUserId();
       const userId = uid || "default";
 
-      let body = editedTranscript || results.transcript || results.journalEntries.join("\n\n");
+      let newBody = editedTranscript || results.transcript || results.journalEntries.join("\n\n");
       if (results.gratitudeItems.length > 0) {
-        body +=
+        newBody +=
           "\n\n🙏 Grateful for:\n" +
           results.gratitudeItems.map((g, i) => `${i + 1}. ${g}`).join("\n");
       }
 
-      const entry = {
-        id: generateId(),
-        userId,
-        date: today,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        title: "Voice Check-in",
-        body,
-        template: "blank" as const,
-        attachments: [],
-        tags: ["voice"],
-        gratitudes: results.gratitudeItems,
-        transcriptionStatus: "done" as const,
-        transcriptionText: editedTranscript || results.transcript,
-      };
-      await addEntry(userId, entry);
+      // Look for an existing voice check-in entry for today to append to
+      const allEntries = await loadEntries(userId);
+      const existingToday = allEntries.find(
+        (e) => e.date === today && (e.tags?.includes("voice") || e.title === "Voice Check-in")
+      );
+
+      if (existingToday) {
+        // Append with a clean timestamp separator
+        const timeLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const separator = `\n\n── ${timeLabel} ──\n\n`;
+        const appendedBody = existingToday.body + separator + newBody;
+        // Merge gratitudes (deduplicate)
+        const mergedGratitudes = Array.from(
+          new Set([...(existingToday.gratitudes ?? []), ...results.gratitudeItems])
+        );
+        await updateEntry(userId, existingToday.id, {
+          body: appendedBody,
+          gratitudes: mergedGratitudes,
+          transcriptionText: appendedBody,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        // First entry of the day — create fresh
+        const entry = {
+          id: generateId(),
+          userId,
+          date: today,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          title: "Voice Check-in",
+          body: newBody,
+          template: "blank" as const,
+          attachments: [],
+          tags: ["voice"],
+          gratitudes: results.gratitudeItems,
+          transcriptionStatus: "done" as const,
+          transcriptionText: editedTranscript || results.transcript,
+        };
+        await addEntry(userId, entry);
+      }
 
       if (Platform.OS !== "web")
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

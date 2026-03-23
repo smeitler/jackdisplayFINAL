@@ -1370,3 +1370,5 @@
 - [x] Bottom sheet editor: add photo strip (drag-to-reorder + × delete) at bottom above toolbar
 - [x] Bottom sheet editor: wire photos prop so it shows current entry's photos
 - [x] Voice check-in: fixed habit ratings not showing on journal day-view — was using raw storage submitCheckIn (bypassed app context), now uses useApp().submitCheckIn which dispatches SET_CHECKINS to update in-memory state immediately
+- [x] Multiple journal entries per day: new habit ratings merge with existing (only override unset habits, don't wipe already-rated ones)
+- [x] Multiple journal entries per day: append new text to existing day entry with a clean timestamp separator (e.g. ── 2:34 PM ──) instead of creating a separate entry
