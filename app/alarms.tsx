@@ -84,7 +84,7 @@ function AlarmEditModal({
   const [soundId, setSoundId]             = useState(alarm?.soundId ?? 'classic');
   const [meditationId, setMeditationId]   = useState<string | undefined>(alarm?.meditationId);
   const [requireCheckin, setRequireCheckin] = useState(alarm?.requireCheckin ?? false);
-  const [snoozeMinutes, setSnoozeMinutes] = useState(alarm?.snoozeMinutes ?? 10);
+  const [snoozeMinutes, setSnoozeMinutes] = useState(alarm?.snoozeMinutes ?? 5);
   const [practiceDurations, setPracticeDurations] = useState<Record<string, number>>(
     alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 }
   );
@@ -108,7 +108,7 @@ function AlarmEditModal({
     setSoundId(alarm?.soundId ?? 'classic');
     setMeditationId(alarm?.meditationId);
     setRequireCheckin(alarm?.requireCheckin ?? false);
-    setSnoozeMinutes(alarm?.snoozeMinutes ?? 10);
+    setSnoozeMinutes(alarm?.snoozeMinutes ?? 5);
     setPracticeDurations(alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 });
     setSoundOpen(false);
     setMeditationOpen(false);
@@ -230,6 +230,35 @@ function AlarmEditModal({
               </View>
             </View>
 
+            {/* Snooze Duration — placed above label for quick access */}
+            <View style={[em.labelSection, { borderTopColor: colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <IconSymbol name="clock.arrow.circlepath" size={14} color={colors.muted} />
+                <Text style={[em.sectionLabel, { color: colors.muted, marginBottom: 0, marginLeft: 6 }]}>SNOOZE DURATION</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {[5, 10, 15, 20].map((mins) => (
+                  <Pressable
+                    key={mins}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSnoozeMinutes(mins);
+                    }}
+                    style={({ pressed }) => [{
+                      flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1.5, alignItems: 'center',
+                      borderColor: snoozeMinutes === mins ? ALARM_COLOR : colors.border,
+                      backgroundColor: snoozeMinutes === mins ? ALARM_COLOR + '18' : 'transparent',
+                      opacity: pressed ? 0.7 : 1,
+                    }]}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: snoozeMinutes === mins ? ALARM_COLOR : colors.muted }}>
+                      {mins} min
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
             {/* Label */}
             <View style={[em.labelSection, { borderTopColor: colors.border }]}>
               <Text style={[em.sectionLabel, { color: colors.muted }]}>LABEL (OPTIONAL)</Text>
@@ -245,17 +274,32 @@ function AlarmEditModal({
             </View>
           </View>
 
-          {/* ── Ritual Setup ── */}
-          <Text style={[em.groupLabel, { color: colors.muted }]}>RITUAL SETUP</Text>
-          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {/* ── Morning Ritual Sequence ── */}
+          <Text style={[em.groupLabel, { color: colors.muted }]}>MORNING RITUAL SEQUENCE</Text>
+          <Text style={[em.groupSubLabel, { color: colors.muted }]}>
+            This is what happens step-by-step when your alarm goes off.
+          </Text>
 
-            {/* Alarm Sound */}
+          {/* Step 1 — Alarm */}
+          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
+            <View style={[em.stepHeader, { borderBottomColor: colors.border }]}>
+              <View style={[em.stepBadge, { backgroundColor: ALARM_COLOR + '20' }]}>
+                <Text style={[em.stepNum, { color: ALARM_COLOR }]}>1</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[em.stepTitle, { color: colors.foreground }]}>⏰ Alarm Rings</Text>
+                <Text style={[em.stepDesc, { color: colors.muted }]}>
+                  Your alarm fires at the set time. Hit Snooze to delay by {snoozeMinutes} min, or Wake Up to start your ritual.
+                </Text>
+              </View>
+            </View>
+            {/* Alarm Sound inline */}
             <Pressable
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setSoundOpen(v => !v);
               }}
-              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, borderBottomWidth: soundOpen ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.7 : 1 }]}
             >
               <IconSymbol name="music.note" size={16} color={colors.muted} />
               <View style={{ flex: 1 }}>
@@ -268,7 +312,7 @@ function AlarmEditModal({
               <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
             </Pressable>
             {soundOpen && (
-              <View style={[em.dropdownContent, { borderBottomColor: colors.border }]}>
+              <View style={[em.dropdownContent, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
                 {ALARM_SOUNDS.map((sound) => {
                   const isSelected = soundId === sound.id;
                   const isPreviewing = previewingId === sound.id;
@@ -296,28 +340,59 @@ function AlarmEditModal({
                 })}
               </View>
             )}
+          </View>
 
-            {/* After Alarm */}
+          {/* Step 2 — Journal */}
+          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
+            <View style={[em.stepHeader, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
+              <View style={[em.stepBadge, { backgroundColor: '#22C55E20' }]}>
+                <Text style={[em.stepNum, { color: '#22C55E' }]}>2</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[em.stepTitle, { color: colors.foreground }]}>📓 Journal Check-in</Text>
+                <Text style={[em.stepDesc, { color: colors.muted }]}>
+                  If you already completed your journal the night before, this step is automatically skipped — no double entry.
+                  {"\n"}If not, you’ll be prompted to do a quick morning entry.
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Step 3 — Ritual */}
+          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[em.stepHeader, { borderBottomColor: colors.border }]}>
+              <View style={[em.stepBadge, { backgroundColor: '#A78BFA20' }]}>
+                <Text style={[em.stepNum, { color: '#A78BFA' }]}>3</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[em.stepTitle, { color: colors.foreground }]}>✨ Morning Ritual</Text>
+                <Text style={[em.stepDesc, { color: colors.muted }]}>
+                  After your journal, the app guides you through your chosen practice below.
+                  {"\n"}Pick what you want to do each morning.
+                </Text>
+              </View>
+            </View>
+            {/* Ritual picker */}
             <Pressable
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setMeditationOpen(v => !v);
               }}
-              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, borderBottomWidth: meditationOpen ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.7 : 1 }]}
             >
               <IconSymbol name="moon.stars.fill" size={16} color={colors.muted} />
               <View style={{ flex: 1 }}>
-                <Text style={[em.dropdownLabel, { color: colors.muted }]}>After Alarm</Text>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Choose Practice</Text>
                 <Text style={[em.dropdownValue, { color: colors.foreground }]}>
                   {meditationId
                     ? `${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.emoji ?? ''} ${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.label ?? ''}`
-                    : '🚫 None'}
+                    : '🚫 None — skip this step'}
                 </Text>
               </View>
               <IconSymbol name={meditationOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
             </Pressable>
             {meditationOpen && (
-              <View style={[em.dropdownContent, { borderBottomColor: colors.border }]}>
+              <View style={[em.dropdownContent, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
                 <Pressable
                   onPress={() => {
                     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -332,7 +407,7 @@ function AlarmEditModal({
                   <Text style={em.itemEmoji}>🚫</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={[em.dropdownItemText, { color: !meditationId ? ALARM_COLOR : colors.foreground }]}>None</Text>
-                    <Text style={[em.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
+                    <Text style={[em.meditationDesc, { color: colors.muted }]}>Skip this step entirely</Text>
                   </View>
                   {!meditationId && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
                 </Pressable>
@@ -397,46 +472,13 @@ function AlarmEditModal({
                 })}
               </View>
             )}
-
-            {/* Snooze Duration */}
-            <View style={[em.dropdownRow, { borderBottomColor: colors.border }]}>
-              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
-              <View style={{ flex: 1 }}>
-                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Snooze Duration</Text>
-                <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                  How long to snooze when alarm is dismissed
-                </Text>
-              </View>
-            </View>
-            <View style={[em.chipRow, { borderBottomColor: colors.border }]}>
-              {[5, 10, 15, 20, 30].map((mins) => (
-                <Pressable
-                  key={mins}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSnoozeMinutes(mins);
-                  }}
-                  style={({ pressed }) => [{
-                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
-                    borderColor: snoozeMinutes === mins ? ALARM_COLOR : colors.border,
-                    backgroundColor: snoozeMinutes === mins ? ALARM_COLOR + '18' : 'transparent',
-                    opacity: pressed ? 0.7 : 1,
-                  }]}
-                >
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: snoozeMinutes === mins ? ALARM_COLOR : colors.muted }}>
-                    {mins} min
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Require Check-in */}
-            <View style={[em.dropdownRow, { borderBottomWidth: 0 }]}>
+            {/* Require Check-in toggle inside Step 3 */}
+            <View style={[em.dropdownRow, { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: 0 }]}>
               <IconSymbol name="lock.fill" size={16} color={colors.muted} />
               <View style={{ flex: 1 }}>
-                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Require Check-in to Unlock App</Text>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Require Check-in to Dismiss</Text>
                 <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                  Block app access until yesterday's check-in is complete
+                  Must complete journal before the alarm screen closes
                 </Text>
               </View>
               <Switch
@@ -540,6 +582,12 @@ const em = StyleSheet.create({
   confirmText: { flex: 1, fontSize: 14 },
   confirmYes: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
   confirmNo:  { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  groupSubLabel: { fontSize: 12, marginTop: -4, marginBottom: 10, paddingHorizontal: 4, lineHeight: 17 },
+  stepHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  stepBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  stepNum: { fontSize: 14, fontWeight: '800' },
+  stepTitle: { fontSize: 15, fontWeight: '700', marginBottom: 3 },
+  stepDesc: { fontSize: 12, lineHeight: 17 },
 });
 
 // ─── Alarm Card ───────────────────────────────────────────────────────────────

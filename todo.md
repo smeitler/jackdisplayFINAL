@@ -1393,3 +1393,6 @@
 - [x] Home screen alarms: 1-2 alarms = full-width stacked cards; 3-4 alarms = 2x2 grid (square widget layout, half-width each)
 - [x] Home screen alarm grid cards: show compact day chips below the time (same as full-width cards)
 - [x] Skip morning pending check-in banner/prompt if the previous day's journal/check-in is already complete
+- [x] Alarm edit modal: move snooze duration selector above label field; remove 30-min option; default to 5 min
+- [x] Alarm edit modal: rewrite ritual setup as a clear numbered sequence (Step 1 Alarm → Step 2 Journal → Step 3 Ritual) with plain-English explanations
+- [x] Alarm screen: snooze button adds incremental time (tap again to add more snooze time)

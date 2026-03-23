@@ -310,7 +310,10 @@ export default function AlarmPreviewScreen() {
   const [submitted, setSubmitted] = useState(false);
 
   const requireCheckin = alarm.requireCheckin ?? false;
-  const snoozeMinutes = alarm.snoozeMinutes ?? 10;
+  const baseSnoozeMinutes = alarm.snoozeMinutes ?? 5;
+  // Incremental snooze: each tap adds baseSnoozeMinutes more time
+  const [snoozeAdded, setSnoozeAdded] = useState(0);
+  const totalSnoozeMinutes = baseSnoozeMinutes + snoozeAdded;
 
   const habitsByCategory = useMemo(() => {
     const map: Record<string, typeof activeHabits> = {};
@@ -601,22 +604,40 @@ export default function AlarmPreviewScreen() {
         )}
 
         {/* Snooze button — only shown when requireCheckin is off */}
+        {/* Tap once to snooze; tap again to add more time before it fires */}
         {!requireCheckin && (
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.back();
-            }}
-            style={({ pressed }) => [
-              styles.snoozeBtn,
-              { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
-            <Text style={[styles.snoozeBtnText, { color: colors.muted }]}>
-              Snooze {snoozeMinutes} min
-            </Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.back();
+              }}
+              style={({ pressed }) => [
+                styles.snoozeBtn,
+                { flex: 1, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
+              <Text style={[styles.snoozeBtnText, { color: colors.muted }]}>
+                Snooze {totalSnoozeMinutes} min
+              </Text>
+            </Pressable>
+            {/* +N min tap to add more snooze time */}
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSnoozeAdded(prev => prev + baseSnoozeMinutes);
+              }}
+              style={({ pressed }) => [{
+                paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1,
+                borderColor: colors.border, backgroundColor: colors.surface,
+                alignItems: 'center', justifyContent: 'center',
+                opacity: pressed ? 0.7 : 1,
+              }]}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted }}>+{baseSnoozeMinutes}m</Text>
+            </Pressable>
+          </View>
         )}
 
         <Pressable
