@@ -4,7 +4,7 @@ import {
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
   Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard, PanResponder,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -2601,6 +2601,18 @@ export default function JournalScreen() {
       setLoading(false);
     })();
   }, []);
+
+  // Refresh entries whenever the screen comes back into focus (e.g. after voice check-in saves).
+  // This ensures voice log entries written by voice-checkin.tsx appear immediately in the card.
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      loadEntries(userId).then((loaded) => {
+        loaded.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setEntries(loaded);
+      }).catch(() => {/* silent */});
+    }, [userId])
+  );
 
   async function handleSaveEntry(entry: JournalEntry) {
     const isNew = !entries.find((e) => e.id === entry.id);
