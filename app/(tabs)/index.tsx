@@ -662,7 +662,7 @@ function AlarmCardFull({
           onPress={(e) => { e.stopPropagation(); onToggle(); }}
           style={({ pressed }) => [{
             width: 44, height: 26, borderRadius: 13,
-            backgroundColor: alarm.isEnabled ? colors.primary : colors.border,
+            backgroundColor: alarm.isEnabled ? '#4ade80' : colors.border,
             justifyContent: 'center', paddingHorizontal: 2,
             opacity: pressed ? 0.8 : 1,
           }]}
@@ -729,7 +729,7 @@ function AlarmCardGrid({
           onPress={(e) => { e.stopPropagation(); onToggle(); }}
           style={({ pressed }) => [{
             width: 36, height: 22, borderRadius: 11,
-            backgroundColor: alarm.isEnabled ? colors.primary : colors.border,
+            backgroundColor: alarm.isEnabled ? '#4ade80' : colors.border,
             justifyContent: 'center', paddingHorizontal: 2,
             opacity: pressed ? 0.8 : 1,
           }]}
@@ -1947,7 +1947,7 @@ const styles = StyleSheet.create({
   },
   alarmDot: { width: 8, height: 8, borderRadius: 4 },
   alarmLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.1 },
-  alarmTimeLarge: { fontSize: 36, fontWeight: '800', letterSpacing: -1.5, lineHeight: 40 },
+  alarmTimeLarge: { fontSize: 46, fontWeight: '800', letterSpacing: -2, lineHeight: 50 },
   alarmDayChips: { flexDirection: 'row', gap: 4, marginTop: 6 },
   alarmDayChip: { width: 22, height: 22, borderRadius: 7, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   alarmDayChipText: { fontSize: 10, fontWeight: '700' },
@@ -1959,7 +1959,7 @@ const styles = StyleSheet.create({
     width: '47.5%',
     minHeight: 110,
   },
-  alarmTimeGrid: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, lineHeight: 26 },
+  alarmTimeGrid: { fontSize: 28, fontWeight: '800', letterSpacing: -1, lineHeight: 32 },
   alarmDayChipGrid: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Section header
