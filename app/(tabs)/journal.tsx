@@ -2462,9 +2462,10 @@ function FullScreenJournalEditor({
         <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' }} />
         </View>
-        {/* Top navigation bar */}
+        {/* Top navigation bar — checkmark lives here, inside safe area */}
         <View style={fsStyles.topBar}>
-          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginLeft: 40 }}>Journal Entry</Text>
+          <View style={{ width: 40 }} />
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>Journal Entry</Text>
           <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { backgroundColor: colors?.primary ?? '#6C63FF', opacity: pressed ? 0.8 : 1 }]}>
             <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
@@ -2477,8 +2478,9 @@ function FullScreenJournalEditor({
         >
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ padding: 20, paddingBottom: photos.length > 0 ? 8 : 40 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: photos.length > 0 ? 8 : 60 }}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
           >
             <TextInput
               ref={inputRef}
