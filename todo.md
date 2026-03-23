@@ -1399,3 +1399,4 @@
 - [x] Home screen alarm cards: redesign to match Meditate/Sleep/Move/Focus card aesthetic (dark rounded, clean icon, softer typography)
 - [x] Alarm cards: replace emoji icons with a green (on) / red (off) status circle
 - [x] Alarm cards: remove status dot/badge, make time very large at top, keep only toggle + label + day chips
+- [x] Home screen: move Meditate/Sleep/Move/Focus wellness grid to the top, above the alarms section

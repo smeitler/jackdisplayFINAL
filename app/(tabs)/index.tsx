@@ -1143,9 +1143,6 @@ export default function HomeScreen() {
             </Pressable>
           )}
 
-          {/* ── Alarms section (up to 4) ── */}
-          <AlarmsSection colors={colors} router={router} formatAlarmTime={formatAlarmTime} />
-
           {/* ── Wellness Audio Grid (2×2) ── */}
           <View style={styles.wellnessGrid}>
             {[
@@ -1175,6 +1172,9 @@ export default function HomeScreen() {
               </Pressable>
             ))}
           </View>
+
+          {/* ── Alarms section (up to 4) ── */}
+          <AlarmsSection colors={colors} router={router} formatAlarmTime={formatAlarmTime} />
 
           {/* ── Stats row ── */}
           <View style={styles.statsRow}>
