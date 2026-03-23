@@ -7,7 +7,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId, loadVisionBoard, saveVisionBoard, VisionBoard, loadVisionMotivations, saveVisionMotivations, VisionMotivations } from "@/lib/storage";
+import { yesterdayString, formatDisplayDate, LIFE_AREAS, Habit, toDateString, getLastUserId, loadVisionBoard, saveVisionBoard, VisionBoard, loadVisionMotivations, saveVisionMotivations, VisionMotivations, AlarmEntry, MAX_ALARMS } from "@/lib/storage";
 import { JournalEntry, loadEntries, todayDateStr } from "@/lib/journal-store";
 import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
@@ -626,6 +626,140 @@ function MissedDaysModal({
   );
 }
 
+// ── Alarms Section ─────────────────────────────────────────────────────────────
+
+function AlarmsSection({
+  colors,
+  router,
+  formatAlarmTime,
+}: {
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+  router: ReturnType<typeof import('expo-router').useRouter>;
+  formatAlarmTime: (h: number, m: number) => string;
+}) {
+  const { alarms, updateAlarms } = useApp();
+
+  const DAY_LABELS = ['M','T','W','T','F','S','S'];
+  const DAY_MAP = [1,2,3,4,5,6,0];
+
+  async function toggleAlarm(id: string) {
+    const updated = alarms.map((a) =>
+      a.id === id ? { ...a, isEnabled: !a.isEnabled } : a
+    );
+    await updateAlarms(updated);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
+  async function addAlarm() {
+    if (alarms.length >= MAX_ALARMS) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    router.push('/you-settings' as never);
+  }
+
+  return (
+    <View style={{ marginBottom: 24 }}>
+      {/* Section header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Alarms</Text>
+        {alarms.length < MAX_ALARMS ? (
+          <Pressable
+            onPress={addAlarm}
+            style={({ pressed }) => [{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              paddingHorizontal: 10, paddingVertical: 5,
+              borderRadius: 10, borderWidth: 1,
+              borderColor: colors.primary,
+              backgroundColor: pressed ? colors.primary + '20' : 'transparent',
+            }]}
+          >
+            <Text style={{ fontSize: 16, color: colors.primary, lineHeight: 18 }}>+</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Add</Text>
+          </Pressable>
+        ) : (
+          <Text style={{ fontSize: 11, color: colors.muted }}>Max 4 — disable one to add</Text>
+        )}
+      </View>
+
+      {/* Alarm cards */}
+      {alarms.length === 0 ? (
+        <Pressable
+          onPress={() => router.push('/you-settings' as never)}
+          style={({ pressed }) => [styles.alarmStrip, {
+            backgroundColor: colors.surface, borderColor: colors.border,
+            opacity: pressed ? 0.8 : 1, justifyContent: 'center', alignItems: 'center',
+          }]}
+        >
+          <Text style={{ fontSize: 13, color: colors.muted }}>No alarms set — tap to configure</Text>
+        </Pressable>
+      ) : (
+        <View style={{ gap: 10 }}>
+          {alarms.map((alarm) => (
+            <Pressable
+              key={alarm.id}
+              onPress={() => router.push('/you-settings' as never)}
+              style={({ pressed }) => [styles.alarmStrip, {
+                backgroundColor: colors.surface,
+                borderColor: alarm.isEnabled ? colors.primary + '50' : colors.border,
+                opacity: pressed ? 0.8 : 1,
+              }]}
+            >
+              <View style={{ flex: 1 }}>
+                {/* Label row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
+                  <Text style={[styles.alarmLabel, { color: colors.muted }]}>
+                    {alarm.label ?? (alarm.isEnabled ? 'Alarm set' : 'Alarm off')}
+                  </Text>
+                </View>
+                {/* Time */}
+                <Text style={[styles.alarmTimeLarge, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
+                  {formatAlarmTime(alarm.hour, alarm.minute)}
+                </Text>
+                {/* Day chips */}
+                {alarm.days && alarm.days.length > 0 && (
+                  <View style={styles.alarmDayChips}>
+                    {DAY_LABELS.map((d, i) => {
+                      const active = alarm.days!.includes(DAY_MAP[i]);
+                      return (
+                        <View key={i} style={[styles.alarmDayChip, {
+                          backgroundColor: active ? colors.primary + '25' : 'transparent',
+                          borderColor: active ? colors.primary : colors.border,
+                        }]}>
+                          <Text style={[styles.alarmDayChipText, { color: active ? colors.primary : colors.muted }]}>{d}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+              {/* Toggle */}
+              <Pressable
+                onPress={(e) => { e.stopPropagation(); toggleAlarm(alarm.id); }}
+                style={({ pressed }) => [{
+                  width: 44, height: 26, borderRadius: 13,
+                  backgroundColor: alarm.isEnabled ? colors.primary : colors.border,
+                  justifyContent: 'center',
+                  paddingHorizontal: 2,
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+              >
+                <View style={[{
+                  width: 22, height: 22, borderRadius: 11,
+                  backgroundColor: '#fff',
+                  shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+                  alignSelf: alarm.isEnabled ? 'flex-end' : 'flex-start',
+                }]} />
+              </Pressable>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ── Home Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -885,47 +1019,8 @@ export default function HomeScreen() {
             </Pressable>
           )}
 
-          {/* ── Alarm strip ── */}
-          <Pressable
-            onPress={() => router.push('/you-settings' as never)}
-            style={({ pressed }) => [
-              styles.alarmStrip,
-              { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
-                <Text style={[styles.alarmLabel, { color: colors.muted }]}>
-                  {alarm.isEnabled ? 'Alarm set' : 'Alarm off'}
-                </Text>
-              </View>
-              <Text style={[styles.alarmTimeLarge, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
-                {alarm.isEnabled ? formatAlarmTime(alarm.hour, alarm.minute) : '—'}
-              </Text>
-              {alarm.isEnabled && alarm.days && alarm.days.length > 0 && (
-                <View style={styles.alarmDayChips}>
-                  {['M','T','W','T','F','S','S'].map((d, i) => {
-                    const dayMap = [1,2,3,4,5,6,0];
-                    const active = alarm.days!.includes(dayMap[i]);
-                    return (
-                      <View key={i} style={[
-                        styles.alarmDayChip,
-                        { backgroundColor: active ? colors.primary + '25' : 'transparent',
-                          borderColor: active ? colors.primary : colors.border },
-                      ]}>
-                        <Text style={[styles.alarmDayChipText, { color: active ? colors.primary : colors.muted }]}>{d}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-            <View style={{ alignItems: 'flex-end', gap: 4 }}>
-              <Text style={[styles.alarmEdit, { color: colors.primary }]}>Edit</Text>
-              <IconSymbol name="chevron.right" size={14} color={colors.muted} />
-            </View>
-          </Pressable>
+          {/* ── Alarms section (up to 4) ── */}
+          <AlarmsSection colors={colors} router={router} formatAlarmTime={formatAlarmTime} />
 
           {/* ── Wellness Audio Grid (2×2) ── */}
           <View style={styles.wellnessGrid}>

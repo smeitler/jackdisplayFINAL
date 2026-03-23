@@ -165,6 +165,41 @@ export const DEFAULT_HABITS: Habit[] = [
   { id: 'sp2', name: 'Prayer or reflection',     emoji: '✨', category: 'spirituality',  isActive: true, order: 1, createdAt: new Date().toISOString() },
 ];
 
+// ─── Multi-alarm ─────────────────────────────────────────────────────────────
+
+/** A named alarm slot — extends AlarmConfig with a unique id and display label */
+export type AlarmEntry = AlarmConfig & {
+  id: string;       // unique identifier, e.g. 'alarm_1'
+  label?: string;   // optional user-facing name, e.g. 'Morning'
+};
+
+export const MAX_ALARMS = 4;
+
+const ALARMS_KEY = 'daycheck:alarms';
+
+/** Load all alarms. Migrates the legacy single alarm on first run. */
+export async function loadAlarms(): Promise<AlarmEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(ALARMS_KEY);
+    if (raw) return JSON.parse(raw) as AlarmEntry[];
+    // Migration: convert legacy single alarm to array
+    const legacy = await AsyncStorage.getItem('daycheck:alarm');
+    if (legacy) {
+      const single = JSON.parse(legacy) as AlarmConfig;
+      const entry: AlarmEntry = { ...single, id: 'alarm_1', label: 'Morning' };
+      await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify([entry]));
+      return [entry];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveAlarms(alarms: AlarmEntry[]): Promise<void> {
+  await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(alarms));
+}
+
 export const DEFAULT_ALARM: AlarmConfig = {
   hour: 8,
   minute: 0,

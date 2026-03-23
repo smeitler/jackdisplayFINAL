@@ -7,6 +7,8 @@ import {
   loadCheckIns, saveCheckIns,
   deleteCheckInsForHabit as localDeleteCheckInsForHabit,
   loadAlarm, saveAlarm,
+  loadAlarms, saveAlarms,
+  AlarmEntry, MAX_ALARMS,
   loadCategories, saveCategories,
   getLastCheckInDate,
   yesterdayString,
@@ -36,6 +38,7 @@ type AppState = {
   categories: CategoryDef[];
   checkIns: CheckInEntry[];
   alarm: AlarmConfig;
+  alarms: AlarmEntry[];   // multi-alarm list (max 4)
   lastCheckInDate: string | null;
   isLoaded: boolean;
   isSyncing: boolean;
@@ -49,6 +52,7 @@ type Action =
   | { type: 'SET_CATEGORIES'; categories: CategoryDef[] }
   | { type: 'SET_CHECKINS'; checkIns: CheckInEntry[] }
   | { type: 'SET_ALARM'; alarm: AlarmConfig }
+  | { type: 'SET_ALARMS'; alarms: AlarmEntry[] }
   | { type: 'SET_LAST_CHECKIN'; date: string }
   | { type: 'SET_SYNCING'; syncing: boolean };
 
@@ -64,6 +68,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, checkIns: action.checkIns };
     case 'SET_ALARM':
       return { ...state, alarm: action.alarm };
+    case 'SET_ALARMS':
+      return { ...state, alarms: action.alarms };
     case 'SET_LAST_CHECKIN':
       return { ...state, lastCheckInDate: action.date };
     case 'SET_SYNCING':
@@ -78,6 +84,7 @@ function reducer(state: AppState, action: Action): AppState {
 const initialState: AppState = {
   habits: [],
   categories: DEFAULT_CATEGORIES,
+  alarms: [],
   checkIns: [],
   alarm: DEFAULT_ALARM,
   lastCheckInDate: null,
@@ -153,6 +160,8 @@ type AppContextValue = AppState & {
   reorderAllHabits: (habits: Habit[]) => Promise<void>;
   submitCheckIn: (date: string, ratingsMap: Record<string, Rating>) => Promise<void>;
   updateAlarm: (config: AlarmConfig) => Promise<void>;
+  alarms: AlarmEntry[];
+  updateAlarms: (alarms: AlarmEntry[]) => Promise<void>;
   isPendingCheckIn: boolean;
   activeHabits: Habit[];
   getEntriesForDate: (date: string) => CheckInEntry[];
@@ -199,14 +208,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 1. Load from local cache immediately for fast startup
-      const [localHabits, localCategories, localCheckIns, localAlarm, lastCheckInDate] = await Promise.all([
+      const [localHabits, localCategories, localCheckIns, localAlarm, localAlarms, lastCheckInDate] = await Promise.all([
         loadHabits(),
         loadCategories(),
         loadCheckIns(),
         loadAlarm(),
+        loadAlarms(),
         getLastCheckInDate(),
       ]);
       dispatch({ type: 'LOADED', habits: localHabits, categories: localCategories, checkIns: localCheckIns, alarm: localAlarm, lastCheckInDate });
+      dispatch({ type: 'SET_ALARMS', alarms: localAlarms });
 
       // 2. Try to fetch server data — if it succeeds, user is authenticated
       dispatch({ type: 'SET_SYNCING', syncing: true });
@@ -703,6 +714,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [utils]);
 
+  const updateAlarms = useCallback(async (alarms: AlarmEntry[]) => {
+    // Enforce max 4 alarms
+    const capped = alarms.slice(0, MAX_ALARMS);
+    await saveAlarms(capped);
+    dispatch({ type: 'SET_ALARMS', alarms: capped });
+    // Apply notifications for all enabled alarms
+    for (const a of capped) {
+      if (a.isEnabled) {
+        await applyAlarm(a);
+      }
+    }
+  }, []);
+
   // ── Derived values ─────────────────────────────────────────────────────────
 
   // Sort by globalOrder when set, otherwise fall back to per-category order
@@ -914,7 +938,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...state,
       addHabit, updateHabit, deleteHabit,
       addCategory, updateCategory, deleteCategory, reorderCategories, reorderHabits, reorderAllHabits,
-      submitCheckIn, updateAlarm,
+      submitCheckIn, updateAlarm, updateAlarms,
       isPendingCheckIn, activeHabits,
       getEntriesForDate, getRatingsForDate,
       getCategoryRate, getCategoryBreakdown, getHabitWeeklyDone, getHabitMonthlyDone,

@@ -1376,3 +1376,8 @@
 - [x] Journal card: timestamp separators now use 🎙/✏️ emoji + time headers and ─── dividers; visible as styled text
 - [x] Journal card: now shows ALL day entries combined with timestamp headers; read-only when multiple entries (tap to expand)
 - [x] Calendar photos: fixed overflow:hidden on Pressable causing black images — ExpoImage wrapped in its own View with borderRadius+overflow:hidden
+
+- [x] Multi-alarm support: upgrade storage to AlarmEntry array (max 4), migrate legacy single alarm
+- [x] Home screen: replace single alarm strip with AlarmsSection showing up to 4 alarm cards
+- [x] Alarm cards: show label, time, day chips, and inline toggle switch
+- [x] Enforce 4-alarm limit: show "Max 4 — disable one to add" when full
