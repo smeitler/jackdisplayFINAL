@@ -654,11 +654,14 @@ function AlarmCardFull({
         transform: [{ scale: pressed ? 0.985 : 1 }],
       }]}
     >
-      {/* Left: icon badge */}
+      {/* Left: status circle */}
       <View style={[styles.alarmIconBadge, {
-        backgroundColor: alarm.isEnabled ? colors.primary + '18' : colors.border + '40',
+        backgroundColor: alarm.isEnabled ? '#4ade8022' : '#ef444422',
       }]}>
-        <Text style={{ fontSize: 22 }}>{alarm.isEnabled ? '⏰' : '🔕'}</Text>
+        <View style={{
+          width: 14, height: 14, borderRadius: 7,
+          backgroundColor: alarm.isEnabled ? '#4ade80' : '#ef4444',
+        }} />
       </View>
       {/* Center: time + label + days */}
       <View style={{ flex: 1 }}>
@@ -729,9 +732,12 @@ function AlarmCardGrid({
       {/* Top: icon + toggle */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <View style={[styles.alarmIconBadgeSmall, {
-          backgroundColor: alarm.isEnabled ? colors.primary + '18' : colors.border + '40',
+          backgroundColor: alarm.isEnabled ? '#4ade8022' : '#ef444422',
         }]}>
-          <Text style={{ fontSize: 16 }}>{alarm.isEnabled ? '⏰' : '🔕'}</Text>
+          <View style={{
+            width: 10, height: 10, borderRadius: 5,
+            backgroundColor: alarm.isEnabled ? '#4ade80' : '#ef4444',
+          }} />
         </View>
         <Pressable
           onPress={(e) => { e.stopPropagation(); onToggle(); }}
