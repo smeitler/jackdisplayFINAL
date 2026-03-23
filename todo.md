@@ -1398,3 +1398,4 @@
 - [x] Alarm screen: snooze button adds incremental time (tap again to add more snooze time)
 - [x] Home screen alarm cards: redesign to match Meditate/Sleep/Move/Focus card aesthetic (dark rounded, clean icon, softer typography)
 - [x] Alarm cards: replace emoji icons with a green (on) / red (off) status circle
+- [x] Alarm cards: remove status dot/badge, make time very large at top, keep only toggle + label + day chips
