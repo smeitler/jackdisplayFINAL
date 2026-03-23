@@ -2482,9 +2482,10 @@ function FullScreenJournalEditor({
         >
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ padding: 20, paddingBottom: photos.length > 0 ? 8 : 60 }}
+            contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: photos.length > 0 ? 80 : 120 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
+            alwaysBounceVertical
           >
             <TextInput
               ref={inputRef}
@@ -2542,7 +2543,9 @@ const fsStyles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   topBarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   checkBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 400, padding: 0 },
+  // minHeight ensures short entries still fill the screen; no maxHeight so it grows with content.
+  // ScrollView (not TextInput) handles scrolling — scrollEnabled must stay false on TextInput.
+  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 500, padding: 0 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 });
