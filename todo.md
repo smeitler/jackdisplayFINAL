@@ -1396,3 +1396,4 @@
 - [x] Alarm edit modal: move snooze duration selector above label field; remove 30-min option; default to 5 min
 - [x] Alarm edit modal: rewrite ritual setup as a clear numbered sequence (Step 1 Alarm → Step 2 Journal → Step 3 Ritual) with plain-English explanations
 - [x] Alarm screen: snooze button adds incremental time (tap again to add more snooze time)
+- [x] Home screen alarm cards: redesign to match Meditate/Sleep/Move/Focus card aesthetic (dark rounded, clean icon, softer typography)

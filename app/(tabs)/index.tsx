@@ -643,24 +643,30 @@ function AlarmCardFull({
   onToggle: () => void;
   onPress: () => void;
 }) {
+  const accentColor = alarm.isEnabled ? colors.primary : colors.muted;
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.alarmStrip, {
         backgroundColor: colors.surface,
-        borderColor: alarm.isEnabled ? colors.primary + '50' : colors.border,
-        opacity: pressed ? 0.8 : 1,
+        borderColor: alarm.isEnabled ? colors.primary + '30' : colors.border,
+        opacity: pressed ? 0.85 : 1,
+        transform: [{ scale: pressed ? 0.985 : 1 }],
       }]}
     >
+      {/* Left: icon badge */}
+      <View style={[styles.alarmIconBadge, {
+        backgroundColor: alarm.isEnabled ? colors.primary + '18' : colors.border + '40',
+      }]}>
+        <Text style={{ fontSize: 22 }}>{alarm.isEnabled ? '⏰' : '🔕'}</Text>
+      </View>
+      {/* Center: time + label + days */}
       <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
-          <Text style={[styles.alarmLabel, { color: colors.muted }]}>
-            {alarm.label ?? (alarm.isEnabled ? 'Alarm set' : 'Alarm off')}
-          </Text>
-        </View>
         <Text style={[styles.alarmTimeLarge, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
           {formatAlarmTime(alarm.hour, alarm.minute)}
+        </Text>
+        <Text style={[styles.alarmLabel, { color: accentColor, marginTop: 1 }]} numberOfLines={1}>
+          {alarm.label ?? (alarm.isEnabled ? 'Alarm on' : 'Alarm off')}
         </Text>
         {alarm.days && alarm.days.length > 0 && (
           <View style={styles.alarmDayChips}>
@@ -668,8 +674,8 @@ function AlarmCardFull({
               const active = alarm.days!.includes(DAY_MAP[i]);
               return (
                 <View key={i} style={[styles.alarmDayChip, {
-                  backgroundColor: active ? colors.primary + '25' : 'transparent',
-                  borderColor: active ? colors.primary : colors.border,
+                  backgroundColor: active ? colors.primary + '22' : 'transparent',
+                  borderColor: active ? colors.primary + '60' : colors.border,
                 }]}>
                   <Text style={[styles.alarmDayChipText, { color: active ? colors.primary : colors.muted }]}>{d}</Text>
                 </View>
@@ -678,6 +684,7 @@ function AlarmCardFull({
           </View>
         )}
       </View>
+      {/* Right: toggle */}
       <Pressable
         onPress={(e) => { e.stopPropagation(); onToggle(); }}
         style={({ pressed }) => [{
@@ -714,17 +721,17 @@ function AlarmCardGrid({
       onPress={onPress}
       style={({ pressed }) => [styles.alarmGridCard, {
         backgroundColor: colors.surface,
-        borderColor: alarm.isEnabled ? colors.primary + '50' : colors.border,
-        opacity: pressed ? 0.8 : 1,
+        borderColor: alarm.isEnabled ? colors.primary + '30' : colors.border,
+        opacity: pressed ? 0.85 : 1,
+        transform: [{ scale: pressed ? 0.97 : 1 }],
       }]}
     >
-      {/* Label + toggle row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <View style={[styles.alarmDot, { backgroundColor: alarm.isEnabled ? '#4ade80' : '#334155' }]} />
-          <Text style={[styles.alarmLabel, { color: colors.muted, fontSize: 11 }]} numberOfLines={1}>
-            {alarm.label ?? (alarm.isEnabled ? 'On' : 'Off')}
-          </Text>
+      {/* Top: icon + toggle */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <View style={[styles.alarmIconBadgeSmall, {
+          backgroundColor: alarm.isEnabled ? colors.primary + '18' : colors.border + '40',
+        }]}>
+          <Text style={{ fontSize: 16 }}>{alarm.isEnabled ? '⏰' : '🔕'}</Text>
         </View>
         <Pressable
           onPress={(e) => { e.stopPropagation(); onToggle(); }}
@@ -742,9 +749,13 @@ function AlarmCardGrid({
           }]} />
         </Pressable>
       </View>
-      {/* Time — compact size for grid */}
+      {/* Time */}
       <Text style={[styles.alarmTimeGrid, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
         {formatAlarmTime(alarm.hour, alarm.minute)}
+      </Text>
+      {/* Label */}
+      <Text style={[styles.alarmLabel, { color: alarm.isEnabled ? colors.primary : colors.muted, fontSize: 11, marginTop: 2 }]} numberOfLines={1}>
+        {alarm.label ?? (alarm.isEnabled ? 'Alarm on' : 'Alarm off')}
       </Text>
       {/* Day chips */}
       {alarm.days && alarm.days.length > 0 && (
@@ -753,8 +764,8 @@ function AlarmCardGrid({
             const active = alarm.days!.includes(DAY_MAP[i]);
             return (
               <View key={i} style={[styles.alarmDayChipGrid, {
-                backgroundColor: active ? colors.primary + '25' : 'transparent',
-                borderColor: active ? colors.primary : colors.border,
+                backgroundColor: active ? colors.primary + '22' : 'transparent',
+                borderColor: active ? colors.primary + '60' : colors.border,
               }]}>
                 <Text style={{ fontSize: 9, fontWeight: '700', color: active ? colors.primary : colors.muted }}>{d}</Text>
               </View>
@@ -1934,24 +1945,31 @@ const styles = StyleSheet.create({
 
   // Alarm strip
   alarmStrip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14,
     borderWidth: 1,
   },
+  alarmIconBadge: {
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  alarmIconBadgeSmall: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
   alarmDot: { width: 8, height: 8, borderRadius: 4 },
-  alarmLabel: { fontSize: 12, fontWeight: '500' },
-  alarmTimeLarge: { fontSize: 32, fontWeight: '800', letterSpacing: -1, lineHeight: 36 },
+  alarmLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.1 },
+  alarmTimeLarge: { fontSize: 30, fontWeight: '800', letterSpacing: -1, lineHeight: 34 },
   alarmDayChips: { flexDirection: 'row', gap: 4, marginTop: 6 },
-  alarmDayChip: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  alarmDayChip: { width: 22, height: 22, borderRadius: 7, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   alarmDayChipText: { fontSize: 10, fontWeight: '700' },
   alarmEdit: { fontSize: 13, fontWeight: '600' },
   alarmGridCard: {
     flexDirection: 'column',
-    borderRadius: 12, borderWidth: 1,
-    padding: 12,
-    // Each card takes exactly half the row minus half the gap (gap=10 → each card = (100%-10)/2)
+    borderRadius: 16, borderWidth: 1,
+    padding: 14,
     width: '47.5%',
-    minHeight: 90,
+    minHeight: 110,
   },
   alarmTimeGrid: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, lineHeight: 26 },
   alarmDayChipGrid: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
