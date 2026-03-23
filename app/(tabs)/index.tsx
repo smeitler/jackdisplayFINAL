@@ -653,9 +653,8 @@ function AlarmsSection({
   async function addAlarm() {
     if (alarms.length >= MAX_ALARMS) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      return;
     }
-    router.push('/you-settings' as never);
+    router.push('/alarms' as never);
   }
 
   return (
@@ -685,20 +684,20 @@ function AlarmsSection({
       {/* Alarm cards */}
       {alarms.length === 0 ? (
         <Pressable
-          onPress={() => router.push('/you-settings' as never)}
+          onPress={() => router.push('/alarms' as never)}
           style={({ pressed }) => [styles.alarmStrip, {
             backgroundColor: colors.surface, borderColor: colors.border,
             opacity: pressed ? 0.8 : 1, justifyContent: 'center', alignItems: 'center',
           }]}
         >
-          <Text style={{ fontSize: 13, color: colors.muted }}>No alarms set — tap to configure</Text>
+          <Text style={{ fontSize: 13, color: colors.muted }}>No alarms set — tap to add one</Text>
         </Pressable>
       ) : (
         <View style={{ gap: 10 }}>
           {alarms.map((alarm) => (
             <Pressable
               key={alarm.id}
-              onPress={() => router.push('/you-settings' as never)}
+              onPress={() => router.push('/alarms' as never)}
               style={({ pressed }) => [styles.alarmStrip, {
                 backgroundColor: colors.surface,
                 borderColor: alarm.isEnabled ? colors.primary + '50' : colors.border,

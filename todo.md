@@ -1381,3 +1381,9 @@
 - [x] Home screen: replace single alarm strip with AlarmsSection showing up to 4 alarm cards
 - [x] Alarm cards: show label, time, day chips, and inline toggle switch
 - [x] Enforce 4-alarm limit: show "Max 4 — disable one to add" when full
+- [x] Build dedicated full-screen Alarms panel (modal, like Meditate/Sleep/Move/Focus panels)
+- [x] Alarms panel: list all alarms with toggle, time, day chips, edit and delete per alarm
+- [x] Alarms panel: Add Alarm bottom sheet with time picker (hour/minute scroll wheels) and day toggles
+- [x] Alarms panel: Edit existing alarm (same sheet pre-filled)
+- [x] Alarms panel: Delete alarm with confirmation
+- [x] Home screen Alarms section: "+  Add" and alarm card taps open the new Alarms panel (not Settings)

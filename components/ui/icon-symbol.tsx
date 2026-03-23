@@ -59,6 +59,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "photo.stack.fill": "photo-library",
   "sparkles": "auto-awesome",
   "alarm.fill": "alarm",
+  "alarm": "alarm",
   "arrow.right.circle.fill": "arrow-circle-right",
   "arrow.up.arrow.down": "swap-vert",
   "line.3.horizontal": "drag-handle",
