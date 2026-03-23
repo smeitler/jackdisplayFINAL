@@ -1176,20 +1176,6 @@ export default function HomeScreen() {
           {/* ── Alarms section (up to 4) ── */}
           <AlarmsSection colors={colors} router={router} formatAlarmTime={formatAlarmTime} />
 
-          {/* ── Stats row ── */}
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
-              <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
-              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{streak}</Text>
-              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Streak</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
-              <IconSymbol name="calendar" size={16} color={isCalm ? '#F5A623' : colors.primary} />
-              <Text style={[styles.statValue, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{totalDaysLogged}</Text>
-              <Text style={[styles.statLabel, { color: isCalm ? '#8B9CC8' : colors.muted }]}>Days Logged</Text>
-            </View>
-          </View>
-
           {/* ── Customizable Widgets ── */}
           <WidgetGrid
             widgetIds={widgetIds}
