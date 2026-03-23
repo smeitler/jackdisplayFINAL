@@ -2433,6 +2433,8 @@ function FullScreenJournalEditor({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const [toolbarHeight, setToolbarHeight] = useState(80);
+  // inputHeight grows with content so all text is visible inside the ScrollView
+  const [inputHeight, setInputHeight] = useState(500);
 
   // Sync value prop when entry changes
   useEffect(() => { setText(value); }, [value]);
@@ -2496,8 +2498,13 @@ function FullScreenJournalEditor({
               multiline
               placeholder={readOnly ? '' : 'Start writing...'}
               placeholderTextColor="rgba(255,255,255,0.3)"
+              onContentSizeChange={(e) => {
+                const h = e.nativeEvent.contentSize.height;
+                if (h > inputHeight) setInputHeight(h);
+              }}
               style={[
                 fsStyles.textInput,
+                { height: Math.max(inputHeight, 500) },
                 Platform.OS === 'web'
                   ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: readOnly ? 'transparent' : '#ffffff' } as any)
                   : {},
@@ -2544,9 +2551,9 @@ const fsStyles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   topBarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   checkBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  // minHeight ensures short entries still fill the screen; no maxHeight so it grows with content.
+  // No fixed height — height is set dynamically via onContentSizeChange so all text is visible.
   // ScrollView (not TextInput) handles scrolling — scrollEnabled must stay false on TextInput.
-  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', minHeight: 500, padding: 0 },
+  textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', padding: 0 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 });
