@@ -1392,3 +1392,4 @@
 - [x] Alarms panel: add per-alarm ritual setup settings (same fields as existing alarm settings)
 - [x] Home screen alarms: 1-2 alarms = full-width stacked cards; 3-4 alarms = 2x2 grid (square widget layout, half-width each)
 - [x] Home screen alarm grid cards: show compact day chips below the time (same as full-width cards)
+- [x] Skip morning pending check-in banner/prompt if the previous day's journal/check-in is already complete

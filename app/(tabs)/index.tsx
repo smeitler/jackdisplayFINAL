@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "rea
 import { useWindowDimensions } from "react-native";
 import { Animated } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
@@ -945,6 +946,21 @@ export default function HomeScreen() {
     return () => loop.stop();
   }, [coachPulse]);
 
+  // Track whether the user already completed a journal/check-in for yesterday
+  const [hasYesterdayEntry, setHasYesterdayEntry] = useState(false);
+
+  // Reload on every screen focus so it stays fresh after the user does their check-in
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const uid = await getLastUserId();
+        const loaded = await loadEntries(uid || 'default');
+        const yest = yesterdayString();
+        setHasYesterdayEntry(loaded.some((e) => e.date === yest));
+      })();
+    }, [])
+  );
+
   // Load profile picture — per-user key so switching accounts shows the right photo
   useEffect(() => {
     (async () => {
@@ -1088,7 +1104,8 @@ export default function HomeScreen() {
           </View>}
 
           {/* ── Today's Focus Card (only shown when there's something to do) ── */}
-          {(isPendingCheckIn || missedDates.length > 0) && (
+          {/* Suppressed if user already completed a journal entry for yesterday */}
+          {((isPendingCheckIn && !hasYesterdayEntry) || missedDates.length > 0) && (
             <Pressable
               onPress={() => {
                 if (missedDates.length > 0) {
