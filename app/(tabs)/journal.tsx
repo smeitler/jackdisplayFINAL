@@ -2486,9 +2486,10 @@ function FullScreenJournalEditor({
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: toolbarHeight + 24 }}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator
-            alwaysBounceVertical
+            directionalLockEnabled
+            canCancelContentTouches
           >
             <TextInput
               ref={inputRef}
