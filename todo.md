@@ -1369,3 +1369,4 @@
 - [x] Bottom sheet editor: fix top content cut off (safe area / drag handle spacing)
 - [x] Bottom sheet editor: add photo strip (drag-to-reorder + × delete) at bottom above toolbar
 - [x] Bottom sheet editor: wire photos prop so it shows current entry's photos
+- [x] Voice check-in: fixed habit ratings not showing on journal day-view — was using raw storage submitCheckIn (bypassed app context), now uses useApp().submitCheckIn which dispatches SET_CHECKINS to update in-memory state immediately

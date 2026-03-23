@@ -45,7 +45,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useApp } from "@/lib/app-context";
 import { trpc } from "@/lib/trpc";
 import { addEntry, generateId, todayDateStr } from "@/lib/journal-store";
-import { getLastUserId, submitCheckIn, loadDayNotes, saveDayNotes, type Rating } from "@/lib/storage";
+import { getLastUserId, loadDayNotes, saveDayNotes, type Rating } from "@/lib/storage";
 
 /// ─── Scrolling Waveform (iOS Voice Memos style) ─────────────────────────────
 // Renders a horizontal scrolling waveform with bars flowing left.
@@ -707,7 +707,7 @@ const cardStyles = StyleSheet.create({
 export default function VoiceCheckinScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { habits, activeHabits, categories } = useApp();
+  const { habits, activeHabits, categories, submitCheckIn: appSubmitCheckIn } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const habitsByCategory = useMemo(() => {
     const map: Record<string, typeof activeHabits> = {};
@@ -1025,7 +1025,10 @@ export default function VoiceCheckinScreen() {
         if (rating && rating !== 'none') ratingsMap[habitId] = rating as Rating;
       }
       if (Object.keys(ratingsMap).length > 0) {
-        await submitCheckIn(today, ratingsMap, allHabitIds);
+        // Use the app-context submitCheckIn so it dispatches SET_CHECKINS and updates
+        // the in-memory state immediately — the journal day-view will see the new ratings
+        // without requiring an app restart.
+        await appSubmitCheckIn(today, ratingsMap);
       }
 
       // 2. Save AI-generated habit notes (descriptions) so journal day-view can display them
@@ -1078,7 +1081,7 @@ export default function VoiceCheckinScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [results, habits, router, vcRatings, editedTranscript]);
+  }, [results, habits, router, vcRatings, editedTranscript, appSubmitCheckIn]);
 
   const handleTryAgain = useCallback(() => {
     setResults(null);
