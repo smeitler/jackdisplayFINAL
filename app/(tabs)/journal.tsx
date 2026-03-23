@@ -2821,20 +2821,21 @@ export default function JournalScreen() {
       return;
     }
     // Primary entry = first non-voice entry (editable), or first voice entry if no manual entry exists.
-    // This is the entry that receives edits from the inline card TextInput.
     const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'))
       ?? dayEntries[0];
     dvPrimaryEntryId.current = primaryEntry.id;
 
-    // Collect all gratitudes across all entries for the day
     const allGratItems: string[] = [];
     const bodyParts: string[] = [];
 
-    // Sort entries oldest-first so they appear in chronological order
+    // Sort entries oldest-first
     const sorted = [...dayEntries].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     for (const entry of sorted) {
       const body = entry.body || '';
+      const isVoice = entry.tags?.includes('voice');
+
+      // Strip gratitude section from the bottom
       const gratIdx = body.indexOf('\n\n🙏 Grateful for:');
       const mainBody = (gratIdx >= 0 ? body.slice(0, gratIdx).trim() : body.trim()).replace(/^# /, '');
       const gratRaw = gratIdx >= 0 ? body.slice(gratIdx + 2).trim() : '';
@@ -2842,20 +2843,56 @@ export default function JournalScreen() {
       const items = rawLines.map((l) => l.replace(/^\d+\.\s*/, '').replace(/^[-•]\s*/, '').trim()).filter(Boolean);
       items.forEach((it) => { if (!allGratItems.includes(it)) allGratItems.push(it); });
 
-      // Add a timestamp header for each entry so the user can see when each was written
-      const timeLabel = new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      const isVoice = entry.tags?.includes('voice');
-      const entryHeader = isVoice ? `🎙 ${timeLabel}` : `✏️ ${timeLabel}`;
-      if (mainBody) {
-        bodyParts.push(`${entryHeader}\n${mainBody}`);
+      if (!mainBody) continue;
+
+      // Voice entries may contain multiple check-ins appended with ── HH:MM AM ── separators.
+      // Split on those separators so each segment gets its own header instead of one header
+      // covering the entire blob (which caused duplicate-looking headers).
+      const SEPARATOR_RE = /\n{0,2}──\s+([\d:]+\s*[APap][Mm])\s+──\n{0,2}/g;
+      const segments: Array<{ time: string; text: string }> = [];
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      // First segment uses the entry's own createdAt time
+      const firstTimeLabel = new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      while ((match = SEPARATOR_RE.exec(mainBody)) !== null) {
+        const segText = mainBody.slice(lastIndex, match.index).trim();
+        if (segText) segments.push({ time: segments.length === 0 ? firstTimeLabel : segments[segments.length - 1].time, text: segText });
+        // The separator itself contains the time for the NEXT segment
+        segments.push({ time: match[1], text: '' }); // placeholder — filled by next iteration
+        lastIndex = match.index + match[0].length;
+      }
+      // Remaining text after last separator
+      const tail = mainBody.slice(lastIndex).trim();
+
+      if (segments.length === 0) {
+        // No separators — single segment
+        const timeLabel = new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        const header = isVoice ? `🎙 ${timeLabel}` : `✏️ ${timeLabel}`;
+        bodyParts.push(`${header}\n${mainBody}`);
+      } else {
+        // Rebuild segments: odd-indexed placeholders get the tail or next real text
+        // Simpler approach: re-split cleanly
+        const parts = mainBody.split(SEPARATOR_RE);
+        // split with capture group: [text0, time1, text1, time2, text2, ...]
+        // parts[0] = text before first sep, parts[1] = captured time1, parts[2] = text after first sep, ...
+        const cleanParts: Array<{ time: string; text: string; isVoice: boolean }> = [];
+        cleanParts.push({ time: firstTimeLabel, text: (parts[0] || '').trim(), isVoice: !!isVoice });
+        for (let pi = 1; pi < parts.length; pi += 2) {
+          const segTime = parts[pi] || '';
+          const segText = (parts[pi + 1] || '').trim();
+          if (segText) cleanParts.push({ time: segTime, text: segText, isVoice: true });
+        }
+        for (const seg of cleanParts) {
+          if (!seg.text) continue;
+          const header = seg.isVoice ? `🎙 ${seg.time}` : `✏️ ${seg.time}`;
+          bodyParts.push(`${header}\n${seg.text}`);
+        }
       }
     }
 
-    // Join all entries with a clear visual separator
     const combinedBody = bodyParts.join('\n\n─────────────\n\n');
     setDvJournalNote(combinedBody);
 
-    // Gratitudes: show all unique items, pad to 3 minimum
     while (allGratItems.length < 3) allGratItems.push('');
     setDvGratItems(allGratItems);
   }, [dayEntries, selectedDate]);
@@ -3285,8 +3322,8 @@ export default function JournalScreen() {
                     </Pressable>
                   </View>
                 </View>
-                {/* Inline TextInput — editable when single entry, read-only (tap to expand) when multiple entries */}
-                {dayEntries.length > 1 ? (
+                {/* Inline TextInput — editable when single entry, read-only (tap to expand) when multiple entries or multiple voice segments */}
+                {(dayEntries.length > 1 || dvJournalNote.includes('🎙') || dvJournalNote.includes('✏️')) ? (
                   // Multiple entries: show read-only preview, tap expands to full editor
                   <Pressable onPress={() => setDvShowFullEditor(true)} style={{ minHeight: 110 }}>
                     <Text
