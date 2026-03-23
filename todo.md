@@ -1390,3 +1390,4 @@
 
 - [x] Alarms panel: fix scroll picker snap-to-number (copy calibration from you-settings)
 - [x] Alarms panel: add per-alarm ritual setup settings (same fields as existing alarm settings)
+- [x] Home screen alarms: 1-2 alarms = full-width stacked cards; 3-4 alarms = 2x2 grid (square widget layout, half-width each)
