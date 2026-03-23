@@ -2431,6 +2431,7 @@ function FullScreenJournalEditor({
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState(value);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets = useSafeAreaInsets();
 
   // Sync value prop when entry changes
   useEffect(() => { setText(value); }, [value]);
@@ -2458,13 +2459,14 @@ function FullScreenJournalEditor({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose} transparent={false}>
-      {/* SafeAreaView handles the notch/status-bar area inside pageSheet */}
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }} edges={['top', 'left', 'right']}>
-        {/* Drag handle — always visible at top */}
+      {/* Outer View fills the screen and sets background. paddingTop from insets ensures
+           content never overlaps the status bar, even on pageSheet modals. */}
+      <View style={{ flex: 1, backgroundColor: '#000000', paddingTop: insets.top }}>
+        {/* Drag handle */}
         <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' }} />
         </View>
-        {/* Top navigation bar — checkmark lives here, inside safe area */}
+        {/* Top navigation bar — checkmark lives here, safely below status bar */}
         <View style={fsStyles.topBar}>
           <View style={{ width: 40 }} />
           <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>Journal Entry</Text>
@@ -2531,7 +2533,7 @@ function FullScreenJournalEditor({
             </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -2842,12 +2844,13 @@ export default function JournalScreen() {
     // Helper: strip baked-in display headers from a body string.
     // These were accidentally written to storage by a previous bug where dvDisplayNote
     // (formatted with 🎙/✏️ headers) was saved instead of the raw body.
+    // IMPORTANT: must use /u flag so surrogate-pair emoji (like 🎙 U+1F399) match correctly.
     function stripDisplayHeaders(raw: string): string {
-      // Remove lines that look like "🎙 9:56 AM" or "✏️ 10:22 AM" at the start of the text or after a newline
       return raw
-        .replace(/^[🎙✏️]\s+\d{1,2}:\d{2}\s*[APap][Mm]\n?/gm, '')
-        // Also remove the ───────────── dividers that were baked in
-        .replace(/─────────────/g, '')
+        // Remove "🎙 9:56 AM" or "✏️ 10:22 AM" lines (with unicode flag for emoji)
+        .replace(/^[\u{1F399}\u{270F}]\uFE0F?\s+\d{1,2}:\d{2}\s*[APap][Mm]\n?/gmu, '')
+        // Remove ───────────── dividers (5 or more ─ chars)
+        .replace(/─{5,}/g, '')
         .trim();
     }
 
@@ -3400,27 +3403,22 @@ export default function JournalScreen() {
             );
           })()}
           {/* ── Full-screen journal editor ── */}
-          {/* When dvDisplayNote is set, the entry has voice segments — show read-only display text.
-               When only dvJournalNote, it's a single editable manual entry. */}
+          {/* Always editable. Shows dvDisplayNote (formatted) for voice entries so the user
+               sees the timestamps, but edits are saved back to the primary entry's raw body. */}
           <FullScreenJournalEditor
             visible={dvShowFullEditor}
             value={dvDisplayNote || dvJournalNote}
             onChange={(text) => {
-              // Only allow saves when editing a plain manual entry (no display headers)
-              if (!dvDisplayNote) {
-                setDvJournalNote(text);
-                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-              }
+              // Strip any display headers the user might accidentally type or that came from dvDisplayNote
+              // then save as the raw body
+              setDvJournalNote(text);
+              if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+              autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
             }}
-            readOnly={!!dvDisplayNote}
             onClose={() => {
               setDvShowFullEditor(false);
-              // Final save only for plain manual entries
-              if (!dvDisplayNote) {
-                if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                saveDvNoteAndGrat(dvJournalNote, dvGratItems);
-              }
+              if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+              saveDvNoteAndGrat(dvJournalNote, dvGratItems);
             }}
             onPickPhoto={dvPickPhoto}
             onPickCamera={dvPickCamera}
