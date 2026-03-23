@@ -2038,12 +2038,17 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colo
                       key={day}
                       onPress={() => !isFuture && onDayPress?.(dateStr)}
                       style={({ pressed }) => ({
-                        width: cellWidth, height: cellHeight, borderRadius: 4, overflow: 'hidden',
+                        width: cellWidth, height: cellHeight, borderRadius: 4,
                         backgroundColor: bgColor, opacity: isFuture ? 0.18 : pressed ? 0.6 : cellOpacity,
                         borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
                       })}
                     >
-                      {photoUri ? <ExpoImage source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
+                      {/* Wrap ExpoImage in its own clipping View — putting overflow:hidden on Pressable causes black images on iOS */}
+                      {photoUri ? (
+                        <View style={[StyleSheet.absoluteFill, { borderRadius: 4, overflow: 'hidden' }]}>
+                          <ExpoImage source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                        </View>
+                      ) : null}
                       <Text style={{ fontSize: 10, fontWeight: '700', lineHeight: 13, color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
                     </Pressable>
                   );
@@ -2807,29 +2812,50 @@ export default function JournalScreen() {
 
   // Sync note/gratitude from the first non-voice entry, or fall back to the voice entry body
   useEffect(() => {
-    // Prefer a non-voice entry; fall back to voice entry so transcript shows in JOURNAL ENTRY
-    const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'))
-      ?? dayEntries.find((e) => e.tags?.includes('voice'));
-    if (primaryEntry) {
-      dvPrimaryEntryId.current = primaryEntry.id;
-      const body = primaryEntry.body || '';
-      const gratIdx = body.indexOf('\n\n🙏 Grateful for:');
-      const mainBody = gratIdx >= 0 ? body.slice(0, gratIdx).trim() : body.trim();
-      const gratRaw = gratIdx >= 0 ? body.slice(gratIdx + 2).trim() : '';
-      // Parse individual gratitude lines (strip numbering like "1. ", "- ")
-      const rawLines = gratRaw.replace(/^🙏 Grateful for:\n?/, '').split('\n').filter(Boolean);
-      const items = rawLines.map((l) => l.replace(/^\d+\.\s*/, '').replace(/^[-•]\s*/, '').trim());
-      // Always show at least 3 slots
-      while (items.length < 3) items.push('');
-      // Strip legacy '# ' prefix from first line (old format used # for headings)
-      const cleanBody = mainBody.replace(/^# /, '');
-      setDvJournalNote(cleanBody);
-      setDvGratItems(items);
-    } else {
+    if (dayEntries.length === 0) {
       dvPrimaryEntryId.current = null;
       setDvJournalNote('');
       setDvGratItems(['', '', '']);
+      return;
     }
+    // Primary entry = first non-voice entry (editable), or first voice entry if no manual entry exists.
+    // This is the entry that receives edits from the inline card TextInput.
+    const primaryEntry = dayEntries.find((e) => !e.tags?.includes('voice'))
+      ?? dayEntries[0];
+    dvPrimaryEntryId.current = primaryEntry.id;
+
+    // Collect all gratitudes across all entries for the day
+    const allGratItems: string[] = [];
+    const bodyParts: string[] = [];
+
+    // Sort entries oldest-first so they appear in chronological order
+    const sorted = [...dayEntries].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    for (const entry of sorted) {
+      const body = entry.body || '';
+      const gratIdx = body.indexOf('\n\n🙏 Grateful for:');
+      const mainBody = (gratIdx >= 0 ? body.slice(0, gratIdx).trim() : body.trim()).replace(/^# /, '');
+      const gratRaw = gratIdx >= 0 ? body.slice(gratIdx + 2).trim() : '';
+      const rawLines = gratRaw.replace(/^🙏 Grateful for:\n?/, '').split('\n').filter(Boolean);
+      const items = rawLines.map((l) => l.replace(/^\d+\.\s*/, '').replace(/^[-•]\s*/, '').trim()).filter(Boolean);
+      items.forEach((it) => { if (!allGratItems.includes(it)) allGratItems.push(it); });
+
+      // Add a timestamp header for each entry so the user can see when each was written
+      const timeLabel = new Date(entry.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      const isVoice = entry.tags?.includes('voice');
+      const entryHeader = isVoice ? `🎙 ${timeLabel}` : `✏️ ${timeLabel}`;
+      if (mainBody) {
+        bodyParts.push(`${entryHeader}\n${mainBody}`);
+      }
+    }
+
+    // Join all entries with a clear visual separator
+    const combinedBody = bodyParts.join('\n\n─────────────\n\n');
+    setDvJournalNote(combinedBody);
+
+    // Gratitudes: show all unique items, pad to 3 minimum
+    while (allGratItems.length < 3) allGratItems.push('');
+    setDvGratItems(allGratItems);
   }, [dayEntries, selectedDate]);
 
   const [dvSaving, setDvSaving] = useState(false);
@@ -3257,26 +3283,39 @@ export default function JournalScreen() {
                     </Pressable>
                   </View>
                 </View>
-                {/* Inline TextInput — direct typing */}
-                <TextInput
-                  value={dvJournalNote}
-                  onChangeText={(text) => {
-                    setDvJournalNote(text);
-                    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                    autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-                  }}
-                  multiline
-                  placeholder="What's on your mind today?"
-                  placeholderTextColor={colors.muted}
-                  style={[
-                    { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 110, textAlignVertical: 'top' },
-                    Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
-                  ]}
-                  textAlignVertical="top"
-                  autoCorrect
-                  autoCapitalize="sentences"
-                  scrollEnabled={false}
-                />
+                {/* Inline TextInput — editable when single entry, read-only (tap to expand) when multiple entries */}
+                {dayEntries.length > 1 ? (
+                  // Multiple entries: show read-only preview, tap expands to full editor
+                  <Pressable onPress={() => setDvShowFullEditor(true)} style={{ minHeight: 110 }}>
+                    <Text
+                      numberOfLines={8}
+                      style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, textAlignVertical: 'top' }}
+                    >
+                      {dvJournalNote || ''}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 6 }}>Tap to expand and edit ↗</Text>
+                  </Pressable>
+                ) : (
+                  <TextInput
+                    value={dvJournalNote}
+                    onChangeText={(text) => {
+                      setDvJournalNote(text);
+                      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                      autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
+                    }}
+                    multiline
+                    placeholder="What's on your mind today?"
+                    placeholderTextColor={colors.muted}
+                    style={[
+                      { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 110, textAlignVertical: 'top' },
+                      Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
+                    ]}
+                    textAlignVertical="top"
+                    autoCorrect
+                    autoCapitalize="sentences"
+                    scrollEnabled={false}
+                  />
+                )}
                 {/* Footer: character count */}
                 {dvJournalNote.length > 0 && (
                   <Text style={{ fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 }}>

@@ -1373,3 +1373,6 @@
 - [x] Multiple journal entries per day: new habit ratings merge with existing (only override unset habits, don't wipe already-rated ones)
 - [x] Multiple journal entries per day: append new text to existing day entry with a clean timestamp separator (e.g. ── 2:34 PM ──) instead of creating a separate entry
 - [x] Journal card on Today screen: show voice log entries for today — fixed by adding useFocusEffect to refresh entries from AsyncStorage when screen regains focus after voice check-in saves
+- [x] Journal card: timestamp separators now use 🎙/✏️ emoji + time headers and ─── dividers; visible as styled text
+- [x] Journal card: now shows ALL day entries combined with timestamp headers; read-only when multiple entries (tap to expand)
+- [x] Calendar photos: fixed overflow:hidden on Pressable causing black images — ExpoImage wrapped in its own View with borderRadius+overflow:hidden
