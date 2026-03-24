@@ -24,6 +24,7 @@ import { trpc } from "@/lib/trpc";
 import { useRouter } from "expo-router";
 import { useApp } from "@/lib/app-context";
 import { useIsCalm } from "@/components/calm-effects";
+import CoachApplyModal from "@/app/coach-apply";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -421,6 +422,7 @@ export default function CommunityScreen() {
   const maxWidth = useContentMaxWidth();
   const [showModal, setShowModal] = useState(false);
   const [showReferral, setShowReferral] = useState(false);
+  const [showCoachApply, setShowCoachApply] = useState(false);
   const { isDemoMode } = useApp();
 
   const { data: serverTeams, isLoading } = trpc.teams.list.useQuery(
@@ -446,7 +448,7 @@ export default function CommunityScreen() {
           {/* ── Large Coach CTA Banner (TOP) ── */}
           <TouchableOpacity
             style={styles.coachCtaBanner}
-            onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
+            onPress={() => setShowCoachApply(true)}
             activeOpacity={0.88}
           >
             <View style={styles.coachCtaTopRow}>
@@ -492,7 +494,7 @@ export default function CommunityScreen() {
             {/* Hire a Coach (compact) */}
             <TouchableOpacity
               style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: 'rgba(251,191,36,0.35)' }]}
-              onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
+              onPress={() => setShowCoachApply(true)}
               activeOpacity={0.8}
             >
               <View style={[styles.compactRowIcon, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
@@ -568,6 +570,7 @@ export default function CommunityScreen() {
       </ScrollView>
 
       <CreateJoinModal visible={showModal} onClose={() => setShowModal(false)} />
+      <CoachApplyModal visible={showCoachApply} onClose={() => setShowCoachApply(false)} />
     </ScreenContainer>
   );
 }

@@ -1,14 +1,27 @@
 import {
   View, Text, Pressable, StyleSheet, TextInput,
   Modal, Platform, KeyboardAvoidingView, Animated,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Alert,
 } from "react-native";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
+import {
+  initConnection,
+  fetchProducts,
+  requestPurchase,
+  finishTransaction,
+  purchaseUpdatedListener,
+  purchaseErrorListener,
+  type Purchase,
+} from "expo-iap";
+
+// ─── IAP Product ID ───────────────────────────────────────────────────────────
+// TODO: Replace with your App Store Connect product ID once created
+const COACH_PRODUCT_ID = "com.jackalarm.coach_sprint_297";
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 interface FormData {
@@ -216,6 +229,67 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const generatePitchMutation = trpc.coach.generatePitch.useMutation();
+  const [iapConnected, setIapConnected] = useState(false);
+  const [iapLoading, setIapLoading] = useState(false);
+
+  // Initialize IAP connection when modal opens
+  useEffect(() => {
+    if (!visible || Platform.OS === "web") return;
+    let purchaseSub: { remove: () => void } | null = null;
+    let errorSub: { remove: () => void } | null = null;
+
+    (async () => {
+      try {
+        await initConnection();
+        setIapConnected(true);
+        await fetchProducts({ skus: [COACH_PRODUCT_ID], type: "in-app" });
+
+        purchaseSub = purchaseUpdatedListener(async (purchase: Purchase) => {
+          // Acknowledge / finish the transaction
+          await finishTransaction({ purchase, isConsumable: false });
+          setIapLoading(false);
+          if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setScreen("success");
+        });
+
+        errorSub = purchaseErrorListener((error) => {
+          setIapLoading(false);
+          if (error.code !== "user-cancelled") {
+            Alert.alert("Purchase Failed", error.message || "Something went wrong. Please try again.");
+          }
+        });
+      } catch {
+        // IAP not available (simulator, web, etc.) — silently ignore
+      }
+    })();
+
+    return () => {
+      purchaseSub?.remove();
+      errorSub?.remove();
+    };
+  }, [visible]);
+
+  async function handlePurchase() {
+    if (Platform.OS === "web" || !iapConnected) {
+      // Fallback for web / simulator: skip straight to success
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setScreen("success");
+      return;
+    }
+    try {
+      setIapLoading(true);
+      await requestPurchase({
+        type: "in-app",
+        request: {
+          apple: { sku: COACH_PRODUCT_ID },
+          google: { skus: [COACH_PRODUCT_ID] },
+        },
+      });
+      // Result handled by purchaseUpdatedListener above
+    } catch {
+      setIapLoading(false);
+    }
+  }
 
   const q = QUESTIONS[step];
   const progress = (step + 1) / TOTAL;
@@ -425,14 +499,18 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
             {/* CTA */}
             <View style={[st.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
               <Pressable
-                onPress={() => {
-                  if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  setScreen("success");
-                }}
-                style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, flex: 1 }]}
+                onPress={handlePurchase}
+                disabled={iapLoading}
+                style={({ pressed }) => [st.ctaBtn, { backgroundColor: colors.primary, opacity: (pressed || iapLoading) ? 0.75 : 1, flex: 1 }]}
               >
-                <Text style={st.ctaBtnText}>Claim My Spot — $297</Text>
-                <IconSymbol name="arrow.right" size={18} color="#ffffff" />
+                {iapLoading ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <>
+                    <Text style={st.ctaBtnText}>Claim My Spot — $297</Text>
+                    <IconSymbol name="arrow.right" size={18} color="#ffffff" />
+                  </>
+                )}
               </Pressable>
             </View>
           </>
