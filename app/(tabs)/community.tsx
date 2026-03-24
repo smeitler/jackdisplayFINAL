@@ -420,9 +420,10 @@ export default function CommunityScreen() {
   const router = useRouter();
   const maxWidth = useContentMaxWidth();
   const [showModal, setShowModal] = useState(false);
+  const [showReferral, setShowReferral] = useState(false);
   const { isDemoMode } = useApp();
 
-  const { data: serverTeams, isLoading, refetch } = trpc.teams.list.useQuery(
+  const { data: serverTeams, isLoading } = trpc.teams.list.useQuery(
     undefined,
     { enabled: !isDemoMode }
   );
@@ -436,65 +437,127 @@ export default function CommunityScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
-        {/* Header */}
-        <View style={styles.pageHeader}>
-          <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
-          <View style={styles.headerBtns}>
+
+          {/* ── Header ── */}
+          <View style={styles.pageHeader}>
+            <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
+          </View>
+
+          {/* ── 3 Action Options ── */}
+          <View style={styles.actionGrid}>
+            {/* 1. Create Family Plan */}
             <TouchableOpacity
-              style={styles.coachHeaderBtn}
-              onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert("Coming Soon", "The coaching page will be available shortly."))}
+              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => setShowModal(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.coachHeaderBtnText}>⚡ Get a Coach</Text>
+              <View style={[styles.actionIconCircle, { backgroundColor: '#22C55E20' }]}>
+                <IconSymbol name="person.3.fill" size={22} color="#22C55E" />
+              </View>
+              <Text style={[styles.actionNum, { color: colors.muted }]}>1</Text>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Family Plan</Text>
+              <Text style={[styles.actionDesc, { color: colors.muted }]}>Create a shared group to track habits together</Text>
             </TouchableOpacity>
+
+            {/* 2. Refer a Friend */}
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => setShowReferral(true)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.actionIconCircle, { backgroundColor: colors.primary + '20' }]}>
+                <IconSymbol name="gift.fill" size={22} color={colors.primary} />
+              </View>
+              <Text style={[styles.actionNum, { color: colors.muted }]}>2</Text>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Refer a Friend</Text>
+              <Text style={[styles.actionDesc, { color: colors.muted }]}>Earn 6 months free for every friend you invite</Text>
+            </TouchableOpacity>
+
+            {/* 3. Hire a Coach */}
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: 'rgba(251,191,36,0.35)' }]}
+              onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.actionIconCircle, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
+                <IconSymbol name="star.fill" size={22} color="#FBBF24" />
+              </View>
+              <Text style={[styles.actionNum, { color: colors.muted }]}>3</Text>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Hire a Coach</Text>
+              <Text style={[styles.actionDesc, { color: colors.muted }]}>Get daily voice feedback from a real coach</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Referral panel (expandable) ── */}
+          {showReferral && (
+            <View style={{ marginBottom: 8 }}>
+              <ReferralBanner />
+            </View>
+          )}
+
+          {/* ── My Teams ── */}
+          <View style={styles.sectionRow}>
+            <Text style={[styles.sectionTitle, { color: colors.muted }]}>MY TEAMS</Text>
             <TouchableOpacity
               style={[styles.addBtn, { backgroundColor: colors.primary }]}
               onPress={() => setShowModal(true)}
               activeOpacity={0.8}
             >
-              <IconSymbol name="plus" size={18} color="#fff" />
-              <Text style={styles.addBtnText}>Team</Text>
+              <IconSymbol name="plus" size={16} color="#fff" />
+              <Text style={styles.addBtnText}>Add</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Coach Upsell Card */}
-        <CoachCard />
+          {isLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 32 }} />
+          ) : !teams || teams.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <IconSymbol name="person.3.fill" size={40} color={colors.muted} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No teams yet</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+                Create a family plan or join a team with a code from a friend.
+              </Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 16, alignSelf: 'stretch' }]}
+                onPress={() => setShowModal(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryBtnText}>Create or Join a Team</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.teamList}>
+              {(teams as TeamItem[]).map((team) => (
+                <TeamCard
+                  key={team.id}
+                  team={team}
+                  onPress={() => router.push({ pathname: '/team/[id]', params: { id: String(team.id) } })}
+                />
+              ))}
+            </View>
+          )}
 
-        {/* Teams Section */}
-        <Text style={[styles.sectionTitle, { color: colors.muted }]}>MY TEAMS</Text>
+          {/* ── Large Coach CTA Banner ── */}
+          <TouchableOpacity
+            style={styles.coachCtaBanner}
+            onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
+            activeOpacity={0.88}
+          >
+            <View style={styles.coachCtaTopRow}>
+              <View style={styles.coachCtaBadge}>
+                <Text style={styles.coachCtaBadgeText}>LIMITED SPOTS</Text>
+              </View>
+              <View style={styles.coachCtaBadge2}>
+                <Text style={styles.coachCtaBadge2Text}>8-WEEK SPRINT</Text>
+              </View>
+            </View>
+            <Text style={styles.coachCtaHeadline}>Hire an{`\n`}Accountability Coach</Text>
+            <Text style={styles.coachCtaSub}>Daily voice feedback based on your real app data. No Zoom calls. No scheduling.</Text>
+            <View style={styles.coachCtaBtn}>
+              <Text style={styles.coachCtaBtnText}>Get Your Coach  →</Text>
+            </View>
+          </TouchableOpacity>
 
-        {isLoading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 32 }} />
-        ) : !teams || teams.length === 0 ? (
-          <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <IconSymbol name="person.3.fill" size={40} color={colors.muted} />
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No teams yet</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-              Create a team to hold each other accountable, or join one with a code from a friend.
-            </Text>
-            <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 16, alignSelf: "stretch" }]}
-              onPress={() => setShowModal(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryBtnText}>Create or Join a Team</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.teamList}>
-            {(teams as TeamItem[]).map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                onPress={() => router.push({ pathname: "/team/[id]", params: { id: String(team.id) } })}
-              />
-            ))}
-          </View>
-        )}
-        {/* Referral Banner — moved to bottom */}
-        <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 24 }]}>REFER A FRIEND</Text>
-        <ReferralBanner />
         </View>
       </ScrollView>
 
@@ -588,6 +651,38 @@ const styles = StyleSheet.create({
   rankScore: { fontSize: 13, fontWeight: "800" },
   ownerBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   ownerBadgeText: { fontSize: 11, fontWeight: "700" },
+
+  // Action grid
+  actionGrid: { gap: 10, marginBottom: 24 },
+  actionCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 6 },
+  actionIconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  actionNum: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  actionTitle: { fontSize: 17, fontWeight: '700' },
+  actionDesc: { fontSize: 13, lineHeight: 18 },
+
+  // Section row with title + button
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, marginTop: 4 },
+
+  // Large coach CTA banner
+  coachCtaBanner: {
+    marginTop: 28, borderRadius: 20, borderWidth: 1.5,
+    borderColor: 'rgba(251,191,36,0.6)',
+    backgroundColor: 'rgba(251,191,36,0.06)',
+    padding: 24, gap: 14,
+  },
+  coachCtaTopRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  coachCtaBadge: { backgroundColor: '#EF4444', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  coachCtaBadgeText: { color: '#fff', fontWeight: '800', fontSize: 10, letterSpacing: 0.5 },
+  coachCtaBadge2: { backgroundColor: '#FBBF24', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  coachCtaBadge2Text: { color: '#000', fontWeight: '800', fontSize: 10, letterSpacing: 0.5 },
+  coachCtaHeadline: { fontSize: 32, fontWeight: '900', color: '#FBBF24', lineHeight: 38, letterSpacing: -0.5 },
+  coachCtaSub: { fontSize: 14, color: 'rgba(251,191,36,0.75)', lineHeight: 20 },
+  coachCtaBtn: {
+    backgroundColor: '#FBBF24', borderRadius: 14,
+    paddingVertical: 16, paddingHorizontal: 20,
+    alignItems: 'center', marginTop: 4,
+  },
+  coachCtaBtnText: { color: '#000', fontWeight: '800', fontSize: 17 },
 
   // Modal
   modalContainer: { flex: 1 },

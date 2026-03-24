@@ -1401,3 +1401,4 @@
 - [x] Alarm cards: remove status dot/badge, make time very large at top, keep only toggle + label + day chips
 - [x] Home screen: move Meditate/Sleep/Move/Focus wellness grid to the top, above the alarms section
 - [x] Home screen: remove Streak and Days Logged stat cards
+- [x] Community/Chat screen: 3 action options (Create Family Plan, Refer a Friend, Hire a Coach) + My Teams section + large Hire an Accountability Coach CTA banner
