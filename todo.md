@@ -1402,3 +1402,4 @@
 - [x] Home screen: move Meditate/Sleep/Move/Focus wellness grid to the top, above the alarms section
 - [x] Home screen: remove Streak and Days Logged stat cards
 - [x] Community/Chat screen: 3 action options (Create Family Plan, Refer a Friend, Hire a Coach) + My Teams section + large Hire an Accountability Coach CTA banner
+- [x] Community/Chat screen: move large coach CTA to top, make Refer a Friend and Hire a Coach compact tappable rows

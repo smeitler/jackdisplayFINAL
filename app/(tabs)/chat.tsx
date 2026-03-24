@@ -443,57 +443,84 @@ export default function CommunityScreen() {
             <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
           </View>
 
-          {/* ── 3 Action Options ── */}
-          <View style={styles.actionGrid}>
-            {/* 1. Create Family Plan */}
+          {/* ── Large Coach CTA Banner (TOP) ── */}
+          <TouchableOpacity
+            style={styles.coachCtaBanner}
+            onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
+            activeOpacity={0.88}
+          >
+            <View style={styles.coachCtaTopRow}>
+              <View style={styles.coachCtaBadge}>
+                <Text style={styles.coachCtaBadgeText}>LIMITED SPOTS</Text>
+              </View>
+              <View style={styles.coachCtaBadge2}>
+                <Text style={styles.coachCtaBadge2Text}>8-WEEK SPRINT</Text>
+              </View>
+            </View>
+            <Text style={styles.coachCtaHeadline}>Hire an{`\n`}Accountability Coach</Text>
+            <Text style={styles.coachCtaSub}>Daily voice feedback based on your real app data. No Zoom calls. No scheduling.</Text>
+            <View style={styles.coachCtaBtn}>
+              <Text style={styles.coachCtaBtnText}>Get Your Coach  →</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* ── Compact action rows ── */}
+          <View style={styles.compactRowsContainer}>
+            {/* Refer a Friend */}
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => setShowModal(true)}
+              style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => setShowReferral(!showReferral)}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconCircle, { backgroundColor: '#22C55E20' }]}>
-                <IconSymbol name="person.3.fill" size={22} color="#22C55E" />
+              <View style={[styles.compactRowIcon, { backgroundColor: colors.primary + '20' }]}>
+                <IconSymbol name="gift.fill" size={18} color={colors.primary} />
               </View>
-              <Text style={[styles.actionNum, { color: colors.muted }]}>1</Text>
-              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Family Plan</Text>
-              <Text style={[styles.actionDesc, { color: colors.muted }]}>Create a shared group to track habits together</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.compactRowTitle, { color: colors.foreground }]}>Refer a Friend</Text>
+                <Text style={[styles.compactRowDesc, { color: colors.muted }]}>Earn 6 months free for every friend you invite</Text>
+              </View>
+              <IconSymbol name={showReferral ? 'chevron.down' : 'chevron.right'} size={16} color={colors.muted} />
             </TouchableOpacity>
 
-            {/* 2. Refer a Friend */}
-            <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => setShowReferral(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.actionIconCircle, { backgroundColor: colors.primary + '20' }]}>
-                <IconSymbol name="gift.fill" size={22} color={colors.primary} />
+            {/* Referral panel (expandable) */}
+            {showReferral && (
+              <View style={{ marginTop: -4, marginBottom: 4 }}>
+                <ReferralBanner />
               </View>
-              <Text style={[styles.actionNum, { color: colors.muted }]}>2</Text>
-              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Refer a Friend</Text>
-              <Text style={[styles.actionDesc, { color: colors.muted }]}>Earn 6 months free for every friend you invite</Text>
-            </TouchableOpacity>
+            )}
 
-            {/* 3. Hire a Coach */}
+            {/* Hire a Coach (compact) */}
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: 'rgba(251,191,36,0.35)' }]}
+              style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: 'rgba(251,191,36,0.35)' }]}
               onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
               activeOpacity={0.8}
             >
-              <View style={[styles.actionIconCircle, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
-                <IconSymbol name="star.fill" size={22} color="#FBBF24" />
+              <View style={[styles.compactRowIcon, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
+                <IconSymbol name="star.fill" size={18} color="#FBBF24" />
               </View>
-              <Text style={[styles.actionNum, { color: colors.muted }]}>3</Text>
-              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Hire a Coach</Text>
-              <Text style={[styles.actionDesc, { color: colors.muted }]}>Get daily voice feedback from a real coach</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.compactRowTitle, { color: colors.foreground }]}>Hire a Coach</Text>
+                <Text style={[styles.compactRowDesc, { color: colors.muted }]}>Get daily voice feedback from a real coach</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            </TouchableOpacity>
+
+            {/* Family Plan */}
+            <TouchableOpacity
+              style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: '#22C55E30' }]}
+              onPress={() => setShowModal(true)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.compactRowIcon, { backgroundColor: '#22C55E20' }]}>
+                <IconSymbol name="person.3.fill" size={18} color="#22C55E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.compactRowTitle, { color: colors.foreground }]}>Family Plan</Text>
+                <Text style={[styles.compactRowDesc, { color: colors.muted }]}>Create a shared group to track habits together</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
             </TouchableOpacity>
           </View>
-
-          {/* ── Referral panel (expandable) ── */}
-          {showReferral && (
-            <View style={{ marginBottom: 8 }}>
-              <ReferralBanner />
-            </View>
-          )}
 
           {/* ── My Teams ── */}
           <View style={styles.sectionRow}>
@@ -536,27 +563,6 @@ export default function CommunityScreen() {
               ))}
             </View>
           )}
-
-          {/* ── Large Coach CTA Banner ── */}
-          <TouchableOpacity
-            style={styles.coachCtaBanner}
-            onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
-            activeOpacity={0.88}
-          >
-            <View style={styles.coachCtaTopRow}>
-              <View style={styles.coachCtaBadge}>
-                <Text style={styles.coachCtaBadgeText}>LIMITED SPOTS</Text>
-              </View>
-              <View style={styles.coachCtaBadge2}>
-                <Text style={styles.coachCtaBadge2Text}>8-WEEK SPRINT</Text>
-              </View>
-            </View>
-            <Text style={styles.coachCtaHeadline}>Hire an{`\n`}Accountability Coach</Text>
-            <Text style={styles.coachCtaSub}>Daily voice feedback based on your real app data. No Zoom calls. No scheduling.</Text>
-            <View style={styles.coachCtaBtn}>
-              <Text style={styles.coachCtaBtnText}>Get Your Coach  →</Text>
-            </View>
-          </TouchableOpacity>
 
         </View>
       </ScrollView>
@@ -652,6 +658,13 @@ const styles = StyleSheet.create({
   ownerBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   ownerBadgeText: { fontSize: 11, fontWeight: "700" },
 
+  // Compact action rows
+  compactRowsContainer: { gap: 8, marginBottom: 24 },
+  compactRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
+  compactRowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  compactRowTitle: { fontSize: 15, fontWeight: '600', marginBottom: 1 },
+  compactRowDesc: { fontSize: 12, lineHeight: 16 },
+
   // Action grid
   actionGrid: { gap: 10, marginBottom: 24 },
   actionCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 6 },
@@ -665,7 +678,7 @@ const styles = StyleSheet.create({
 
   // Large coach CTA banner
   coachCtaBanner: {
-    marginTop: 28, borderRadius: 20, borderWidth: 1.5,
+    marginTop: 0, marginBottom: 16, borderRadius: 20, borderWidth: 1.5,
     borderColor: 'rgba(251,191,36,0.6)',
     backgroundColor: 'rgba(251,191,36,0.06)',
     padding: 24, gap: 14,
