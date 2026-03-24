@@ -651,49 +651,53 @@ function AlarmCardFull({
         borderColor: alarm.isEnabled ? colors.primary + '30' : colors.border,
         opacity: pressed ? 0.85 : 1,
         transform: [{ scale: pressed ? 0.985 : 1 }],
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
       }]}
     >
-      {/* Top row: label + toggle */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <Text style={[styles.alarmLabel, { color: colors.muted }]} numberOfLines={1}>
+      {/* Left: label + time + day chips */}
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.alarmLabel, { color: colors.muted, marginBottom: 2 }]} numberOfLines={1}>
           {alarm.label ?? (alarm.isEnabled ? 'Alarm' : 'Alarm off')}
         </Text>
-        <Pressable
-          onPress={(e) => { e.stopPropagation(); onToggle(); }}
-          style={({ pressed }) => [{
-            width: 44, height: 26, borderRadius: 13,
-            backgroundColor: alarm.isEnabled ? '#4ade80' : colors.border,
-            justifyContent: 'center', paddingHorizontal: 2,
-            opacity: pressed ? 0.8 : 1,
-          }]}
-        >
-          <View style={{
-            width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff',
-            shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
-            alignSelf: alarm.isEnabled ? 'flex-end' : 'flex-start',
-          }} />
-        </Pressable>
+        <Text style={[styles.alarmTimeLarge, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
+          {formatAlarmTime(alarm.hour, alarm.minute)}
+        </Text>
+        {alarm.days && alarm.days.length > 0 && (
+          <View style={[styles.alarmDayChips, { marginTop: 6 }]}>
+            {DAY_LABELS.map((d, i) => {
+              const active = alarm.days!.includes(DAY_MAP[i]);
+              return (
+                <View key={i} style={[styles.alarmDayChip, {
+                  backgroundColor: active ? colors.primary + '22' : 'transparent',
+                  borderColor: active ? colors.primary + '60' : colors.border,
+                }]}>
+                  <Text style={[styles.alarmDayChipText, { color: active ? colors.primary : colors.muted }]}>{d}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </View>
-      {/* Hero time */}
-      <Text style={[styles.alarmTimeLarge, { color: alarm.isEnabled ? colors.foreground : colors.muted }]}>
-        {formatAlarmTime(alarm.hour, alarm.minute)}
-      </Text>
-      {/* Day chips */}
-      {alarm.days && alarm.days.length > 0 && (
-        <View style={styles.alarmDayChips}>
-          {DAY_LABELS.map((d, i) => {
-            const active = alarm.days!.includes(DAY_MAP[i]);
-            return (
-              <View key={i} style={[styles.alarmDayChip, {
-                backgroundColor: active ? colors.primary + '22' : 'transparent',
-                borderColor: active ? colors.primary + '60' : colors.border,
-              }]}>
-                <Text style={[styles.alarmDayChipText, { color: active ? colors.primary : colors.muted }]}>{d}</Text>
-              </View>
-            );
-          })}
-        </View>
-      )}
+      {/* Right: toggle */}
+      <Pressable
+        onPress={(e) => { e.stopPropagation(); onToggle(); }}
+        style={({ pressed }) => [{
+          width: 44, height: 26, borderRadius: 13,
+          backgroundColor: alarm.isEnabled ? '#4ade80' : colors.border,
+          justifyContent: 'center', paddingHorizontal: 2,
+          opacity: pressed ? 0.8 : 1,
+          marginLeft: 12,
+        }]}
+      >
+        <View style={{
+          width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff',
+          shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+          alignSelf: alarm.isEnabled ? 'flex-end' : 'flex-start',
+        }} />
+      </Pressable>
     </Pressable>
   );
 }
@@ -1919,8 +1923,7 @@ const styles = StyleSheet.create({
 
   // Alarm strip
   alarmStrip: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14,
+    borderRadius: 16,
     borderWidth: 1,
   },
   alarmIconBadge: {
@@ -1933,7 +1936,7 @@ const styles = StyleSheet.create({
   },
   alarmDot: { width: 8, height: 8, borderRadius: 4 },
   alarmLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.1 },
-  alarmTimeLarge: { fontSize: 46, fontWeight: '800', letterSpacing: -2, lineHeight: 50 },
+  alarmTimeLarge: { fontSize: 34, fontWeight: '800', letterSpacing: -1, lineHeight: 38 },
   alarmDayChips: { flexDirection: 'row', gap: 4, marginTop: 6 },
   alarmDayChip: { width: 22, height: 22, borderRadius: 7, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   alarmDayChipText: { fontSize: 10, fontWeight: '700' },

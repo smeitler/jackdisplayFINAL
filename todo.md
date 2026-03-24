@@ -1404,3 +1404,4 @@
 - [x] Community/Chat screen: 3 action options (Create Family Plan, Refer a Friend, Hire a Coach) + My Teams section + large Hire an Accountability Coach CTA banner
 - [x] Community/Chat screen: move large coach CTA to top, make Refer a Friend and Hire a Coach compact tappable rows
 - [x] Coach CTA: open coach survey/apply modal (not external URL), add Apple In-App Purchase at end of survey flow
+- [x] Full-width alarm card: compact layout — time smaller, label+toggle on same row, day chips below, no wasted vertical space
