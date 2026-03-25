@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image, Alert,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image, Alert, Share,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -227,7 +227,7 @@ function CelebrationOverlay({ score }: { score: number }) {
 }
 
 export default function CheckInScreen() {
-  const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm, isPendingCheckIn } = useApp();
+  const { activeHabits, categories, submitCheckIn, getRatingsForDate, alarm, isPendingCheckIn, streak } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
   const isCalm = useIsCalm();
@@ -887,6 +887,50 @@ export default function CheckInScreen() {
             {yellowCount > 0 && <View style={[styles.successPill, { backgroundColor: '#F59E0B' }]}><Text style={styles.successPillText}>{yellowCount} okay</Text></View>}
             {redCount    > 0 && <View style={[styles.successPill, { backgroundColor: '#EF4444' }]}><Text style={styles.successPillText}>{redCount} missed</Text></View>}
           </View>
+
+          {/* ── Shareable Win Cards ── */}
+          {(() => {
+            const winCards: { id: string; gradient: [string, string]; headline: string; subline: string; message: string }[] = [];
+            if (score === 100) winCards.push({ id: 'perfect', gradient: ['#22C55E', '#16A34A'], headline: '💯 Perfect Day', subline: 'Every single habit crushed', message: `I just had a PERFECT day — 100% on every habit! 💯 Building momentum one day at a time. #DailyProgress` });
+            if (streak >= 7 && streak % 7 === 0) winCards.push({ id: 'streak', gradient: ['#F59E0B', '#D97706'], headline: `🔥 ${streak}-Day Streak`, subline: `${streak} days of showing up`, message: `${streak} days in a row of showing up for myself 🔥 Consistency is everything. #Streak #DailyProgress` });
+            if (streak >= 3 && streak < 7) winCards.push({ id: 'streak3', gradient: ['#F59E0B', '#D97706'], headline: `🔥 ${streak}-Day Streak`, subline: 'Building momentum', message: `${streak} days in a row! 🔥 Building momentum one day at a time. #DailyProgress` });
+            if (greenCount >= 5) winCards.push({ id: 'green5', gradient: ['#7C3AED', '#6D28D9'], headline: `💪 ${greenCount} Habits Crushed`, subline: 'On fire today', message: `Crushed ${greenCount} habits today 💪 Showing up and doing the work. #DailyProgress` });
+            if (score >= 70 && score < 100) winCards.push({ id: 'solid', gradient: ['#0EA5E9', '#0284C7'], headline: `✨ ${score}% Score`, subline: 'Strong day', message: `Hit ${score}% on my daily habits today ✨ Progress over perfection. #DailyProgress` });
+            // Always add at least one card
+            if (winCards.length === 0) winCards.push({ id: 'showing-up', gradient: ['#64748B', '#475569'], headline: '💪 Showing Up', subline: 'Every rep counts', message: `Showing up for myself today 💪 Every day counts. #DailyProgress` });
+            return (
+              <View style={{ width: '100%', marginTop: 16, marginBottom: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, letterSpacing: 0.8, marginBottom: 10 }}>SHARE YOUR WIN</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
+                  {winCards.map(card => (
+                    <View key={card.id} style={{ width: 200, borderRadius: 16, padding: 16, overflow: 'hidden', backgroundColor: card.gradient[0] }}>
+                      <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', lineHeight: 28 }}>{card.headline}</Text>
+                      <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4, marginBottom: 16 }}>{card.subline}</Text>
+                      <Pressable
+                        onPress={() => {
+                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          Share.share({ message: card.message });
+                        }}
+                        style={({ pressed }) => ({
+                          backgroundColor: 'rgba(255,255,255,0.25)',
+                          borderRadius: 10,
+                          paddingVertical: 9,
+                          paddingHorizontal: 14,
+                          alignSelf: 'flex-start',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Share</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            );
+          })()}
 
           {/* After-alarm session player card */}
           {showAfterAlarm && meditationMeta && (() => {
