@@ -1,6 +1,6 @@
 /** @type {const} */
 const themeColors = {
-  primary: { light: '#6C63FF', dark: '#7B74FF' },
+  primary: { light: '#6366F1', dark: '#6366F1' },
   background: { light: '#F8F7FF', dark: '#0F0E1A' },
   surface: { light: '#FFFFFF', dark: '#1C1B2E' },
   foreground: { light: '#1A1A2E', dark: '#EEEEFF' },
@@ -13,8 +13,8 @@ const themeColors = {
   health: { light: '#22C55E', dark: '#4ADE80' },
   relationships: { light: '#EC4899', dark: '#F472B6' },
   wealth: { light: '#F59E0B', dark: '#FBBF24' },
-  mindset: { light: '#6C63FF', dark: '#7B74FF' },
-  tint: { light: '#6C63FF', dark: '#7B74FF' },
+  mindset: { light: '#6366F1', dark: '#6366F1' },
+  tint: { light: '#6366F1', dark: '#6366F1' },
 };
 
 module.exports = { themeColors };
