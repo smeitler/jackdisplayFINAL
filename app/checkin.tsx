@@ -1370,7 +1370,18 @@ export default function CheckInScreen() {
                 {habits.map((habit, idx) => {
                   const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
-                  const rank = idx + 1;
+                  const activeRating = (current !== 'none' ? current : null) as ActiveRating | null;
+                  const pillColor = activeRating ? RATING_COLORS[activeRating] : colors.border;
+                  const pillLabel = activeRating === 'red' ? 'Missed' : activeRating === 'yellow' ? 'Okay' : activeRating === 'green' ? 'Crushed' : 'Tap';
+
+                  // Cycle: none → green → yellow → red → none
+                  function cycleRating() {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    const cycle: Rating[] = ['none', 'green', 'yellow', 'red'];
+                    const idx2 = cycle.indexOf(current);
+                    const next = cycle[(idx2 + 1) % cycle.length];
+                    setRatings((prev) => ({ ...prev, [habit.id]: next }));
+                  }
 
                   return (
                     <View
@@ -1380,80 +1391,33 @@ export default function CheckInScreen() {
                         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                       ]}
                     >
-                      {/* Habit name with number badge */}
-                      <View style={styles.habitNameRow}>
-                        <View style={[styles.habitNumBadge, {
-                          backgroundColor: colors.primary + '22',
-                          borderColor: colors.primary + '44',
-                        }]}>
-                          <Text style={[styles.habitNumText, { color: colors.primary }]}>{rank}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.habitName, { color: colors.foreground }]}>
-                            {habit.name}
+                      {/* Habit name */}
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
+                        {habit.description ? (
+                          <Text style={[styles.habitDescription, { color: colors.muted }]} numberOfLines={1}>
+                            {habit.description}
                           </Text>
-                          {habit.description ? (
-                            <Text style={[styles.habitDescription, { color: colors.muted }]} numberOfLines={2}>
-                              {habit.description}
-                            </Text>
-                          ) : null}
-                          {habit.teamId && teamNameMap[habit.teamId] && (
-                            <View style={[styles.teamBadge, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}>
-                              <Text style={[styles.teamBadgeText, { color: colors.primary }]}>👥 {teamNameMap[habit.teamId]}</Text>
-                            </View>
-                          )}
-                          {/* Show note area if: has a voice note, currently editing, or habit is rated (allow manual note) */}
-                          {(vcNotes[habit.id] !== undefined || editingNoteId === habit.id || (ratings[habit.id] && ratings[habit.id] !== 'none')) ? (
-                            editingNoteId === habit.id ? (
-                              <TextInput
-                                autoFocus
-                                value={vcNotes[habit.id] ?? ''}
-                                onChangeText={(t) => setVcNotes(prev => ({ ...prev, [habit.id]: t }))}
-                                onBlur={() => setEditingNoteId(null)}
-                                onSubmitEditing={() => setEditingNoteId(null)}
-                                returnKeyType="done"
-                                multiline
-                                style={[styles.habitVcNoteInput, { color: RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted, borderColor: (RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted) + '55' }]}
-                                placeholder="Add a note..."
-                                placeholderTextColor={colors.muted + '88'}
-                              />
-                            ) : (
-                              <Pressable onPress={() => setEditingNoteId(habit.id)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}>
-                                <Text style={[styles.habitVcNote, { color: RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted, flex: 1 }]} numberOfLines={3}>
-                                  {vcNotes[habit.id] || 'Tap to add note...'}
-                                </Text>
-                                <IconSymbol name="pencil" size={10} color={RATING_COLORS[ratings[habit.id] as ActiveRating] ?? colors.muted} style={{ marginTop: 2, opacity: 0.7 }} />
-                              </Pressable>
-                            )
-                          ) : null}
-                        </View>
+                        ) : null}
                       </View>
 
-                      {/* 3-color segmented button */}
-                      <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
-                        {RATINGS.map((rating, i) => {
-                          const isSelected = current === rating;
-                          const isFirst = i === 0;
-                          const isLastSeg = i === RATINGS.length - 1;
-                          const col = RATING_COLORS[rating];
-
-                          return (
-                            <Pressable
-                              key={rating}
-                              onPress={() => setRating(habit.id, rating)}
-                              style={({ pressed }) => [
-                                styles.segment,
-                                isFirst && styles.segmentFirst,
-                                isLastSeg && styles.segmentLast,
-                                {
-                                  backgroundColor: isSelected ? col : col + '44',
-                                  opacity: pressed ? 0.75 : 1,
-                                },
-                              ]}
-                            />
-                          );
-                        })}
-                      </View>
+                      {/* Single tap-to-cycle pill */}
+                      <Pressable
+                        onPress={cycleRating}
+                        style={({ pressed }) => ([
+                          styles.cyclePill,
+                          {
+                            backgroundColor: activeRating ? pillColor + '22' : colors.border + '44',
+                            borderColor: activeRating ? pillColor + '88' : colors.border,
+                            opacity: pressed ? 0.75 : 1,
+                            transform: [{ scale: pressed ? 0.95 : 1 }],
+                          },
+                        ])}
+                      >
+                        <Text style={[styles.cyclePillText, { color: activeRating ? pillColor : colors.muted }]}>
+                          {pillLabel}
+                        </Text>
+                      </Pressable>
                     </View>
                   );
                 })}
@@ -1664,6 +1628,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rateAllLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
+
+  cyclePill: {
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cyclePillText: { fontSize: 13, fontWeight: '600' },
 
   footer: {
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28,
