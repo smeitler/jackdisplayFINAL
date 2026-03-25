@@ -230,33 +230,21 @@ const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; descriptio
 
 const THEMES: { id: AppTheme; label: string; preview: string; description: string }[] = [
   {
-    id: "purple",
-    label: "Purple",
-    preview: "#3B82F6",
-    description: "Dark navy",
-  },
-  {
-    id: "white",
-    label: "White",
-    preview: "#FFFFFF",
-    description: "Pure white",
-  },
-  {
-    id: "black",
-    label: "Black",
+    id: "dark",
+    label: "Dark",
     preview: "#000000",
     description: "True black",
   },
   {
-    id: "valley",
-    label: "Valley",
-    preview: "#4ADE80",
-    description: "Momentum",
+    id: "light",
+    label: "Light",
+    preview: "#FFFFFF",
+    description: "Pure white",
   },
   {
     id: "airy",
     label: "Airy",
-    preview: "#C084A8",
+    preview: "#F5F0F7",
     description: "Dreamy",
   },
 ];
@@ -381,385 +369,55 @@ export default function YouSettingsScreen() {
           <Text style={[styles.title, { color: colors.foreground, flex: 1 }]}>Settings</Text>
         </View>
 
-        {/* Alarm section */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
-              <IconSymbol name="bell.fill" size={18} color={colors.primary} />
-            </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Daily Alarm</Text>
-            <Switch
-              value={enabled}
-              onValueChange={(v) => {
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setEnabled(v);
-              }}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor="#fff"
-            />
-          </View>
 
-          {enabled && (
-            <>
-              {/* Wheel time picker */}
-              <View style={[styles.wheelPickerSection, { borderTopColor: colors.border }]}>
-                <WheelTimePicker
-                  hour={hour}
-                  minute={minute}
-                  onChange={(h, m) => { setHour(h); setMinute(m); }}
-                />
-              </View>
-
-              {/* Day picker */}
-              <View style={[styles.pickerSection, { borderTopColor: colors.border }]}>
-                <Text style={[styles.pickerLabel, { color: colors.muted }]}>Days</Text>
-                <View style={styles.daysRow}>
-                  {DAY_LABELS.map((label, idx) => {
-                    const isSelected = days.includes(idx);
-                    return (
-                      <Pressable
-                        key={idx}
-                        onPress={() => toggleDay(idx)}
-                        style={({ pressed }) => [
-                          styles.dayBtn,
-                          isSelected && { backgroundColor: colors.primary },
-                          !isSelected && { borderColor: colors.border, borderWidth: 1 },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={[
-                          styles.dayBtnText,
-                          { color: isSelected ? '#fff' : colors.muted },
-                        ]}>
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Alarm Sound Picker — collapsible dropdown */}
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSoundOpen(v => !v);
-                }}
-                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <IconSymbol name="music.note" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Alarm Sound</Text>
-                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
-                    {ALARM_SOUNDS.find(s => s.id === soundId)?.emoji ?? '⏰'}{' '}
-                    {ALARM_SOUNDS.find(s => s.id === soundId)?.label ?? 'Classic'}
-                  </Text>
-                </View>
-                <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-              </Pressable>
-              {soundOpen && (
-                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
-                  {ALARM_SOUNDS.map((sound) => {
-                    const isSelected = soundId === sound.id;
-                    const isPreviewing = previewingId === sound.id;
-                    return (
-                      <Pressable
-                        key={sound.id}
-                        onPress={() => {
-                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSoundId(sound.id);
-                          playPreview(sound.id, sound.source);
-                        }}
-                        style={({ pressed }) => [
-                          styles.dropdownItem,
-                          isSelected && { backgroundColor: colors.primary + '18' },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
-                        <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground, flex: 1 }]}>
-                          {sound.label}
-                        </Text>
-                        {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Guided Meditation Picker — collapsible dropdown */}
-              <Pressable
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setMeditationOpen(v => !v);
-                }}
-                style={({ pressed }) => [styles.dropdownRow, { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <IconSymbol name="moon.stars.fill" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>After Alarm</Text>
-                  <Text style={[styles.dropdownRowValue, { color: colors.foreground }]}>
-                    {meditationId
-                      ? `${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.emoji ?? ''} ${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.label ?? ''}`
-                      : '🚫 None'}
-                  </Text>
-                </View>
-                <IconSymbol name={meditationOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-              </Pressable>
-              {meditationOpen && (
-                <View style={[styles.dropdownContent, { borderTopColor: colors.border }]}>
-                  {/* None option */}
-                  <Pressable
-                    onPress={() => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setMeditationId(undefined);
-                    }}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      !meditationId && { backgroundColor: colors.primary + '18' },
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <Text style={styles.soundEmoji}>🚫</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.dropdownItemText, { color: !meditationId ? colors.primary : colors.foreground }]}>None</Text>
-                      <Text style={[styles.meditationDesc, { color: colors.muted }]}>Skip meditation</Text>
-                    </View>
-                    {!meditationId && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                  </Pressable>
-                  {MEDITATION_OPTIONS.map((med) => {
-                    const isSelected = meditationId === med.id;
-                    const isPreviewing = previewingId === med.id;
-                    const hasDuration = med.id !== 'journaling' && med.id !== 'none';
-                    const currentDuration = practiceDurations[med.id] ?? 10;
-                    return (
-                      <View key={med.id}>
-                        <Pressable
-                          onPress={() => {
-                            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setMeditationId(med.id);
-                            playPreview(med.id, med.source ?? null);
-                          }}
-                          style={({ pressed }) => [
-                            styles.dropdownItem,
-                            isSelected && { backgroundColor: colors.primary + '18' },
-                            { opacity: pressed ? 0.7 : 1 },
-                          ]}
-                        >
-                          <Text style={styles.soundEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.dropdownItemText, { color: isSelected ? colors.primary : colors.foreground }]}>
-                              {med.label}
-                            </Text>
-                            <Text style={[styles.meditationDesc, { color: colors.muted }]}>
-                              {hasDuration ? `${currentDuration} min · ${med.description.split(',').slice(1).join(',').trim() || med.description}` : med.description}
-                            </Text>
-                          </View>
-                          {isSelected && <IconSymbol name="checkmark" size={14} color={colors.primary} />}
-                        </Pressable>
-                        {/* Duration chips — shown when this option is selected and supports duration */}
-                        {isSelected && hasDuration && (
-                          <View style={[styles.durationChipRow, { borderTopColor: colors.border }]}>
-                            <Text style={[styles.durationChipLabel, { color: colors.muted }]}>Duration</Text>
-                            <View style={styles.durationChips}>
-                              {[5, 10, 15, 20].map((mins) => (
-                                <Pressable
-                                  key={mins}
-                                  onPress={() => {
-                                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    setPracticeDurations(prev => ({ ...prev, [med.id]: mins }));
-                                  }}
-                                  style={({ pressed }) => [{
-                                    paddingHorizontal: 14,
-                                    paddingVertical: 7,
-                                    borderRadius: 20,
-                                    borderWidth: 1.5,
-                                    borderColor: currentDuration === mins ? colors.primary : colors.border,
-                                    backgroundColor: currentDuration === mins ? colors.primary + '18' : 'transparent',
-                                    opacity: pressed ? 0.7 : 1,
-                                  }]}
-                                >
-                                  <Text style={[{ fontSize: 13, fontWeight: '700', color: currentDuration === mins ? colors.primary : colors.muted }]}>
-                                    {mins} min
-                                  </Text>
-                                </Pressable>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-              {/* Snooze interval picker */}
-              <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
-                <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Snooze Duration</Text>
-                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                    How long to snooze when alarm is dismissed
-                  </Text>
-                </View>
-              </View>
-              <View style={[{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: 16, paddingVertical: 12 }]}>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  {[5, 10, 15, 20, 30].map((mins) => (
-                    <Pressable
-                      key={mins}
-                      onPress={() => {
-                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSnoozeMinutes(mins);
-                      }}
-                      style={({ pressed }) => [{
-                        paddingHorizontal: 16,
-                        paddingVertical: 8,
-                        borderRadius: 20,
-                        borderWidth: 1.5,
-                        borderColor: snoozeMinutes === mins ? colors.primary : colors.border,
-                        backgroundColor: snoozeMinutes === mins ? colors.primary + '18' : 'transparent',
-                        opacity: pressed ? 0.7 : 1,
-                      }]}
-                    >
-                      <Text style={[{ fontSize: 14, fontWeight: '700', color: snoozeMinutes === mins ? colors.primary : colors.muted }]}>
-                        {mins} min
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {/* Require check-in toggle */}
-              <View style={[styles.dropdownRow, { borderTopColor: colors.border }]}>
-                <IconSymbol name="lock.fill" size={16} color={colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.muted }]}>Require Check-in to Unlock App</Text>
-                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                    Block app access until yesterday's check-in is complete
-                  </Text>
-                </View>
-                <Switch
-                  value={requireCheckin}
-                  onValueChange={(v) => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    setRequireCheckin(v);
-                  }}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              {/* Preview check-in button */}
-              <Pressable
-                onPress={() => router.push('/alarm-preview' as never)}
-                style={({ pressed }) => [{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  borderTopWidth: StyleSheet.hairlineWidth,
-                  borderTopColor: colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                }]}
-              >
-                <IconSymbol name="eye.fill" size={16} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownRowLabel, { color: colors.primary }]}>Preview Check-in Popup</Text>
-                  <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                    See exactly what appears when your alarm fires
-                  </Text>
-                </View>
-                <IconSymbol name="chevron.right" size={14} color={colors.muted} />
-              </Pressable>
-            </>
-          )}
-        </View>
-
-        {/* Save button */}
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          style={({ pressed }) => [
-            styles.saveBtn,
-            { backgroundColor: saved ? colors.success : colors.primary, transform: [{ scale: pressed ? 0.97 : 1 }] },
-          ]}
-        >
-          <IconSymbol
-            name={saved ? "checkmark.circle.fill" : "bell.fill"}
-            size={18}
-            color="#fff"
-          />
-          <Text style={styles.saveBtnText}>
-            {saving ? 'Saving…' : saved ? 'Alarm Saved!' : 'Save Alarm'}
-          </Text>
-        </Pressable>
-
-        {/* Appearance section — collapsible */}
+        {/* Appearance section — always visible, 3 tap buttons */}
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setAppearanceExpanded((v) => !v);
-            }}
-            style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.7 : 1 }]}
-          >
+          <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
               <IconSymbol name="sparkles" size={18} color={colors.primary} />
             </View>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
-            {/* Active theme preview swatch */}
-            <View style={[styles.activeSwatchSmall, { backgroundColor: THEMES.find(t => t.id === appTheme)?.preview ?? colors.primary, borderColor: colors.border }]} />
-            <Text style={[{ fontSize: 13, color: colors.muted, marginRight: 4 }]}>
-              {THEMES.find(t => t.id === appTheme)?.label ?? ''}
-            </Text>
-            <IconSymbol name={appearanceExpanded ? 'chevron.up' : 'chevron.down'} size={16} color={colors.muted} />
-          </Pressable>
-          {appearanceExpanded && (
-            <View style={[styles.themeRow, { borderTopColor: colors.border }]}>
-              {THEMES.map((theme) => {
-                const isActive = appTheme === theme.id;
-                return (
-                  <Pressable
-                    key={theme.id}
-                    onPress={() => {
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setAppTheme(theme.id);
-                    }}
-                    style={({ pressed }) => [
-                      styles.themeOption,
-                      {
-                        borderColor: isActive ? colors.primary : colors.border,
-                        backgroundColor: isActive ? colors.primary + '15' : colors.background,
-                        opacity: pressed ? 0.7 : 1,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.themeSwatch,
-                        {
-                          backgroundColor: theme.preview,
-                          borderColor: isActive ? colors.primary : colors.border,
-                        },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.themeLabel,
-                        { color: isActive ? colors.primary : colors.foreground },
-                      ]}
-                    >
-                      {theme.label}
-                    </Text>
-                    {isActive && (
-                      <IconSymbol name="checkmark" size={12} color={colors.primary} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
+          </View>
+          <View style={[{ flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+            {THEMES.map((theme) => {
+              const isActive = appTheme === theme.id;
+              return (
+                <Pressable
+                  key={theme.id}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setAppTheme(theme.id);
+                  }}
+                  style={({ pressed }) => [{
+                    flex: 1,
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingVertical: 14,
+                    borderRadius: 14,
+                    borderWidth: 2,
+                    borderColor: isActive ? colors.primary : colors.border,
+                    backgroundColor: isActive ? colors.primary + '15' : colors.background,
+                    opacity: pressed ? 0.7 : 1,
+                  }]}
+                >
+                  <View style={[{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: theme.preview,
+                    borderWidth: 1.5,
+                    borderColor: isActive ? colors.primary : colors.border,
+                  }]} />
+                  <Text style={[{ fontSize: 13, fontWeight: isActive ? '700' : '500', color: isActive ? colors.primary : colors.foreground }]}>
+                    {theme.label}
+                  </Text>
+                  {isActive && (
+                    <View style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary }]} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         {/* Habits section */}

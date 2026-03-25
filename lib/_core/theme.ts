@@ -4,8 +4,8 @@ import { themeColors } from "@/theme.config";
 
 export type ColorScheme = "light" | "dark";
 
-// Named app themes
-export type AppTheme = "purple" | "white" | "black" | "valley" | "airy";
+// Named app themes — Dark, Light, Airy
+export type AppTheme = "dark" | "light" | "airy";
 
 export const ThemeColors = themeColors;
 
@@ -89,35 +89,9 @@ function makeThemePalette(
   };
 }
 
-/** Purple theme: dark navy with indigo-blue accent */
-const purplePalette: ThemeColorPalette = makeThemePalette(
-  '#3B82F6', // primary — indigo-blue
-  '#0F0E1A', // background (deep dark navy)
-  '#1C1B2E', // surface
-  '#EEEEFF', // foreground
-  '#9090B8', // muted
-  '#2E2D45', // border
-  '#4ADE80', // success
-  '#FBBF24', // warning
-  '#F87171', // error
-);
-
-/** White theme: clean pure white with indigo-blue accent */
-const whitePalette: ThemeColorPalette = makeThemePalette(
-  '#3B82F6', // primary — indigo-blue
-  '#FFFFFF', // background (pure white)
-  '#FFFFFF', // surface (pure white — no grey tint)
-  '#000000', // foreground
-  '#8E8E93', // muted
-  '#E5E5EA', // border
-  '#34C759', // success
-  '#FF9500', // warning
-  '#FF3B30', // error
-);
-
-/** Black theme: true black OLED with indigo-blue accent */
-const blackPalette: ThemeColorPalette = makeThemePalette(
-  '#3B82F6', // primary — indigo-blue
+/** Dark theme: true black OLED with blue accent */
+const darkPalette: ThemeColorPalette = makeThemePalette(
+  '#3B82F6', // primary — blue
   '#000000', // background
   '#111111', // surface
   '#FFFFFF', // foreground
@@ -128,49 +102,44 @@ const blackPalette: ThemeColorPalette = makeThemePalette(
   '#F87171', // error
 );
 
-/** Momentum Valley theme: deep forest green + warm amber on rich dark earth */
-const valleyPalette: ThemeColorPalette = makeThemePalette(
-  '#4ADE80', // primary — vivid green
-  '#0D1A0F', // background — deep forest black-green
-  '#162318', // surface — dark moss
-  '#E8F5E9', // foreground — soft leaf white
-  '#6B9E72', // muted — muted sage
-  '#1E3A22', // border — dark forest
-  '#86EFAC', // success — bright mint
-  '#FCD34D', // warning — warm amber
-  '#F87171', // error — soft red
+/** Light theme: clean pure white with blue accent */
+const lightPalette: ThemeColorPalette = makeThemePalette(
+  '#3B82F6', // primary — blue
+  '#FFFFFF', // background
+  '#F2F2F7', // surface
+  '#000000', // foreground
+  '#8E8E93', // muted
+  '#E5E5EA', // border
+  '#34C759', // success
+  '#FF9500', // warning
+  '#FF3B30', // error
 );
 
 /**
- * Airy theme: inspired by Monument Valley's dreamy pastel aesthetic.
- * Soft dusty rose primary, misty lavender-white background, warm sandy surface,
- * deep muted slate text — the same ethereal, calming palette as the game.
+ * Airy theme: soft dreamy pastel aesthetic.
+ * Dusty rose primary, misty lavender-white background, warm sandy surface.
  */
 const airyPalette: ThemeColorPalette = makeThemePalette(
-  '#C084A8', // primary — dusty rose / soft magenta (MV accent)
+  '#C084A8', // primary — dusty rose
   '#F5F0F7', // background — misty lavender-white
   '#EDE8F2', // surface — pale lilac card
   '#2D2438', // foreground — deep muted plum text
   '#8E7FA0', // muted — soft lavender-grey
   '#D8CEEA', // border — pale violet
-  '#7ECBA1', // success — muted sage green (MV greenery)
-  '#E8B86D', // warning — warm sandy amber (MV warm tones)
+  '#7ECBA1', // success — muted sage green
+  '#E8B86D', // warning — warm sandy amber
   '#D97B8A', // error — soft dusty pink
 );
 
 export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
-  purple: purplePalette,
-  white: whitePalette,
-  black: blackPalette,
-  valley: valleyPalette,
+  dark: darkPalette,
+  light: lightPalette,
   airy: airyPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
-  purple: "dark",
-  white: "light",
-  black: "dark",
-  valley: "dark",
+  dark: "dark",
+  light: "light",
   airy: "light",
 };
 

@@ -36,12 +36,12 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [appTheme, setAppThemeState] = useState<AppTheme>("purple");
+  const [appTheme, setAppThemeState] = useState<AppTheme>("dark");
 
   // Load persisted theme on mount
   useEffect(() => {
     AsyncStorage.getItem(THEME_STORAGE_KEY).then((saved) => {
-      const validThemes: AppTheme[] = ["purple", "white", "black", "valley", "airy"];
+      const validThemes: AppTheme[] = ["dark", "light", "airy"];
       if (saved && validThemes.includes(saved as AppTheme)) {
         const theme = saved as AppTheme;
         const scheme = AppThemeColorScheme[theme];
