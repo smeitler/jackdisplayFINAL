@@ -1412,3 +1412,7 @@
 - [x] Remove Punk, Nova, Calm themes from theme picker and AppTheme type
 - [x] Redesign plus button sheet: 2 large side-by-side tiles (Voice Log red, Log Habits yellow)
 - [x] Fix voice log flow: show journal entry popup after recording (not missing journal option)
+
+- [x] Move Journal Entry section to top of Log Habits scroll list
+- [x] Add inline editable description/note TextInput per habit row in Log Habits screen
+- [x] Make date label tappable to open drum-roll date picker modal (month/day/year WheelColumn)

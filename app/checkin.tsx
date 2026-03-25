@@ -1,5 +1,5 @@
 import {
-  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image, Alert, Share,
+  ScrollView, Text, View, Pressable, StyleSheet, Platform, Animated, TextInput, Image, Alert, Share, Modal, KeyboardAvoidingView,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -24,6 +24,7 @@ import {
   getLastUserId,
 } from '@/lib/storage';
 import { useIsCalm } from '@/components/calm-effects';
+import { WheelColumn } from '@/components/wheel-time-picker';
 import { addEntry, loadEntries, generateId, updateEntry } from '@/lib/journal-store';
 
 // ─── Voice Check-in Simple Recorder ─────────────────────────────────────────
@@ -268,6 +269,8 @@ export default function CheckInScreen() {
   const [vcElapsed, setVcElapsed] = useState(0);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [journalEntry, setJournalEntry] = useState('');
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [pickerDate, setPickerDate] = useState<Date>(() => new Date(currentDate + 'T12:00:00'));
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -1308,14 +1311,20 @@ export default function CheckInScreen() {
           >
             <IconSymbol name="chevron.left" size={16} color={colors.primary} />
           </Pressable>
-          <View style={styles.dateLabelWrap}>
+          <Pressable
+            style={({ pressed }) => [styles.dateLabelWrap, { opacity: pressed ? 0.6 : 1 }]}
+            onPress={() => {
+              setPickerDate(new Date(currentDate + 'T12:00:00'));
+              setDatePickerVisible(true);
+            }}
+          >
             <Text style={[styles.dateLabel, { color: colors.foreground }]}>
               {formatDisplayDate(currentDate)}
             </Text>
-            <Text style={[styles.dateSub, { color: colors.muted }]}>
-              {new Date(currentDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            <Text style={[styles.dateSub, { color: colors.primary }]}>
+              {new Date(currentDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} • tap to change
             </Text>
-          </View>
+          </Pressable>
           <Pressable
             onPress={() => canGoForward ? navigateDate(1) : undefined}
             style={({ pressed }) => [styles.arrowBtn, { opacity: canGoForward ? (pressed ? 0.5 : 1) : 0.2 }]}
@@ -1375,6 +1384,25 @@ export default function CheckInScreen() {
         onMomentumScrollBegin={resetCountdown}
         scrollEventThrottle={400}
       >
+        {/* Journal Entry section — at the top, matches voice log results layout */}
+        <View style={styles.journalSection}>
+          <Text style={[styles.journalSectionTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
+          <TextInput
+            value={journalEntry}
+            onChangeText={setJournalEntry}
+            placeholder="How did your day go? What are you grateful for?"
+            placeholderTextColor={colors.muted + '66'}
+            style={[
+              styles.journalBlock,
+              { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
+            ]}
+            multiline
+            scrollEnabled={false}
+            textAlignVertical="top"
+            returnKeyType="done"
+          />
+        </View>
+
         {sortedCategories.map((cat) => {
           const habits = habitsByCategory[cat.id] ?? [];
           if (habits.length === 0) return null;
@@ -1417,21 +1445,32 @@ export default function CheckInScreen() {
                       key={habit.id}
                       style={[
                         styles.habitRow,
+                        { alignItems: 'flex-start' },
                         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                       ]}
                     >
-                      {/* Habit name */}
+                      {/* Habit name + editable description */}
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.habitName, { color: colors.foreground }]}>{habit.name}</Text>
-                        {habit.description ? (
-                          <Text style={[styles.habitDescription, { color: colors.muted }]} numberOfLines={1}>
-                            {habit.description}
-                          </Text>
-                        ) : null}
+                        <TextInput
+                          value={vcNotes[habit.id] ?? ''}
+                          onChangeText={(text) => setVcNotes((prev) => ({ ...prev, [habit.id]: text }))}
+                          placeholder={habit.description || 'Add a note…'}
+                          placeholderTextColor={colors.muted + '55'}
+                          style={[
+                            styles.habitNoteInput,
+                            { color: colors.foreground, borderColor: colors.border },
+                          ]}
+                          multiline
+                          scrollEnabled={false}
+                          textAlignVertical="top"
+                          returnKeyType="done"
+                          blurOnSubmit
+                        />
                       </View>
 
                       {/* 3-color segmented button (Missed / Okay / Crushed) */}
-                      <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
+                      <View style={[styles.segmentedBtn, { backgroundColor: colors.border, marginTop: 2 }]}>
                         {RATINGS.map((rating, i) => {
                           const isSelected = current === rating;
                           const col = RATING_COLORS[rating];
@@ -1459,25 +1498,6 @@ export default function CheckInScreen() {
             </View>
           );
         })}
-
-        {/* Journal Entry section — matches voice log results layout */}
-        <View style={styles.journalSection}>
-          <Text style={[styles.journalSectionTitle, { color: colors.foreground }]}>Journal Entry</Text>
-          <TextInput
-            value={journalEntry}
-            onChangeText={setJournalEntry}
-            placeholder="How did your day go? What are you grateful for?"
-            placeholderTextColor={colors.muted + '66'}
-            style={[
-              styles.journalBlock,
-              { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
-            ]}
-            multiline
-            scrollEnabled={false}
-            textAlignVertical="top"
-            returnKeyType="done"
-          />
-        </View>
 
         <View style={{ height: 16 }} />
       </ScrollView>
@@ -1586,6 +1606,96 @@ export default function CheckInScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* ── Date Picker Modal ── */}
+      <Modal
+        visible={datePickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDatePickerVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}
+          onPress={() => setDatePickerVisible(false)}
+        />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={[styles.datePickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            {/* Header */}
+            <View style={styles.datePickerHeader}>
+              <Pressable
+                onPress={() => setDatePickerVisible(false)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+              >
+                <Text style={{ fontSize: 16, color: colors.muted }}>Cancel</Text>
+              </Pressable>
+              <Text style={[styles.datePickerTitle, { color: colors.foreground }]}>Select Date</Text>
+              <Pressable
+                onPress={() => {
+                  const d = pickerDate;
+                  const newDate = toDateString(d);
+                  if (newDate >= today) return;
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setCurrentDate(newDate);
+                  setRatings(getRatingsForDate(newDate));
+                  setSubmitted(false);
+                  loadDayNotes().then((allNotes) => {
+                    const notesForDate: Record<string, string> = {};
+                    for (const habit of activeHabits) {
+                      const key = `${habit.id}:${newDate}`;
+                      if (allNotes[key]) notesForDate[habit.id] = allNotes[key];
+                    }
+                    setVcNotes(notesForDate);
+                  });
+                  setDatePickerVisible(false);
+                }}
+                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+              >
+                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.primary }}>Done</Text>
+              </Pressable>
+            </View>
+
+            {/* Drum-roll pickers: Month / Day / Year */}
+            <View style={styles.datePickerWheels}>
+              {/* Month */}
+              <WheelColumn
+                items={['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']}
+                initialIndex={pickerDate.getMonth()}
+                onSelect={(idx) => {
+                  const d = new Date(pickerDate);
+                  const maxDay = new Date(d.getFullYear(), idx + 1, 0).getDate();
+                  d.setMonth(idx);
+                  if (d.getDate() > maxDay) d.setDate(maxDay);
+                  setPickerDate(new Date(d));
+                }}
+                width={90}
+              />
+              {/* Day */}
+              <WheelColumn
+                key={`day-${pickerDate.getMonth()}-${pickerDate.getFullYear()}`}
+                items={Array.from({ length: new Date(pickerDate.getFullYear(), pickerDate.getMonth() + 1, 0).getDate() }, (_, i) => String(i + 1))}
+                initialIndex={pickerDate.getDate() - 1}
+                onSelect={(idx) => {
+                  const d = new Date(pickerDate);
+                  d.setDate(idx + 1);
+                  setPickerDate(new Date(d));
+                }}
+                width={70}
+              />
+              {/* Year */}
+              <WheelColumn
+                items={Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 4 + i))}
+                initialIndex={Math.max(0, pickerDate.getFullYear() - (new Date().getFullYear() - 4))}
+                onSelect={(idx) => {
+                  const d = new Date(pickerDate);
+                  d.setFullYear(new Date().getFullYear() - 4 + idx);
+                  setPickerDate(new Date(d));
+                }}
+                width={80}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -1710,6 +1820,12 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
 
+  habitNoteInput: {
+    fontSize: 12, marginTop: 4, letterSpacing: 0.1,
+    borderWidth: StyleSheet.hairlineWidth, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 5,
+    minHeight: 32, lineHeight: 18,
+  },
   // Voice check-in styles
   habitVcNote: { fontSize: 11, fontWeight: '600', marginTop: 3, letterSpacing: 0.1 },
   habitVcNoteInput: {
@@ -1787,6 +1903,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   snoozeBtnText: { fontSize: 15, fontWeight: '700' },
+
+  // Date picker modal
+  datePickerSheet: {
+    borderTopWidth: 1, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingBottom: 40, paddingHorizontal: 24,
+  },
+  datePickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 16,
+  },
+  datePickerTitle: { fontSize: 17, fontWeight: '700' },
+  datePickerWheels: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    paddingVertical: 8, gap: 8,
+  },
 
   // Journal entry section (matches voice log results layout)
   journalSection: { marginBottom: 18 },
