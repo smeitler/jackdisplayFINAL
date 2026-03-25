@@ -21,8 +21,10 @@ import {
   yesterdayString as yesterdayStr,
   loadDayNotes,
   saveDayNotes,
+  getLastUserId,
 } from '@/lib/storage';
 import { useIsCalm } from '@/components/calm-effects';
+import { addEntry, loadEntries, generateId, updateEntry } from '@/lib/journal-store';
 
 // ─── Voice Check-in Simple Recorder ─────────────────────────────────────────
 // Simple approach: record all audio, stop, send full blob to Whisper once.
@@ -265,6 +267,7 @@ export default function CheckInScreen() {
   const [vcNotes, setVcNotes] = useState<Record<string, string>>({});
   const [vcElapsed, setVcElapsed] = useState(0);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [journalEntry, setJournalEntry] = useState('');
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -667,6 +670,44 @@ export default function CheckInScreen() {
     }
 
     await submitCheckIn(currentDate, ratings);
+
+    // Save journal entry if user typed something
+    if (journalEntry.trim().length > 0) {
+      try {
+        const uid = await getLastUserId();
+        const userId = uid || 'default';
+        const allEntries = await loadEntries(userId);
+        const existingToday = allEntries.find(
+          (e) => e.date === currentDate && (e.tags?.includes('manual') || e.title === 'Daily Check-in')
+        );
+        if (existingToday) {
+          const timeLabel = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          const separator = `\n\n\u2500\u2500 ${timeLabel} \u2500\u2500\n\n`;
+          await updateEntry(userId, existingToday.id, {
+            body: existingToday.body + separator + journalEntry.trim(),
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          const entry = {
+            id: generateId(),
+            userId,
+            date: currentDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            title: 'Daily Check-in',
+            body: journalEntry.trim(),
+            template: 'blank' as const,
+            attachments: [],
+            tags: ['manual'],
+            transcriptionStatus: 'done' as const,
+          };
+          await addEntry(userId, entry);
+        }
+      } catch (e) {
+        console.warn('[CheckIn] Failed to save journal entry:', e);
+      }
+    }
+
     setSubmitted(true);
 
     // Auto-generate morning practice if enabled
@@ -1370,18 +1411,6 @@ export default function CheckInScreen() {
                 {habits.map((habit, idx) => {
                   const current: Rating = ratings[habit.id] ?? 'none';
                   const isLast = idx === habits.length - 1;
-                  const activeRating = (current !== 'none' ? current : null) as ActiveRating | null;
-                  const pillColor = activeRating ? RATING_COLORS[activeRating] : colors.border;
-                  const pillLabel = activeRating === 'red' ? 'Missed' : activeRating === 'yellow' ? 'Okay' : activeRating === 'green' ? 'Crushed' : 'Tap';
-
-                  // Cycle: none → green → yellow → red → none
-                  function cycleRating() {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    const cycle: Rating[] = ['none', 'green', 'yellow', 'red'];
-                    const idx2 = cycle.indexOf(current);
-                    const next = cycle[(idx2 + 1) % cycle.length];
-                    setRatings((prev) => ({ ...prev, [habit.id]: next }));
-                  }
 
                   return (
                     <View
@@ -1401,23 +1430,28 @@ export default function CheckInScreen() {
                         ) : null}
                       </View>
 
-                      {/* Single tap-to-cycle pill */}
-                      <Pressable
-                        onPress={cycleRating}
-                        style={({ pressed }) => ([
-                          styles.cyclePill,
-                          {
-                            backgroundColor: activeRating ? pillColor + '22' : colors.border + '44',
-                            borderColor: activeRating ? pillColor + '88' : colors.border,
-                            opacity: pressed ? 0.75 : 1,
-                            transform: [{ scale: pressed ? 0.95 : 1 }],
-                          },
-                        ])}
-                      >
-                        <Text style={[styles.cyclePillText, { color: activeRating ? pillColor : colors.muted }]}>
-                          {pillLabel}
-                        </Text>
-                      </Pressable>
+                      {/* 3-color segmented button (Missed / Okay / Crushed) */}
+                      <View style={[styles.segmentedBtn, { backgroundColor: colors.border }]}>
+                        {RATINGS.map((rating, i) => {
+                          const isSelected = current === rating;
+                          const col = RATING_COLORS[rating];
+                          return (
+                            <Pressable
+                              key={rating}
+                              onPress={() => setRating(habit.id, rating)}
+                              style={({ pressed }) => [
+                                styles.segment,
+                                i === 0 && styles.segmentFirst,
+                                i === RATINGS.length - 1 && styles.segmentLast,
+                                {
+                                  backgroundColor: isSelected ? col : col + '44',
+                                  opacity: pressed ? 0.75 : 1,
+                                },
+                              ]}
+                            />
+                          );
+                        })}
+                      </View>
                     </View>
                   );
                 })}
@@ -1425,6 +1459,25 @@ export default function CheckInScreen() {
             </View>
           );
         })}
+
+        {/* Journal Entry section — matches voice log results layout */}
+        <View style={styles.journalSection}>
+          <Text style={[styles.journalSectionTitle, { color: colors.foreground }]}>Journal Entry</Text>
+          <TextInput
+            value={journalEntry}
+            onChangeText={setJournalEntry}
+            placeholder="How did your day go? What are you grateful for?"
+            placeholderTextColor={colors.muted + '66'}
+            style={[
+              styles.journalBlock,
+              { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
+            ]}
+            multiline
+            scrollEnabled={false}
+            textAlignVertical="top"
+            returnKeyType="done"
+          />
+        </View>
 
         <View style={{ height: 16 }} />
       </ScrollView>
@@ -1734,4 +1787,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   snoozeBtnText: { fontSize: 15, fontWeight: '700' },
+
+  // Journal entry section (matches voice log results layout)
+  journalSection: { marginBottom: 18 },
+  journalSectionTitle: {
+    fontSize: 13, fontWeight: '700', letterSpacing: 0.3,
+    textTransform: 'uppercase', marginBottom: 8,
+  },
+  journalBlock: {
+    borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 14,
+    fontSize: 14, lineHeight: 22, minHeight: 120,
+  },
 });
