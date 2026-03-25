@@ -174,6 +174,7 @@ export function CategoryCalendar({
                       : colors.border;
                     const stripOpacity = rating && (isPast || isToday) ? 0.9 : 0.3;
 
+                    const habitIdx = habits.indexOf(h) + 1;
                     return (
                       <View
                         key={h.id}
@@ -182,8 +183,17 @@ export function CategoryCalendar({
                           borderRadius: 1,
                           backgroundColor: stripColor,
                           opacity: stripOpacity,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
                         }}
-                      />
+                      >
+                        {STRIP_H >= 6 && (
+                          <Text style={{ fontSize: Math.min(STRIP_H - 1, 8), fontWeight: '900', color: '#fff', lineHeight: STRIP_H, opacity: 0.9 }}>
+                            {habitIdx}
+                          </Text>
+                        )}
+                      </View>
                     );
                   })}
                 </View>

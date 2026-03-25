@@ -1419,3 +1419,4 @@
 - [x] Replace drum-roll date picker with month calendar grid view in Log Habits screen
 - [x] Polish Log Habits layout: lower legend row, reduce segmented button size for better visual balance
 - [x] Add required field validation for first name, last name, email, phone in accountability coach setup (all 4 on step 1, block Continue until filled)
+- [x] Add habit index number (1, 2, 3…) inside each colored habit box in the calendar view
