@@ -11,7 +11,7 @@ import {
   type ThemeColorPalette,
 } from "@/constants/theme";
 
-const THEME_STORAGE_KEY = "app_theme_v2";
+const THEME_STORAGE_KEY = "app_theme_v3";
 
 type ThemeContextValue = {
   colorScheme: ColorScheme;
