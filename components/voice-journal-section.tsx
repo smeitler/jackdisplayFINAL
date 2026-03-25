@@ -183,8 +183,8 @@ function RecordingRow({
         </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 3 }}>
           {rec.journalCount > 0 && (
-            <View style={[rowStyles.badge, { backgroundColor: '#7B74FF18' }]}>
-              <Text style={[rowStyles.badgeText, { color: '#7B74FF' }]}>
+            <View style={[rowStyles.badge, { backgroundColor: '#818CF818' }]}>
+              <Text style={[rowStyles.badgeText, { color: '#818CF8' }]}>
                 📝 {rec.journalCount} journal
               </Text>
             </View>

@@ -53,7 +53,7 @@ const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; descriptio
   { id: 'journaling',    label: 'Journaling',         emoji: '📓', description: 'Morning pages, free write',      source: null },
 ];
 
-const ALARM_COLOR = '#6C63FF';
+const ALARM_COLOR = '#6366F1';
 
 // ─── Add/Edit Full-Screen Modal ───────────────────────────────────────────────
 

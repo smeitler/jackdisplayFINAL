@@ -232,7 +232,7 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
   {
     id: "purple",
     label: "Purple",
-    preview: "#7B74FF",
+    preview: "#818CF8",
     description: "Dark navy",
   },
   {
@@ -809,8 +809,8 @@ export default function YouSettingsScreen() {
         {/* Mind Dump */}
         <View style={[styles.section, { borderColor: colors.border }]}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: '#7B74FF18' }]}>
-              <IconSymbol name="brain" size={18} color="#7B74FF" />
+            <View style={[styles.sectionIconWrap, { backgroundColor: '#818CF818' }]}>
+              <IconSymbol name="brain" size={18} color="#818CF8" />
             </View>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Mind Dump</Text>
             <Text style={[styles.habitCountBadge, { color: colors.muted }]}>Capture thoughts</Text>
@@ -822,7 +822,7 @@ export default function YouSettingsScreen() {
               { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <Text style={[styles.manageHabitsBtnText, { color: '#7B74FF' }]}>
+            <Text style={[styles.manageHabitsBtnText, { color: '#818CF8' }]}>
               Open Mind Dump
             </Text>
             <IconSymbol name="chevron.right" size={16} color={colors.muted} />

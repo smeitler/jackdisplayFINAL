@@ -38,7 +38,7 @@ const RATING_COLORS: Record<ActiveRating, string> = {
 };
 
 // ─── Celebration Overlay ─────────────────────────────────────────────────────
-const CONFETTI_COLORS = ['#22C55E', '#F59E0B', '#7C3AED', '#EF4444', '#60A5FA', '#F472B6', '#34D399', '#FBBF24'];
+const CONFETTI_COLORS = ['#22C55E', '#F59E0B', '#6366F1', '#EF4444', '#60A5FA', '#F472B6', '#34D399', '#FBBF24'];
 const NUM_PARTICLES = 40;
 
 function CelebrationOverlay({ score }: { score: number }) {
@@ -201,14 +201,14 @@ function MorningPracticeCard({ alarm, colors }: { alarm: ReturnType<typeof useAp
               }}
               style={({ pressed }) => ({
                 paddingHorizontal: 11, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5,
-                borderColor: isSelected ? '#7C3AED' : colors.border,
-                backgroundColor: isSelected ? '#7C3AED18' : 'transparent',
+                borderColor: isSelected ? '#6366F1' : colors.border,
+                backgroundColor: isSelected ? '#6366F118' : 'transparent',
                 opacity: pressed ? 0.7 : 1,
                 flexDirection: 'row', alignItems: 'center', gap: 4,
               })}
             >
               <Text style={{ fontSize: 13 }}>{m.emoji}</Text>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: isSelected ? '#7C3AED' : colors.muted }}>{m.label}</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: isSelected ? '#6366F1' : colors.muted }}>{m.label}</Text>
             </Pressable>
           );
         })}
@@ -225,19 +225,19 @@ function MorningPracticeCard({ alarm, colors }: { alarm: ReturnType<typeof useAp
                 onPress={() => { setMpSelectedDuration(min); setMpCustomDuration(''); }}
                 style={({ pressed }) => ({
                   paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5,
-                  borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.border,
-                  backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED18' : 'transparent',
+                  borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#6366F1' : colors.border,
+                  backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#6366F118' : 'transparent',
                   opacity: pressed ? 0.7 : 1,
                 })}
               >
-                <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#7C3AED' : colors.foreground }}>{min} min</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#6366F1' : colors.foreground }}>{min} min</Text>
               </Pressable>
             ))}
             <View style={{
               flexDirection: 'row', alignItems: 'center', borderWidth: 1.5,
-              borderColor: mpCustomDuration ? '#7C3AED' : colors.border, borderRadius: 20,
+              borderColor: mpCustomDuration ? '#6366F1' : colors.border, borderRadius: 20,
               paddingHorizontal: 10, paddingVertical: 4,
-              backgroundColor: mpCustomDuration ? '#7C3AED18' : 'transparent',
+              backgroundColor: mpCustomDuration ? '#6366F118' : 'transparent',
             }}>
               <TextInput
                 value={mpCustomDuration}
@@ -245,10 +245,10 @@ function MorningPracticeCard({ alarm, colors }: { alarm: ReturnType<typeof useAp
                 placeholder="Custom"
                 placeholderTextColor={colors.muted}
                 keyboardType="number-pad"
-                style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#7C3AED' : colors.foreground, minWidth: 50, textAlign: 'center' }}
+                style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#6366F1' : colors.foreground, minWidth: 50, textAlign: 'center' }}
                 returnKeyType="done"
               />
-              {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#7C3AED', marginLeft: 2 }}>min</Text> : null}
+              {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#6366F1', marginLeft: 2 }}>min</Text> : null}
             </View>
           </View>
         </View>

@@ -1406,3 +1406,4 @@
 - [x] Coach CTA: open coach survey/apply modal (not external URL), add Apple In-App Purchase at end of survey flow
 - [x] Full-width alarm card: compact layout — time smaller, label+toggle on same row, day chips below, no wasted vertical space
 - [x] After daily check-in: show shareable celebration cards (streak milestone, perfect day, goal progress wins) with native share sheet
+- [x] Update primary accent color to indigo-blue (#6366F1) and apply consistently to all submit buttons, action buttons, icons, and interactive elements

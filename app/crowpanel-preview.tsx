@@ -14,7 +14,7 @@
  * Design constraints that mirror the real CrowPanel hardware:
  *   - Display: 800 × 480 px, landscape, IPS touch panel
  *   - Font: Montserrat (LVGL built-in), rendered here as System Bold
- *   - Colors: dark background (#0D0D1A), accent (#7B74FF), status colors
+ *   - Colors: dark background (#0D0D1A), accent (#818CF8), status colors
  *   - Touch targets: minimum 60 × 60 px (finger-friendly on 7" glass)
  *   - No scroll — everything must fit on one screen (LVGL has no scroll by default)
  */
@@ -43,7 +43,7 @@ const CP = {
   bg:        '#0D0D1A',   // lv_color_hex(0x0D0D1A)  — deep navy black
   surface:   '#1A1A2E',   // card / panel background
   border:    '#2E2D45',   // subtle divider
-  accent:    '#7B74FF',   // primary purple — matches Jack brand
+  accent:    '#818CF8',   // primary purple — matches Jack brand
   accentDim: '#4A45A0',   // dimmed accent for inactive states
   fg:        '#EEEEFF',   // primary text
   muted:     '#9090B8',   // secondary text
@@ -51,7 +51,7 @@ const CP = {
   yellow:    '#F59E0B',   // okay
   green:     '#22C55E',   // crushed it
   snooze:    '#374151',   // snooze button bg
-  dismiss:   '#7B74FF',   // dismiss button bg (accent)
+  dismiss:   '#818CF8',   // dismiss button bg (accent)
   statusBar: '#050510',   // top status bar
 };
 
