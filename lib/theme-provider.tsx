@@ -28,9 +28,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Load persisted theme on mount
   useEffect(() => {
     AsyncStorage.getItem(THEME_STORAGE_KEY).then((saved) => {
-      if (saved === "purple" || saved === "white" || saved === "black") {
-        applyTheme(saved);
-        setAppThemeState(saved);
+      const validThemes: AppTheme[] = ["purple","white","black","punk","valley","airy","nova","calm"];
+      if (saved && validThemes.includes(saved as AppTheme)) {
+        applyTheme(saved as AppTheme);
+        setAppThemeState(saved as AppTheme);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

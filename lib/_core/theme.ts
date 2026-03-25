@@ -91,7 +91,7 @@ function makeThemePalette(
 
 /** Purple theme: original dark navy/purple brand palette */
 const purplePalette: ThemeColorPalette = makeThemePalette(
-  '#818CF8', // primary
+  '#6366F1', // primary
   '#0F0E1A', // background (deep dark navy)
   '#1C1B2E', // surface
   '#EEEEFF', // foreground

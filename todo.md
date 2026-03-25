@@ -1407,3 +1407,4 @@
 - [x] Full-width alarm card: compact layout — time smaller, label+toggle on same row, day chips below, no wasted vertical space
 - [x] After daily check-in: show shareable celebration cards (streak milestone, perfect day, goal progress wins) with native share sheet
 - [x] Update primary accent color to indigo-blue (#6366F1) and apply consistently to all submit buttons, action buttons, icons, and interactive elements
+- [ ] Fix submit/action buttons still showing old purple — ensure all buttons use colors.primary from useColors() hook
