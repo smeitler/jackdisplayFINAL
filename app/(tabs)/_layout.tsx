@@ -26,7 +26,7 @@ export default function TabLayout() {
   const [plusSheetVisible, setPlusSheetVisible] = useState(false);
 
   // Dark navy background — matches the reference screenshot aesthetic
-  const tabBarBg = isNova ? "#050510" : isCalm ? "#0D1135" : "#0F1117";
+  const tabBarBg = colors.background;
 
   // Active: bright white. Inactive: soft muted blue-grey
   const activeColor = "#FFFFFF";
@@ -177,7 +177,7 @@ export default function TabLayout() {
           style={[
             sheetStyles.sheet,
             {
-              backgroundColor: isNova ? "#0D0A1E" : isCalm ? "#0D1135" : colors.surface,
+              backgroundColor: colors.surface,
             },
           ]}
         >

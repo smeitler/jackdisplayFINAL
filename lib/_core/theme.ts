@@ -5,7 +5,7 @@ import { themeColors } from "@/theme.config";
 export type ColorScheme = "light" | "dark";
 
 // Named app themes
-export type AppTheme = "purple" | "white" | "black" | "punk" | "valley" | "airy" | "nova" | "calm";
+export type AppTheme = "purple" | "white" | "black" | "valley" | "airy";
 
 export const ThemeColors = themeColors;
 
@@ -89,9 +89,9 @@ function makeThemePalette(
   };
 }
 
-/** Purple theme: original dark navy/purple brand palette */
+/** Purple theme: dark navy with indigo-blue accent */
 const purplePalette: ThemeColorPalette = makeThemePalette(
-  '#6366F1', // primary
+  '#6366F1', // primary — indigo-blue
   '#0F0E1A', // background (deep dark navy)
   '#1C1B2E', // surface
   '#EEEEFF', // foreground
@@ -102,9 +102,9 @@ const purplePalette: ThemeColorPalette = makeThemePalette(
   '#F87171', // error
 );
 
-/** White theme: clean pure white, iOS-style */
+/** White theme: clean pure white with indigo-blue accent */
 const whitePalette: ThemeColorPalette = makeThemePalette(
-  '#007AFF', // primary
+  '#6366F1', // primary — indigo-blue
   '#FFFFFF', // background (pure white)
   '#FFFFFF', // surface (pure white — no grey tint)
   '#000000', // foreground
@@ -115,9 +115,9 @@ const whitePalette: ThemeColorPalette = makeThemePalette(
   '#FF3B30', // error
 );
 
-/** Black theme: true black OLED */
+/** Black theme: true black OLED with indigo-blue accent */
 const blackPalette: ThemeColorPalette = makeThemePalette(
-  '#6366F1', // primary
+  '#6366F1', // primary — indigo-blue
   '#000000', // background
   '#111111', // surface
   '#FFFFFF', // foreground
@@ -158,73 +158,20 @@ const airyPalette: ThemeColorPalette = makeThemePalette(
   '#D97B8A', // error — soft dusty pink
 );
 
-/** Punk theme: cyberpunk neon magenta + cyan on true black */
-const punkPalette: ThemeColorPalette = makeThemePalette(
-  '#FF00FF', // primary — neon magenta
-  '#000000', // background — true black
-  '#0D0D0D', // surface — near-black
-  '#00FFFF', // foreground — neon cyan
-  '#CC00CC', // muted — dim magenta
-  '#330033', // border — dark magenta
-  '#00FF99', // success — neon green
-  '#FF6600', // warning — neon orange
-  '#FF0055', // error — hot pink
-);
-
-/**
- * Nova theme: deep space aurora — electric violet primary on true black,
- * cosmic teal/cyan accents, animated shimmer and glow effects activated
- * via the NovaEffects component when this theme is active.
- */
-const novaPalette: ThemeColorPalette = makeThemePalette(
-  '#A855F7', // primary — electric violet
-  '#050510', // background — deep space black
-  '#0D0B1E', // surface — dark nebula
-  '#E8E0FF', // foreground — soft starlight white
-  '#7C6FA0', // muted — dim violet-grey
-  '#2D1B69', // border — deep violet
-  '#22D3EE', // success — cosmic cyan
-  '#F59E0B', // warning — solar amber
-  '#F43F5E', // error — supernova red-pink
-);
-
-/**
- * Calm theme: inspired by Headspace/Calm app — deep navy background,
- * warm amber primary, soft blue-grey muted text, rounded elevated cards.
- * Designed for a serene, focused daily habit experience.
- */
-const calmPalette: ThemeColorPalette = makeThemePalette(
-  '#F5A623', // primary — warm amber (CTAs, active tab, highlights)
-  '#0D1135', // background — deep navy
-  '#1A2050', // surface — elevated navy card
-  '#FFFFFF', // foreground — crisp white text
-  '#8B9CC8', // muted — soft blue-grey (subtitles, metadata)
-  '#252D6E', // border — subtle deep navy border
-  '#27AE60', // success — calm green
-  '#F5C518', // warning — warm gold
-  '#E74C3C', // error — soft red
-);
-
 export const AppThemePalettes: Record<AppTheme, ThemeColorPalette> = {
   purple: purplePalette,
   white: whitePalette,
   black: blackPalette,
-  punk: punkPalette,
   valley: valleyPalette,
   airy: airyPalette,
-  nova: novaPalette,
-  calm: calmPalette,
 };
 
 export const AppThemeColorScheme: Record<AppTheme, ColorScheme> = {
   purple: "dark",
   white: "light",
   black: "dark",
-  punk: "dark",
   valley: "dark",
   airy: "light",
-  nova: "dark",
-  calm: "dark",
 };
 
 export const Fonts = Platform.select({

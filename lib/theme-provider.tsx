@@ -11,7 +11,7 @@ import {
   type ThemeColorPalette,
 } from "@/constants/theme";
 
-const THEME_STORAGE_KEY = "app_theme";
+const THEME_STORAGE_KEY = "app_theme_v2";
 
 type ThemeContextValue = {
   colorScheme: ColorScheme;
@@ -28,7 +28,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Load persisted theme on mount
   useEffect(() => {
     AsyncStorage.getItem(THEME_STORAGE_KEY).then((saved) => {
-      const validThemes: AppTheme[] = ["purple","white","black","punk","valley","airy","nova","calm"];
+      const validThemes: AppTheme[] = ["purple","white","black","valley","airy"];
       if (saved && validThemes.includes(saved as AppTheme)) {
         applyTheme(saved as AppTheme);
         setAppThemeState(saved as AppTheme);

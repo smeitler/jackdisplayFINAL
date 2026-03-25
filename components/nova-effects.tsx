@@ -27,8 +27,8 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useIsNova() {
-  const { appTheme } = useThemeContext();
-  return appTheme === "nova";
+  // Nova theme removed — always returns false
+  return false;
 }
 
 // ─── Aurora Background ────────────────────────────────────────────────────────

@@ -248,12 +248,6 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
     description: "True black",
   },
   {
-    id: "punk",
-    label: "Punk",
-    preview: "#FF00FF",
-    description: "Cyberpunk",
-  },
-  {
     id: "valley",
     label: "Valley",
     preview: "#4ADE80",
@@ -265,24 +259,11 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
     preview: "#C084A8",
     description: "Dreamy",
   },
-  {
-    id: "nova",
-    label: "Nova ✨",
-    preview: "#A855F7",
-    description: "Galaxy",
-  },
-  {
-    id: "calm",
-    label: "Calm",
-    preview: "#F5A623",
-    description: "Deep navy",
-  },
 ];
 
 export default function YouSettingsScreen() {
   const { alarm, updateAlarm, activeHabits, isDemoMode, exitDemo } = useApp();
   const colors = useColors();
-  const isCalm = useIsCalm();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
@@ -386,7 +367,7 @@ export default function YouSettingsScreen() {
   }
 
   return (
-    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
+    <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         {/* Header */}

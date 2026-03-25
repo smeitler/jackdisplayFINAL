@@ -22,8 +22,8 @@ import { useThemeContext } from "@/lib/theme-provider";
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useIsCalm() {
-  const { appTheme } = useThemeContext();
-  return appTheme === "calm";
+  // Calm theme removed — always returns false
+  return false;
 }
 
 // ─── Calm Header ──────────────────────────────────────────────────────────────
