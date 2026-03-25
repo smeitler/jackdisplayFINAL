@@ -24,7 +24,6 @@ import {
   getLastUserId,
 } from '@/lib/storage';
 import { useIsCalm } from '@/components/calm-effects';
-import { WheelColumn } from '@/components/wheel-time-picker';
 import { addEntry, loadEntries, generateId, updateEntry } from '@/lib/journal-store';
 
 // ─── Voice Check-in Simple Recorder ─────────────────────────────────────────
@@ -271,6 +270,8 @@ export default function CheckInScreen() {
   const [journalEntry, setJournalEntry] = useState('');
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [pickerDate, setPickerDate] = useState<Date>(() => new Date(currentDate + 'T12:00:00'));
+  const [pickerViewYear, setPickerViewYear] = useState(() => new Date(currentDate + 'T12:00:00').getFullYear());
+  const [pickerViewMonth, setPickerViewMonth] = useState(() => new Date(currentDate + 'T12:00:00').getMonth());
   const vcTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const vcPulseAnim = useRef(new Animated.Value(1)).current;
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -1344,18 +1345,6 @@ export default function CheckInScreen() {
         }]} />
       </View>
 
-      {/* ── Legend ── */}
-      <View style={[styles.legendRow, { borderBottomColor: colors.border }]}>
-        {RATINGS.map((r) => (
-          <View key={r} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: RATING_COLORS[r] }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>
-              {r === 'red' ? 'Missed' : r === 'yellow' ? 'Okay' : 'Crushed it'}
-            </Text>
-          </View>
-        ))}
-      </View>
-
       {/* ── Global rate-all row ── */}
       <View style={[styles.rateAllRow, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <Text style={[styles.rateAllLabel, { color: colors.muted }]}>Rate All</Text>
@@ -1384,6 +1373,18 @@ export default function CheckInScreen() {
         onMomentumScrollBegin={resetCountdown}
         scrollEventThrottle={400}
       >
+        {/* Legend — inline in scroll, above journal */}
+        <View style={[styles.legendRow, { borderBottomColor: 'transparent', marginBottom: 4 }]}>
+          {RATINGS.map((r) => (
+            <View key={r} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: RATING_COLORS[r] }]} />
+              <Text style={[styles.legendText, { color: colors.muted }]}>
+                {r === 'red' ? 'Missed' : r === 'yellow' ? 'Okay' : 'Crushed it'}
+              </Text>
+            </View>
+          ))}
+        </View>
+
         {/* Journal Entry section — at the top, matches voice log results layout */}
         <View style={styles.journalSection}>
           <Text style={[styles.journalSectionTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
@@ -1607,7 +1608,7 @@ export default function CheckInScreen() {
         </View>
       </View>
 
-      {/* ── Date Picker Modal ── */}
+      {/* ── Date Picker Modal (month calendar grid) ── */}
       <Modal
         visible={datePickerVisible}
         transparent
@@ -1618,83 +1619,135 @@ export default function CheckInScreen() {
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}
           onPress={() => setDatePickerVisible(false)}
         />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={[styles.datePickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-            {/* Header */}
-            <View style={styles.datePickerHeader}>
-              <Pressable
-                onPress={() => setDatePickerVisible(false)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-              >
-                <Text style={{ fontSize: 16, color: colors.muted }}>Cancel</Text>
-              </Pressable>
-              <Text style={[styles.datePickerTitle, { color: colors.foreground }]}>Select Date</Text>
-              <Pressable
-                onPress={() => {
-                  const d = pickerDate;
-                  const newDate = toDateString(d);
-                  if (newDate >= today) return;
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setCurrentDate(newDate);
-                  setRatings(getRatingsForDate(newDate));
-                  setSubmitted(false);
-                  loadDayNotes().then((allNotes) => {
-                    const notesForDate: Record<string, string> = {};
-                    for (const habit of activeHabits) {
-                      const key = `${habit.id}:${newDate}`;
-                      if (allNotes[key]) notesForDate[habit.id] = allNotes[key];
-                    }
-                    setVcNotes(notesForDate);
-                  });
-                  setDatePickerVisible(false);
-                }}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-              >
-                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.primary }}>Done</Text>
-              </Pressable>
-            </View>
-
-            {/* Drum-roll pickers: Month / Day / Year */}
-            <View style={styles.datePickerWheels}>
-              {/* Month */}
-              <WheelColumn
-                items={['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']}
-                initialIndex={pickerDate.getMonth()}
-                onSelect={(idx) => {
-                  const d = new Date(pickerDate);
-                  const maxDay = new Date(d.getFullYear(), idx + 1, 0).getDate();
-                  d.setMonth(idx);
-                  if (d.getDate() > maxDay) d.setDate(maxDay);
-                  setPickerDate(new Date(d));
-                }}
-                width={90}
-              />
-              {/* Day */}
-              <WheelColumn
-                key={`day-${pickerDate.getMonth()}-${pickerDate.getFullYear()}`}
-                items={Array.from({ length: new Date(pickerDate.getFullYear(), pickerDate.getMonth() + 1, 0).getDate() }, (_, i) => String(i + 1))}
-                initialIndex={pickerDate.getDate() - 1}
-                onSelect={(idx) => {
-                  const d = new Date(pickerDate);
-                  d.setDate(idx + 1);
-                  setPickerDate(new Date(d));
-                }}
-                width={70}
-              />
-              {/* Year */}
-              <WheelColumn
-                items={Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 4 + i))}
-                initialIndex={Math.max(0, pickerDate.getFullYear() - (new Date().getFullYear() - 4))}
-                onSelect={(idx) => {
-                  const d = new Date(pickerDate);
-                  d.setFullYear(new Date().getFullYear() - 4 + idx);
-                  setPickerDate(new Date(d));
-                }}
-                width={80}
-              />
-            </View>
+        <View style={[styles.datePickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+          {/* Header row: Cancel | Month Year | Done */}
+          <View style={styles.datePickerHeader}>
+            <Pressable
+              onPress={() => setDatePickerVisible(false)}
+              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+            >
+              <Text style={{ fontSize: 16, color: colors.muted }}>Cancel</Text>
+            </Pressable>
+            <Text style={[styles.datePickerTitle, { color: colors.foreground }]}>
+              {new Date(pickerViewYear, pickerViewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+            <Pressable
+              onPress={() => {
+                const newDate = toDateString(pickerDate);
+                if (newDate >= today) return;
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setCurrentDate(newDate);
+                setRatings(getRatingsForDate(newDate));
+                setSubmitted(false);
+                loadDayNotes().then((allNotes) => {
+                  const notesForDate: Record<string, string> = {};
+                  for (const habit of activeHabits) {
+                    const key = `${habit.id}:${newDate}`;
+                    if (allNotes[key]) notesForDate[habit.id] = allNotes[key];
+                  }
+                  setVcNotes(notesForDate);
+                });
+                setDatePickerVisible(false);
+              }}
+              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+            >
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.primary }}>Done</Text>
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
+
+          {/* Month navigation */}
+          <View style={styles.datePickerMonthNav}>
+            <Pressable
+              onPress={() => {
+                let m = pickerViewMonth - 1;
+                let y = pickerViewYear;
+                if (m < 0) { m = 11; y -= 1; }
+                setPickerViewMonth(m);
+                setPickerViewYear(y);
+              }}
+              style={({ pressed }) => [styles.datePickerNavBtn, { opacity: pressed ? 0.5 : 1 }]}
+            >
+              <IconSymbol name="chevron.left" size={18} color={colors.primary} />
+            </Pressable>
+            <Text style={[styles.datePickerMonthLabel, { color: colors.foreground }]}>
+              {new Date(pickerViewYear, pickerViewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+            <Pressable
+              onPress={() => {
+                let m = pickerViewMonth + 1;
+                let y = pickerViewYear;
+                if (m > 11) { m = 0; y += 1; }
+                // Don't navigate past current month
+                const nextMonthStart = toDateString(new Date(y, m, 1));
+                if (nextMonthStart > today) return;
+                setPickerViewMonth(m);
+                setPickerViewYear(y);
+              }}
+              style={({ pressed }) => [styles.datePickerNavBtn, { opacity: pressed ? 0.5 : 1 }]}
+            >
+              <IconSymbol name="chevron.right" size={18} color={colors.primary} />
+            </Pressable>
+          </View>
+
+          {/* Day-of-week header */}
+          <View style={styles.datePickerDowRow}>
+            {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d) => (
+              <Text key={d} style={[styles.datePickerDow, { color: colors.muted }]}>{d}</Text>
+            ))}
+          </View>
+
+          {/* Calendar grid */}
+          {(() => {
+            const firstDay = new Date(pickerViewYear, pickerViewMonth, 1).getDay();
+            const daysInMonth = new Date(pickerViewYear, pickerViewMonth + 1, 0).getDate();
+            const cells: (number | null)[] = [
+              ...Array(firstDay).fill(null),
+              ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+            ];
+            // Pad to complete last row
+            while (cells.length % 7 !== 0) cells.push(null);
+            const rows: (number | null)[][] = [];
+            for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+            const todayStr = today;
+            return rows.map((row, ri) => (
+              <View key={ri} style={styles.datePickerWeekRow}>
+                {row.map((day, ci) => {
+                  if (!day) return <View key={ci} style={styles.datePickerCell} />;
+                  const cellDate = toDateString(new Date(pickerViewYear, pickerViewMonth, day));
+                  const isFuture = cellDate >= todayStr;
+                  const isSelected = cellDate === toDateString(pickerDate);
+                  const isToday = cellDate === todayStr;
+                  return (
+                    <Pressable
+                      key={ci}
+                      onPress={() => {
+                        if (isFuture) return;
+                        const d = new Date(pickerViewYear, pickerViewMonth, day, 12);
+                        setPickerDate(d);
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                      style={({ pressed }) => [
+                        styles.datePickerCell,
+                        isSelected && { backgroundColor: colors.primary, borderRadius: 20 },
+                        !isSelected && isToday && { borderWidth: 1.5, borderColor: colors.primary, borderRadius: 20 },
+                        isFuture && { opacity: 0.25 },
+                        pressed && !isFuture && { opacity: 0.6 },
+                      ]}
+                    >
+                      <Text style={[
+                        styles.datePickerCellText,
+                        { color: isSelected ? '#fff' : colors.foreground },
+                        isToday && !isSelected && { color: colors.primary, fontWeight: '700' },
+                      ]}>{day}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ));
+          })()}
+
+          <View style={{ height: 20 }} />
+        </View>
       </Modal>
     </ScreenContainer>
   );
@@ -1771,19 +1824,19 @@ const styles = StyleSheet.create({
 
   segmentedBtn: {
     flexDirection: 'row',
-    borderRadius: 11,
+    borderRadius: 10,
     overflow: 'hidden',
     gap: 2,
     padding: 2,
   },
   segment: {
-    width: 40,
-    height: 38,
-    borderRadius: 9,
+    width: 34,
+    height: 32,
+    borderRadius: 8,
   },
-  segmentFirst: { borderTopLeftRadius: 9, borderBottomLeftRadius: 9 },
-  segmentLast:  { borderTopRightRadius: 9, borderBottomRightRadius: 9 },
-  segmentSmall: { width: 32, height: 28 },
+  segmentFirst: { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  segmentLast:  { borderTopRightRadius: 8, borderBottomRightRadius: 8 },
+  segmentSmall: { width: 28, height: 24 },
 
   rateAllRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1904,20 +1957,33 @@ const styles = StyleSheet.create({
   },
   snoozeBtnText: { fontSize: 15, fontWeight: '700' },
 
-  // Date picker modal
+  // Date picker modal (calendar grid)
   datePickerSheet: {
     borderTopWidth: 1, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingBottom: 40, paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   datePickerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 16,
   },
   datePickerTitle: { fontSize: 17, fontWeight: '700' },
-  datePickerWheels: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    paddingVertical: 8, gap: 8,
+  datePickerMonthNav: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 6, paddingHorizontal: 4, marginBottom: 4,
   },
+  datePickerNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  datePickerMonthLabel: { fontSize: 16, fontWeight: '700' },
+  datePickerDowRow: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    paddingBottom: 6, paddingTop: 2,
+  },
+  datePickerDow: { width: 36, textAlign: 'center', fontSize: 12, fontWeight: '600' },
+  datePickerWeekRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 4 },
+  datePickerCell: {
+    width: 36, height: 36,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  datePickerCellText: { fontSize: 15, fontWeight: '500' },
 
   // Journal entry section (matches voice log results layout)
   journalSection: { marginBottom: 18 },

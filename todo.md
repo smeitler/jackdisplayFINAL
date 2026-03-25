@@ -1416,3 +1416,5 @@
 - [x] Move Journal Entry section to top of Log Habits scroll list
 - [x] Add inline editable description/note TextInput per habit row in Log Habits screen
 - [x] Make date label tappable to open drum-roll date picker modal (month/day/year WheelColumn)
+- [x] Replace drum-roll date picker with month calendar grid view in Log Habits screen
+- [x] Polish Log Habits layout: lower legend row, reduce segmented button size for better visual balance
