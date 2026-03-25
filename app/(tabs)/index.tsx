@@ -1,7 +1,6 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image, FlatList } from "react-native";
 import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
 import { useWindowDimensions } from "react-native";
-import { Animated } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { ScreenContainer } from "@/components/screen-container";
@@ -936,18 +935,7 @@ export default function HomeScreen() {
   const maxWidth = useContentMaxWidth();
   const yesterday = yesterdayString();
 
-  // AI Coach button pulse animation
-  const coachPulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(coachPulse, { toValue: 1.18, duration: 900, useNativeDriver: true }),
-        Animated.timing(coachPulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [coachPulse]);
+  // AI Coach button — no animation
 
   // Track whether the user already completed a journal/check-in for yesterday
   const [hasYesterdayEntry, setHasYesterdayEntry] = useState(false);
@@ -1076,12 +1064,11 @@ export default function HomeScreen() {
                 onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/ai-coach'); }}
                 style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
               >
-                {/* Outer pulse ring */}
-                <Animated.View style={{
+                {/* AI Coach icon ring */}
+                <View style={{
                   width: 44, height: 44, borderRadius: 22,
                   alignItems: 'center', justifyContent: 'center',
                   backgroundColor: colors.primary + '22',
-                  transform: [{ scale: coachPulse }],
                 }}>
                   {/* Inner gradient-style circle */}
                   <View style={{
@@ -1096,7 +1083,7 @@ export default function HomeScreen() {
                   }}>
                     <Text style={{ fontSize: 17 }}>✦</Text>
                   </View>
-                </Animated.View>
+                </View>
               </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
