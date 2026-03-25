@@ -1410,3 +1410,5 @@
 - [x] Fix submit/action buttons still showing old purple — ensure all buttons use colors.primary from useColors() hook
 - [x] Fix all purple colors to indigo-blue #6366F1 (deep audit of all color sources)
 - [x] Remove Punk, Nova, Calm themes from theme picker and AppTheme type
+- [x] Redesign plus button sheet: 2 large side-by-side tiles (Voice Log red, Log Habits yellow)
+- [x] Fix voice log flow: show journal entry popup after recording (not missing journal option)

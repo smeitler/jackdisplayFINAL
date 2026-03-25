@@ -176,53 +176,37 @@ export default function TabLayout() {
         <View
           style={[
             sheetStyles.sheet,
-            {
-              backgroundColor: colors.surface,
-            },
+            { backgroundColor: colors.surface },
           ]}
         >
-          <View style={[sheetStyles.handle, { backgroundColor: colors.muted + "55" }]} />
-          <Text style={[sheetStyles.title, { color: colors.foreground }]}>Quick Add</Text>
+          <View style={[sheetStyles.handle, { backgroundColor: colors.muted + '55' }]} />
 
-          <TouchableOpacity
-            style={[
-              sheetStyles.option,
-              { backgroundColor: colors.primary + "18", borderColor: colors.primary + "44" },
-            ]}
-            onPress={handleVoiceLog}
-            activeOpacity={0.8}
-          >
-            <View style={[sheetStyles.optionIcon, { backgroundColor: colors.primary + "22" }]}>
-              <IconSymbol name="mic.fill" size={24} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[sheetStyles.optionTitle, { color: colors.foreground }]}>Voice Log</Text>
-              <Text style={[sheetStyles.optionDesc, { color: colors.muted }]}>
-                Record your habits and journal by voice
-              </Text>
-            </View>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </TouchableOpacity>
+          {/* Two side-by-side large tiles */}
+          <View style={sheetStyles.tileRow}>
+            {/* Voice Log — Red */}
+            <TouchableOpacity
+              style={[sheetStyles.tile, { backgroundColor: '#1a0a0a', borderColor: '#E5383B44' }]}
+              onPress={handleVoiceLog}
+              activeOpacity={0.8}
+            >
+              <View style={[sheetStyles.tileIconCircle, { backgroundColor: '#E5383B' }]}>
+                <IconSymbol name="mic.fill" size={28} color="#fff" />
+              </View>
+              <Text style={[sheetStyles.tileLabel, { color: '#fff' }]}>Voice Log</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              sheetStyles.option,
-              { backgroundColor: colors.success + "18", borderColor: colors.success + "44" },
-            ]}
-            onPress={handleLogHabits}
-            activeOpacity={0.8}
-          >
-            <View style={[sheetStyles.optionIcon, { backgroundColor: colors.success + "22" }]}>
-              <IconSymbol name="checkmark.circle.fill" size={24} color={colors.success} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[sheetStyles.optionTitle, { color: colors.foreground }]}>Log Habits</Text>
-              <Text style={[sheetStyles.optionDesc, { color: colors.muted }]}>
-                Check in today's habits and progress
-              </Text>
-            </View>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </TouchableOpacity>
+            {/* Log Habits — Yellow */}
+            <TouchableOpacity
+              style={[sheetStyles.tile, { backgroundColor: '#1a1500', borderColor: '#F59E0B44' }]}
+              onPress={handleLogHabits}
+              activeOpacity={0.8}
+            >
+              <View style={[sheetStyles.tileIconCircle, { backgroundColor: '#F59E0B' }]}>
+                <IconSymbol name="checkmark.circle.fill" size={28} color="#fff" />
+              </View>
+              <Text style={[sheetStyles.tileLabel, { color: '#fff' }]}>Log Habits</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[sheetStyles.cancelBtn, { borderColor: colors.border }]}
@@ -267,46 +251,53 @@ const plusBtnStyles = StyleSheet.create({
 });
 
 const sheetStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: 12,
-    gap: 12,
+    gap: 16,
   },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 8,
+    alignSelf: 'center',
+    marginBottom: 4,
   },
-  title: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
-  option: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    padding: 16,
-    borderRadius: 14,
+  tileRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  tile: {
+    flex: 1,
+    borderRadius: 18,
     borderWidth: 1,
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
   },
-  optionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  tileIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  optionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 2 },
-  optionDesc: { fontSize: 13 },
+  tileLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   cancelBtn: {
-    alignItems: "center",
+    alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    marginTop: 4,
+    marginTop: 0,
   },
-  cancelText: { fontSize: 15, fontWeight: "600" },
+  cancelText: { fontSize: 15, fontWeight: '600' },
 });

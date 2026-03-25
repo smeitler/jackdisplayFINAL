@@ -19,6 +19,8 @@ import {
   Animated,
   Dimensions,
   Easing,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -732,6 +734,9 @@ export default function VoiceCheckinScreen() {
   // Editable transcript (full text shown in Journal Entry)
   const [editedTranscript, setEditedTranscript] = useState("");
 
+  // Journal popup — auto-opens when results arrive
+  const [journalModalVisible, setJournalModalVisible] = useState(false);
+
   // Editable habit descriptions (habitId -> description)
   const [editedDescriptions, setEditedDescriptions] = useState<Record<string, string>>({});
 
@@ -974,6 +979,8 @@ export default function VoiceCheckinScreen() {
         transcript: fullTranscript,
       });
       setPhase("results");
+      // Auto-open journal popup after a short delay so the results screen renders first
+      setTimeout(() => setJournalModalVisible(true), 400);
     } catch (err: any) {
       console.error("[VoiceCheckin] analyze error:", err);
       const msg = err?.message ?? "Could not process your recording. Please try again.";
@@ -1417,6 +1424,103 @@ export default function VoiceCheckinScreen() {
 
             <View style={{ height: 16 }} />
           </ScrollView>
+
+          {/* Journal Entry Popup */}
+          <Modal
+            visible={journalModalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setJournalModalVisible(false)}
+          >
+            <Pressable
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }}
+              onPress={() => setJournalModalVisible(false)}
+            />
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 }}
+            >
+              {/* Handle */}
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.muted + '55', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
+
+              {/* Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 }}>
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#3B82F618', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <IconSymbol name="book.fill" size={18} color={colors.primary} />
+                </View>
+                <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground, flex: 1 }}>Journal Entry</Text>
+                <Pressable
+                  onPress={() => setJournalModalVisible(false)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Done</Text>
+                </Pressable>
+              </View>
+
+              {/* Editable transcript */}
+              <TextInput
+                value={editedTranscript}
+                onChangeText={setEditedTranscript}
+                placeholder="Your voice transcript will appear here..."
+                placeholderTextColor={colors.muted + '66'}
+                style={{
+                  marginHorizontal: 20,
+                  minHeight: 140,
+                  maxHeight: 280,
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderRadius: 14,
+                  padding: 14,
+                  fontSize: 15,
+                  lineHeight: 22,
+                  color: colors.foreground,
+                  textAlignVertical: 'top',
+                }}
+                multiline
+                scrollEnabled
+                textAlignVertical="top"
+              />
+
+              {/* Gratitude items if any */}
+              {results && results.gratitudeItems.length > 0 && (
+                <View style={{ marginHorizontal: 20, marginTop: 12 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Grateful For</Text>
+                  {results.gratitudeItems.map((g, i) => (
+                    <TextInput
+                      key={i}
+                      value={g}
+                      onChangeText={(t) =>
+                        setResults((prev) => {
+                          if (!prev) return prev;
+                          const updated = [...prev.gratitudeItems];
+                          updated[i] = t;
+                          return { ...prev, gratitudeItems: updated };
+                        })
+                      }
+                      style={{
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderRadius: 12,
+                        padding: 12,
+                        fontSize: 14,
+                        lineHeight: 20,
+                        color: colors.foreground,
+                        marginBottom: 8,
+                        textAlignVertical: 'top',
+                      }}
+                      multiline
+                      scrollEnabled={false}
+                      textAlignVertical="top"
+                      placeholderTextColor={colors.muted + '66'}
+                      placeholder="What are you grateful for?"
+                    />
+                  ))}
+                </View>
+              )}
+            </KeyboardAvoidingView>
+          </Modal>
 
           {/* Footer: tally + save */}
           <View style={[classicStyles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
