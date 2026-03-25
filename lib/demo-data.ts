@@ -224,7 +224,7 @@ export const DEMO_REWARDS: Reward[] = [
     habitId: 'dm2',
     milestoneCount: 25,
     createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-    color: '#6366F1',
+    color: '#3B82F6',
   },
   {
     id: 'dr4',

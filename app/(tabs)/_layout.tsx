@@ -158,7 +158,7 @@ export default function TabLayout() {
       >
         <TouchableOpacity
           onPress={openPlusSheet}
-          style={[plusBtnStyles.btn, { backgroundColor: '#6366F1' }]}
+          style={[plusBtnStyles.btn, { backgroundColor: '#E5383B' }]}
           activeOpacity={0.85}
         >
           <Text style={plusBtnStyles.icon}>+</Text>
@@ -252,10 +252,10 @@ const plusBtnStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+    elevation: 6,
   },
   icon: {
     color: "#fff",

@@ -176,7 +176,7 @@ export function MorningPracticeSection() {
         style={styles.header}
         onPress={() => setIsExpanded(v => !v)}
       >
-        <View style={[styles.iconBadge, { backgroundColor: '#6366F122' }]}>
+        <View style={[styles.iconBadge, { backgroundColor: '#3B82F622' }]}>
           <Text style={styles.iconEmoji}>🌅</Text>
         </View>
         <View style={styles.headerText}>
@@ -198,7 +198,7 @@ export function MorningPracticeSection() {
             <Switch
               value={practiceEnabled}
               onValueChange={handleToggleEnabled}
-              trackColor={{ false: colors.border, true: '#6366F1' }}
+              trackColor={{ false: colors.border, true: '#3B82F6' }}
               thumbColor="#fff"
             />
           </View>
@@ -211,7 +211,7 @@ export function MorningPracticeSection() {
                 key={opt.id}
                 style={({ pressed }) => [
                   styles.optionRow,
-                  { backgroundColor: practiceType === opt.id ? '#6366F118' : 'transparent', opacity: pressed ? 0.7 : 1 },
+                  { backgroundColor: practiceType === opt.id ? '#3B82F618' : 'transparent', opacity: pressed ? 0.7 : 1 },
                 ]}
                 onPress={() => handleSelectType(opt.id)}
               >
@@ -238,8 +238,8 @@ export function MorningPracticeSection() {
                     style={[
                       styles.chip,
                       {
-                        backgroundColor: practiceLength === len ? '#6366F1' : colors.background,
-                        borderColor: practiceLength === len ? '#6366F1' : colors.border,
+                        backgroundColor: practiceLength === len ? '#3B82F6' : colors.background,
+                        borderColor: practiceLength === len ? '#3B82F6' : colors.border,
                       },
                     ]}
                     onPress={() => handleSelectLength(len)}
@@ -262,7 +262,7 @@ export function MorningPracticeSection() {
                   key={s.id}
                   style={({ pressed }) => [
                     styles.optionRow,
-                    { backgroundColor: breathworkStyle === s.id ? '#6366F118' : 'transparent', opacity: pressed ? 0.7 : 1 },
+                    { backgroundColor: breathworkStyle === s.id ? '#3B82F618' : 'transparent', opacity: pressed ? 0.7 : 1 },
                   ]}
                   onPress={() => handleSelectBreathworkStyle(s.id)}
                 >
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   checkmark: {
-    color: '#6366F1',
+    color: '#3B82F6',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   launchBtn: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#3B82F6',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 30,

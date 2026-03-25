@@ -2220,7 +2220,7 @@ function DrawCanvas({ colors }: { colors: any }) {
   const [penWidth, setPenWidth] = React.useState(3);
   const isDrawing = React.useRef(false);
 
-  const COLORS = ['#000000', '#EF4444', '#3B82F6', '#22C55E', '#F59E0B', '#6366F1', '#EC4899'];
+  const COLORS = ['#000000', '#EF4444', '#3B82F6', '#22C55E', '#F59E0B', '#3B82F6', '#EC4899'];
 
   function pointsToPath(pts: { x: number; y: number }[]): string {
     if (pts.length < 2) return '';
@@ -2473,7 +2473,7 @@ function FullScreenJournalEditor({
         <View style={fsStyles.topBar}>
           <View style={{ width: 40 }} />
           <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>Journal Entry</Text>
-          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { backgroundColor: colors?.primary ?? '#6366F1', opacity: pressed ? 0.8 : 1 }]}>
+          <Pressable onPress={handleClose} style={({ pressed }) => [fsStyles.checkBtn, { backgroundColor: colors?.primary ?? '#3B82F6', opacity: pressed ? 0.8 : 1 }]}>
             <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
         </View>
@@ -2520,7 +2520,7 @@ function FullScreenJournalEditor({
             <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
               <DraggablePhotoStrip
                 photos={photos}
-                colors={{ muted: 'rgba(255,255,255,0.4)', primary: colors?.primary ?? '#6366F1' }}
+                colors={{ muted: 'rgba(255,255,255,0.4)', primary: colors?.primary ?? '#3B82F6' }}
                 onDelete={onDeletePhoto}
                 onReorder={onReorderPhotos}
               />
@@ -3460,7 +3460,7 @@ export default function JournalScreen() {
             <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 }}>
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
               {([
-                { icon: 'tag.fill' as const, label: 'Tag', color: '#6366F1', onPress: () => { setDvShowAttachSheet(false); setDvShowTagInput(true); } },
+                { icon: 'tag.fill' as const, label: 'Tag', color: '#3B82F6', onPress: () => { setDvShowAttachSheet(false); setDvShowTagInput(true); } },
                 { icon: 'mic.fill' as const, label: 'Audio', color: '#EF4444', onPress: () => { setDvShowAttachSheet(false); setDvShowAudioRecorder(true); } },
                 { icon: 'camera.fill' as const, label: 'Camera', color: '#3B82F6', onPress: () => { setDvShowAttachSheet(false); dvPickCamera(); } },
                 { icon: 'video.fill' as const, label: 'Video', color: '#10B981', onPress: () => { setDvShowAttachSheet(false); dvPickVideo(); } },

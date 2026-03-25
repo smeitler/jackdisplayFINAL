@@ -47,7 +47,7 @@ const SPEED_VISION  = 28;
 const SPEED_GRAT    = 55;
 
 // Theme
-const PRIMARY        = '#6366F1';
+const PRIMARY        = '#3B82F6';
 const PRIMARY_DIM    = 'rgba(108,99,255,0.22)';
 const PRIMARY_BORDER = 'rgba(108,99,255,0.55)';
 const SURFACE        = 'rgba(255,255,255,0.07)';

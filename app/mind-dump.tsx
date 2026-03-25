@@ -15,7 +15,7 @@ import {
 
 // ─── Category config ──────────────────────────────────────────────────────────
 const CATEGORIES: { id: MindDumpCategory; label: string; emoji: string; color: string }[] = [
-  { id: 'task',      label: 'Task',      emoji: '✅', color: '#6366F1' },
+  { id: 'task',      label: 'Task',      emoji: '✅', color: '#3B82F6' },
   { id: 'idea',      label: 'Idea',      emoji: '💡', color: '#F59E0B' },
   { id: 'reminder',  label: 'Reminder',  emoji: '🔔', color: '#0a7ea4' },
   { id: 'worry',     label: 'Worry',     emoji: '😟', color: '#EF4444' },

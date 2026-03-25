@@ -91,7 +91,7 @@ function makeThemePalette(
 
 /** Purple theme: dark navy with indigo-blue accent */
 const purplePalette: ThemeColorPalette = makeThemePalette(
-  '#6366F1', // primary — indigo-blue
+  '#3B82F6', // primary — indigo-blue
   '#0F0E1A', // background (deep dark navy)
   '#1C1B2E', // surface
   '#EEEEFF', // foreground
@@ -104,7 +104,7 @@ const purplePalette: ThemeColorPalette = makeThemePalette(
 
 /** White theme: clean pure white with indigo-blue accent */
 const whitePalette: ThemeColorPalette = makeThemePalette(
-  '#6366F1', // primary — indigo-blue
+  '#3B82F6', // primary — indigo-blue
   '#FFFFFF', // background (pure white)
   '#FFFFFF', // surface (pure white — no grey tint)
   '#000000', // foreground
@@ -117,7 +117,7 @@ const whitePalette: ThemeColorPalette = makeThemePalette(
 
 /** Black theme: true black OLED with indigo-blue accent */
 const blackPalette: ThemeColorPalette = makeThemePalette(
-  '#6366F1', // primary — indigo-blue
+  '#3B82F6', // primary — indigo-blue
   '#000000', // background
   '#111111', // surface
   '#FFFFFF', // foreground

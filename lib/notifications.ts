@@ -21,7 +21,7 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       name: 'Jack Daily Alarm',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#6366F1',
+      lightColor: '#3B82F6',
       sound: 'default',
     });
   }

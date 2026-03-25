@@ -166,7 +166,7 @@ const COUNTDOWN_SECONDS = 15;
 // Shows fireworks/confetti animation for 3 seconds after check-in submission.
 // Uses pure React Native Animated API (no native modules needed).
 
-const CONFETTI_COLORS = ['#22C55E', '#F59E0B', '#6366F1', '#EF4444', '#60A5FA', '#F472B6', '#34D399', '#FBBF24'];
+const CONFETTI_COLORS = ['#22C55E', '#F59E0B', '#3B82F6', '#EF4444', '#60A5FA', '#F472B6', '#34D399', '#FBBF24'];
 const NUM_PARTICLES = 40;
 
 function CelebrationOverlay({ score }: { score: number }) {
@@ -894,7 +894,7 @@ export default function CheckInScreen() {
             if (score === 100) winCards.push({ id: 'perfect', gradient: ['#22C55E', '#16A34A'], headline: '💯 Perfect Day', subline: 'Every single habit crushed', message: `I just had a PERFECT day — 100% on every habit! 💯 Building momentum one day at a time. #DailyProgress` });
             if (streak >= 7 && streak % 7 === 0) winCards.push({ id: 'streak', gradient: ['#F59E0B', '#D97706'], headline: `🔥 ${streak}-Day Streak`, subline: `${streak} days of showing up`, message: `${streak} days in a row of showing up for myself 🔥 Consistency is everything. #Streak #DailyProgress` });
             if (streak >= 3 && streak < 7) winCards.push({ id: 'streak3', gradient: ['#F59E0B', '#D97706'], headline: `🔥 ${streak}-Day Streak`, subline: 'Building momentum', message: `${streak} days in a row! 🔥 Building momentum one day at a time. #DailyProgress` });
-            if (greenCount >= 5) winCards.push({ id: 'green5', gradient: ['#6366F1', '#4F46E5'], headline: `💪 ${greenCount} Habits Crushed`, subline: 'On fire today', message: `Crushed ${greenCount} habits today 💪 Showing up and doing the work. #DailyProgress` });
+            if (greenCount >= 5) winCards.push({ id: 'green5', gradient: ['#3B82F6', '#4F46E5'], headline: `💪 ${greenCount} Habits Crushed`, subline: 'On fire today', message: `Crushed ${greenCount} habits today 💪 Showing up and doing the work. #DailyProgress` });
             if (score >= 70 && score < 100) winCards.push({ id: 'solid', gradient: ['#0EA5E9', '#0284C7'], headline: `✨ ${score}% Score`, subline: 'Strong day', message: `Hit ${score}% on my daily habits today ✨ Progress over perfection. #DailyProgress` });
             // Always add at least one card
             if (winCards.length === 0) winCards.push({ id: 'showing-up', gradient: ['#64748B', '#475569'], headline: '💪 Showing Up', subline: 'Every rep counts', message: `Showing up for myself today 💪 Every day counts. #DailyProgress` });
@@ -1084,8 +1084,8 @@ export default function CheckInScreen() {
                         paddingVertical: 6,
                         borderRadius: 16,
                         borderWidth: 1.5,
-                        borderColor: mpSelectedType === opt.id ? '#6366F1' : colors.border,
-                        backgroundColor: mpSelectedType === opt.id ? '#6366F118' : 'transparent',
+                        borderColor: mpSelectedType === opt.id ? '#3B82F6' : colors.border,
+                        backgroundColor: mpSelectedType === opt.id ? '#3B82F618' : 'transparent',
                         opacity: pressed ? 0.7 : 1,
                         flexDirection: 'row',
                         alignItems: 'center',
@@ -1093,7 +1093,7 @@ export default function CheckInScreen() {
                       })}
                     >
                       <Text style={{ fontSize: 13 }}>{opt.emoji}</Text>
-                      <Text style={{ fontSize: 12, fontWeight: '600', color: mpSelectedType === opt.id ? '#6366F1' : colors.muted }}>{opt.label}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: mpSelectedType === opt.id ? '#3B82F6' : colors.muted }}>{opt.label}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -1109,19 +1109,19 @@ export default function CheckInScreen() {
                           onPress={() => { setMpSelectedDuration(min); setMpCustomDuration(''); }}
                           style={({ pressed }) => ({
                             paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5,
-                            borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#6366F1' : colors.border,
-                            backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#6366F118' : 'transparent',
+                            borderColor: mpSelectedDuration === min && !mpCustomDuration ? '#3B82F6' : colors.border,
+                            backgroundColor: mpSelectedDuration === min && !mpCustomDuration ? '#3B82F618' : 'transparent',
                             opacity: pressed ? 0.7 : 1,
                           })}
                         >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#6366F1' : colors.foreground }}>{min} min</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: mpSelectedDuration === min && !mpCustomDuration ? '#3B82F6' : colors.foreground }}>{min} min</Text>
                         </Pressable>
                       ))}
                       <View style={{
                         flexDirection: 'row', alignItems: 'center', borderWidth: 1.5,
-                        borderColor: mpCustomDuration ? '#6366F1' : colors.border, borderRadius: 20,
+                        borderColor: mpCustomDuration ? '#3B82F6' : colors.border, borderRadius: 20,
                         paddingHorizontal: 10, paddingVertical: 4,
-                        backgroundColor: mpCustomDuration ? '#6366F118' : 'transparent',
+                        backgroundColor: mpCustomDuration ? '#3B82F618' : 'transparent',
                       }}>
                         <TextInput
                           value={mpCustomDuration}
@@ -1129,10 +1129,10 @@ export default function CheckInScreen() {
                           placeholder="Custom"
                           placeholderTextColor={colors.muted}
                           keyboardType="number-pad"
-                          style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#6366F1' : colors.foreground, minWidth: 50, textAlign: 'center' }}
+                          style={{ fontSize: 13, fontWeight: '600', color: mpCustomDuration ? '#3B82F6' : colors.foreground, minWidth: 50, textAlign: 'center' }}
                           returnKeyType="done"
                         />
-                        {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#6366F1', marginLeft: 2 }}>min</Text> : null}
+                        {mpCustomDuration ? <Text style={{ fontSize: 12, color: '#3B82F6', marginLeft: 2 }}>min</Text> : null}
                       </View>
                     </View>
                   </View>
@@ -1487,8 +1487,8 @@ export default function CheckInScreen() {
           </View>
         )}
         {vcStatus === 'transcribing' && (
-          <View style={[styles.vcStatusBar, { backgroundColor: '#6366F110', borderColor: '#6366F130' }]}>
-            <Text style={[styles.vcStatusText, { color: '#6366F1', flex: 1 }]}>● Transcribing…</Text>
+          <View style={[styles.vcStatusBar, { backgroundColor: '#3B82F610', borderColor: '#3B82F630' }]}>
+            <Text style={[styles.vcStatusText, { color: '#3B82F6', flex: 1 }]}>● Transcribing…</Text>
           </View>
         )}
         {vcStatus === 'done' && vcTranscript ? (

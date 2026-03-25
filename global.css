@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Force true blue primary in ALL themes */
+:root {
+  --color-primary: #3B82F6 !important;
+  --color-mindset: #3B82F6 !important;
+  --color-tint: #3B82F6 !important;
+  --color-tabIconSelected: #3B82F6 !important;
+}
+
+:root[data-theme="dark"],
+.dark {
+  --color-primary: #3B82F6 !important;
+  --color-mindset: #3B82F6 !important;
+  --color-tint: #3B82F6 !important;
+  --color-tabIconSelected: #3B82F6 !important;
+}
