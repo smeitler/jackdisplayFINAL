@@ -28,6 +28,7 @@ interface FormData {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
   age: string;
   specificHabit: string;
   habitDirection: string;
@@ -42,7 +43,7 @@ interface FormData {
 }
 
 const EMPTY: FormData = {
-  firstName: "", lastName: "", email: "", age: "",
+  firstName: "", lastName: "", email: "", phone: "", age: "",
   specificHabit: "", habitDirection: "",
   primaryGoals: [], whyNow: "",
   biggestChallenges: [], whatStopped: "",
@@ -71,14 +72,7 @@ const QUESTIONS: Question[] = [
     subtitle: "Let's make this personal.",
     required: true,
   },
-  {
-    id: "email",
-    type: "email",
-    question: "What's your email address?",
-    subtitle: "We'll use this to reach you about your spot.",
-    placeholder: "you@example.com",
-    required: true,
-  },
+
   {
     id: "habitDirection",
     type: "chips-single",
@@ -225,6 +219,7 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [screen, setScreen] = useState<ScreenState>("form");
   const [pitch, setPitch] = useState("");
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -311,6 +306,18 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   }
 
   function goNext() {
+    // Validate required fields on step 0 (name/email/phone)
+    if (q.type === "name") {
+      if (!form.firstName.trim()) { setFieldError("First name is required."); return; }
+      if (!form.lastName.trim()) { setFieldError("Last name is required."); return; }
+      if (!form.email.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) { setFieldError("A valid email address is required."); return; }
+      if (!form.phone.trim() || form.phone.replace(/\D/g, '').length < 7) { setFieldError("A valid phone number is required."); return; }
+    } else if (q.required) {
+      const val = form[q.id as keyof FormData];
+      const isEmpty = Array.isArray(val) ? val.length === 0 : !String(val).trim();
+      if (isEmpty) { setFieldError("This field is required."); return; }
+    }
+    setFieldError(null);
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (step < TOTAL - 1) {
       animateToNext(true, () => setStep((s) => s + 1));
@@ -320,6 +327,7 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
   }
 
   function goBack() {
+    setFieldError(null);
     if (screen === "pitch") { setScreen("form"); return; }
     if (step > 0) {
       animateToNext(false, () => setStep((s) => s - 1));
@@ -555,22 +563,44 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                     <View style={{ gap: 12 }}>
                       <TextInput
                         value={form.firstName}
-                        onChangeText={(v) => setField("firstName", v)}
-                        placeholder="First name"
+                        onChangeText={(v) => { setField("firstName", v); setFieldError(null); }}
+                        placeholder="First name *"
                         placeholderTextColor={colors.muted + "88"}
-                        style={[st.textInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
+                        style={[st.textInput, { color: colors.foreground, borderColor: fieldError && !form.firstName.trim() ? colors.error : colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
                         autoFocus
                         returnKeyType="next"
                       />
                       <TextInput
                         value={form.lastName}
-                        onChangeText={(v) => setField("lastName", v)}
-                        placeholder="Last name"
+                        onChangeText={(v) => { setField("lastName", v); setFieldError(null); }}
+                        placeholder="Last name *"
                         placeholderTextColor={colors.muted + "88"}
-                        style={[st.textInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
+                        style={[st.textInput, { color: colors.foreground, borderColor: fieldError && !form.lastName.trim() ? colors.error : colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
+                        returnKeyType="next"
+                      />
+                      <TextInput
+                        value={form.email}
+                        onChangeText={(v) => { setField("email", v); setFieldError(null); }}
+                        placeholder="Email address *"
+                        placeholderTextColor={colors.muted + "88"}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        returnKeyType="next"
+                        style={[st.textInput, { color: colors.foreground, borderColor: fieldError && (!form.email.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) ? colors.error : colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
+                      />
+                      <TextInput
+                        value={form.phone}
+                        onChangeText={(v) => { setField("phone", v); setFieldError(null); }}
+                        placeholder="Phone number *"
+                        placeholderTextColor={colors.muted + "88"}
+                        keyboardType="phone-pad"
                         returnKeyType="done"
                         onSubmitEditing={goNext}
+                        style={[st.textInput, { color: colors.foreground, borderColor: fieldError && (!form.phone.trim() || form.phone.replace(/\D/g,'').length < 7) ? colors.error : colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
                       />
+                      {fieldError ? (
+                        <Text style={{ color: colors.error, fontSize: 13, marginTop: 2 }}>{fieldError}</Text>
+                      ) : null}
                     </View>
                   )}
 
@@ -604,44 +634,53 @@ export default function CoachApplyModal({ visible, onClose }: Props) {
                   )}
 
                   {q.type === "textarea" && (
-                    <TextInput
-                      value={form[q.id as keyof FormData] as string}
-                      onChangeText={(v) => setField(q.id as keyof FormData, v)}
-                      placeholder={q.placeholder}
-                      placeholderTextColor={colors.muted + "88"}
-                      multiline
-                      numberOfLines={5}
-                      autoFocus
-                      textAlignVertical="top"
-                      style={[st.textarea, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
-                    />
+                    <View>
+                      <TextInput
+                        value={form[q.id as keyof FormData] as string}
+                        onChangeText={(v) => { setField(q.id as keyof FormData, v); setFieldError(null); }}
+                        placeholder={q.placeholder}
+                        placeholderTextColor={colors.muted + "88"}
+                        multiline
+                        numberOfLines={5}
+                        autoFocus
+                        textAlignVertical="top"
+                        style={[st.textarea, { color: colors.foreground, borderColor: fieldError ? colors.error : colors.border, backgroundColor: colors.surface }, Platform.OS === "web" ? ({ outlineWidth: 0 } as any) : {}]}
+                      />
+                      {fieldError ? <Text style={{ color: colors.error, fontSize: 13, marginTop: 6 }}>{fieldError}</Text> : null}
+                    </View>
                   )}
 
                   {q.type === "chips-multi" && (
-                    <View style={st.chipsWrap}>
-                      {q.options!.map((opt) => (
-                        <Chip
-                          key={opt}
-                          label={opt}
-                          active={(form[q.id as keyof FormData] as string[]).includes(opt)}
-                          onPress={() => toggleChip(q.id as keyof FormData, opt, true)}
-                          colors={colors}
-                        />
-                      ))}
+                    <View>
+                      <View style={st.chipsWrap}>
+                        {q.options!.map((opt) => (
+                          <Chip
+                            key={opt}
+                            label={opt}
+                            active={(form[q.id as keyof FormData] as string[]).includes(opt)}
+                            onPress={() => { toggleChip(q.id as keyof FormData, opt, true); setFieldError(null); }}
+                            colors={colors}
+                          />
+                        ))}
+                      </View>
+                      {fieldError ? <Text style={{ color: colors.error, fontSize: 13, marginTop: 8 }}>{fieldError}</Text> : null}
                     </View>
                   )}
 
                   {q.type === "chips-single" && (
-                    <View style={st.chipsWrap}>
-                      {q.options!.map((opt) => (
-                        <Chip
-                          key={opt}
-                          label={opt}
-                          active={form[q.id as keyof FormData] === opt}
-                          onPress={() => toggleChip(q.id as keyof FormData, opt, false)}
-                          colors={colors}
-                        />
-                      ))}
+                    <View>
+                      <View style={st.chipsWrap}>
+                        {q.options!.map((opt) => (
+                          <Chip
+                            key={opt}
+                            label={opt}
+                            active={form[q.id as keyof FormData] === opt}
+                            onPress={() => { toggleChip(q.id as keyof FormData, opt, false); setFieldError(null); }}
+                            colors={colors}
+                          />
+                        ))}
+                      </View>
+                      {fieldError ? <Text style={{ color: colors.error, fontSize: 13, marginTop: 8 }}>{fieldError}</Text> : null}
                     </View>
                   )}
                 </View>
