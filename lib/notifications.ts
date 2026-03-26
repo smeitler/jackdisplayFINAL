@@ -43,19 +43,20 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Maps a soundId string to the bundled .caf filename for iOS notification sounds.
- * .caf files must be included in the iOS bundle (assets/audio/).
- * Android uses the channel sound set in requestNotificationPermissions.
+ * Maps a soundId string to the bundled sound filename for notification sounds.
+ * Use .wav — these match the filenames registered in the expo-notifications
+ * plugin config (app.config.ts sounds array). The plugin copies them into
+ * the native bundle; we reference by base filename only.
  */
 function getSoundFilename(soundId?: string): string {
   const map: Record<string, string> = {
-    classic:  'alarm_classic.caf',
-    buzzer:   'alarm_buzzer.caf',
-    digital:  'alarm_digital.caf',
-    gentle:   'alarm_gentle.caf',
-    urgent:   'alarm_urgent.caf',
+    classic:  'alarm_classic.wav',
+    buzzer:   'alarm_buzzer.wav',
+    digital:  'alarm_digital.wav',
+    gentle:   'alarm_gentle.wav',
+    urgent:   'alarm_urgent.wav',
   };
-  return map[soundId ?? 'classic'] ?? 'alarm_classic.caf';
+  return map[soundId ?? 'classic'] ?? 'alarm_classic.wav';
 }
 
 /** Schedule one notification per enabled day-of-week. Returns notification IDs. */
@@ -65,7 +66,9 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
 
   if (!config.isEnabled || config.days.length === 0) return [];
 
-  const soundFile = Platform.OS === 'ios' ? getSoundFilename(config.soundId) : 'default';
+  // Use the registered .wav sound file on both platforms.
+  // On Android, the channel sound is 'default' but per-notification sound overrides it.
+  const soundFile = getSoundFilename(config.soundId);
   const ids: string[] = [];
 
   for (const day of config.days) {

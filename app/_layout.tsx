@@ -58,12 +58,27 @@ function NotificationHandler() {
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
+    // Handle notification tapped while app was running (warm launch)
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as { action?: string };
       if (data?.action === 'open_checkin') {
         router.push('/checkin?fromAlarm=1' as never);
       }
     });
+
+    // Handle notification tapped from killed state (cold launch)
+    // getLastNotificationResponseAsync is not available on web
+    if (Platform.OS !== 'web') {
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response) {
+          const data = response.notification.request.content.data as { action?: string };
+          if (data?.action === 'open_checkin') {
+            router.push('/checkin?fromAlarm=1' as never);
+          }
+        }
+      });
+    }
+
     return () => { responseListener.current?.remove(); };
   }, [router]);
 

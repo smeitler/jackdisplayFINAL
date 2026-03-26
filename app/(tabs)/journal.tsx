@@ -3307,116 +3307,63 @@ export default function JournalScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── JOURNAL ENTRY — improved card ── */}
-          {(() => {
-            const photoAtts = dvPrimaryEntryId.current
-              ? (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo')
-              : [];
-            const handleDeletePhoto = async (photoId: string) => {
-              if (!dvPrimaryEntryId.current || !userId) return;
-              const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
-              const merged = allAtts.filter((a) => a.id !== photoId);
-              await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
-              setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
-            };
-            return (
-              <View style={[dvStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                {/* Card header: title + saved indicator on left, photo icon + expand on right */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
-                    {dvSaved && (
-                      <Text style={{ fontSize: 11, color: colors.success, fontWeight: '500' }}>✓ Saved</Text>
-                    )}
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    {/* Photo library button */}
-                    <Pressable
-                      onPress={dvPickPhoto}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
-                    >
-                      <IconSymbol name="photo.stack.fill" size={18} color={colors.primary} />
-                    </Pressable>
-                    {/* Expand to bottom-sheet editor */}
-                    <Pressable
-                      onPress={() => setDvShowFullEditor(true)}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 4 })}
-                    >
-                      <IconSymbol name="arrow.up.left.and.arrow.down.right" size={16} color={colors.muted} />
-                    </Pressable>
-                  </View>
-                </View>
-                {/* Inline TextInput — editable when single entry, read-only (tap to expand) when multiple entries or voice segments */}
-                {dvDisplayNote ? (
-                  // Has display-formatted text (voice entry or multiple entries): show read-only preview
-                  <Pressable onPress={() => setDvShowFullEditor(true)} style={{ minHeight: 110 }}>
-                    <Text
-                      numberOfLines={8}
-                      style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, textAlignVertical: 'top' }}
-                    >
-                      {dvDisplayNote}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colors.primary, marginTop: 6 }}>Tap to expand ↗</Text>
-                  </Pressable>
-                ) : (
-                  <TextInput
-                    value={dvJournalNote}
-                    onChangeText={(text) => {
-                      setDvJournalNote(text);
-                      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                      autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(text, dvGratItems), 800);
-                    }}
-                    multiline
-                    placeholder="What's on your mind today?"
-                    placeholderTextColor={colors.muted}
-                    style={[
-                      { fontSize: 15, lineHeight: 22, color: colors.foreground, minHeight: 110, textAlignVertical: 'top' },
-                      Platform.OS === 'web' ? ({ outlineWidth: 0, outlineStyle: 'none' } as any) : {},
-                    ]}
-                    textAlignVertical="top"
-                    autoCorrect
-                    autoCapitalize="sentences"
-                    scrollEnabled={false}
-                  />
-                )}
-                {/* Footer: character count — show raw note length (not display-formatted) */}
-                {(dvJournalNote.length > 0 || dvDisplayNote.length > 0) && (
-                  <Text style={{ fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 }}>
-                    {dvJournalNote.length || dvDisplayNote.length} chars
-                  </Text>
-                )}
-                {/* Photo strip — BELOW text, with delete buttons and drag-to-reorder */}
-                {photoAtts.length > 0 && (
-                  <DraggablePhotoStrip
-                    photos={photoAtts}
-                    colors={colors}
-                    onDelete={handleDeletePhoto}
-                    onReorder={async (reordered) => {
-                      if (!dvPrimaryEntryId.current || !userId) return;
-                      const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
-                      const nonPhotos = allAtts.filter((a) => a.type !== 'photo');
-                      const merged = [...reordered, ...nonPhotos];
-                      await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
-                      setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
-                    }}
-                  />
-                )}
-                {/* Tag chips */}
-                {dvTags.length > 0 && (
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    {dvTags.map((tag) => (
-                      <View
-                        key={tag}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '22', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
-                      >
-                        <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>#{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
+          {/* ── JOURNAL ENTRY — simplified tap-to-open card ── */}
+          <Pressable
+            onPress={() => setDvShowFullEditor(true)}
+            style={({ pressed }) => [
+              dvStyles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            {/* Card header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[dvStyles.cardTitle, { color: colors.muted }]}>JOURNAL ENTRY</Text>
+                {dvSaved && (
+                  <Text style={{ fontSize: 11, color: colors.success, fontWeight: '500' }}>✓ Saved</Text>
                 )}
               </View>
-            );
-          })()}
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            </View>
+            {/* Preview text or placeholder */}
+            {(dvDisplayNote || dvJournalNote) ? (
+              <Text
+                numberOfLines={3}
+                style={{ fontSize: 15, lineHeight: 22, color: colors.foreground }}
+              >
+                {dvDisplayNote || dvJournalNote}
+              </Text>
+            ) : (
+              <Text style={{ fontSize: 15, lineHeight: 22, color: colors.muted }}>
+                What's on your mind today?
+              </Text>
+            )}
+            {/* Photo count indicator */}
+            {(() => {
+              const photoCount = dvPrimaryEntryId.current
+                ? (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo').length
+                : 0;
+              return photoCount > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                  <IconSymbol name="photo.stack.fill" size={14} color={colors.primary} />
+                  <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>{photoCount} photo{photoCount !== 1 ? 's' : ''}</Text>
+                </View>
+              ) : null;
+            })()}
+            {/* Tag chips */}
+            {dvTags.length > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {dvTags.map((tag) => (
+                  <View
+                    key={tag}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '22', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
+                  >
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </Pressable>
           {/* ── Full-screen journal editor ── */}
           {/* Always editable. Shows dvDisplayNote (formatted) for voice entries so the user
                sees the timestamps, but edits are saved back to the primary entry's raw body. */}

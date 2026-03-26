@@ -1437,3 +1437,6 @@
 - [x] Fix: Journal Entry modal has excessive blank space above the sheet
 - [x] Fix: Edit Alarm screen has blank space above the title
 - [x] Fix: Journal calendar Saturday column cut off on right side
+
+- [x] Audit and fix iOS alarm system: scheduling, sound playback, snooze, wake-up flow for TestFlight
+- [x] Simplify journal entry: replace modal/sheet with direct navigation to full journal screen on tap
