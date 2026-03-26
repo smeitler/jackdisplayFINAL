@@ -1445,3 +1445,18 @@
 - [x] Audit and fix calendar view photo display (retrieve stored URI, show thumbnail in cell)
 
 - [x] Fix: Voice recording waveform bars are random animation, not real microphone levels - use expo-audio metering API
+
+- [x] Fix: Blank space at top of Check-In screen (opened via + button)
+- [x] Fix: Blank space at top of Journal screen
+- [x] Fix: Blank space at top of Manage Goals screen
+- [x] Fix: Swipe-down-to-dismiss not working on Edit Goal sheet
+- [x] Fix: Swipe-down-to-dismiss not working on Edit Habit sheet
+- [x] Fix: Swipe-down-to-dismiss not working on Add Widget sheet
+- [x] Add visible drag handle indicator to all bottom sheets
+- [x] Fix: Add Widget sheet cannot scroll — Rewards widget cut off, no way to reach Save
+- [x] Fix: Rewards field is required in Edit Habit — make it optional, rename section to "Advanced"
+- [x] Fix: You tab icon was already mapped correctly (clipboard.data.fill → assignment)
+- [x] Add: Manage Goals shortcut button in Dashboard header (list icon)
+- [x] Fix: Manage Goals — all categories auto-expanded by default (already implemented, verified)
+- [x] Add: Persist expand/collapse state per category in Manage Goals
+- [x] Fix: Keyboard hides Cancel/Save buttons in Edit Habit sheet (ScrollView inside sheet)

@@ -1,4 +1,5 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image, FlatList } from "react-native";
+import React from "react";
+import { ScrollView, View, Text, Pressable, StyleSheet, Platform, TouchableOpacity, Modal, Image, FlatList, Dimensions } from "react-native";
 import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
 import { useWindowDimensions } from "react-native";
 import { useRouter } from "expo-router";
@@ -13,12 +14,32 @@ import * as Haptics from "expo-haptics";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { CategoryIcon } from "@/components/category-icon";
 import Svg, { Circle } from "react-native-svg";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { CalmHeader, useIsCalm } from "@/components/calm-effects";
 import { WellnessIcon } from "@/components/wellness-icon";
+
+const SCREEN_H = Dimensions.get('window').height;
+
+function SwipeSheet({ children, onClose, style }: { children: React.ReactNode; onClose: () => void; style?: object }) {
+  const ty = useSharedValue(0);
+  const pan = Gesture.Pan()
+    .runOnJS(true)
+    .onUpdate((e) => { if (e.translationY > 0) ty.value = e.translationY; })
+    .onEnd((e) => {
+      if (e.translationY > 120 || e.velocityY > 800) {
+        ty.value = withTiming(SCREEN_H, { duration: 250 }, () => { runOnJS(onClose)(); ty.value = 0; });
+      } else {
+        ty.value = withSpring(0, { damping: 20, stiffness: 200 });
+      }
+    });
+  const anim = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
+  return <GestureDetector gesture={pan}><Animated.View style={[style, anim]}>{children}</Animated.View></GestureDetector>;
+}
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));
 // Profile pic key is per-user — built dynamically once userId is known
@@ -1085,6 +1106,19 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </Pressable>
+              {/* Manage Goals shortcut */}
+              <Pressable
+                onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/habits'); }}
+                style={({ pressed }) => [{
+                  width: 40, height: 40, borderRadius: 20,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: colors.surface,
+                  borderWidth: 1, borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                <IconSymbol name="list.bullet" size={18} color={colors.foreground} />
+              </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}
                 onPress={handlePickProfilePic}
@@ -1224,38 +1258,41 @@ export default function HomeScreen() {
           {/* ── Widget Library Modal ── */}
           <Modal visible={widgetLibraryOpen} transparent animationType="slide" onRequestClose={() => setWidgetLibraryOpen(false)}>
             <Pressable style={styles.legendOverlay} onPress={() => setWidgetLibraryOpen(false)} />
-            <View style={[styles.widgetLibrarySheet, { backgroundColor: isCalm ? '#0D1135' : colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.missedDaysHandle, { backgroundColor: colors.muted + '55' }]} />
+            <SwipeSheet onClose={() => setWidgetLibraryOpen(false)} style={[styles.widgetLibrarySheet, { backgroundColor: isCalm ? '#0D1135' : colors.surface, borderColor: colors.border }]}>
+              {/* Drag handle */}
+              <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: colors.muted + '80', alignSelf: 'center', marginBottom: 12 }} />
               <Text style={[styles.widgetLibraryTitle, { color: colors.foreground }]}>Add Widget</Text>
-              {ALL_WIDGETS.filter((w) => !widgetIds.includes(w.id)).length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.muted, textAlign: 'center', paddingVertical: 24 }]}>All widgets are already on your dashboard.</Text>
-              ) : (
-                ALL_WIDGETS.filter((w) => !widgetIds.includes(w.id)).map((w) => (
-                  <TouchableOpacity
-                    key={w.id}
-                    onPress={() => addWidget(w.id)}
-                    style={[styles.widgetLibraryRow, { borderColor: colors.border }]}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.widgetLibraryIcon, { backgroundColor: colors.primary + '18' }]}>
-                      <IconSymbol name={w.icon as any} size={20} color={colors.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.widgetLibraryLabel, { color: colors.foreground }]}>{w.label}</Text>
-                      <Text style={[styles.widgetLibraryDesc, { color: colors.muted }]}>{w.desc}</Text>
-                    </View>
-                    <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
-                  </TouchableOpacity>
-                ))
-              )}
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 0, paddingBottom: 8 }}>
+                {ALL_WIDGETS.filter((w) => !widgetIds.includes(w.id)).length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.muted, textAlign: 'center', paddingVertical: 24 }]}>All widgets are already on your dashboard.</Text>
+                ) : (
+                  ALL_WIDGETS.filter((w) => !widgetIds.includes(w.id)).map((w) => (
+                    <TouchableOpacity
+                      key={w.id}
+                      onPress={() => addWidget(w.id)}
+                      style={[styles.widgetLibraryRow, { borderColor: colors.border }]}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.widgetLibraryIcon, { backgroundColor: colors.primary + '18' }]}>
+                        <IconSymbol name={w.icon as any} size={20} color={colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.widgetLibraryLabel, { color: colors.foreground }]}>{w.label}</Text>
+                        <Text style={[styles.widgetLibraryDesc, { color: colors.muted }]}>{w.desc}</Text>
+                      </View>
+                      <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
               <TouchableOpacity
                 onPress={() => setWidgetLibraryOpen(false)}
-                style={[styles.missedDaysClose, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+                style={[styles.missedDaysClose, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginTop: 8 }]}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.missedDaysCloseText, { color: colors.foreground }]}>Cancel</Text>
               </TouchableOpacity>
-            </View>
+            </SwipeSheet>
           </Modal>
         </View>
       </ScrollView>

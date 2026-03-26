@@ -1,11 +1,14 @@
+import React from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, Pressable,
-  StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView, Image,
+  StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform, ScrollView, Image, Dimensions,
 } from 'react-native';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
+  useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ScreenContainer } from '@/components/screen-container';
@@ -17,6 +20,37 @@ import { CategoryDef, Habit, CheckInEntry, LIFE_AREAS, LifeArea } from '@/lib/st
 import { CategoryIcon, getCategoryIconName } from '@/components/category-icon';
 import { trpc } from '@/lib/trpc';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+// Reusable swipeable sheet wrapper
+function SwipeableSheet({ children, onClose, style }: { children: React.ReactNode; onClose: () => void; style?: object }) {
+  const translateY = useSharedValue(0);
+
+  const panGesture = Gesture.Pan()
+    .runOnJS(true)
+    .onUpdate((e) => {
+      if (e.translationY > 0) translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      if (e.translationY > 120 || e.velocityY > 800) {
+        translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, () => {
+          runOnJS(onClose)();
+          translateY.value = 0;
+        });
+      } else {
+        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+      }
+    });
+
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={[style, animStyle]}>{children}</Animated.View>
+    </GestureDetector>
+  );
+}
 
 
 // ─── Inline Date Picker ─────────────────────────────────────────────────────
@@ -214,6 +248,101 @@ function SwipeableHabitRow({ habit, habitIndex, isLast, teamName, onEdit, onTogg
   );
 }
 
+// ─── Advanced (Reward) Section ───────────────────────────────────────────────
+
+interface AdvancedSectionProps {
+  colors: ReturnType<typeof useColors>;
+  rewardName: string;
+  setRewardName: (v: string) => void;
+  rewardEmoji: string;
+  setRewardEmoji: (v: string) => void;
+  rewardImageUri: string | undefined;
+  setRewardImageUri: (v: string | undefined) => void;
+  rewardDescription: string;
+  setRewardDescription: (v: string) => void;
+  frequencyType: import('@/lib/storage').FrequencyType;
+  onOpenEmojiPicker: () => void;
+}
+
+function AdvancedSection({
+  colors, rewardName, setRewardName, rewardEmoji, setRewardEmoji,
+  rewardImageUri, setRewardImageUri, rewardDescription, setRewardDescription,
+  frequencyType, onOpenEmojiPicker,
+}: AdvancedSectionProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <View style={{ marginTop: 4 }}>
+      {/* Collapsible header */}
+      <TouchableOpacity
+        onPress={() => setOpen((o) => !o)}
+        style={[styles.weeklyGoalRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }]}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.weeklyGoalLabel, { color: colors.foreground, marginBottom: 0 }]}>Advanced</Text>
+        <IconSymbol name={open ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+      </TouchableOpacity>
+
+      {open && (
+        <View style={[styles.weeklyGoalRow, { marginTop: 0, paddingTop: 0 }]}>
+          <Text style={[styles.weeklyGoalHint, { color: colors.muted, marginBottom: 8, marginTop: 0 }]}>
+            Reward yourself when you hit your {frequencyType} goal (optional).
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            {/* Reward icon button */}
+            <TouchableOpacity
+              onPress={onOpenEmojiPicker}
+              style={[styles.weeklyGoalDay, { width: 52, height: 52, borderRadius: 12, overflow: 'hidden', position: 'relative' }]}
+              activeOpacity={0.7}
+            >
+              {rewardImageUri ? (
+                <Image source={{ uri: rewardImageUri }} style={{ width: 52, height: 52, borderRadius: 12 }} />
+              ) : (
+                <Text style={{ fontSize: 26 }}>{rewardEmoji || '🎁'}</Text>
+              )}
+              <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.45)', borderTopLeftRadius: 6, paddingHorizontal: 3, paddingVertical: 1 }}>
+                <Text style={{ fontSize: 9, color: '#fff' }}>✏️</Text>
+              </View>
+            </TouchableOpacity>
+            {rewardImageUri && (
+              <TouchableOpacity
+                onPress={() => setRewardImageUri(undefined)}
+                style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 12, color: '#EF4444' }}>Remove photo</Text>
+              </TouchableOpacity>
+            )}
+            <TextInput
+              style={[styles.nameInput, { flex: 1, backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+              placeholder="e.g. New running shoes, spa day…"
+              placeholderTextColor={colors.muted}
+              value={rewardName}
+              onChangeText={(t) => setRewardName(t.slice(0, 60))}
+              maxLength={60}
+              returnKeyType="done"
+              blurOnSubmit
+              autoCapitalize="sentences"
+            />
+          </View>
+          <TextInput
+            style={[styles.descInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            placeholder="Why does this reward matter to you? (optional)"
+            placeholderTextColor={colors.muted}
+            value={rewardDescription}
+            onChangeText={(t) => setRewardDescription(t.slice(0, 120))}
+            maxLength={120}
+            multiline
+            numberOfLines={2}
+            returnKeyType="done"
+            blurOnSubmit
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Add/Edit Habit Modal ─────────────────────────────────────────────────────
 
 interface HabitModalProps {
@@ -243,7 +372,7 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const currentGoal = frequencyType === 'weekly' ? weeklyGoal : monthlyGoal;
-  const canSave = name.trim().length > 0 && currentGoal !== undefined && rewardName.trim().length > 0;
+  const canSave = name.trim().length > 0 && currentGoal !== undefined;
 
   async function handleSave() {
     if (!canSave) return;
@@ -296,13 +425,14 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
           setConfirmDelete(false);
         }}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={0}>
           <Pressable style={styles.backdrop} onPress={onClose} />
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          <SwipeableSheet onClose={onClose} style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border, maxHeight: '90%' }]}>
+            <View style={[styles.handle, { backgroundColor: colors.muted + '80', width: 44, height: 5 }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
               {editHabit ? 'Edit Habit' : 'Add Habit'}
             </Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
 
             <View style={styles.inputRow}>
               <View style={styles.nameInputWrapper}>
@@ -420,71 +550,20 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
               )}
             </View>
 
-            {/* Reward section — required */}
-            <View style={[styles.weeklyGoalRow, { marginTop: 4 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                <Text style={[styles.weeklyGoalLabel, { color: colors.foreground, marginBottom: 0 }]}>Your reward for hitting this goal</Text>
-                <Text style={{ color: colors.error, fontSize: 13, marginLeft: 4, lineHeight: 18 }}> *</Text>
-              </View>
-              <Text style={[styles.weeklyGoalHint, { color: colors.muted, marginBottom: 8, marginTop: 0 }]}>
-                What will you treat yourself to when you hit your {frequencyType} goal?
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                {/* Reward icon button — opens emoji picker */}
-                <TouchableOpacity
-                  onPress={() => setEmojiPickerOpen(true)}
-                  style={[styles.weeklyGoalDay, { width: 52, height: 52, borderRadius: 12, overflow: 'hidden', position: 'relative' }]}
-                  activeOpacity={0.7}
-                >
-                  {rewardImageUri ? (
-                    <Image source={{ uri: rewardImageUri }} style={{ width: 52, height: 52, borderRadius: 12 }} />
-                  ) : (
-                    <Text style={{ fontSize: 26 }}>{rewardEmoji}</Text>
-                  )}
-                  {/* Small edit badge */}
-                  <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.45)', borderTopLeftRadius: 6, paddingHorizontal: 3, paddingVertical: 1 }}>
-                    <Text style={{ fontSize: 9, color: '#fff' }}>✏️</Text>
-                  </View>
-                </TouchableOpacity>
-                {rewardImageUri && (
-                  <TouchableOpacity
-                    onPress={() => setRewardImageUri(undefined)}
-                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={{ fontSize: 12, color: '#EF4444' }}>Remove photo</Text>
-                  </TouchableOpacity>
-                )}
-                <TextInput
-                  style={[styles.nameInput, { flex: 1, backgroundColor: colors.background, borderColor: rewardName.trim().length === 0 ? colors.error + '80' : colors.border, color: colors.foreground }]}
-                  placeholder="e.g. New running shoes, spa day…"
-                  placeholderTextColor={colors.muted}
-                  value={rewardName}
-                  onChangeText={(t) => setRewardName(t.slice(0, 60))}
-                  maxLength={60}
-                  returnKeyType="done"
-                  blurOnSubmit
-                  autoCapitalize="sentences"
-                />
-              </View>
-              <TextInput
-                style={[styles.descInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
-                placeholder="Why does this reward matter to you? (optional)"
-                placeholderTextColor={colors.muted}
-                value={rewardDescription}
-                onChangeText={(t) => setRewardDescription(t.slice(0, 120))}
-                maxLength={120}
-                multiline
-                numberOfLines={2}
-                returnKeyType="done"
-                blurOnSubmit
-              />
-              {rewardName.trim().length === 0 && (
-                <Text style={[styles.weeklyGoalHint, { color: colors.error, marginTop: 4 }]}>
-                  Required — enter what you'll reward yourself with
-                </Text>
-              )}
-            </View>
+            {/* Advanced section (optional) */}
+            <AdvancedSection
+              colors={colors}
+              rewardName={rewardName}
+              setRewardName={setRewardName}
+              rewardEmoji={rewardEmoji}
+              setRewardEmoji={setRewardEmoji}
+              rewardImageUri={rewardImageUri}
+              setRewardImageUri={setRewardImageUri}
+              rewardDescription={rewardDescription}
+              setRewardDescription={setRewardDescription}
+              frequencyType={frequencyType}
+              onOpenEmojiPicker={() => setEmojiPickerOpen(true)}
+            />
 
             <View style={styles.modalActions}>
 
@@ -553,7 +632,8 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
                 </View>
               </View>
             )}
-          </View>
+            </ScrollView>
+          </SwipeableSheet>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -626,8 +706,8 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.backdrop} onPress={onClose} />
-          <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          <SwipeableSheet onClose={onClose} style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.handle, { backgroundColor: colors.muted + '80', width: 44, height: 5 }]} />
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
               {editCategory ? 'Edit Goal' : 'New Goal'}
             </Text>
@@ -775,7 +855,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
                 </View>
               </View>
             )}
-          </View>
+          </SwipeableSheet>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -797,14 +877,47 @@ export default function HabitsScreen() {
     return map;
   }, [myTeams]);
 
-  const [expandedCat, setExpandedCat] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  // Persist expand/collapse state per category
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  // Load persisted expand state on mount, then auto-expand all categories
+  useEffect(() => {
+    AsyncStorage.getItem('habits_expanded_cats').then((val) => {
+      if (val) {
+        try {
+          const saved: string[] = JSON.parse(val);
+          setExpandedCats(new Set(saved));
+          return;
+        } catch {}
+      }
+      // Default: expand all
+      setExpandedCats(new Set(categories.map((c) => c.id)));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // When categories change (new category added), auto-expand it
+  useEffect(() => {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const c of categories) {
+        if (!next.has(c.id)) { next.add(c.id); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [categories]);
   const [habitModal, setHabitModal] = useState<{ open: boolean; categoryId: string; edit?: Habit | null }>({ open: false, categoryId: '' });
   const [categoryModal, setCategoryModal] = useState<{ open: boolean; edit?: CategoryDef | null }>({ open: false });
 
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
   function toggleCategory(id: string) {
-    setExpandedCat((prev) => (prev === id ? null : id));
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      AsyncStorage.setItem('habits_expanded_cats', JSON.stringify([...next]));
+      return next;
+    });
   }
 
   async function handleSaveHabit(name: string, emoji: string, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string, rewardImageUri?: string) {
@@ -824,9 +937,9 @@ export default function HabitsScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer edges={['left', 'right']}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top + 4 }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backBtn}
@@ -875,7 +988,7 @@ export default function HabitsScreen() {
         }
         renderItem={({ item: cat, drag, isActive }: RenderItemParams<CategoryDef>) => {
           const catHabits = [...habits.filter((h) => h.category === cat.id)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          const isExpanded = expandedCat === cat.id;
+          const isExpanded = expandedCats.has(cat.id);
 
           return (
             <ScaleDecorator activeScale={1.02}>

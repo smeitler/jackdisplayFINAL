@@ -3249,9 +3249,9 @@ export default function JournalScreen() {
   const [pickerDayCount, setPickerDayCount] = useState(31);
 
   return (
-    <ScreenContainer containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
+    <ScreenContainer edges={['left', 'right']} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
-      <View style={dvStyles.header}>
+      <View style={[dvStyles.header, { paddingTop: insets.top + 4 }]}>
         {/* Fire streak icon — left */}
         <Pressable
           onPress={() => {}}

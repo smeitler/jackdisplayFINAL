@@ -4,6 +4,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { ScreenContainer } from "@/components/screen-container";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -232,6 +233,7 @@ export default function CheckInScreen() {
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const colors = useColors();
   const isCalm = useIsCalm();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string; fromAlarm?: string; preview?: string }>();
   const fromAlarm = params.fromAlarm === '1';
@@ -1281,7 +1283,7 @@ export default function CheckInScreen() {
   }
 
   return (
-    <ScreenContainer edges={["top", "left", "right"]} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
+    <ScreenContainer edges={["left", "right"]} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
 
       {/* ── Countdown bar (alarm mode only) ── */}
       {isAlarmActive && (
@@ -1332,7 +1334,7 @@ export default function CheckInScreen() {
       )}
 
       {/* ── Header ── */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top + 4 }]}>
         <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.5 : 1 }]}
