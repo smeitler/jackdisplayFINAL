@@ -1199,37 +1199,49 @@ export default function VoiceCheckinScreen() {
 
       {/* LISTENING phase */}
       {phase === "listening" && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={listeningStyles.container}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Scrolling waveform (iOS Voice Memos style) */}
-          <View style={[listeningStyles.waveRow, { alignSelf: 'stretch' }]}>
-            <ScrollingWaveform isActive color={colors.primary} nativeMeteringRef={nativeMeteringRef} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
-                {isRecording ? "Recording..." : "Starting..."}
-              </Text>
-              <Text style={[listeningStyles.recordingLabel, { color: colors.muted, fontVariant: ['tabular-nums'] }]}>
-                {`${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`}
-              </Text>
-            </View>
-          </View>
-
-          {/* Habit prompt card */}
-          <HabitPromptCard habits={habits} colors={colors} />
-
-          {/* Send button */}
-          <TouchableOpacity
-            style={[sendStyles.btn, { backgroundColor: colors.primary }]}
-            onPress={stopAndAnalyze}
-            activeOpacity={0.85}
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[listeningStyles.container, { paddingBottom: 100 }]}
+            showsVerticalScrollIndicator={false}
           >
-            <IconSymbol name="arrow.up" size={22} color="#fff" />
-            <Text style={sendStyles.label}>Done — Analyze</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            {/* Scrolling waveform (iOS Voice Memos style) */}
+            <View style={[listeningStyles.waveRow, { alignSelf: 'stretch' }]}>
+              <ScrollingWaveform isActive color={colors.primary} nativeMeteringRef={nativeMeteringRef} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
+                  {isRecording ? "Recording..." : "Starting..."}
+                </Text>
+                <Text style={[listeningStyles.recordingLabel, { color: colors.muted, fontVariant: ['tabular-nums'] }]}>
+                  {`${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`}
+                </Text>
+              </View>
+            </View>
+
+            {/* Habit prompt card */}
+            <HabitPromptCard habits={habits} colors={colors} />
+          </ScrollView>
+
+          {/* Sticky Done — Analyze footer */}
+          <View style={listeningStyles.stickyFooter} pointerEvents="box-none">
+            {/* Gradient fade — simulated with a semi-transparent overlay */}
+            <View
+              style={[
+                listeningStyles.gradientFade,
+                { backgroundColor: colors.background },
+              ]}
+              pointerEvents="none"
+            />
+            <TouchableOpacity
+              style={[sendStyles.btn, { backgroundColor: colors.primary, marginHorizontal: 20, marginBottom: 8 }]}
+              onPress={stopAndAnalyze}
+              activeOpacity={0.85}
+            >
+              <IconSymbol name="arrow.up" size={22} color="#fff" />
+              <Text style={sendStyles.label}>Done — Analyze</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* ANALYZING phase — always mounted so spinner never resets */}
@@ -1252,7 +1264,11 @@ export default function VoiceCheckinScreen() {
 
       {/* RESULTS phase — classic grouped-category layout */}
       {phase === "results" && results && (
-        <>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
           {/* Legend row */}
           <View style={[classicStyles.legendRow, { borderBottomColor: colors.border }]}>
             {(['red', 'yellow', 'green'] as const).map((r) => (
@@ -1577,7 +1593,7 @@ export default function VoiceCheckinScreen() {
               </Pressable>
             </View>
           </View>
-        </>
+        </KeyboardAvoidingView>
       )}
 
       {/* DONE phase */}
@@ -1681,6 +1697,18 @@ const listeningStyles = StyleSheet.create({
     paddingVertical: 8,
   },
   recordingLabel: { fontSize: 13, fontWeight: "600" },
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingBottom: 16,
+  },
+  gradientFade: {
+    height: 48,
+    opacity: 0.92,
+    marginBottom: -4,
+  },
 });
 
 const sendStyles = StyleSheet.create({

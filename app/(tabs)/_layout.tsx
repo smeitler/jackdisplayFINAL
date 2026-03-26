@@ -28,9 +28,9 @@ export default function TabLayout() {
   // Dark navy background — matches the reference screenshot aesthetic
   const tabBarBg = colors.background;
 
-  // Active: bright white. Inactive: soft muted blue-grey
-  const activeColor = "#FFFFFF";
-  const inactiveColor = "rgba(160,170,200,0.55)";
+  // Active: primary blue (visible on both light and dark backgrounds). Inactive: muted
+  const activeColor = colors.primary;
+  const inactiveColor = colors.muted;
 
   useEffect(() => {
     if (!loading && !isAuthenticated && !isDemoMode) {
@@ -139,7 +139,7 @@ export default function TabLayout() {
           options={{
             title: "You",
             tabBarIcon: ({ color, focused }) => (
-              <IconSymbol size={focused ? 28 : 26} name="clipboard.data.fill" color={color} />
+              <IconSymbol size={focused ? 28 : 26} name="chart.line.uptrend.xyaxis" color={color} />
             ),
           }}
         />

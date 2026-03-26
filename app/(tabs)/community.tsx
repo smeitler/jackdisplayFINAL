@@ -443,9 +443,9 @@ export default function CommunityScreen() {
             <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
           </View>
 
-          {/* ── 3 Action Options ── */}
+          {/* ── 2 Action Options ── */}
           <View style={styles.actionGrid}>
-            {/* 1. Create Family Plan */}
+            {/* 1. Create a Team */}
             <TouchableOpacity
               style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => setShowModal(true)}
@@ -455,8 +455,8 @@ export default function CommunityScreen() {
                 <IconSymbol name="person.3.fill" size={22} color="#22C55E" />
               </View>
               <Text style={[styles.actionNum, { color: colors.muted }]}>1</Text>
-              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Family Plan</Text>
-              <Text style={[styles.actionDesc, { color: colors.muted }]}>Create a shared group to track habits together</Text>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Create a Team</Text>
+              <Text style={[styles.actionDesc, { color: colors.muted }]}>Build a shared group to track habits together</Text>
             </TouchableOpacity>
 
             {/* 2. Refer a Friend */}
@@ -471,20 +471,6 @@ export default function CommunityScreen() {
               <Text style={[styles.actionNum, { color: colors.muted }]}>2</Text>
               <Text style={[styles.actionTitle, { color: colors.foreground }]}>Refer a Friend</Text>
               <Text style={[styles.actionDesc, { color: colors.muted }]}>Earn 6 months free for every friend you invite</Text>
-            </TouchableOpacity>
-
-            {/* 3. Hire a Coach */}
-            <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: 'rgba(251,191,36,0.35)' }]}
-              onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.actionIconCircle, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
-                <IconSymbol name="star.fill" size={22} color="#FBBF24" />
-              </View>
-              <Text style={[styles.actionNum, { color: colors.muted }]}>3</Text>
-              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Hire a Coach</Text>
-              <Text style={[styles.actionDesc, { color: colors.muted }]}>Get daily voice feedback from a real coach</Text>
             </TouchableOpacity>
           </View>
 
@@ -537,26 +523,20 @@ export default function CommunityScreen() {
             </View>
           )}
 
-          {/* ── Large Coach CTA Banner ── */}
-          <TouchableOpacity
-            style={styles.coachCtaBanner}
-            onPress={() => Linking.openURL(COACH_URL).catch(() => Alert.alert('Coming Soon', 'The coaching page will be available shortly.'))}
-            activeOpacity={0.88}
-          >
-            <View style={styles.coachCtaTopRow}>
-              <View style={styles.coachCtaBadge}>
-                <Text style={styles.coachCtaBadgeText}>LIMITED SPOTS</Text>
-              </View>
-              <View style={styles.coachCtaBadge2}>
-                <Text style={styles.coachCtaBadge2Text}>8-WEEK SPRINT</Text>
-              </View>
+          {/* ── Streak Wall ── */}
+          <View style={[styles.sectionRow, { marginTop: 8 }]}>
+            <Text style={[styles.sectionTitle, { color: colors.muted }]}>STREAK WALL</Text>
+          </View>
+          <View style={[styles.streakWallCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.streakWallRow}>
+              {['🔥 42d', '⚡ 31d', '🌟 28d', '💪 21d', '✨ 18d'].map((entry, i) => (
+                <View key={i} style={[styles.streakBadge, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <Text style={[styles.streakBadgeText, { color: colors.foreground }]}>{entry}</Text>
+                </View>
+              ))}
             </View>
-            <Text style={styles.coachCtaHeadline}>Hire an{`\n`}Accountability Coach</Text>
-            <Text style={styles.coachCtaSub}>Daily voice feedback based on your real app data. No Zoom calls. No scheduling.</Text>
-            <View style={styles.coachCtaBtn}>
-              <Text style={styles.coachCtaBtnText}>Get Your Coach  →</Text>
-            </View>
-          </TouchableOpacity>
+            <Text style={[styles.streakWallHint, { color: colors.muted }]}>Keep your streak going to appear here</Text>
+          </View>
 
         </View>
       </ScrollView>
@@ -700,4 +680,9 @@ const styles = StyleSheet.create({
   formTextarea: { minHeight: 80, textAlignVertical: "top" },
   primaryBtn: { borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 24 },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  streakWallCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 24, gap: 12 },
+  streakWallRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  streakBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  streakBadgeText: { fontSize: 14, fontWeight: "700" },
+  streakWallHint: { fontSize: 13, textAlign: "center", marginTop: 4 },
 });

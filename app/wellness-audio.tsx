@@ -22,6 +22,8 @@ import {
   ActivityIndicator,
   Modal,
   Dimensions,
+  PanResponder,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -307,25 +309,61 @@ interface PlayerModalProps {
   onPrev: () => void;
   onNext: () => void;
   onToggleFavorite: (id: string) => void;
+  onSeek?: (ratio: number) => void;
+  durationLimit?: number | null;
+  onDurationLimit?: (minutes: number | null) => void;
 }
+
+const DURATION_OPTIONS = [5, 10, 15, 30];
 
 function PlayerModal({
   visible, track, trackIndex, allTracks, isPlaying, isLoading, progress, currentTime,
   color, category, favoriteIds, onClose, onPlayPause, onPrev, onNext, onToggleFavorite,
+  onSeek, durationLimit, onDurationLimit,
 }: PlayerModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 50) : insets.top;
   const botPad = Platform.OS === 'web' ? Math.max(insets.bottom, 20) : insets.bottom;
 
+  // Swipe-to-dismiss
+  const translateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 120 || g.vy > 0.5) {
+          Animated.timing(translateY, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+            translateY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
+
+  // Scrubbing
+  const progressBarRef = useRef<View>(null);
+  const progressBarWidth = useRef(0);
+
   if (!track) return null;
   const isFav = favoriteIds.includes(track.id);
   const hasPrev = trackIndex > 0;
   const hasNext = trackIndex < allTracks.length - 1;
+  const isMeditate = category === 'meditate';
+  const displayDuration = durationLimit ? durationLimit * 60 : track.durationSec;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent>
-      <View style={[pm.container, { backgroundColor: colors.background, paddingTop: topPad + 8, paddingBottom: botPad + 16 }]}>
+      <Animated.View style={[pm.container, { backgroundColor: colors.background, paddingTop: topPad + 8, paddingBottom: botPad + 16, transform: [{ translateY }] }]}>
+
+        {/* Drag handle */}
+        <View {...panResponder.panHandlers} style={pm.dragHandleArea}>
+          <View style={[pm.dragHandle, { backgroundColor: colors.muted + '55' }]} />
+        </View>
 
         {/* Top bar */}
         <View style={pm.topBar}>
@@ -357,15 +395,49 @@ function PlayerModal({
           )}
         </View>
 
-        {/* Progress */}
+        {/* Duration selector — meditation only */}
+        {isMeditate && onDurationLimit && (
+          <View style={pm.durationRow}>
+            {DURATION_OPTIONS.map((min) => {
+              const isSelected = durationLimit === min;
+              return (
+                <Pressable
+                  key={min}
+                  onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDurationLimit(isSelected ? null : min); }}
+                  style={({ pressed }) => [pm.durationPill, { backgroundColor: isSelected ? color : color + '22', opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <Text style={[pm.durationPillText, { color: isSelected ? '#fff' : color }]}>{min} min</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Progress — tappable for scrubbing */}
         <View style={pm.progressSection}>
-          <View style={[pm.progressTrack, { backgroundColor: colors.border }]}>
+          <View
+            ref={progressBarRef}
+            onLayout={(e) => { progressBarWidth.current = e.nativeEvent.layout.width; }}
+            style={[pm.progressTrackTouchable, { backgroundColor: colors.border }]}
+            {...(onSeek ? PanResponder.create({
+              onStartShouldSetPanResponder: () => true,
+              onMoveShouldSetPanResponder: () => true,
+              onPanResponderGrant: (e) => {
+                const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / progressBarWidth.current));
+                onSeek(ratio);
+              },
+              onPanResponderMove: (e) => {
+                const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / progressBarWidth.current));
+                onSeek(ratio);
+              },
+            }).panHandlers : {})}
+          >
             <View style={[pm.progressFill, { width: `${Math.min(progress * 100, 100)}%`, backgroundColor: color }]} />
             <View style={[pm.progressThumb, { left: `${Math.min(progress * 100, 100)}%`, backgroundColor: color }]} />
           </View>
           <View style={pm.timeRow}>
             <Text style={[pm.timeLabel, { color: colors.muted }]}>{formatTime(currentTime)}</Text>
-            <Text style={[pm.timeLabel, { color: colors.muted }]}>{formatTime(track.durationSec)}</Text>
+            <Text style={[pm.timeLabel, { color: colors.muted }]}>{formatTime(displayDuration)}</Text>
           </View>
         </View>
 
@@ -386,7 +458,7 @@ function PlayerModal({
         </View>
 
         <Text style={[pm.trackCounter, { color: colors.muted }]}>{trackIndex + 1} of {allTracks.length}</Text>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -418,6 +490,12 @@ const pm = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6,
   },
   trackCounter: { fontSize: 13 },
+  dragHandleArea: { width: '100%', alignItems: 'center', paddingVertical: 10, marginBottom: 4 },
+  dragHandle: { width: 36, height: 4, borderRadius: 2 },
+  durationRow: { flexDirection: 'row', gap: 8, marginBottom: 20, justifyContent: 'center' },
+  durationPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
+  durationPillText: { fontSize: 13, fontWeight: '600' },
+  progressTrackTouchable: { width: '100%', height: 20, justifyContent: 'center', overflow: 'visible', position: 'relative' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -478,10 +556,11 @@ export default function WellnessAudioScreen() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [playerVisible, setPlayerVisible] = useState(false);
   const [playerTrackIndex, setPlayerTrackIndex] = useState(0);
+  const [durationLimit, setDurationLimit] = useState<number | null>(null);
 
   useKeepAwake();
 
-  useEffect(() => { setAudioModeAsync({ playsInSilentMode: true }); }, []);
+  useEffect(() => { setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'mixWithOthers' }); }, []);
 
   useEffect(() => {
     return () => {
@@ -500,10 +579,13 @@ export default function WellnessAudioScreen() {
     setPlayingId(null); setProgress(0); setCurrentTime(0);
   }, []);
 
-  const startTrack = useCallback(async (track: AudioTrack) => {
+  const startTrack = useCallback(async (track: AudioTrack, loopUntilSec?: number) => {
     stopCurrent();
     setIsLoading(true);
     setPlayingId(track.id);
+    const loopMode = cat === 'sleep' || cat === 'focus';
+    const totalSec = loopUntilSec ?? null; // null = no limit
+    const loopStartTime = Date.now();
     try {
       const player = createAudioPlayer({ uri: track.url });
       playerRef.current = player;
@@ -513,13 +595,36 @@ export default function WellnessAudioScreen() {
         try {
           const ct = player.currentTime || 0;
           const dur = player.duration || track.durationSec;
+          const elapsedSec = (Date.now() - loopStartTime) / 1000;
+          // Duration limit (meditation) or sleep/focus timer
+          if (totalSec !== null && elapsedSec >= totalSec) {
+            // Auto-fade: reduce volume over last 5 seconds then stop
+            const fadeRemaining = totalSec - elapsedSec;
+            if (fadeRemaining <= 5 && fadeRemaining > 0) {
+              try { player.volume = Math.max(0, fadeRemaining / 5); } catch {}
+            } else if (elapsedSec >= totalSec) {
+              stopCurrent();
+              return;
+            }
+          }
           setCurrentTime(ct);
-          if (dur > 0) setProgress(ct / dur);
-          if (dur > 0 && ct >= dur - 0.5) stopCurrent();
+          if (dur > 0) {
+            if (totalSec !== null) {
+              setProgress(Math.min(elapsedSec / totalSec, 1));
+            } else {
+              setProgress(ct / dur);
+            }
+          }
+          // Loop: restart when track ends (sleep/focus)
+          if (loopMode && dur > 0 && ct >= dur - 0.5) {
+            try { player.seekTo(0); player.play(); } catch {}
+          } else if (!loopMode && dur > 0 && ct >= dur - 0.5) {
+            stopCurrent();
+          }
         } catch {}
       }, 500);
     } catch { setIsLoading(false); stopCurrent(); }
-  }, [stopCurrent]);
+  }, [stopCurrent, cat]);
 
   const openPlayer = useCallback((track: AudioTrack, indexInAll: number) => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -551,6 +656,16 @@ export default function WellnessAudioScreen() {
     setPlayerTrackIndex(ni);
     startTrack(tracks[ni]);
   }, [playerTrackIndex, tracks, startTrack]);
+
+  const handleSeek = useCallback((ratio: number) => {
+    const track = tracks[playerTrackIndex];
+    if (!track || !playerRef.current) return;
+    const dur = playerRef.current.duration || track.durationSec;
+    const seekTo = ratio * dur;
+    try { playerRef.current.seekTo(seekTo); } catch {}
+    setCurrentTime(seekTo);
+    setProgress(ratio);
+  }, [tracks, playerTrackIndex]);
 
   // ── Derived ─────────────────────────────────────────────
   const favoritesList = favoriteIds.map((id) => tracks.find((t) => t.id === id)).filter(Boolean) as AudioTrack[];
@@ -803,6 +918,9 @@ export default function WellnessAudioScreen() {
         onPrev={handlePrev}
         onNext={handleNext}
         onToggleFavorite={toggleFavorite}
+        onSeek={handleSeek}
+        durationLimit={durationLimit}
+        onDurationLimit={(min) => setDurationLimit(min)}
       />
     </View>
   );

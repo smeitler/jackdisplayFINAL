@@ -24,7 +24,7 @@ import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-nativ
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 // Reusable swipeable sheet wrapper
-function SwipeableSheet({ children, onClose, style }: { children: React.ReactNode; onClose: () => void; style?: object }) {
+function SwipeableSheet({ children, onClose, style, sheetColors }: { children: React.ReactNode; onClose: () => void; style?: object; sheetColors?: ReturnType<typeof useColors> }) {
   const translateY = useSharedValue(0);
 
   const panGesture = Gesture.Pan()
@@ -47,7 +47,10 @@ function SwipeableSheet({ children, onClose, style }: { children: React.ReactNod
 
   return (
     <GestureDetector gesture={panGesture}>
-      <Animated.View style={[style, animStyle]}>{children}</Animated.View>
+      <Animated.View style={[style, animStyle]}>
+        <View style={[styles.dragHandle, { backgroundColor: sheetColors ? sheetColors.muted + '55' : 'rgba(150,150,170,0.4)' }]} />
+        {children}
+      </Animated.View>
     </GestureDetector>
   );
 }
@@ -427,8 +430,7 @@ function HabitModal({ visible, editHabit, entryCount, onSave, onDelete, onDeacti
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={0}>
           <Pressable style={styles.backdrop} onPress={onClose} />
-          <SwipeableSheet onClose={onClose} style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border, maxHeight: '90%' }]}>
-            <View style={[styles.handle, { backgroundColor: colors.muted + '80', width: 44, height: 5 }]} />
+          <SwipeableSheet onClose={onClose} sheetColors={colors} style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border, maxHeight: '90%' }]}>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
               {editHabit ? 'Edit Habit' : 'Add Habit'}
             </Text>
@@ -706,8 +708,7 @@ function CategoryModal({ visible, editCategory, habitCount, onSave, onDelete, on
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.backdrop} onPress={onClose} />
-          <SwipeableSheet onClose={onClose} style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.handle, { backgroundColor: colors.muted + '80', width: 44, height: 5 }]} />
+          <SwipeableSheet onClose={onClose} sheetColors={colors} style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
               {editCategory ? 'Edit Goal' : 'New Goal'}
             </Text>

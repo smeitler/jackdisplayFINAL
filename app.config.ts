@@ -42,6 +42,10 @@ const config: ExpoConfig = {
       ITSAppUsesNonExemptEncryption: false,
       // Bundle custom notification sounds (.caf format required by iOS)
       UISupportedExternalAccessoryProtocols: [],
+      NSMicrophoneUsageDescription: "Jack uses your microphone to record voice check-ins and analyze your daily progress.",
+      NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries.",
+      NSPhotoLibraryUsageDescription: "Jack accesses your photo library to attach images to journal entries.",
+      NSPhotoLibraryAddUsageDescription: "Jack saves photos to your library from journal entries.",
     },
   },
   android: {

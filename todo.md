@@ -1460,3 +1460,26 @@
 - [x] Fix: Manage Goals — all categories auto-expanded by default (already implemented, verified)
 - [x] Add: Persist expand/collapse state per category in Manage Goals
 - [x] Fix: Keyboard hides Cancel/Save buttons in Edit Habit sheet (ScrollView inside sheet)
+
+- [ ] Fix: Manage Goals screen cannot scroll down to see all habits
+- [ ] Fix: Manage Goals drag handle pill indicator missing at top of sheet
+- [ ] Fix: Add Widget sheet corner shows grey/white background — should be transparent
+- [ ] Fix: Dashboard AI recommendations button has too much blank space/buffer around it
+- [ ] Fix: Journal tab icon (position 2) not showing in tab bar
+- [ ] Fix: Chat/You tab icon (position 3) not showing in tab bar
+- [ ] Fix: Tab bar selected icon invisible in light mode — make selected icon blue or darker
+- [ ] Fix: You tab icon invisible in dark mode — replace with progress/analytics/arrow icon
+- [ ] Fix: Voice Check-In "Done — Analyze" button not sticky — make it fixed at bottom with gradient fade above
+- [ ] Fix: Review Check-In — keyboard blocks submit, move journal entry to top, tap to open full-screen editor
+- [ ] Fix: Meditation Now Playing — swipe-to-dismiss not working
+- [ ] Fix: Meditation Now Playing — audio does not play in background when leaving app
+- [ ] Fix: Meditation Now Playing — progress bar dot not scrubbable, add drag-to-seek
+- [ ] Feature: Meditation duration selector — 5/10/15/30 min segmented pill selector before play
+- [ ] Fix: Sleep audio — continuous loop up to 15 hours, user controls duration
+- [ ] Fix: Focus audio — same continuous loop behavior as Sleep
+- [ ] Feature: Sleep/Focus — add auto-fade out option for last 5 minutes
+- [ ] Fix: Community screen — remove redundant small "Hire a Coach" list row (keep big card)
+- [ ] Fix: Community screen — remove "Family Plan" row entirely
+- [ ] Feature: Community screen — add Leaderboard/Streak Wall section
+- [ ] Fix: Home screen — remove "Move" widget, keep row of 3 widgets (Meditate, Sleep, Focus)
+- [ ] Feature: iOS app.config.ts — add Alarms, Live Activities, Background App Refresh permissions

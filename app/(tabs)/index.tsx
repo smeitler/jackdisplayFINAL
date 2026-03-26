@@ -1168,12 +1168,11 @@ export default function HomeScreen() {
             </Pressable>
           )}
 
-          {/* ── Wellness Audio Grid (2×2) ── */}
-          <View style={styles.wellnessGrid}>
+          {/* ── Wellness Audio Row (3 items: Meditate, Sleep, Focus) ── */}
+          <View style={styles.wellnessRow}>
             {[
               { key: 'meditate', label: 'Meditate', color: '#FF8C42' },
               { key: 'sleep', label: 'Sleep', color: '#B07FD0' },
-              { key: 'move', label: 'Move', color: '#22C55E' },
               { key: 'focus', label: 'Focus', color: '#3B82F6' },
             ].map((item) => (
               <Pressable
@@ -1257,7 +1256,7 @@ export default function HomeScreen() {
 
           {/* ── Widget Library Modal ── */}
           <Modal visible={widgetLibraryOpen} transparent animationType="slide" onRequestClose={() => setWidgetLibraryOpen(false)}>
-            <Pressable style={styles.legendOverlay} onPress={() => setWidgetLibraryOpen(false)} />
+            <Pressable style={styles.widgetLibraryOverlay} onPress={() => setWidgetLibraryOpen(false)} />
             <SwipeSheet onClose={() => setWidgetLibraryOpen(false)} style={[styles.widgetLibrarySheet, { backgroundColor: isCalm ? '#0D1135' : colors.surface, borderColor: colors.border }]}>
               {/* Drag handle */}
               <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: colors.muted + '80', alignSelf: 'center', marginBottom: 12 }} />
@@ -2055,10 +2054,13 @@ const styles = StyleSheet.create({
   wellnessGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16,
   },
+  wellnessRow: {
+    flexDirection: 'row', gap: 10, marginBottom: 16,
+  },
   wellnessCard: {
-    width: '48%' as any, flexGrow: 1, flexBasis: '45%',
-    borderRadius: 16, padding: 18,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flex: 1,
+    borderRadius: 16, padding: 16,
+    flexDirection: 'column', alignItems: 'center', gap: 8,
     borderWidth: 1,
   },
   wellnessIconWrap: {
@@ -2094,6 +2096,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   editDashBtnText: { fontSize: 13, fontWeight: '600' },
+
+  // Widget library overlay — flex-end so sheet sits at bottom with no grey corner peek
+  widgetLibraryOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
 
   // Widget library sheet
   widgetLibrarySheet: {
