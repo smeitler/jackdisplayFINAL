@@ -769,12 +769,25 @@ export default function VoiceCheckinScreen() {
   const webRecorder = useWebRecorder();
 
   // ── Native recorder (expo-audio hooks must be called unconditionally) ─────
-  const nativeRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const nativeRecorderState = useAudioRecorderState(nativeRecorder);
+  // Enable isMeteringEnabled so RecorderState.metering is populated with dB values
+  const nativeRecorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+  // Poll at 100ms for smooth waveform updates
+  const nativeRecorderState = useAudioRecorderState(nativeRecorder, 100);
+
+  // Ref that ScrollingWaveform reads on each 80ms tick to get the latest dB level
+  const nativeMeteringRef = useRef<number>(-60);
 
   // Unified isRecording
   const isRecording =
     Platform.OS === "web" ? webRecorder.isRecording : nativeRecorderState.isRecording;
+
+  // Keep nativeMeteringRef in sync with the latest metering value from expo-audio
+  // nativeRecorderState.metering is a dB value (typically -160 to 0)
+  useEffect(() => {
+    if (Platform.OS !== "web" && nativeRecorderState.metering !== undefined) {
+      nativeMeteringRef.current = nativeRecorderState.metering;
+    }
+  }, [nativeRecorderState.metering]);
 
   // ── Live recording timer ──────────────────────────────────────────────────
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -1193,7 +1206,7 @@ export default function VoiceCheckinScreen() {
         >
           {/* Scrolling waveform (iOS Voice Memos style) */}
           <View style={[listeningStyles.waveRow, { alignSelf: 'stretch' }]}>
-            <ScrollingWaveform isActive color={colors.primary} />
+            <ScrollingWaveform isActive color={colors.primary} nativeMeteringRef={nativeMeteringRef} />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
               <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
                 {isRecording ? "Recording..." : "Starting..."}

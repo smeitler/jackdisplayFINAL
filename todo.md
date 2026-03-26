@@ -1443,3 +1443,5 @@
 
 - [x] Audit and fix photo saving pipeline for iOS TestFlight (pick, copy to app dir, persist URI)
 - [x] Audit and fix calendar view photo display (retrieve stored URI, show thumbnail in cell)
+
+- [x] Fix: Voice recording waveform bars are random animation, not real microphone levels - use expo-audio metering API
