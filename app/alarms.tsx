@@ -174,7 +174,7 @@ function AlarmEditModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[em.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={[em.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
+        <View style={[em.header, { paddingTop: Platform.OS === 'ios' ? 8 : insets.top + 8, borderBottomColor: colors.border }]}>
           <Pressable
             onPress={onClose}
             style={({ pressed }) => [em.cancelBtn, { opacity: pressed ? 0.6 : 1 }]}

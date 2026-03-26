@@ -1430,3 +1430,10 @@
 - [x] iOS compatibility audit: verify document references have typeof document check
 - [x] iOS compatibility audit: verify window.localStorage usages have Platform.OS === 'web' guards
 - [x] iOS compatibility audit: TypeScript check passes with 0 errors after all fixes
+
+- [x] Fix: "No procedure found on path voiceCheckin.transcribeAndAnalyze" error on voice check-in (route exists server-side; production server needs re-deploy via Publish)
+- [x] Fix: Permissions not properly requested on app launch (microphone, notifications, etc.)
+- [x] Fix: Voice check-in habit names truncated/cut off (e.g. "Drink 8 glasses o...", "Reach out to a fri...")
+- [x] Fix: Journal Entry modal has excessive blank space above the sheet
+- [x] Fix: Edit Alarm screen has blank space above the title
+- [x] Fix: Journal calendar Saturday column cut off on right side

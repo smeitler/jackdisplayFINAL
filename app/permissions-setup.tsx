@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { requestRecordingPermissionsAsync } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -41,6 +42,15 @@ interface Step {
 }
 
 const STEPS: Step[] = [
+  {
+    id: 'microphone',
+    icon: '🎙️',
+    title: 'Allow Microphone',
+    description:
+      'Jack uses your microphone for voice check-ins and journal recordings. This lets you log your day hands-free.',
+    actionLabel: 'Allow Microphone',
+    skipLabel: 'Skip for now',
+  },
   {
     id: 'notifications',
     icon: '🔔',
@@ -104,7 +114,26 @@ export default function PermissionsSetupScreen() {
   const handleAction = useCallback(async () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    if (currentStep.id === 'notifications') {
+    if (currentStep.id === 'microphone') {
+      setStatuses(s => ({ ...s, microphone: 'loading' }));
+      try {
+        if (Platform.OS === 'web') {
+          // Web: skip microphone permission (handled by browser)
+          setStatuses(s => ({ ...s, microphone: 'done' }));
+          setTimeout(() => animateToNext(stepIndex + 1), 600);
+          return;
+        }
+        const perm = await requestRecordingPermissionsAsync();
+        const granted = perm.granted;
+        setStatuses(s => ({ ...s, microphone: granted ? 'done' : 'denied' }));
+        if (granted) {
+          setTimeout(() => animateToNext(stepIndex + 1), 600);
+        }
+      } catch {
+        setStatuses(s => ({ ...s, microphone: 'denied' }));
+      }
+
+    } else if (currentStep.id === 'notifications') {
       setStatuses(s => ({ ...s, notifications: 'loading' }));
       try {
         const { status } = await Notifications.requestPermissionsAsync({
@@ -117,42 +146,35 @@ export default function PermissionsSetupScreen() {
         const granted = status === 'granted';
         setStatuses(s => ({ ...s, notifications: granted ? 'done' : 'denied' }));
         if (granted) {
-          setTimeout(() => animateToNext(1), 600);
+          setTimeout(() => animateToNext(stepIndex + 1), 600);
         }
       } catch {
         setStatuses(s => ({ ...s, notifications: 'denied' }));
       }
 
     } else if (currentStep.id === 'timeSensitive') {
-      // Time-Sensitive is part of the notification permission on iOS 15+.
-      // We request it here by opening Settings so the user can verify the
-      // "Time Sensitive" toggle is on in Notifications > Jack.
-      // On iOS we can also check current permission status.
       setStatuses(s => ({ ...s, timeSensitive: 'loading' }));
       try {
         const perms = await Notifications.getPermissionsAsync();
-        // interruptionLevel timeSensitive is automatically included when
-        // allowAlert is granted on iOS 15+. Open Settings for the user to verify.
         if (Platform.OS === 'ios') {
           await Linking.openSettings();
         }
         const granted = perms.status === 'granted';
         setStatuses(s => ({ ...s, timeSensitive: granted ? 'done' : 'idle' }));
-        setTimeout(() => animateToNext(2), 400);
+        setTimeout(() => animateToNext(stepIndex + 1), 400);
       } catch {
         setStatuses(s => ({ ...s, timeSensitive: 'idle' }));
-        animateToNext(2);
+        animateToNext(stepIndex + 1);
       }
 
     } else if (currentStep.id === 'focus') {
-      // Open iOS Settings so user can add app to Focus allowed list
       if (Platform.OS === 'ios') {
         await Linking.openSettings();
       }
       setStatuses(s => ({ ...s, focus: 'done' }));
       setTimeout(() => markDone(), 800);
     }
-  }, [currentStep, animateToNext, markDone]);
+  }, [currentStep, stepIndex, animateToNext, markDone]);
 
   const handleSkip = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -235,6 +257,13 @@ export default function PermissionsSetupScreen() {
       {/* What this unlocks */}
       <View style={[styles.unlockBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.unlockTitle, { color: colors.foreground }]}>Why this matters</Text>
+        {currentStep?.id === 'microphone' && (
+          <>
+            <UnlockRow icon="🎤" text="Voice check-ins — rate habits by talking" />
+            <UnlockRow icon="📝" text="Voice journal — capture thoughts hands-free" />
+            <UnlockRow icon="🤖" text="AI transcription of your recordings" />
+          </>
+        )}
         {currentStep?.id === 'notifications' && (
           <>
             <UnlockRow icon="🔔" text="Alarm fires when app is closed" />

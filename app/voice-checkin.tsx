@@ -537,7 +537,7 @@ function HabitPromptCard({
                 {h.emoji ? (
                   <Text style={promptStyles.habitEmoji}>{h.emoji}</Text>
                 ) : null}
-                <Text style={[promptStyles.habitName, { color: colors.foreground }]} numberOfLines={1}>
+                <Text style={[promptStyles.habitName, { color: colors.foreground }]}>
                   {h.name}
                 </Text>
               </View>
@@ -587,7 +587,7 @@ const promptStyles = StyleSheet.create({
     borderWidth: 1,
   },
   habitEmoji: { fontSize: 13 },
-  habitName: { fontSize: 13, fontWeight: "500", maxWidth: 120 },
+  habitName: { fontSize: 13, fontWeight: "500" },
   gratitudeRow: {
     flexDirection: "row",
     alignItems: "center",

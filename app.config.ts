@@ -118,8 +118,12 @@ const config: ExpoConfig = {
         locationWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to tag journal entries.",
       },
     ],
-    // expo-audio: no plugin entry needed (avoids UIBackgroundModes audio declaration)
-    // expo-video: no background playback (avoids UIBackgroundModes audio declaration)
+    [
+      "expo-audio",
+      {
+        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone for voice check-ins and journal recordings.",
+      },
+    ],
     [
       "expo-splash-screen",
       {

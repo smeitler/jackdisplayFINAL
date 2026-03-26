@@ -1328,7 +1328,7 @@ function CalendarTab({ entries, onDayPress, colors }: {
   // 7 equal columns, 1px border between cells, cells are perfectly square.
   // Use useWindowDimensions so it reacts to screen size changes.
   const { width: winWidth } = useWindowDimensions();
-  const CELL_GAP = 3;
+  const CELL_GAP = 2;
   const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - 32 - CELL_GAP * 6) / 7);
   const cellHeight = cellWidth;
 
@@ -1977,8 +1977,9 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colo
     return map;
   }, [calEntries]);
 
-  const CELL_GAP = 3;
-  const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - 40 - CELL_GAP * 6) / 7);
+  const CELL_GAP = 2;
+  const containerPadding = 24; // reduced from 40 to prevent Saturday column cutoff
+  const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - containerPadding - CELL_GAP * 6) / 7);
   const cellHeight = cellWidth;
 
   const scrollRef = useRef<ScrollView>(null);
@@ -1993,7 +1994,7 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colo
   }, [didScroll, todayMonthIndex]);
 
   return (
-    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20, paddingHorizontal: 16 }}>
+    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20, paddingHorizontal: 12 }}>
       {months.map(({ year, month }, monthIndex) => {
         const daysInMonth = jcGetMonthDays(year, month);
         const firstDay = jcGetFirstDay(year, month);
@@ -2469,7 +2470,7 @@ function FullScreenJournalEditor({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose} transparent={false}>
       {/* Outer View fills the screen and sets background. paddingTop from insets ensures
            content never overlaps the status bar, even on pageSheet modals. */}
-      <View style={{ flex: 1, backgroundColor: '#000000', paddingTop: insets.top }}>
+      <View style={{ flex: 1, backgroundColor: '#000000', paddingTop: Platform.OS === 'ios' ? 0 : insets.top }}>
         {/* Drag handle */}
         <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' }} />
