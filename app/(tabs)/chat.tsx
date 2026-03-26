@@ -491,37 +491,7 @@ export default function CommunityScreen() {
               </View>
             )}
 
-            {/* Hire a Coach (compact) */}
-            <TouchableOpacity
-              style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: 'rgba(251,191,36,0.35)' }]}
-              onPress={() => setShowCoachApply(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.compactRowIcon, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
-                <IconSymbol name="star.fill" size={18} color="#FBBF24" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.compactRowTitle, { color: colors.foreground }]}>Hire a Coach</Text>
-                <Text style={[styles.compactRowDesc, { color: colors.muted }]}>Get daily voice feedback from a real coach</Text>
-              </View>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-            </TouchableOpacity>
 
-            {/* Family Plan */}
-            <TouchableOpacity
-              style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: '#22C55E30' }]}
-              onPress={() => setShowModal(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.compactRowIcon, { backgroundColor: '#22C55E20' }]}>
-                <IconSymbol name="person.3.fill" size={18} color="#22C55E" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.compactRowTitle, { color: colors.foreground }]}>Family Plan</Text>
-                <Text style={[styles.compactRowDesc, { color: colors.muted }]}>Create a shared group to track habits together</Text>
-              </View>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-            </TouchableOpacity>
           </View>
 
           {/* ── My Teams ── */}

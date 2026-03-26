@@ -1498,3 +1498,4 @@
 
 - [x] Fix: Voice Check-In — Done-Analyze button overlaps last habit chip; make it a true sticky footer with proper bottom inset
 - [x] Feature: Voice Check-In — waveform header collapses to mini bar on scroll down, expands back on scroll up
+- [x] Fix: Community screen — permanently deleted Hire a Coach and Family Plan rows from chat.tsx (that was the actual source, not community.tsx)
