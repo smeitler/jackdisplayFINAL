@@ -1440,3 +1440,6 @@
 
 - [x] Audit and fix iOS alarm system: scheduling, sound playback, snooze, wake-up flow for TestFlight
 - [x] Simplify journal entry: replace modal/sheet with direct navigation to full journal screen on tap
+
+- [x] Audit and fix photo saving pipeline for iOS TestFlight (pick, copy to app dir, persist URI)
+- [x] Audit and fix calendar view photo display (retrieve stored URI, show thumbnail in cell)

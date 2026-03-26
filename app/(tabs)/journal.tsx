@@ -1434,21 +1434,22 @@ function CalendarTab({ entries, onDayPress, colors }: {
                           width: cellWidth,
                           height: cellHeight,
                           borderRadius: 4,
-                          overflow: "hidden",
                           backgroundColor: bgColor,
                           opacity: pressed ? 0.6 : cellOpacity,
                           borderWidth: isToday ? 1.5 : 0,
                           borderColor: isToday ? colors.primary : "transparent",
                         })}
                       >
-                        {/* Photo fills entire cell */}
+                        {/* Wrap in clipping View — overflow:hidden on Pressable causes black images on iOS */}
                         {photoUri ? (
-                          <ExpoImage
-                            source={{ uri: photoUri }}
-                            style={StyleSheet.absoluteFill}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                          />
+                          <View style={[StyleSheet.absoluteFill, { borderRadius: 4, overflow: "hidden" }]}>
+                            <ExpoImage
+                              source={{ uri: photoUri }}
+                              style={StyleSheet.absoluteFill}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                            />
+                          </View>
                         ) : null}
                         {/* Date number */}
                         <Text style={{
@@ -2965,6 +2966,14 @@ export default function JournalScreen() {
   // ── Day-view photo picker ────────────────────────────────────────────────
   const dvPickPhoto = useCallback(async () => {
     try {
+      // Request media library permission first (required on iOS)
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please allow access to your photo library in Settings to add photos.');
+          return;
+        }
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,

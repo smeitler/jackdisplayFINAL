@@ -101,7 +101,8 @@ const config: ExpoConfig = {
     [
       "expo-image-picker",
       {
-        photosPermission: "Allow $(PRODUCT_NAME) to access your photos to add images to your Vision Board.",
+        photosPermission: "Allow $(PRODUCT_NAME) to access your photos to add images to your journal and Vision Board.",
+        cameraPermission: "Allow $(PRODUCT_NAME) to use the camera to capture photos and videos for your journal.",
       },
     ],
     [
