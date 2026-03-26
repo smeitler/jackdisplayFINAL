@@ -1495,3 +1495,6 @@
 - [x] Fix: Journal full-screen editor — photo icon above keyboard toolbar (already present)
 - [x] Feature: Journal entry card — photo thumbnail strip shown when photos attached
 - [x] Fix: Community screen — Family Plan row confirmed removed from code (only in empty-state subtitle text)
+
+- [x] Fix: Voice Check-In — Done-Analyze button overlaps last habit chip; make it a true sticky footer with proper bottom inset
+- [x] Feature: Voice Check-In — waveform header collapses to mini bar on scroll down, expands back on scroll up

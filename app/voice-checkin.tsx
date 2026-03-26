@@ -14,6 +14,7 @@
  *   - Native (iOS/Android): expo-audio useAudioRecorder
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Alert,
   Animated,
@@ -725,6 +726,29 @@ export default function VoiceCheckinScreen() {
     return map;
   }, [activeHabits, categories]);
 
+  // Safe area insets for proper bottom padding
+  const insets = useSafeAreaInsets();
+
+  // Waveform collapse state — collapses when user scrolls down
+  const [waveformCollapsed, setWaveformCollapsed] = useState(false);
+  const waveformHeight = useRef(new Animated.Value(1)).current; // 1 = expanded, 0 = collapsed
+  const lastScrollY = useRef(0);
+
+  const handleListeningScroll = useCallback((e: any) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const prev = lastScrollY.current;
+    lastScrollY.current = y;
+    if (y > 40 && prev <= 40) {
+      // Scrolled down past threshold — collapse
+      setWaveformCollapsed(true);
+      Animated.timing(waveformHeight, { toValue: 0, duration: 250, useNativeDriver: false }).start();
+    } else if (y < 20 && prev >= 20) {
+      // Scrolled back to top — expand
+      setWaveformCollapsed(false);
+      Animated.timing(waveformHeight, { toValue: 1, duration: 250, useNativeDriver: false }).start();
+    }
+  }, [waveformHeight]);
+
   // Start directly in listening phase — idle screen never renders
   const [phase, setPhase] = useState<Phase>("listening");
   const [results, setResults] = useState<ParsedResults | null>(null);
@@ -1200,15 +1224,25 @@ export default function VoiceCheckinScreen() {
       {/* LISTENING phase */}
       {phase === "listening" && (
         <View style={{ flex: 1 }}>
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={[listeningStyles.container, { paddingBottom: 130 }]}
-            showsVerticalScrollIndicator={false}
+
+          {/* Collapsible waveform header — sits above the scroll, animates height */}
+          <Animated.View
+            style={[
+              listeningStyles.waveHeader,
+              {
+                borderBottomColor: colors.border,
+                height: waveformHeight.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [44, 130],
+                }),
+                overflow: 'hidden',
+              },
+            ]}
           >
-            {/* Scrolling waveform (iOS Voice Memos style) */}
-            <View style={[listeningStyles.waveRow, { alignSelf: 'stretch' }]}>
+            {/* Full waveform — visible when expanded */}
+            <Animated.View style={{ opacity: waveformHeight, flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
               <ScrollingWaveform isActive color={colors.primary} nativeMeteringRef={nativeMeteringRef} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
                 <Text style={[listeningStyles.recordingLabel, { color: colors.primary }]}>
                   {isRecording ? "Recording..." : "Starting..."}
                 </Text>
@@ -1216,23 +1250,53 @@ export default function VoiceCheckinScreen() {
                   {`${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`}
                 </Text>
               </View>
-            </View>
+            </Animated.View>
 
+            {/* Mini pill — visible when collapsed */}
+            <Animated.View
+              style={[
+                listeningStyles.miniPill,
+                {
+                  opacity: waveformHeight.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0] }),
+                  backgroundColor: colors.surface,
+                },
+              ]}
+            >
+              <View style={[listeningStyles.miniDot, { backgroundColor: colors.primary }]} />
+              <Text style={[listeningStyles.miniLabel, { color: colors.primary }]}>
+                {isRecording ? "Recording" : "Starting"}
+              </Text>
+              <Text style={[listeningStyles.miniLabel, { color: colors.muted, fontVariant: ['tabular-nums'] }]}>
+                {`${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`}
+              </Text>
+            </Animated.View>
+          </Animated.View>
+
+          {/* Scrollable content */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[listeningStyles.container, { paddingBottom: 24 }]}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleListeningScroll}
+            scrollEventThrottle={16}
+          >
             {/* Habit prompt card */}
             <HabitPromptCard habits={habits} colors={colors} />
           </ScrollView>
 
-          {/* Sticky Done — Analyze footer */}
-          <View style={listeningStyles.stickyFooter} pointerEvents="box-none">
-            {/* Gradient fade layers — transparent at top, opaque at bottom */}
-            <View pointerEvents="none" style={{ height: 56, overflow: 'hidden' }}>
-              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 0 }]} />
-              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 0.35 }]} />
-              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 0.7 }]} />
-              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 1 }]} />
-            </View>
+          {/* Done — Analyze: true sticky footer, never overlaps content */}
+          <View
+            style={[
+              listeningStyles.trueFooter,
+              {
+                backgroundColor: colors.background,
+                borderTopColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
+            ]}
+          >
             <TouchableOpacity
-              style={[sendStyles.btn, { backgroundColor: colors.primary, marginHorizontal: 20, marginBottom: 8 }]}
+              style={[sendStyles.btn, { backgroundColor: colors.primary, marginHorizontal: 20 }]}
               onPress={stopAndAnalyze}
               activeOpacity={0.85}
             >
@@ -1688,7 +1752,7 @@ const micStyles = StyleSheet.create({
 const listeningStyles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 24,
     gap: 16,
     alignItems: "stretch",
   },
@@ -1698,6 +1762,38 @@ const listeningStyles = StyleSheet.create({
     paddingVertical: 8,
   },
   recordingLabel: { fontSize: 13, fontWeight: "600" },
+  // Animated header that collapses when scrolling
+  waveHeader: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'flex-start',
+  },
+  // Mini pill shown when waveform is collapsed
+  miniPill: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  miniDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  miniLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // True sticky footer — outside the scroll, never overlaps content
+  trueFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+  },
+  // Legacy — kept for reference
   stickyFooter: {
     position: 'absolute',
     bottom: 0,
