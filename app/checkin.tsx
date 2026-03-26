@@ -14,7 +14,8 @@ import {
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { trpc } from "@/lib/trpc";
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, useAudioRecorder, useAudioRecorderState, RecordingPresets, requestRecordingPermissionsAsync } from "expo-audio";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   loadHabits,
   loadGratitudeEntries,
@@ -26,14 +27,11 @@ import {
 import { useIsCalm } from '@/components/calm-effects';
 import { addEntry, loadEntries, generateId, updateEntry } from '@/lib/journal-store';
 
-// ─── Voice Check-in Simple Recorder ─────────────────────────────────────────
-// Simple approach: record all audio, stop, send full blob to Whisper once.
-// No streaming, no silence detection, no chunk intervals.
-// Result: reliable on web + native, ~0.5-1.5s transcription after stop.
-
-function useSimpleRecorder() {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+// ─── Web MediaRecorder hook (web only) ──────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function useWebRecorder() {
+  const mediaRecorderRef = useRef<any>(null);
+  const streamRef = useRef<any>(null);
   const allChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>('audio/webm');
   const isRecordingRef = useRef(false);
@@ -44,15 +42,17 @@ function useSimpleRecorder() {
     setMicError(null);
     allChunksRef.current = [];
     try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices) { setMicError('Recording not available on this platform'); return false; }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       let mimeType = '';
-      if (typeof MediaRecorder.isTypeSupported === 'function') {
+      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
         if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
         else if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
         else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
       }
       mimeTypeRef.current = mimeType || 'audio/webm';
+      if (typeof MediaRecorder === 'undefined') { setMicError('Recording not available on this platform'); return false; }
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) allChunksRef.current.push(e.data);
@@ -75,7 +75,6 @@ function useSimpleRecorder() {
     }
   }, []);
 
-  // Stop recording and return the full audio blob
   const stop = useCallback((): Promise<Blob | null> => {
     return new Promise((resolve) => {
       const mr = mediaRecorderRef.current;
@@ -86,7 +85,7 @@ function useSimpleRecorder() {
         return;
       }
       mr.addEventListener('stop', () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current?.getTracks().forEach((t: any) => t.stop());
         streamRef.current = null;
         const blob = allChunksRef.current.length > 0
           ? new Blob(allChunksRef.current, { type: mimeTypeRef.current })
@@ -105,13 +104,13 @@ function useSimpleRecorder() {
   return { start, stop, getMimeType, isRecording, isRecordingRef, micError };
 }
 
-// Convert Blob to base64 string
-function blobToBase64(blob: Blob): Promise<string> {
+// Convert Blob to base64 string (web only)
+function blobToBase64(blob: any): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (typeof FileReader === 'undefined') { reject(new Error('FileReader not available')); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Strip data URI prefix: "data:audio/webm;base64," -> just the base64 part
       const base64 = result.split(',')[1] || '';
       resolve(base64);
     };
@@ -291,7 +290,11 @@ export default function CheckInScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkinRecorder = useSimpleRecorder();
+  // ── Cross-platform recording: web uses MediaRecorder, native uses expo-audio ──
+  const webRecorder = useWebRecorder();
+  const nativeRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const nativeRecorderState = useAudioRecorderState(nativeRecorder);
+  const isVcRecording = Platform.OS === 'web' ? webRecorder.isRecording : nativeRecorderState.isRecording;
 
   // ── Countdown bar (only active when fromAlarm and not yet submitted) ──
   const countdownAnim = useRef(new Animated.Value(1)).current;
@@ -794,18 +797,32 @@ export default function CheckInScreen() {
       // Show transcribing state immediately (optimistic UI)
       setVcStatus('transcribing');
 
-      // Get the full audio blob from the recorder
-      const audioBlob = await checkinRecorder.stop();
-      if (!audioBlob || audioBlob.size < 500) {
-        setVcStatus('error');
-        setTimeout(() => setVcStatus('idle'), 3000);
-        return;
+      // Get the full audio — web returns Blob, native returns file URI
+      let audioBase64 = '';
+      let mimeType = 'audio/webm';
+      if (Platform.OS === 'web') {
+        const audioBlob = await webRecorder.stop();
+        if (!audioBlob || audioBlob.size < 500) {
+          setVcStatus('error');
+          setTimeout(() => setVcStatus('idle'), 3000);
+          return;
+        }
+        audioBase64 = await blobToBase64(audioBlob);
+        mimeType = webRecorder.getMimeType();
+      } else {
+        await nativeRecorder.stop();
+        const uri = nativeRecorder.uri;
+        if (!uri) {
+          setVcStatus('error');
+          setTimeout(() => setVcStatus('idle'), 3000);
+          return;
+        }
+        audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        mimeType = 'audio/m4a';
       }
 
       try {
         // STEP 1: Whisper — transcribe full audio in one shot
-        const audioBase64 = await blobToBase64(audioBlob);
-        const mimeType = checkinRecorder.getMimeType();
         const transcribeResult = await transcribeChunkMutation.mutateAsync({
           audioBase64,
           mimeType,
@@ -847,8 +864,26 @@ export default function CheckInScreen() {
     } else if (vcStatus === 'idle' || vcStatus === 'done' || vcStatus === 'error') {
       // START recording
       setVcTranscript('');
-      const ok = await checkinRecorder.start();
-      if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
+      if (Platform.OS === 'web') {
+        const ok = await webRecorder.start();
+        if (!ok) { setVcStatus('error'); setTimeout(() => setVcStatus('idle'), 2000); return; }
+      } else {
+        try {
+          const perm = await requestRecordingPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert('Microphone Permission', 'Please allow microphone access to use voice check-in.');
+            return;
+          }
+          await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+          await nativeRecorder.prepareToRecordAsync();
+          nativeRecorder.record();
+        } catch (err: any) {
+          console.error('[Checkin] native start error:', err);
+          setVcStatus('error');
+          setTimeout(() => setVcStatus('idle'), 2000);
+          return;
+        }
+      }
       setVcElapsed(0);
       setVcStatus('recording');
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1538,7 +1573,7 @@ export default function CheckInScreen() {
         {vcStatus === 'error' && (
           <View style={[styles.vcStatusBar, { backgroundColor: '#EF444410', borderColor: '#EF444430' }]}>
             <Text style={[styles.vcStatusText, { color: '#EF4444' }]}>
-              {checkinRecorder.micError ?? 'Could not analyze. Try again.'}
+              {(Platform.OS === 'web' ? webRecorder.micError : null) ?? 'Could not analyze. Try again.'}
             </Text>
           </View>
         )}

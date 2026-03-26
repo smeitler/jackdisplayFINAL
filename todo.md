@@ -1420,3 +1420,13 @@
 - [x] Polish Log Habits layout: lower legend row, reduce segmented button size for better visual balance
 - [x] Add required field validation for first name, last name, email, phone in accountability coach setup (all 4 on step 1, block Continue until filled)
 - [x] Add habit index number (1, 2, 3…) inside each colored habit box in the calendar view
+
+- [x] iOS compatibility audit: add typeof guards for navigator.mediaDevices in all useWebRecorder hooks (checkin.tsx, journal.tsx, voice-checkin.tsx)
+- [x] iOS compatibility audit: add typeof guards for MediaRecorder before instantiation in all web recorder hooks
+- [x] iOS compatibility audit: add FileReader availability check in blobToBase64/blobToDataUri helpers
+- [x] iOS compatibility audit: replace web-only type annotations (AnalyserNode, AudioContext, HTMLAudioElement) with 'any' to avoid TS errors on native
+- [x] iOS compatibility audit: add Platform guard for cursor CSS property in journal.tsx recording button
+- [x] iOS compatibility audit: verify all window.confirm usages have Platform.OS === 'web' guards
+- [x] iOS compatibility audit: verify document references have typeof document check
+- [x] iOS compatibility audit: verify window.localStorage usages have Platform.OS === 'web' guards
+- [x] iOS compatibility audit: TypeScript check passes with 0 errors after all fixes

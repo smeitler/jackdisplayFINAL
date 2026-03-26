@@ -76,9 +76,9 @@ function ScrollingWaveform({
   const [bars, setBars] = useState<number[]>(Array(TOTAL_BARS).fill(0));
 
   // Web Audio analyser
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const analyserRef = useRef<any>(null);
+  const audioCtxRef = useRef<any>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
 
   // Interval ref
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -213,9 +213,10 @@ function ScrollingWaveform({
 }
 
 // ─── Web MediaRecorder hook ─────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function useWebRecorder() {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<any>(null);
+  const streamRef = useRef<any>(null);
   const allChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("audio/webm");
   const [isRecording, setIsRecording] = useState(false);
@@ -225,15 +226,17 @@ function useWebRecorder() {
     setMicError(null);
     allChunksRef.current = [];
     try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices) { setMicError('Recording not available on this platform'); return false; }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       let mimeType = "";
-      if (typeof MediaRecorder.isTypeSupported === "function") {
+      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === "function") {
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
         else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
         else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
       }
       mimeTypeRef.current = mimeType || "audio/webm";
+      if (typeof MediaRecorder === 'undefined') { setMicError('Recording not available on this platform'); return false; }
       const mr = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream);
@@ -268,7 +271,7 @@ function useWebRecorder() {
       mr.addEventListener(
         "stop",
         () => {
-          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current?.getTracks().forEach((t: any) => t.stop());
           streamRef.current = null;
           const blob =
             allChunksRef.current.length > 0
@@ -289,8 +292,9 @@ function useWebRecorder() {
 }
 
 // Convert Blob to base64 string (web only)
-function blobToBase64(blob: Blob): Promise<string> {
+function blobToBase64(blob: any): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (typeof FileReader === 'undefined') { reject(new Error('FileReader not available')); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;

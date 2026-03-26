@@ -62,9 +62,10 @@ async function copyToDocuments(uri: string, ext = 'jpg'): Promise<string> {
 }
 
 // ─── Web MediaRecorder Hook ──────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function useWebRecorder() {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<any>(null);
+  const streamRef = useRef<any>(null);
   const chunksRef = useRef<Blob[]>([]);
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -74,14 +75,16 @@ function useWebRecorder() {
     setMicError(null);
     chunksRef.current = [];
     try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices) { setMicError('Recording not available on this platform'); return false; }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       let mimeType = "";
-      if (typeof MediaRecorder.isTypeSupported === "function") {
+      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === "function") {
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mimeType = "audio/webm;codecs=opus";
         else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
         else if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
       }
+      if (typeof MediaRecorder === 'undefined') { setMicError('Recording not available on this platform'); return false; }
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
       mr.start(100);
@@ -113,7 +116,7 @@ function useWebRecorder() {
       }
       const recordedMime = mr.mimeType || "audio/webm";
       mr.addEventListener("stop", () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current?.getTracks().forEach((t: any) => t.stop());
         streamRef.current = null;
         const blob = new Blob(chunksRef.current, { type: recordedMime });
         isRecordingRef.current = false;
@@ -128,8 +131,9 @@ function useWebRecorder() {
 }
 
 // ─── Web Audio Helpers ───────────────────────────────────────────────────────
-function blobToDataUri(blob: Blob): Promise<string> {
+function blobToDataUri(blob: any): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (typeof FileReader === 'undefined') { reject(new Error('FileReader not available')); return; }
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
@@ -177,13 +181,13 @@ function AudioPlaybackRow({ uri, duration }: { uri: string; duration?: number })
 }
 
 function WebAudioPlayer({ uri, duration, colors }: { uri: string; duration?: number; colors: any }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [pos, setPos] = useState(0);
   const [dur, setDur] = useState(duration ?? 0);
 
   useEffect(() => {
-    const audio = new (window as any).Audio(uri) as HTMLAudioElement;
+    const audio = new (window as any).Audio(uri);
     audioRef.current = audio;
     audio.addEventListener("timeupdate", () => setPos(audio.currentTime));
     audio.addEventListener("durationchange", () => { if (isFinite(audio.duration)) setDur(audio.duration); });
@@ -408,7 +412,8 @@ function MicButton({ onRecordingComplete, colors, templatePrompt }: {
               {...webTouchProps}
               style={[{
                 width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center",
-                backgroundColor: isRecording ? "#EF4444" : colors.primary, cursor: "pointer",
+                backgroundColor: isRecording ? "#EF4444" : colors.primary,
+                ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}),
               } as any]}
             >
               <IconSymbol name="mic.fill" size={22} color="#fff" />
