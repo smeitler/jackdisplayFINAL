@@ -17,7 +17,6 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.jackalarm.com",
         "EXPO_PUBLIC_APP_ID": "bFcyWdAL5JXed3bpyDvBEf",
