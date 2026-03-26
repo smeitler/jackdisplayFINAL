@@ -3332,8 +3332,31 @@ export default function JournalScreen() {
                   <Text style={{ fontSize: 11, color: colors.success, fontWeight: '500' }}>✓ Saved</Text>
                 )}
               </View>
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); dvPickPhoto(); }}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <IconSymbol name="camera.fill" size={18} color={colors.primary} />
+                </Pressable>
+                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              </View>
             </View>
+            {/* Photo thumbnail strip */}
+            {(() => {
+              const photos = dvPrimaryEntryId.current
+                ? (entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? []).filter((a) => a.type === 'photo')
+                : [];
+              if (photos.length === 0) return null;
+              return (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ gap: 6 }}>
+                  {photos.map((photo) => (
+                    <Image key={photo.id} source={{ uri: photo.uri }} style={{ width: 60, height: 60, borderRadius: 8 }} />
+                  ))}
+                </ScrollView>
+              );
+            })()}
             {/* Preview text or placeholder */}
             {(dvDisplayNote || dvJournalNote) ? (
               <Text

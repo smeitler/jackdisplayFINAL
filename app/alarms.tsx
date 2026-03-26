@@ -55,6 +55,20 @@ const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; descriptio
 
 const ALARM_COLOR = '#3B82F6';
 
+// Meditation tracks from the Meditate catalog (mirrors wellness-audio.tsx)
+const MEDITATE_TRACKS: { id: string; title: string; artist: string; duration: string; outcome: string; url: string }[] = [
+  { id: 'med-1', title: 'Meditation',         artist: 'FreeMusicForVideo', duration: '1:27', outcome: 'Quick 1-min reset',     url: 'https://cdn.pixabay.com/download/audio/2026/03/05/audio_37d75d2b63.mp3?filename=freemusicforvideo-meditation-495611.mp3' },
+  { id: 'med-2', title: 'Peaceful Zen Garden', artist: 'Ambient Sounds',   duration: '3:00', outcome: 'Stop overthinking',      url: 'https://cdn.pixabay.com/download/audio/2022/02/22/audio_d1718ab41b.mp3?filename=please-calm-my-mind-125566.mp3' },
+  { id: 'med-3', title: 'Deep Calm',           artist: 'Relaxation Music', duration: '2:30', outcome: 'Clear mental fog',       url: 'https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3?filename=meditation-music-432hz-deep-calm-mind-relaxation-276988.mp3' },
+  { id: 'med-4', title: 'Morning Mindset',     artist: 'Mindful Start',    duration: '5:00', outcome: 'Start your day right',   url: 'https://cdn.pixabay.com/download/audio/2022/02/22/audio_d1718ab41b.mp3?filename=please-calm-my-mind-125566.mp3' },
+  { id: 'med-5', title: 'Anxiety Release',     artist: 'Calm Mind',        duration: '8:00', outcome: 'Calm anxiety fast',      url: 'https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3?filename=meditation-music-432hz-deep-calm-mind-relaxation-276988.mp3' },
+  { id: 'med-6', title: 'Body Scan',           artist: 'Deep Rest',        duration: '15:00', outcome: 'Full body relaxation',  url: 'https://cdn.pixabay.com/download/audio/2022/02/22/audio_d1718ab41b.mp3?filename=please-calm-my-mind-125566.mp3' },
+  { id: 'med-7', title: 'Confidence Builder',  artist: 'Inner Power',      duration: '6:00', outcome: 'Build confidence',       url: 'https://cdn.pixabay.com/download/audio/2026/03/05/audio_37d75d2b63.mp3?filename=freemusicforvideo-meditation-495611.mp3' },
+  { id: 'med-8', title: 'Anger Cooldown',      artist: 'Emotional Balance', duration: '4:00', outcome: 'Release anger',         url: 'https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3?filename=meditation-music-432hz-deep-calm-mind-relaxation-276988.mp3' },
+];
+
+const DEFAULT_MEDITATION_TRACK_ID = 'med-4'; // Morning Mindset
+
 // ─── Add/Edit Full-Screen Modal ───────────────────────────────────────────────
 
 function AlarmEditModal({
@@ -83,6 +97,8 @@ function AlarmEditModal({
   const [label, setLabel]                 = useState(alarm?.label ?? '');
   const [soundId, setSoundId]             = useState(alarm?.soundId ?? 'classic');
   const [meditationId, setMeditationId]   = useState<string | undefined>(alarm?.meditationId);
+  const [meditationTrackId, setMeditationTrackId] = useState<string>(alarm?.meditationTrackId ?? DEFAULT_MEDITATION_TRACK_ID);
+  const [trackPickerOpen, setTrackPickerOpen] = useState(false);
   const [requireCheckin, setRequireCheckin] = useState(alarm?.requireCheckin ?? false);
   const [snoozeMinutes, setSnoozeMinutes] = useState(alarm?.snoozeMinutes ?? 5);
   const [practiceDurations, setPracticeDurations] = useState<Record<string, number>>(
@@ -107,6 +123,8 @@ function AlarmEditModal({
     setLabel(alarm?.label ?? '');
     setSoundId(alarm?.soundId ?? 'classic');
     setMeditationId(alarm?.meditationId);
+    setMeditationTrackId(alarm?.meditationTrackId ?? DEFAULT_MEDITATION_TRACK_ID);
+    setTrackPickerOpen(false);
     setRequireCheckin(alarm?.requireCheckin ?? false);
     setSnoozeMinutes(alarm?.snoozeMinutes ?? 5);
     setPracticeDurations(alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 });
@@ -162,6 +180,7 @@ function AlarmEditModal({
       isEnabled: true,
       soundId,
       meditationId,
+      meditationTrackId: meditationId === 'meditation' ? meditationTrackId : undefined,
       requireCheckin,
       snoozeMinutes,
       practiceDurations,
@@ -441,7 +460,68 @@ function AlarmEditModal({
                         </View>
                         {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
                       </Pressable>
-                      {isSelected && hasDuration && (
+                      {/* Track picker for Guided Meditation */}
+                      {isSelected && med.id === 'meditation' && (
+                        <View style={[em.durationChipRow, { borderTopColor: colors.border }]}>
+                          <Text style={[em.durationChipLabel, { color: colors.muted }]}>Track</Text>
+                          <Pressable
+                            onPress={() => {
+                              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setTrackPickerOpen(v => !v);
+                            }}
+                            style={({ pressed }) => [{
+                              flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
+                              paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                              borderWidth: 1.5, borderColor: ALARM_COLOR,
+                              backgroundColor: ALARM_COLOR + '12',
+                              opacity: pressed ? 0.7 : 1,
+                            }]}
+                          >
+                            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: ALARM_COLOR }}>
+                              {MEDITATE_TRACKS.find(t => t.id === meditationTrackId)?.title ?? 'Morning Mindset'}
+                            </Text>
+                            <Text style={{ fontSize: 11, color: colors.muted }}>
+                              {MEDITATE_TRACKS.find(t => t.id === meditationTrackId)?.duration ?? '5:00'}
+                            </Text>
+                            <IconSymbol name={trackPickerOpen ? 'chevron.up' : 'chevron.down'} size={12} color={ALARM_COLOR} />
+                          </Pressable>
+                        </View>
+                      )}
+                      {/* Expanded track list */}
+                      {isSelected && med.id === 'meditation' && trackPickerOpen && (
+                        <View style={[{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+                          {MEDITATE_TRACKS.map((track) => {
+                            const isTrackSelected = meditationTrackId === track.id;
+                            return (
+                              <Pressable
+                                key={track.id}
+                                onPress={() => {
+                                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  setMeditationTrackId(track.id);
+                                  setTrackPickerOpen(false);
+                                  playPreview(track.id, track.url);
+                                }}
+                                style={({ pressed }) => [{
+                                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                                  paddingHorizontal: 16, paddingVertical: 10,
+                                  backgroundColor: isTrackSelected ? ALARM_COLOR + '12' : 'transparent',
+                                  opacity: pressed ? 0.7 : 1,
+                                }]}
+                              >
+                                <Text style={{ fontSize: 13 }}>{previewingId === track.id ? '🔊' : '🎵'}</Text>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '600', color: isTrackSelected ? ALARM_COLOR : colors.foreground }}>
+                                    {track.title}
+                                  </Text>
+                                  <Text style={{ fontSize: 11, color: colors.muted }}>{track.outcome} · {track.duration}</Text>
+                                </View>
+                                {isTrackSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
+                      {isSelected && hasDuration && med.id !== 'meditation' && (
                         <View style={[em.durationChipRow, { borderTopColor: colors.border }]}>
                           <Text style={[em.durationChipLabel, { color: colors.muted }]}>Duration</Text>
                           <View style={em.durationChips}>

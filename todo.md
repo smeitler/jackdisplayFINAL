@@ -1483,3 +1483,15 @@
 - [ ] Feature: Community screen — add Leaderboard/Streak Wall section
 - [ ] Fix: Home screen — remove "Move" widget, keep row of 3 widgets (Meditate, Sleep, Focus)
 - [ ] Feature: iOS app.config.ts — add Alarms, Live Activities, Background App Refresh permissions
+
+- [ ] Fix: All sheets missing drag handle pill — create shared SheetHandle component and apply everywhere
+- [ ] Fix: Edit Habit sheet has broken emoji/placeholder icon in top-left — remove it
+- [ ] Fix: Voice Check-In "Done — Analyze" button still misaligned — habit chips show below/behind it
+- [ ] Fix: Voice Check-In Review — journal entry appears at bottom, should be at top
+- [ ] Fix: Log Habits screen has massive blank space at top
+- [ ] Fix: Edit Alarm — saved meditation practice selection not loading back when reopening
+- [ ] Feature: Edit Alarm — wire meditation audio tracks from Meditate library (default track auto-selected, custom picker to choose specific track, duration selector)
+- [ ] Fix: Journal screen — photo/camera icon disappeared from journal entry card
+- [ ] Fix: Journal full-screen editor — add photo icon above keyboard (far left, above keyboard toolbar)
+- [ ] Feature: Journal entry card — show photo thumbnail preview when photo is attached
+- [ ] Fix: Community screen — verify Family Plan row is fully removed from code

@@ -1202,7 +1202,7 @@ export default function VoiceCheckinScreen() {
         <View style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={[listeningStyles.container, { paddingBottom: 100 }]}
+            contentContainerStyle={[listeningStyles.container, { paddingBottom: 130 }]}
             showsVerticalScrollIndicator={false}
           >
             {/* Scrolling waveform (iOS Voice Memos style) */}
@@ -1224,14 +1224,13 @@ export default function VoiceCheckinScreen() {
 
           {/* Sticky Done — Analyze footer */}
           <View style={listeningStyles.stickyFooter} pointerEvents="box-none">
-            {/* Gradient fade — simulated with a semi-transparent overlay */}
-            <View
-              style={[
-                listeningStyles.gradientFade,
-                { backgroundColor: colors.background },
-              ]}
-              pointerEvents="none"
-            />
+            {/* Gradient fade layers — transparent at top, opaque at bottom */}
+            <View pointerEvents="none" style={{ height: 56, overflow: 'hidden' }}>
+              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 0 }]} />
+              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 0.35 }]} />
+              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 0.7 }]} />
+              <View style={[listeningStyles.gradientFade, { backgroundColor: colors.background, opacity: 1 }]} />
+            </View>
             <TouchableOpacity
               style={[sendStyles.btn, { backgroundColor: colors.primary, marginHorizontal: 20, marginBottom: 8 }]}
               onPress={stopAndAnalyze}
@@ -1310,6 +1309,25 @@ export default function VoiceCheckinScreen() {
             contentContainerStyle={classicStyles.scroll}
             showsVerticalScrollIndicator={false}
           >
+            {/* Journal block — full transcript, editable — shown at TOP */}
+            <View style={classicStyles.journalSection}>
+              <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Journal Entry</Text>
+              <TextInput
+                value={editedTranscript}
+                onChangeText={setEditedTranscript}
+                placeholder="Your voice transcript will appear here..."
+                placeholderTextColor={colors.muted + "66"}
+                style={[
+                  classicStyles.journalBlock,
+                  classicStyles.journalTextInput,
+                  { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
+                ]}
+                multiline
+                scrollEnabled={false}
+                textAlignVertical="top"
+              />
+            </View>
+
             {/* Grouped habits by category */}
             {sortedCategories.map((cat) => {
               const catHabits = habitsByCategory[cat.id] ?? [];
@@ -1408,24 +1426,7 @@ export default function VoiceCheckinScreen() {
               );
             })}
 
-            {/* Journal block — full transcript, editable */}
-            <View style={classicStyles.journalSection}>
-              <Text style={[classicStyles.journalTitle, { color: colors.foreground }]}>Journal Entry</Text>
-              <TextInput
-                value={editedTranscript}
-                onChangeText={setEditedTranscript}
-                placeholder="Your voice transcript will appear here..."
-                placeholderTextColor={colors.muted + "66"}
-                style={[
-                  classicStyles.journalBlock,
-                  classicStyles.journalTextInput,
-                  { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
-                ]}
-                multiline
-                scrollEnabled={false}
-                textAlignVertical="top"
-              />
-            </View>
+
 
             {/* Gratitude — editable */}
             {results.gratitudeItems.length > 0 && (
@@ -1705,9 +1706,7 @@ const listeningStyles = StyleSheet.create({
     paddingBottom: 16,
   },
   gradientFade: {
-    height: 48,
-    opacity: 0.92,
-    marginBottom: -4,
+    height: 14,
   },
 });
 

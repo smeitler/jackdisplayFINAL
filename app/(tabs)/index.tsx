@@ -38,7 +38,16 @@ function SwipeSheet({ children, onClose, style }: { children: React.ReactNode; o
       }
     });
   const anim = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
-  return <GestureDetector gesture={pan}><Animated.View style={[style, anim]}>{children}</Animated.View></GestureDetector>;
+  return (
+    <GestureDetector gesture={pan}>
+      <Animated.View style={[style, anim]}>
+        <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 10, paddingBottom: 6 }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(150,150,170,0.4)' }} />
+        </View>
+        {children}
+      </Animated.View>
+    </GestureDetector>
+  );
 }
 
 const LIFE_AREA_MAP = Object.fromEntries(LIFE_AREAS.map((a) => [a.id, a]));

@@ -48,7 +48,9 @@ function SwipeableSheet({ children, onClose, style, sheetColors }: { children: R
   return (
     <GestureDetector gesture={panGesture}>
       <Animated.View style={[style, animStyle]}>
-        <View style={[styles.dragHandle, { backgroundColor: sheetColors ? sheetColors.muted + '55' : 'rgba(150,150,170,0.4)' }]} />
+        <View style={styles.dragHandleArea}>
+          <View style={[styles.dragHandlePill, { backgroundColor: sheetColors ? sheetColors.muted + '55' : 'rgba(150,150,170,0.4)' }]} />
+        </View>
         {children}
       </Animated.View>
     </GestureDetector>
@@ -304,7 +306,7 @@ function AdvancedSection({
                 <Text style={{ fontSize: 26 }}>{rewardEmoji || '🎁'}</Text>
               )}
               <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.45)', borderTopLeftRadius: 6, paddingHorizontal: 3, paddingVertical: 1 }}>
-                <Text style={{ fontSize: 9, color: '#fff' }}>✏️</Text>
+                <IconSymbol name="pencil" size={9} color="#fff" />
               </View>
             </TouchableOpacity>
             {rewardImageUri && (
@@ -1271,6 +1273,12 @@ const styles = StyleSheet.create({
   weeklyGoalHint: { fontSize: 11, marginTop: 6 },
   dragHandle: {
     width: 32, height: 44, alignItems: 'center', justifyContent: 'center',
+  },
+  dragHandleArea: {
+    width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 10, paddingBottom: 6,
+  },
+  dragHandlePill: {
+    width: 36, height: 4, borderRadius: 2,
   },
   habitDragRow: {
     flexDirection: 'row', alignItems: 'center',

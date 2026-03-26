@@ -68,7 +68,8 @@ export type AlarmConfig = {
   isEnabled: boolean;
   notificationIds: string[];
   soundId?: string;       // ID of the alarm sound to play (default: 'classic')
-  meditationId?: string;  // ID of the post-alarm meditation (default: none)
+  meditationId?: string;  // ID of the post-alarm meditation practice type (default: none)
+  meditationTrackId?: string; // ID of the specific audio track from the Meditate catalog (default: 'med-4' = Morning Mindset)
   practiceDurations?: Record<string, number>; // Per-type duration in minutes: { priming: 15, meditation: 10, ... }
   requireCheckin?: boolean; // If true, block app access until yesterday's check-in is done
   snoozeMinutes?: number;   // Snooze duration in minutes (default: 10)
