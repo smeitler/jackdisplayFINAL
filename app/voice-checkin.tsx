@@ -1166,7 +1166,7 @@ export default function VoiceCheckinScreen() {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <ScreenContainer
-      edges={["top", "left", "right", "bottom"]}
+      edges={["top", "left", "right"]}
       containerClassName="bg-background"
     >
       {/* Header */}
@@ -1284,19 +1284,27 @@ export default function VoiceCheckinScreen() {
             <HabitPromptCard habits={habits} colors={colors} />
           </ScrollView>
 
-          {/* Done — Analyze: true sticky footer, never overlaps content */}
+          {/* Done — Analyze: bulletproof sticky footer */}
           <View
             style={[
               listeningStyles.trueFooter,
               {
                 backgroundColor: colors.background,
                 borderTopColor: colors.border,
-                paddingBottom: Math.max(insets.bottom, 16),
+                paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
               },
             ]}
           >
             <TouchableOpacity
-              style={[sendStyles.btn, { backgroundColor: colors.primary, marginHorizontal: 20 }]}
+              style={[
+                sendStyles.btn,
+                {
+                  backgroundColor: colors.primary,
+                  marginHorizontal: 16,
+                  width: undefined,
+                  alignSelf: 'stretch',
+                },
+              ]}
               onPress={stopAndAnalyze}
               activeOpacity={0.85}
             >
