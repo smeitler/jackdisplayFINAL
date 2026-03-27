@@ -3918,6 +3918,8 @@ export default function JournalScreen() {
           </Pressable>
 
           {/* Save Entry button removed — auto-saves on keystroke */}
+          {/* ── Quick-Add Task Bar (inline, below gratitudes) ── */}
+          <JournalQuickAddTaskBar inline />
         </ScrollView>
       )}
 
@@ -4181,14 +4183,13 @@ export default function JournalScreen() {
           </View>
         </View>
       </Modal>
-      <JournalQuickAddTaskBar />
     </ScreenContainer>
   );
 }
 
 // --- Quick-Add Task Bar (Journal) ---
 const JOURNAL_TASKS_KEY = '@you_tasks_v1';
-function JournalQuickAddTaskBar() {
+function JournalQuickAddTaskBar({ inline = false }: { inline?: boolean }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [text, setText] = React.useState('');
@@ -4219,6 +4220,41 @@ function JournalQuickAddTaskBar() {
     }
   }
 
+  const inputRow = (
+    <View style={journalTaskBarStyles.inlineRow}>
+      <TextInput
+        style={[journalTaskBarStyles.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+        placeholder={inline ? 'Type a task and tap +' : 'Add a task...'}
+        placeholderTextColor={colors.muted}
+        value={text}
+        onChangeText={setText}
+        onSubmitEditing={handleAdd}
+        returnKeyType="done"
+        blurOnSubmit={false}
+      />
+      <Pressable
+        style={({ pressed }) => [
+          journalTaskBarStyles.addBtn,
+          { backgroundColor: text.trim() ? colors.primary : colors.border },
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={handleAdd}
+        disabled={!text.trim() || saving}
+      >
+        <Text style={[journalTaskBarStyles.addBtnText, { color: text.trim() ? '#fff' : colors.muted }]}>+</Text>
+      </Pressable>
+    </View>
+  );
+
+  if (inline) {
+    return (
+      <View style={[journalTaskBarStyles.inlineContainer, { borderColor: colors.border }]}>
+        <Text style={[journalTaskBarStyles.inlineLabel, { color: colors.muted }]}>Quick-add task</Text>
+        {inputRow}
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -4228,27 +4264,7 @@ function JournalQuickAddTaskBar() {
         journalTaskBarStyles.bar,
         { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: insets.bottom + 8 },
       ]}>
-        <TextInput
-          style={[journalTaskBarStyles.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
-          placeholder="Add a task..."
-          placeholderTextColor={colors.muted}
-          value={text}
-          onChangeText={setText}
-          onSubmitEditing={handleAdd}
-          returnKeyType="done"
-          blurOnSubmit={false}
-        />
-        <Pressable
-          style={({ pressed }) => [
-            journalTaskBarStyles.addBtn,
-            { backgroundColor: text.trim() ? colors.primary : colors.border },
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={handleAdd}
-          disabled={!text.trim() || saving}
-        >
-          <Text style={[journalTaskBarStyles.addBtnText, { color: text.trim() ? '#fff' : colors.muted }]}>+</Text>
-        </Pressable>
+        {inputRow}
       </View>
     </KeyboardAvoidingView>
   );
@@ -4262,6 +4278,26 @@ const journalTaskBarStyles = StyleSheet.create({
     paddingTop: 10,
     gap: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  inlineContainer: {
+    marginTop: 16,
+    marginHorizontal: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  inlineLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   input: {
     flex: 1,

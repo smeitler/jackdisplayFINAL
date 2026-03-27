@@ -1560,3 +1560,6 @@
 - [x] Settings Voice: only show Christopher, Michael, Rachael, Jessa as voice options
 - [x] Settings Voice: add monthly-change confirmation modal (once per month limit)
 - [x] Settings Voice: remove Read Aloud toggle (moved to Alarm Settings)
+
+- [x] Voice settings: add Preview button next to each voice name to hear a sample clip
+- [x] Journal screen: move task quick-add bar to below the Gratitude section (scrollable, not fixed to bottom)

@@ -4,9 +4,9 @@
  * - Only 4 hardcoded voices: Christopher, Michael, Rachael, Jessa
  * - Voice can only be changed once per month
  * - Confirmation modal before committing the change
- * - Read Aloud toggle has been moved to Alarm Settings
+ * - Preview button next to each voice plays a short TTS sample
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import { setAudioModeAsync } from 'expo-audio';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColors } from '@/hooks/use-colors';
@@ -50,11 +52,139 @@ const ELEVENLABS_IDS: Record<string, string> = {
   jessa:       'cgSgspJ2msm6clMCkdW9',
 };
 
+// ─── Voice Preview Hook ───────────────────────────────────────────────────────
+
+/**
+ * Generates a short TTS sample for a voice and plays it.
+ * Uses ElevenLabs TTS API directly on-device for fast preview.
+ * On web, falls back to the browser Audio API.
+ */
+function useVoicePreview(apiKey: string | undefined) {
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const audioRef = useRef<any>(null); // web Audio element
+  const playerRef = useRef<any>(null); // AudioPlayer instance
+
+  async function playPreview(voiceKey: string) {
+    if (!apiKey) {
+      setPreviewError('API key not available');
+      return;
+    }
+    if (previewingId === voiceKey) {
+      // Stop if already playing this voice
+      stopPreview();
+      return;
+    }
+
+    stopPreview();
+    setPreviewingId(voiceKey);
+    setPreviewError(null);
+
+    const elevenLabsId = ELEVENLABS_IDS[voiceKey] ?? voiceKey;
+    const sampleText = `Hi, I'm ${VOICES.find(v => v.id === voiceKey)?.name ?? voiceKey}. Good morning!`;
+
+    try {
+      const resp = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${elevenLabsId}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg',
+          },
+          body: JSON.stringify({
+            text: sampleText,
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        throw new Error(`ElevenLabs error ${resp.status}`);
+      }
+
+      if (Platform.OS === 'web') {
+        // Web: use blob URL + HTML Audio
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new (window as any).Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          setPreviewingId(null);
+          URL.revokeObjectURL(url);
+        };
+        audio.onerror = () => {
+          setPreviewingId(null);
+          URL.revokeObjectURL(url);
+        };
+        await audio.play();
+      } else {
+        // Native: write to temp file and use expo-audio AudioPlayer
+        const arrayBuffer = await resp.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < uint8.length; i++) {
+          binary += String.fromCharCode(uint8[i]);
+        }
+        const base64 = btoa(binary);
+        const tmpPath = (FileSystem.cacheDirectory ?? '') + `voice_preview_${voiceKey}.mp3`;
+        await FileSystem.writeAsStringAsync(tmpPath, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await setAudioModeAsync({ playsInSilentMode: true });
+        const { AudioPlayer } = await import('expo-audio');
+        // AudioPlayer constructor: (source, updateInterval, keepAudioSessionActive)
+        const player = new AudioPlayer({ uri: tmpPath }, 250, false);
+        playerRef.current = player as any;
+        player.play();
+        // Poll for completion
+        const checkDone = setInterval(() => {
+          if (!player.playing) {
+            clearInterval(checkDone);
+            setPreviewingId(null);
+            player.release();
+          }
+        }, 500);
+        // Safety timeout: clear after 15s
+        setTimeout(() => {
+          clearInterval(checkDone);
+          setPreviewingId(null);
+          try { player.release(); } catch {}
+        }, 15000);
+      }
+    } catch (err: any) {
+      console.error('[VoicePreview] error:', err);
+      setPreviewError(err?.message ?? 'Preview failed');
+      setPreviewingId(null);
+    }
+  }
+
+  function stopPreview() {
+    if (Platform.OS === 'web') {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    } else {
+      if (playerRef.current) {
+        try { (playerRef.current as any).release(); } catch {}
+        playerRef.current = null;
+      }
+    }
+    setPreviewingId(null);
+  }
+
+  return { previewingId, previewError, playPreview, stopPreview };
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function VoicePickerSection() {
   const colors = useColors();
   const apiKeyQuery = trpc.voice.getApiKey.useQuery();
+  const apiKey = apiKeyQuery.data?.apiKey;
 
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -62,6 +192,8 @@ export function VoicePickerSection() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [lastChangedDate, setLastChangedDate] = useState<Date | null>(null);
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const { previewingId, previewError, playPreview } = useVoicePreview(apiKey);
 
   // Load persisted voice + last changed date on mount
   useEffect(() => {
@@ -119,7 +251,6 @@ export function VoicePickerSection() {
     setPendingVoice(null);
 
     // Trigger background pre-recording of all habits
-    const apiKey = apiKeyQuery.data?.apiKey;
     if (!apiKey) return;
     try {
       await clearHabitAudioCache();
@@ -184,8 +315,14 @@ export function VoicePickerSection() {
               </Text>
             </View>
           )}
+          {previewError && (
+            <View style={[styles.limitBanner, { backgroundColor: colors.error + '18', borderBottomColor: colors.border }]}>
+              <Text style={[styles.limitText, { color: colors.error }]}>Preview error: {previewError}</Text>
+            </View>
+          )}
           {VOICES.map((voice) => {
             const isSelected = selectedVoiceId === voice.id;
+            const isPreviewing = previewingId === voice.id;
             return (
               <Pressable
                 key={voice.id}
@@ -203,12 +340,43 @@ export function VoicePickerSection() {
                   </Text>
                   <Text style={[styles.voiceDesc, { color: colors.muted }]}>{voice.description}</Text>
                 </View>
+                {/* Preview button */}
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    playPreview(voice.id);
+                  }}
+                  style={({ pressed }) => [
+                    styles.previewBtn,
+                    {
+                      backgroundColor: isPreviewing ? colors.primary : colors.primary + '22',
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                  hitSlop={8}
+                >
+                  {isPreviewing ? (
+                    <ActivityIndicator size="small" color="#fff" style={{ width: 16, height: 16 }} />
+                  ) : (
+                    <IconSymbol
+                      name="play.fill"
+                      size={12}
+                      color={isPreviewing ? '#fff' : colors.primary}
+                    />
+                  )}
+                </Pressable>
                 {isSelected && (
-                  <IconSymbol name="checkmark" size={14} color={colors.primary} />
+                  <IconSymbol name="checkmark" size={14} color={colors.primary} style={{ marginLeft: 6 }} />
                 )}
               </Pressable>
             );
           })}
+          <View style={[styles.previewHint, { borderTopColor: colors.border }]}>
+            <Text style={[styles.previewHintText, { color: colors.muted }]}>
+              Tap ▶ to hear a sample before selecting
+            </Text>
+          </View>
         </View>
       )}
 
@@ -342,6 +510,22 @@ const styles = StyleSheet.create({
   voiceDesc: {
     fontSize: 12,
     marginTop: 1,
+  },
+  previewBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewHint: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  previewHintText: {
+    fontSize: 12,
+    textAlign: 'center',
   },
   syncRow: {
     flexDirection: 'row',
