@@ -1552,3 +1552,11 @@
 
 - [x] Add quick-add task input bar at the bottom of the Habits screen
 - [x] Add quick-add task input bar at the bottom of the Journal screen
+
+- [x] Settings: condense Appearance section to inline color dots next to the header title
+- [x] Settings: remove Mind Dump section entirely
+- [x] Settings: remove Voice Journal section entirely
+- [x] Settings: remove Morning Practice section entirely
+- [x] Settings Voice: only show Christopher, Michael, Rachael, Jessa as voice options
+- [x] Settings Voice: add monthly-change confirmation modal (once per month limit)
+- [x] Settings Voice: remove Read Aloud toggle (moved to Alarm Settings)

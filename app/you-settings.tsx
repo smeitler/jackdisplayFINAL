@@ -19,8 +19,6 @@ import { trpc } from "@/lib/trpc";
 
 import * as WebBrowser from "expo-web-browser";
 import { VoicePickerSection } from "@/components/voice-picker-section";
-import { VoiceJournalSection } from "@/components/voice-journal-section";
-import { MorningPracticeSection } from "@/components/morning-practice-section";
 import { useIsCalm } from "@/components/calm-effects";
 
 
@@ -370,53 +368,40 @@ export default function YouSettingsScreen() {
         </View>
 
 
-        {/* Appearance section — always visible, 3 tap buttons */}
+        {/* Appearance — condensed inline color dots */}
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 20 }]}>
-          <View style={styles.sectionHeader}>
+          <View style={[styles.sectionHeader, { paddingVertical: 14 }]}>
             <View style={[styles.sectionIconWrap, { backgroundColor: colors.primary + '22' }]}>
               <IconSymbol name="sparkles" size={18} color={colors.primary} />
             </View>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
-          </View>
-          <View style={[{ flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
-            {THEMES.map((theme) => {
-              const isActive = appTheme === theme.id;
-              return (
-                <Pressable
-                  key={theme.id}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setAppTheme(theme.id);
-                  }}
-                  style={({ pressed }) => [{
-                    flex: 1,
-                    alignItems: 'center',
-                    gap: 8,
-                    paddingVertical: 14,
-                    borderRadius: 14,
-                    borderWidth: 2,
-                    borderColor: isActive ? colors.primary : colors.border,
-                    backgroundColor: isActive ? colors.primary + '15' : colors.background,
-                    opacity: pressed ? 0.7 : 1,
-                  }]}
-                >
-                  <View style={[{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor: theme.preview,
-                    borderWidth: 1.5,
-                    borderColor: isActive ? colors.primary : colors.border,
-                  }]} />
-                  <Text style={[{ fontSize: 13, fontWeight: isActive ? '700' : '500', color: isActive ? colors.primary : colors.foreground }]}>
-                    {theme.label}
-                  </Text>
-                  {isActive && (
-                    <View style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary }]} />
-                  )}
-                </Pressable>
-              );
-            })}
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              {THEMES.map((theme) => {
+                const isActive = appTheme === theme.id;
+                return (
+                  <Pressable
+                    key={theme.id}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setAppTheme(theme.id);
+                    }}
+                    style={({ pressed }) => [{ alignItems: 'center', gap: 3, opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <View style={[{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 13,
+                      backgroundColor: theme.preview,
+                      borderWidth: isActive ? 2.5 : 1.5,
+                      borderColor: isActive ? colors.primary : colors.border,
+                    }]} />
+                    <Text style={{ fontSize: 10, fontWeight: isActive ? '700' : '500', color: isActive ? colors.primary : colors.muted }}>
+                      {theme.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
 
@@ -445,28 +430,7 @@ export default function YouSettingsScreen() {
           </Pressable>
         </View>
 
-        {/* Mind Dump */}
-        <View style={[styles.section, { borderColor: colors.border }]}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIconWrap, { backgroundColor: '#3B82F618' }]}>
-              <IconSymbol name="brain" size={18} color="#3B82F6" />
-            </View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Mind Dump</Text>
-            <Text style={[styles.habitCountBadge, { color: colors.muted }]}>Capture thoughts</Text>
-          </View>
-          <Pressable
-            onPress={() => router.push('/mind-dump' as never)}
-            style={({ pressed }) => [
-              styles.manageHabitsBtn,
-              { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Text style={[styles.manageHabitsBtnText, { color: '#3B82F6' }]}>
-              Open Mind Dump
-            </Text>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-          </Pressable>
-        </View>
+
 
         {/* Demo Mode banner + Exit button */}
         {isDemoMode && (
@@ -632,12 +596,6 @@ export default function YouSettingsScreen() {
 
         {/* Global Voice Picker */}
         <VoicePickerSection />
-
-        {/* Voice Journal */}
-        <VoiceJournalSection />
-
-        {/* Morning Practice */}
-        <MorningPracticeSection />
 
         {/* Jack Alarm Device Pairing */}
         {isAuthenticated && (

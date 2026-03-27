@@ -42,6 +42,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "star.fill": "star",
   "flame.fill": "local-fire-department",
   "calendar": "calendar-today",
+  "clock": "access-time",
   "clock.fill": "access-time",
   "clock.arrow.circlepath": "snooze",
   "list.bullet": "list",
