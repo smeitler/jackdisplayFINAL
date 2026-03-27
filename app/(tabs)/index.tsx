@@ -33,6 +33,7 @@ const STEP_ICON_MAP: Record<StepType, string> = {
   affirmations: 'quote.bubble.fill',
   priming:      'flame.fill',
   reminder:     'bell.fill',
+  melatonin:    'moon.fill',
   custom:       'pencil',
 };
 
@@ -106,6 +107,129 @@ function getDailyQuote(): string {
   const start = new Date(now.getFullYear(), 0, 0);
   const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
   return DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
+}
+
+// ── Genre-based motivational quotes ─────────────────────────────────────────
+
+export type MotivationalGenre = 'entrepreneurial' | 'conquering_day' | 'stoic' | 'athletic' | 'mindset' | 'general';
+
+const GENRE_QUOTES: Record<MotivationalGenre, string[]> = {
+  entrepreneurial: [
+    "Build the business others said was impossible.",
+    "Entrepreneurs don't wait for opportunity — they create it.",
+    "Every empire started with a single decision.",
+    "The market rewards the relentless.",
+    "Your idea is worthless without execution.",
+    "Revenue is validation. Ship first, perfect later.",
+    "The best time to start was yesterday. The next best time is now.",
+    "Solve a real problem and the money follows.",
+    "Failure is tuition. Pay it and keep going.",
+    "Build in silence. Let success make the noise.",
+  ],
+  conquering_day: [
+    "Today is the day you decide who you're becoming.",
+    "Attack the morning and the day is yours.",
+    "One focused hour beats ten distracted ones.",
+    "Win the morning, win the day.",
+    "Every task you finish is a vote for your future self.",
+    "Conquer the small things and the big things follow.",
+    "Your day is a blank canvas — paint it with intention.",
+    "Don't manage your time. Protect it.",
+    "The version of you that wins today is built right now.",
+    "Execution is the only strategy that matters.",
+  ],
+  stoic: [
+    "You have power over your mind, not outside events. Realize this and you will find strength. — Marcus Aurelius",
+    "The obstacle is the way.",
+    "Waste no more time arguing about what a good person should be. Be one. — Marcus Aurelius",
+    "He who is brave is free. — Seneca",
+    "Difficulties strengthen the mind as labor does the body. — Seneca",
+    "The best revenge is not to be like your enemy. — Marcus Aurelius",
+    "You have two ears and one mouth — use them proportionally.",
+    "It is not the man who has too little, but the man who craves more, who is poor. — Seneca",
+    "First say to yourself what you would be; then do what you have to do. — Epictetus",
+    "Seek not that the things which happen should happen as you wish; but wish the things which happen to be as they are. — Epictetus",
+  ],
+  athletic: [
+    "Champions train. Losers complain.",
+    "Pain is temporary. Quitting lasts forever.",
+    "Your body can handle almost anything. It's your mind you have to convince.",
+    "The last rep is the one that counts.",
+    "Sweat is just fat crying.",
+    "Train like there's someone warming up to take your spot.",
+    "Hard work beats talent when talent doesn't work hard.",
+    "Your only competition is who you were yesterday.",
+    "Champions are made in the moments they want to quit.",
+    "Push harder than yesterday if you want a different tomorrow.",
+  ],
+  mindset: [
+    "Your thoughts become your reality. Choose them wisely.",
+    "What you focus on expands.",
+    "The mind is everything. What you think, you become. — Buddha",
+    "Believe you can and you're halfway there.",
+    "Whether you think you can or you think you can't — you're right. — Henry Ford",
+    "Your mindset is your most powerful asset.",
+    "Change your thoughts and you change your world.",
+    "A growth mindset turns every obstacle into a lesson.",
+    "The strongest force in the human personality is the need to remain consistent with how we define ourselves.",
+    "Identity drives behavior. Become the person first.",
+  ],
+  general: [
+    "Discipline is choosing what you want most over what you want now.",
+    "You don't rise to goals—you fall to habits.",
+    "The cost of discipline is always cheaper than regret.",
+    "Become the person your goals require.",
+    "The standard you tolerate becomes your life.",
+    "Hard things build easy lives.",
+    "Comfort today is debt tomorrow.",
+    "Every excuse is a vote against your future.",
+    "Greatness is boring repetition done well.",
+    "Consistency turns effort into inevitability.",
+  ],
+};
+
+const SPIRITUAL_QUOTES: string[] = [
+  "You are not a drop in the ocean. You are the entire ocean in a drop. — Rumi",
+  "The present moment is the only moment available to us, and it is the door to all moments. — Thich Nhat Hanh",
+  "Be still and know that I am God. — Psalm 46:10",
+  "Wherever you are, be all there. — Jim Elliot",
+  "The soul that sees beauty may sometimes walk alone. — Goethe",
+  "In the middle of difficulty lies opportunity. — Einstein",
+  "What lies behind us and what lies before us are tiny matters compared to what lies within us. — Emerson",
+  "The kingdom of God is within you. — Luke 17:21",
+  "When you realize there is nothing lacking, the whole world belongs to you. — Lao Tzu",
+  "Your task is not to seek for love, but merely to seek and find all the barriers within yourself that you have built against it. — Rumi",
+  "Do not be conformed to this world, but be transformed by the renewal of your mind. — Romans 12:2",
+  "The quieter you become, the more you are able to hear. — Rumi",
+  "Gratitude turns what we have into enough.",
+  "Peace comes from within. Do not seek it without. — Buddha",
+  "You are the universe experiencing itself. — Alan Watts",
+];
+
+const GENRE_LABELS: Record<MotivationalGenre, string> = {
+  entrepreneurial: 'Entrepreneurial',
+  conquering_day:  'Conquering the Day',
+  stoic:           'Stoic Wisdom',
+  athletic:        'Athletic Drive',
+  mindset:         'Mindset',
+  general:         'General',
+};
+
+const MOTIVATIONAL_GENRE_KEY = 'daycheck:motivationalGenre';
+
+function getGenreQuote(genre: MotivationalGenre): string {
+  const list = GENRE_QUOTES[genre];
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+  return list[dayOfYear % list.length];
+}
+
+function getSpiritualQuote(): string {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+  return SPIRITUAL_QUOTES[dayOfYear % SPIRITUAL_QUOTES.length];
 }
 
 // ── Helpers: days remaining in current week / month ─────────────────────────
@@ -926,6 +1050,15 @@ export default function HomeScreen() {
   const [widgetIds, setWidgetIds] = useState<string[]>([]);
   const [editingWidgets, setEditingWidgets] = useState(false);
   const [widgetLibraryOpen, setWidgetLibraryOpen] = useState(false);
+  const [motivationalGenre, setMotivationalGenre] = useState<MotivationalGenre>('general');
+  const [showGenrePicker, setShowGenrePicker] = useState(false);
+
+  // Load saved motivational genre preference
+  useEffect(() => {
+    AsyncStorage.getItem(MOTIVATIONAL_GENRE_KEY).then((v) => {
+      if (v) setMotivationalGenre(v as MotivationalGenre);
+    });
+  }, []);
 
   const WIDGET_STORAGE_KEY = 'daycheck:dashboard:widgets:v1';
   const DEFAULT_WIDGETS: string[] = [];
@@ -1180,46 +1313,70 @@ export default function HomeScreen() {
             </View>
           </View>}
 
-          {/* ── Today's Focus Card (only shown when there's something to do) ── */}
-          {/* Suppressed if user already completed a journal entry for yesterday */}
-          {((isPendingCheckIn && !hasYesterdayEntry) || missedDates.length > 0) && (
-            <Pressable
-              onPress={() => {
-                if (missedDates.length > 0) {
-                  setShowMissedDays(true);
-                } else {
-                  handleCheckIn(yesterday);
-                }
-              }}
-              style={({ pressed }) => [
-                styles.focusCard,
-                {
-                  backgroundColor: isPendingCheckIn ? colors.primary : colors.surface,
-                  borderColor: isPendingCheckIn ? colors.primary : '#F59E0B',
-                  opacity: pressed ? 0.9 : 1,
-                  transform: [{ scale: pressed ? 0.98 : 1 }],
-                },
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.focusCardTitle, { color: isPendingCheckIn ? '#fff' : colors.foreground }]}>
-                  {isPendingCheckIn
-                    ? `${activeHabits.length} habit${activeHabits.length !== 1 ? 's' : ''} to review`
-                    : `${missedDates.length} day${missedDates.length !== 1 ? 's' : ''} to catch up`}
-                </Text>
-                <Text style={[styles.focusCardSub, { color: isPendingCheckIn ? 'rgba(255,255,255,0.75)' : colors.muted }]}>
-                  {isPendingCheckIn
-                    ? `${formatDisplayDate(yesterday)} · Tap to rate`
-                    : 'Tap to review missed days'}
-                </Text>
+          {/* ── Motivational Message Card ── */}
+          <View style={[styles.motivCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+            <View style={styles.motivHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <IconSymbol name="quote.bubble.fill" size={16} color="#F59E0B" />
+                <Text style={[styles.motivLabel, { color: '#F59E0B' }]}>Motivation</Text>
               </View>
-              <IconSymbol
-                name="chevron.right"
-                size={18}
-                color={isPendingCheckIn ? 'rgba(255,255,255,0.8)' : '#F59E0B'}
-              />
-            </Pressable>
-          )}
+              <Pressable
+                onPress={() => setShowGenrePicker(true)}
+                style={({ pressed }) => [styles.genreBtn, { borderColor: isCalm ? '#3A4070' : colors.border, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={[styles.genreBtnText, { color: isCalm ? 'rgba(255,255,255,0.7)' : colors.muted }]}>
+                  {GENRE_LABELS[motivationalGenre]}
+                </Text>
+                <IconSymbol name="chevron.down" size={12} color={isCalm ? 'rgba(255,255,255,0.5)' : colors.muted} />
+              </Pressable>
+            </View>
+            <Text style={[styles.motivQuote, { color: isCalm ? '#fff' : colors.foreground }]}>
+              “{getGenreQuote(motivationalGenre)}”
+            </Text>
+          </View>
+
+          {/* ── Spiritual Message Card ── */}
+          <View style={[styles.motivCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+            <View style={styles.motivHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <IconSymbol name="sparkles" size={16} color="#8B5CF6" />
+                <Text style={[styles.motivLabel, { color: '#8B5CF6' }]}>Spiritual</Text>
+              </View>
+            </View>
+            <Text style={[styles.motivQuote, { color: isCalm ? '#fff' : colors.foreground }]}>
+              “{getSpiritualQuote()}”
+            </Text>
+          </View>
+
+          {/* Genre picker modal */}
+          <Modal visible={showGenrePicker} transparent animationType="fade" onRequestClose={() => setShowGenrePicker(false)}>
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setShowGenrePicker(false)} />
+            <View style={[styles.genreSheet, { backgroundColor: colors.surface }]}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.35)', alignSelf: 'center', marginBottom: 16 }} />
+              <Text style={[{ fontSize: 17, fontWeight: '800', color: colors.foreground, marginBottom: 12, textAlign: 'center' }]}>Motivational Style</Text>
+              {(Object.keys(GENRE_LABELS) as MotivationalGenre[]).map((g) => (
+                <Pressable
+                  key={g}
+                  onPress={() => {
+                    setMotivationalGenre(g);
+                    AsyncStorage.setItem(MOTIVATIONAL_GENRE_KEY, g);
+                    setShowGenrePicker(false);
+                  }}
+                  style={({ pressed }) => [{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    paddingVertical: 13, paddingHorizontal: 4,
+                    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
+                    opacity: pressed ? 0.7 : 1,
+                  }]}
+                >
+                  <Text style={{ fontSize: 15, color: g === motivationalGenre ? '#F59E0B' : colors.foreground, fontWeight: g === motivationalGenre ? '700' : '400' }}>
+                    {GENRE_LABELS[g]}
+                  </Text>
+                  {g === motivationalGenre && <IconSymbol name="checkmark" size={16} color="#F59E0B" />}
+                </Pressable>
+              ))}
+            </View>
+          </Modal>
 
           {/* ── Stack Widgets: Wake Up + Sleep (full-width, stacked) ── */}
           {(['wakeup', 'sleep'] as const).map((kind) => {
@@ -1232,7 +1389,11 @@ export default function HomeScreen() {
                 key={kind}
                 onPress={() => {
                   if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/stack-player?id=${stack.id}` as never);
+                  if (stack.steps.length === 0) {
+                    router.push(`/stack-editor?id=${stack.id}` as never);
+                  } else {
+                    router.push(`/stack-player?id=${stack.id}` as never);
+                  }
                 }}
                 style={({ pressed }) => [
                   styles.stackWidgetFull,
@@ -2304,4 +2465,11 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8,
   },
   missedDaysCloseText: { fontSize: 15, fontWeight: '700' },
+  motivCard: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16, marginBottom: 12 },
+  motivHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 10 },
+  motivLabel: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.8, textTransform: 'uppercase' as const },
+  motivQuote: { fontSize: 15, fontWeight: '500' as const, lineHeight: 22, fontStyle: 'italic' as const },
+  genreBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  genreBtnText: { fontSize: 12, fontWeight: '500' as const },
+  genreSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
 });

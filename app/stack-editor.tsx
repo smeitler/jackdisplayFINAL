@@ -1,19 +1,17 @@
 /**
  * Stack Editor Screen
- * Add, remove, reorder, and configure ritual steps for a stack.
+ * Add, remove, reorder (drag), and configure ritual steps for a stack.
  * Up to 5 steps per stack. No emojis — icons only throughout.
  *
- * Design:
- *  - Clean step cards: number badge left, type label + detail, edit tap on card body, delete far right
- *  - Up/down reorder arrows kept for simplicity (long-press drag requires GestureHandler setup)
- *  - "Add Step" is a solid subtle row, not dashed
- *  - Journal step → navigates to /alarm-journal (manual or voice)
- *  - Reminder step → renamed "Habit Reminder", picks from habits list
+ * Drag-to-reorder: long-press the ≡ handle on the left of each card.
+ * Empty stack: tapping the widget on the home screen goes straight here.
+ * Step types: timer, stopwatch, meditation, breathwork, journal, affirmations,
+ *             priming, reminder (habit), melatonin, custom.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
-  TextInput, Modal, FlatList,
+  TextInput, Modal, FlatList, PanResponder, Animated as RNAnimated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,7 +28,7 @@ import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
 
-// ─── Step type icon map (SF Symbols → Material Icons via icon-symbol.tsx) ──────
+// ─── Step type icon map ───────────────────────────────────────────────────────
 
 const STEP_ICON: Record<StepType, string> = {
   timer:        'timer',
@@ -41,15 +39,16 @@ const STEP_ICON: Record<StepType, string> = {
   affirmations: 'quote.bubble.fill',
   priming:      'flame.fill',
   reminder:     'bell.fill',
+  melatonin:    'moon.fill',
   custom:       'pencil',
 };
 
 const STEP_TYPES: StepType[] = [
   'timer', 'stopwatch', 'meditation', 'breathwork',
-  'journal', 'affirmations', 'priming', 'reminder', 'custom',
+  'journal', 'affirmations', 'priming', 'reminder', 'melatonin', 'custom',
 ];
 
-// ─── Audio library data (mirrors wellness-audio catalog) ─────────────────────
+// ─── Audio library data ───────────────────────────────────────────────────────
 
 interface LibraryTrack { id: string; title: string; artist: string; duration: string; }
 
@@ -65,10 +64,10 @@ const MEDITATION_TRACKS: LibraryTrack[] = [
 ];
 
 const BREATHWORK_TRACKS: LibraryTrack[] = [
-  { id: 'bw-box',      title: 'Box Breathing',     artist: '4-4-4-4 pattern',   duration: '5:00' },
-  { id: 'bw-478',      title: '4-7-8 Breathing',   artist: 'Relaxation breath',  duration: '4:00' },
-  { id: 'bw-wimhof',   title: 'Wim Hof Method',    artist: '3 rounds',           duration: '8:00' },
-  { id: 'bw-coherent', title: 'Coherent Breathing', artist: '5-5 pattern',        duration: '6:00' },
+  { id: 'bw-box',      title: 'Box Breathing',      artist: '4-4-4-4 pattern',  duration: '5:00' },
+  { id: 'bw-478',      title: '4-7-8 Breathing',    artist: 'Relaxation breath', duration: '4:00' },
+  { id: 'bw-wimhof',   title: 'Wim Hof Method',     artist: '3 rounds',          duration: '8:00' },
+  { id: 'bw-coherent', title: 'Coherent Breathing',  artist: '5-5 pattern',       duration: '6:00' },
 ];
 
 const PRIMING_TRACKS: LibraryTrack[] = [
@@ -77,6 +76,132 @@ const PRIMING_TRACKS: LibraryTrack[] = [
   { id: 'prm-3', title: 'Power Visualization', artist: 'Goal activation',    duration: '12:00' },
   { id: 'prm-4', title: 'Evening Reflection',  artist: 'Wind-down priming',  duration: '7:00' },
 ];
+
+// ─── Draggable Step List ──────────────────────────────────────────────────────
+
+const CARD_HEIGHT = 72; // approximate height of each step card + margin
+
+interface DraggableStepListProps {
+  steps: RitualStep[];
+  accentColor: string;
+  colors: ReturnType<typeof useColors>;
+  onReorder: (steps: RitualStep[]) => void;
+  onEdit: (step: RitualStep) => void;
+  onDelete: (id: string) => void;
+}
+
+function DraggableStepList({ steps, accentColor, colors, onReorder, onEdit, onDelete }: DraggableStepListProps) {
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const dragY = useRef(new RNAnimated.Value(0)).current;
+  const startY = useRef(0);
+  const currentIdx = useRef<number | null>(null);
+
+  const makePanResponder = useCallback((idx: number) => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
+    onPanResponderGrant: () => {
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      startY.current = 0;
+      dragY.setValue(0);
+      currentIdx.current = idx;
+      setDraggingIdx(idx);
+      setHoverIdx(idx);
+    },
+    onPanResponderMove: (_, g) => {
+      dragY.setValue(g.dy);
+      const newIdx = Math.max(0, Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)));
+      if (newIdx !== hoverIdx) setHoverIdx(newIdx);
+    },
+    onPanResponderRelease: (_, g) => {
+      const fromIdx = idx;
+      const toIdx = Math.max(0, Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)));
+      dragY.setValue(0);
+      setDraggingIdx(null);
+      setHoverIdx(null);
+      currentIdx.current = null;
+      if (fromIdx !== toIdx) {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const next = [...steps];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        onReorder(next);
+      }
+    },
+    onPanResponderTerminate: () => {
+      dragY.setValue(0);
+      setDraggingIdx(null);
+      setHoverIdx(null);
+    },
+  }), [steps, hoverIdx, onReorder]);
+
+  return (
+    <View>
+      {steps.map((step, idx) => {
+        const isDragging = draggingIdx === idx;
+        const panResponder = makePanResponder(idx);
+
+        return (
+          <RNAnimated.View
+            key={step.id}
+            style={[
+              styles.stepCard,
+              {
+                backgroundColor: isDragging ? colors.surface : colors.surface,
+                borderColor: isDragging ? accentColor : colors.border,
+                transform: isDragging ? [{ translateY: dragY }] : [],
+                zIndex: isDragging ? 100 : 1,
+                elevation: isDragging ? 8 : 0,
+                shadowColor: isDragging ? '#000' : 'transparent',
+                shadowOffset: { width: 0, height: isDragging ? 4 : 0 },
+                shadowOpacity: isDragging ? 0.25 : 0,
+                shadowRadius: isDragging ? 8 : 0,
+                opacity: (hoverIdx !== null && hoverIdx !== idx && draggingIdx !== null && idx === hoverIdx) ? 0.5 : 1,
+              },
+            ]}
+          >
+            {/* Drag handle — long-press area */}
+            <View {...panResponder.panHandlers} style={styles.dragHandle}>
+              <IconSymbol name="line.3.horizontal" size={18} color={colors.muted} />
+            </View>
+
+            {/* Step number badge */}
+            <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
+              <Text style={styles.stepNum}>{idx + 1}</Text>
+            </View>
+
+            {/* Tap body to edit */}
+            <Pressable
+              onPress={() => onEdit(step)}
+              style={{ flex: 1 }}
+            >
+              <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
+                {step.type === 'reminder' ? 'Habit Reminder' : step.type === 'melatonin' ? 'Melatonin' : STEP_TYPE_META[step.type]?.label ?? step.type}
+              </Text>
+              <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
+                {stepLabel(step) || 'Tap to configure'}
+              </Text>
+              {step.delayAfterSeconds > 0 && (
+                <Text style={[styles.stepDelay, { color: colors.muted }]}>
+                  {step.delayAfterSeconds}s countdown before
+                </Text>
+              )}
+            </Pressable>
+
+            {/* Delete button (separated) */}
+            <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
+            <Pressable
+              onPress={() => onDelete(step.id)}
+              style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <IconSymbol name="trash" size={16} color={colors.error} />
+            </Pressable>
+          </RNAnimated.View>
+        );
+      })}
+    </View>
+  );
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -117,16 +242,9 @@ export default function StackEditorScreen() {
     persist({ ...stack, steps: stack.steps.filter((s) => s.id !== stepId) });
   }
 
-  function moveStep(stepId: string, dir: 'up' | 'down') {
+  function reorderSteps(newSteps: RitualStep[]) {
     if (!stack) return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const idx = stack.steps.findIndex((s) => s.id === stepId);
-    if (idx < 0) return;
-    const next = [...stack.steps];
-    const swap = dir === 'up' ? idx - 1 : idx + 1;
-    if (swap < 0 || swap >= next.length) return;
-    [next[idx], next[swap]] = [next[swap], next[idx]];
-    persist({ ...stack, steps: next });
+    persist({ ...stack, steps: newSteps });
   }
 
   function saveStepEdit(updated: RitualStep) {
@@ -162,6 +280,7 @@ export default function StackEditorScreen() {
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
       >
         {stack.steps.length === 0 ? (
           <View style={[styles.emptyBox, { borderColor: colors.border }]}>
@@ -171,67 +290,22 @@ export default function StackEditorScreen() {
             </Text>
           </View>
         ) : (
-          stack.steps.map((step, idx) => (
-            <Pressable
-              key={step.id}
-              onPress={() => setEditingStep(step)}
-              style={({ pressed }) => [
-                styles.stepCard,
-                { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
-              ]}
-            >
-              {/* Left: step number */}
-              <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
-                <Text style={styles.stepNum}>{idx + 1}</Text>
-              </View>
-
-              {/* Center: type label + detail */}
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
-                  {step.type === 'reminder' ? 'Habit Reminder' : STEP_TYPE_META[step.type].label}
-                </Text>
-                <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
-                  {step.type === 'journal'
-                    ? (step.config.customLabel || 'Journal Entry')
-                    : stepLabel(step) || 'Tap to configure'}
-                </Text>
-                {step.delayAfterSeconds > 0 && (
-                  <Text style={[styles.stepDelay, { color: colors.muted }]}>
-                    {step.delayAfterSeconds}s countdown before
-                  </Text>
-                )}
-              </View>
-
-              {/* Right: reorder + delete (visually separated) */}
-              <View style={styles.stepActions}>
-                <Pressable
-                  onPress={(e) => { e.stopPropagation(); moveStep(step.id, 'up'); }}
-                  disabled={idx === 0}
-                  style={({ pressed }) => [styles.actionBtn, { opacity: idx === 0 ? 0.2 : pressed ? 0.6 : 1 }]}
-                >
-                  <IconSymbol name="arrow.up" size={15} color={colors.muted} />
-                </Pressable>
-                <Pressable
-                  onPress={(e) => { e.stopPropagation(); moveStep(step.id, 'down'); }}
-                  disabled={idx === stack.steps.length - 1}
-                  style={({ pressed }) => [styles.actionBtn, { opacity: idx === stack.steps.length - 1 ? 0.2 : pressed ? 0.6 : 1 }]}
-                >
-                  <IconSymbol name="arrow.down" size={15} color={colors.muted} />
-                </Pressable>
-                {/* Separator */}
-                <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
-                <Pressable
-                  onPress={(e) => { e.stopPropagation(); removeStep(step.id); }}
-                  style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.6 : 1 }]}
-                >
-                  <IconSymbol name="trash" size={15} color={colors.error} />
-                </Pressable>
-              </View>
-            </Pressable>
-          ))
+          <>
+            <Text style={[styles.dragHint, { color: colors.muted }]}>
+              Hold ≡ and drag to reorder steps
+            </Text>
+            <DraggableStepList
+              steps={stack.steps}
+              accentColor={accentColor}
+              colors={colors}
+              onReorder={reorderSteps}
+              onEdit={setEditingStep}
+              onDelete={removeStep}
+            />
+          </>
         )}
 
-        {/* Add Step button — solid, not dashed */}
+        {/* Add Step button */}
         {stack.steps.length < MAX_STEPS ? (
           <Pressable
             onPress={() => setAddingStep(true)}
@@ -268,14 +342,16 @@ export default function StackEditorScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.typeLabel, { color: colors.foreground }]}>
-                    {type === 'reminder' ? 'Habit Reminder' : STEP_TYPE_META[type].label}
+                    {type === 'reminder' ? 'Habit Reminder' : type === 'melatonin' ? 'Melatonin' : STEP_TYPE_META[type]?.label ?? type}
                   </Text>
                   <Text style={[styles.typeDesc, { color: colors.muted }]}>
                     {type === 'reminder'
                       ? 'Pick a habit from your list with a countdown timer'
                       : type === 'journal'
                       ? 'Open a journal entry — type or record your voice'
-                      : STEP_TYPE_META[type].description}
+                      : type === 'melatonin'
+                      ? 'Reminder to take melatonin before sleep with a countdown'
+                      : STEP_TYPE_META[type]?.description ?? ''}
                   </Text>
                 </View>
                 <IconSymbol name="chevron.right" size={16} color={colors.muted} />
@@ -344,7 +420,10 @@ function StepConfigModal({
     step.type === 'breathwork' ? config.breathworkTrackTitle :
     step.type === 'priming'    ? config.primingTrackTitle    : undefined;
 
-  const stepDisplayName = step.type === 'reminder' ? 'Habit Reminder' : STEP_TYPE_META[step.type].label;
+  const stepDisplayName =
+    step.type === 'reminder'  ? 'Habit Reminder' :
+    step.type === 'melatonin' ? 'Melatonin' :
+    STEP_TYPE_META[step.type]?.label ?? step.type;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -379,7 +458,17 @@ function StepConfigModal({
             </CRow>
           )}
 
-          {/* Journal — info note, no config needed */}
+          {/* Stopwatch — no config */}
+          {step.type === 'stopwatch' && (
+            <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+              <IconSymbol name="stopwatch" size={18} color={accentColor} />
+              <Text style={[styles.infoText, { color: colors.foreground }]}>
+                An open-ended stopwatch you stop manually when you're done.
+              </Text>
+            </View>
+          )}
+
+          {/* Journal — info note */}
           {step.type === 'journal' && (
             <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
               <IconSymbol name="book.fill" size={18} color={accentColor} />
@@ -437,6 +526,16 @@ function StepConfigModal({
             </CRow>
           )}
 
+          {/* Affirmations — info */}
+          {step.type === 'affirmations' && (
+            <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+              <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
+              <Text style={[styles.infoText, { color: colors.foreground }]}>
+                Your saved voice affirmations will play during this step.
+              </Text>
+            </View>
+          )}
+
           {/* Habit Reminder — pick from habits list + countdown */}
           {step.type === 'reminder' && (
             <>
@@ -483,28 +582,51 @@ function StepConfigModal({
             </>
           )}
 
-          {/* Affirmations — no config needed, just info */}
-          {step.type === 'affirmations' && (
-            <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
-              <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
-              <Text style={[styles.infoText, { color: colors.foreground }]}>
-                Your saved voice affirmations will play during this step.
-              </Text>
-            </View>
+          {/* Melatonin — reminder with countdown */}
+          {step.type === 'melatonin' && (
+            <>
+              <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+                <IconSymbol name="moon.fill" size={18} color={accentColor} />
+                <Text style={[styles.infoText, { color: colors.foreground }]}>
+                  A reminder to take your melatonin. A countdown will run while you get ready for sleep.
+                </Text>
+              </View>
+              <CRow label="Countdown duration (seconds)" colors={colors}>
+                <TextInput
+                  style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  value={String(config.durationSeconds ?? 120)}
+                  onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 120 })}
+                />
+                <Text style={[styles.inputHint, { color: colors.muted }]}>Default: 120s (2 min)</Text>
+              </CRow>
+            </>
           )}
 
           {/* Custom */}
           {step.type === 'custom' && (
-            <CRow label="Step name" colors={colors}>
-              <TextInput
-                style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
-                placeholder="e.g. Do 20 push-ups"
-                placeholderTextColor={colors.muted}
-                returnKeyType="done"
-                value={config.customLabel ?? ''}
-                onChangeText={(v) => setConfig({ ...config, customLabel: v })}
-              />
-            </CRow>
+            <>
+              <CRow label="Step name" colors={colors}>
+                <TextInput
+                  style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+                  placeholder="e.g. Do 20 push-ups"
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="done"
+                  value={config.customLabel ?? ''}
+                  onChangeText={(v) => setConfig({ ...config, customLabel: v })}
+                />
+              </CRow>
+              <CRow label="Duration (seconds, 0 = manual done)" colors={colors}>
+                <TextInput
+                  style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  value={String(config.durationSeconds ?? 0)}
+                  onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 0 })}
+                />
+              </CRow>
+            </>
           )}
 
           {/* Countdown delay before step */}
@@ -602,26 +724,27 @@ const styles = StyleSheet.create({
   },
   headerBtn: { padding: 8, width: 44, alignItems: 'center' },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', textAlign: 'center' },
+  dragHint: { fontSize: 12, textAlign: 'center', marginBottom: 10 },
   emptyBox: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 32, alignItems: 'center', gap: 12, marginBottom: 16 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
-  // Step card — tap whole card to edit
+  // Step card
   stepCard: {
-    borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12,
-    marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 10,
+    marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8,
   },
+  dragHandle: { padding: 8, justifyContent: 'center', alignItems: 'center' },
   stepNumBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   stepNum: { color: '#fff', fontSize: 11, fontWeight: '800' },
   stepTypeLabel: { fontSize: 11, fontWeight: '500', marginBottom: 1 },
   stepDetail: { fontSize: 14, fontWeight: '700' },
   stepDelay: { fontSize: 11, marginTop: 2 },
 
-  // Actions: up/down + separator + delete
-  stepActions: { flexDirection: 'row', alignItems: 'center', gap: 0 },
-  actionBtn: { padding: 7 },
-  actionSep: { width: 1, height: 20, marginHorizontal: 4 },
+  // Actions
+  actionBtn: { padding: 8 },
+  actionSep: { width: 1, height: 20, marginHorizontal: 2 },
 
-  // Add Step — solid subtle button
+  // Add Step
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, borderWidth: 1, borderRadius: 14, paddingVertical: 14, marginBottom: 16,
@@ -649,7 +772,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   inputHint: { fontSize: 11 },
 
-  // Info box (journal, affirmations)
+  // Info box
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16 },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
 

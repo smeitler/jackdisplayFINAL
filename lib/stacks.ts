@@ -16,6 +16,7 @@ export type StepType =
   | 'affirmations'
   | 'priming'
   | 'reminder'
+  | 'melatonin'
   | 'custom';
 
 export interface StepTypeMeta {
@@ -34,6 +35,7 @@ export const STEP_TYPE_META: Record<StepType, StepTypeMeta> = {
   affirmations: { label: 'Affirmations',   emoji: '🗣️',  description: 'Voice affirmations read aloud to you',   autoComplete: true  },
   priming:      { label: 'Priming',        emoji: '🔥',  description: 'Tony Robbins-style priming session',      autoComplete: true  },
   reminder:     { label: 'Reminder',       emoji: '💧',  description: 'A prompt to do something (drink water…)', autoComplete: false },
+  melatonin:    { label: 'Melatonin',      emoji: '🌙',  description: 'Reminder to take melatonin before sleep',  autoComplete: false },
   custom:       { label: 'Custom',         emoji: '✏️',  description: 'Your own custom step',                    autoComplete: false },
 };
 

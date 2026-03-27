@@ -1573,3 +1573,10 @@
 - [x] Stack editor: redesign step cards (drag handle left, cleaner layout, separated delete, smart placeholder text)
 - [x] Stack editor: Journal step opens in-app journal entry (manual or voice)
 - [x] Stack editor: Reminder step renamed "Habit Reminder", picks from habits list
+
+- [x] Stack editor: drag-to-reorder steps (long-press drag handle, native feel)
+- [x] Home screen: empty stack widget tap goes straight to editor (skip player)
+- [x] Stacks: add Melatonin step type (sleep stack specific)
+- [x] Stacks: add Custom step type (user defines name + duration)
+- [x] Home screen: replace "6 habits to review" banner with motivational message widget (genre picker: Entrepreneurial, Conquering the Day, Stoic, Spiritual, etc.)
+- [x] Home screen: add spiritual message widget below motivational message
