@@ -1527,3 +1527,6 @@
 - [x] Fix: AI coach context — enriched with journal entries, habit notes, full check-in history for deep personalized answers
 - [x] Fix: Voice summary edited text not saving — editedDescriptions now used in handleLog
 - [x] Feature: Voice check-in review — tappable date header (defaults to today, opens bottom sheet picker for past 30 days)
+
+- [x] Fix: Apple Sign-In backend connection (upstream_connect_failed recurring issue)
+- [x] Improve: Voice check-in AI habit descriptions — now requires 2-3 full sentences with specifics, context, and outcome per habit
