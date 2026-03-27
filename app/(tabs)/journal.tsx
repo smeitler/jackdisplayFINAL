@@ -3812,19 +3812,20 @@ export default function JournalScreen() {
       {/* ── Calendar Modal ── */}
       <Modal
         visible={calendarModalVisible}
-        transparent
         animationType="slide"
         onRequestClose={() => setCalendarModalVisible(false)}
+        presentationStyle="fullScreen"
       >
-        <View style={{ flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' }}>
-          <View style={[dvStyles.pickerSheet, { backgroundColor: colors.surface, maxHeight: '85%' }]}>
-            <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setCalendarModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
-                <IconSymbol name="xmark" size={20} color={colors.muted} />
-              </Pressable>
-              <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
-              <View style={{ width: 40 }} />
-            </View>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Full-screen calendar: header bar + calendar fills entire screen */}
+          <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+            <View style={{ width: 40 }} />
+            <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
+            <Pressable onPress={() => setCalendarModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, alignItems: 'flex-end' })}>
+              <IconSymbol name="xmark" size={20} color={colors.muted} />
+            </Pressable>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
             <JournalCalendarView
               colors={colors}
               entries={entries}
@@ -3833,7 +3834,7 @@ export default function JournalScreen() {
                 setCalendarModalVisible(false);
               }}
             />
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 

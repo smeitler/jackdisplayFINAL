@@ -114,6 +114,10 @@ function AlarmEditModal({
   const previewPlayerRef = useRef<AudioPlayer | null>(null);
   const previewTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Scroll lock — disabled while user is touching the time picker
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const scrollViewRef = useRef<ScrollView>(null);
+
   // Re-sync when alarm changes
   useEffect(() => {
     if (!visible) return;
@@ -212,13 +216,20 @@ function AlarmEditModal({
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[em.scroll, { paddingBottom: insets.bottom + 40 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
+          scrollEnabled={scrollEnabled}
         >
           {/* ── Time Picker ── */}
           <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[em.wheelWrap, { borderBottomColor: colors.border }]}>
+            <View
+              style={[em.wheelWrap, { borderBottomColor: colors.border }]}
+              onTouchStart={() => setScrollEnabled(false)}
+              onTouchEnd={() => setScrollEnabled(true)}
+              onTouchCancel={() => setScrollEnabled(true)}
+            >
               <WheelTimePicker
                 hour={hour}
                 minute={minute}
@@ -451,9 +462,16 @@ function AlarmEditModal({
                       >
                         <Text style={em.itemEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
                         <View style={{ flex: 1 }}>
-                          <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground }]}>
-                            {med.label}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground }]}>
+                              {med.label}
+                            </Text>
+                            {med.id === 'priming' && (
+                              <View style={{ backgroundColor: '#F59E0B22', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.4 }}>RECOMMENDED</Text>
+                              </View>
+                            )}
+                          </View>
                           <Text style={[em.meditationDesc, { color: colors.muted }]}>
                             {hasDuration ? `${currentDuration} min · ${med.description.split(',').slice(1).join(',').trim() || med.description}` : med.description}
                           </Text>

@@ -1500,3 +1500,7 @@
 - [x] Feature: Voice Check-In — waveform header collapses to mini bar on scroll down, expands back on scroll up
 - [x] Fix: Community screen — permanently deleted Hire a Coach and Family Plan rows from chat.tsx (that was the actual source, not community.tsx)
 - [x] Fix: Voice Check-In — Done-Analyze button — root cause was double safe area inset (ScreenContainer had bottom edge + footer also added insets.bottom). Fixed: removed bottom from ScreenContainer edges, footer now uses insets.bottom+8 only when home indicator present, button uses alignSelf:stretch instead of width:100% to avoid overflow
+- [x] Fix: Journal calendar modal — X close button moved to right side
+- [x] Fix: Journal calendar modal — now full-screen (presentationStyle=fullScreen, no transparent overlay)
+- [x] Fix: Edit Alarm time picker — scroll locked on parent ScrollView when touching picker (onTouchStart/End)
+- [x] Feature: Edit Alarm meditation picker — Priming now shows amber RECOMMENDED badge
