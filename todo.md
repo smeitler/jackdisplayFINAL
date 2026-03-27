@@ -1530,3 +1530,8 @@
 
 - [x] Fix: Apple Sign-In backend connection (upstream_connect_failed recurring issue)
 - [x] Improve: Voice check-in AI habit descriptions — now requires 2-3 full sentences with specifics, context, and outcome per habit
+
+- [ ] Fix: Backend server keeps dying — Apple login fails with HTML response every session restart
+
+- [x] Fix Apple Sign-In failure: native clients now ignore stale EXPO_PUBLIC_API_BASE_URL env var and always use hardcoded current sandbox URL in constants/oauth.ts
+- [x] Add backend API reachability tests (api-base-url.test.ts) verifying health, Apple auth JSON response, and dev-login

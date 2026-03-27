@@ -26,30 +26,38 @@ export const API_BASE_URL = env.apiBaseUrl;
  * Metro runs on 8081, API server runs on 3000.
  * URL pattern: https://PORT-sandboxid.region.domain
  */
+// CURRENT SANDBOX URL — update this whenever the sandbox session changes.
+// This is the single source of truth for native (Expo Go) API calls.
+// The EXPO_PUBLIC_API_BASE_URL env var is intentionally ignored on native
+// because it can get stale across sandbox sessions and cause auth failures.
+const NATIVE_API_BASE_URL = "https://3000-ipdzewvi1uvuqb695kcjx-7ec38a38.us1.manus.computer";
+
 export function getApiBaseUrl(): string {
-  // If API_BASE_URL is set, use it
-  if (API_BASE_URL) {
-    console.log('[getApiBaseUrl] Using EXPO_PUBLIC_API_BASE_URL:', API_BASE_URL);
-    return API_BASE_URL.replace(/\/$/, "");
+  // On native (iOS/Android), always use the hardcoded sandbox URL.
+  // This prevents stale EXPO_PUBLIC_API_BASE_URL env vars from breaking auth.
+  if (ReactNative.Platform.OS !== "web") {
+    console.log('[getApiBaseUrl] Native: using hardcoded sandbox URL:', NATIVE_API_BASE_URL);
+    return NATIVE_API_BASE_URL;
   }
-  console.log('[getApiBaseUrl] EXPO_PUBLIC_API_BASE_URL not set, using fallback');
 
   // On web, derive from current hostname by replacing port 8081 with 3000
-  if (ReactNative.Platform.OS === "web" && typeof window !== "undefined" && window.location) {
+  if (typeof window !== "undefined" && window.location) {
     const { protocol, hostname } = window.location;
     // Pattern: 8081-sandboxid.region.domain -> 3000-sandboxid.region.domain
     const apiHostname = hostname.replace(/^8081-/, "3000-");
     if (apiHostname !== hostname) {
+      console.log('[getApiBaseUrl] Web: derived from hostname:', `${protocol}//${apiHostname}`);
       return `${protocol}//${apiHostname}`;
     }
   }
 
-  // Native (Expo Go) fallback — current sandbox (updated 2026-03-27)
-  if (ReactNative.Platform.OS !== "web") {
-    return "https://3000-ipdzewvi1uvuqb695kcjx-7ec38a38.us1.manus.computer";
+  // Web fallback: use EXPO_PUBLIC_API_BASE_URL if set
+  if (API_BASE_URL) {
+    console.log('[getApiBaseUrl] Web: using EXPO_PUBLIC_API_BASE_URL:', API_BASE_URL);
+    return API_BASE_URL.replace(/\/$/, "");
   }
 
-  // Fallback to empty (will use relative URL)
+  // Last resort fallback
   return "";
 }
 
