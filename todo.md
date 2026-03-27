@@ -1585,3 +1585,4 @@
 - [x] Stacks: add Motivational Message step type (genre picker: Entrepreneurial, Conquering the Day, Stoic, Athletic, Mindset, General)
 - [x] Stacks: add Spiritual Message step type
 - [x] Stack player: render Motivational Message and Spiritual Message steps (show quote full-screen, tap to continue)
+- [x] Stack widgets: increase "Wake Up Stack" / "Sleep Stack" title font size to be much larger

@@ -2288,7 +2288,7 @@ const styles = StyleSheet.create({
   stackWidgetTopRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },
-  stackWidgetTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
+  stackWidgetTitle: { flex: 1, fontSize: 28, fontWeight: '800' },
   stackStepWords: { fontSize: 13, fontWeight: '400', lineHeight: 19, marginTop: 2 },
   stackEditBtn: {
     paddingHorizontal: 8, paddingVertical: 3,
