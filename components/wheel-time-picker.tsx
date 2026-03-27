@@ -89,8 +89,11 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
 
   const panResponder = useRef(
     PanResponder.create({
+      // Capture phase: claim the touch BEFORE the parent ScrollView can intercept it
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: (_, gs) => Math.abs(gs.dy) > 1,
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 2,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 1,
       onPanResponderGrant: () => {
         // Capture current animated value
         (offsetY as any).stopAnimation((val: number) => {

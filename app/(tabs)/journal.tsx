@@ -1961,7 +1961,7 @@ function jcGenerateMonths(sy: number, sm: number, ey: number, em: number): { yea
   return r;
 }
 
-function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colors: any; onDayPress?: (dateStr: string) => void; entries: JournalEntry[] }) {
+function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScreen }: { colors: any; onDayPress?: (dateStr: string) => void; entries: JournalEntry[]; fullScreen?: boolean }) {
   const { width: winWidth } = useWindowDimensions();
 
   const today = new Date();
@@ -1995,7 +1995,7 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries }: { colo
   }, [didScroll, todayMonthIndex]);
 
   return (
-    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20, paddingHorizontal: 12 }}>
+    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={fullScreen ? { flex: 1 } : { maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 12 }}>
       {months.map(({ year, month }, monthIndex) => {
         const daysInMonth = jcGetMonthDays(year, month);
         const firstDay = jcGetFirstDay(year, month);
@@ -3816,26 +3816,26 @@ export default function JournalScreen() {
         onRequestClose={() => setCalendarModalVisible(false)}
         presentationStyle="fullScreen"
       >
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          {/* Full-screen calendar: header bar + calendar fills entire screen */}
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top', 'left', 'right', 'bottom']}>
+          {/* Header inside SafeAreaView so X button clears Dynamic Island / notch */}
           <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
             <View style={{ width: 40 }} />
             <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
-            <Pressable onPress={() => setCalendarModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 40, alignItems: 'flex-end' })}>
-              <IconSymbol name="xmark" size={20} color={colors.muted} />
+            <Pressable onPress={() => setCalendarModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 4 })}>
+              <IconSymbol name="xmark" size={22} color={colors.foreground} />
             </Pressable>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-            <JournalCalendarView
-              colors={colors}
-              entries={entries}
-              onDayPress={(dateStr) => {
-                setSelectedDate(dateStr);
-                setCalendarModalVisible(false);
-              }}
-            />
-          </ScrollView>
-        </View>
+          {/* Calendar fills remaining space with no maxHeight constraint */}
+          <JournalCalendarView
+            colors={colors}
+            entries={entries}
+            fullScreen
+            onDayPress={(dateStr) => {
+              setSelectedDate(dateStr);
+              setCalendarModalVisible(false);
+            }}
+          />
+        </SafeAreaView>
       </Modal>
 
       {/* ── Date Picker Bottom Sheet ── */}

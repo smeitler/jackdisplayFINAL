@@ -224,12 +224,7 @@ function AlarmEditModal({
         >
           {/* ── Time Picker ── */}
           <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View
-              style={[em.wheelWrap, { borderBottomColor: colors.border }]}
-              onTouchStart={() => setScrollEnabled(false)}
-              onTouchEnd={() => setScrollEnabled(true)}
-              onTouchCancel={() => setScrollEnabled(true)}
-            >
+            <View style={[em.wheelWrap, { borderBottomColor: colors.border }]}>
               <WheelTimePicker
                 hour={hour}
                 minute={minute}
