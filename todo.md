@@ -1580,3 +1580,8 @@
 - [x] Stacks: add Custom step type (user defines name + duration)
 - [x] Home screen: replace "6 habits to review" banner with motivational message widget (genre picker: Entrepreneurial, Conquering the Day, Stoic, Spiritual, etc.)
 - [x] Home screen: add spiritual message widget below motivational message
+
+- [x] Home screen: remove motivational message card and spiritual message card (they belong in stacks only)
+- [x] Stacks: add Motivational Message step type (genre picker: Entrepreneurial, Conquering the Day, Stoic, Athletic, Mindset, General)
+- [x] Stacks: add Spiritual Message step type
+- [x] Stack player: render Motivational Message and Spiritual Message steps (show quote full-screen, tap to continue)

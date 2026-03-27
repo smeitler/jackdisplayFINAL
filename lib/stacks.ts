@@ -17,6 +17,8 @@ export type StepType =
   | 'priming'
   | 'reminder'
   | 'melatonin'
+  | 'motivational'
+  | 'spiritual'
   | 'custom';
 
 export interface StepTypeMeta {
@@ -36,6 +38,8 @@ export const STEP_TYPE_META: Record<StepType, StepTypeMeta> = {
   priming:      { label: 'Priming',        emoji: '🔥',  description: 'Tony Robbins-style priming session',      autoComplete: true  },
   reminder:     { label: 'Reminder',       emoji: '💧',  description: 'A prompt to do something (drink water…)', autoComplete: false },
   melatonin:    { label: 'Melatonin',      emoji: '🌙',  description: 'Reminder to take melatonin before sleep',  autoComplete: false },
+  motivational: { label: 'Motivational',   emoji: '💪',  description: 'A motivational quote read aloud to you',   autoComplete: true  },
+  spiritual:    { label: 'Spiritual',      emoji: '🙏',  description: 'A spiritual reflection or message',        autoComplete: true  },
   custom:       { label: 'Custom',         emoji: '✏️',  description: 'Your own custom step',                    autoComplete: false },
 };
 
@@ -57,6 +61,8 @@ export interface StepConfig {
   reminderText?: string;
   customLabel?: string;
   journalPrompt?: string;
+  motivationalGenre?: string;
+  spiritualCategory?: string;
 }
 
 // ─── Step ─────────────────────────────────────────────────────────────────────
@@ -88,8 +94,10 @@ export function newStepId(): string {
 
 export function stepLabel(step: RitualStep): string {
   switch (step.type) {
-    case 'reminder': return step.config.reminderText || STEP_TYPE_META.reminder.label;
-    case 'custom':   return step.config.customLabel   || STEP_TYPE_META.custom.label;
+    case 'reminder':     return step.config.reminderText || STEP_TYPE_META.reminder.label;
+    case 'custom':       return step.config.customLabel   || STEP_TYPE_META.custom.label;
+    case 'motivational': return step.config.motivationalGenre ? `Motivational — ${step.config.motivationalGenre}` : 'Motivational';
+    case 'spiritual':    return 'Spiritual';
     case 'timer': {
       const secs = step.config.durationSeconds ?? 0;
       const mins = Math.floor(secs / 60);

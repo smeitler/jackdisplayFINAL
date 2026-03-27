@@ -40,12 +40,15 @@ const STEP_ICON: Record<StepType, string> = {
   priming:      'flame.fill',
   reminder:     'bell.fill',
   melatonin:    'moon.fill',
+  motivational: 'bolt.fill',
+  spiritual:    'sparkles',
   custom:       'pencil',
 };
 
 const STEP_TYPES: StepType[] = [
   'timer', 'stopwatch', 'meditation', 'breathwork',
-  'journal', 'affirmations', 'priming', 'reminder', 'melatonin', 'custom',
+  'journal', 'affirmations', 'priming', 'reminder', 'melatonin',
+  'motivational', 'spiritual', 'custom',
 ];
 
 // ─── Audio library data ───────────────────────────────────────────────────────
@@ -600,6 +603,64 @@ function StepConfigModal({
                   onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 120 })}
                 />
                 <Text style={[styles.inputHint, { color: colors.muted }]}>Default: 120s (2 min)</Text>
+              </CRow>
+            </>
+          )}
+
+          {/* Motivational — genre picker */}
+          {step.type === 'motivational' && (
+            <>
+              <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+                <IconSymbol name="bolt.fill" size={18} color={accentColor} />
+                <Text style={[styles.infoText, { color: colors.foreground }]}>
+                  A motivational quote will be displayed (and read aloud if voice is enabled) during your ritual.
+                </Text>
+              </View>
+              <CRow label="Genre" colors={colors}>
+                <View style={{ gap: 8 }}>
+                  {['Entrepreneurial', 'Conquering the Day', 'Stoic', 'Athletic', 'Mindset', 'Spiritual', 'General'].map((g) => (
+                    <Pressable
+                      key={g}
+                      onPress={() => setConfig({ ...config, motivationalGenre: g })}
+                      style={({ pressed }) => [{
+                        flexDirection: 'row', alignItems: 'center', gap: 10,
+                        padding: 12, borderRadius: 10,
+                        backgroundColor: config.motivationalGenre === g ? accentColor + '20' : colors.surface,
+                        borderWidth: 1,
+                        borderColor: config.motivationalGenre === g ? accentColor : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      <IconSymbol
+                        name={config.motivationalGenre === g ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                        size={18}
+                        color={config.motivationalGenre === g ? accentColor : colors.muted}
+                      />
+                      <Text style={{ color: colors.foreground, fontSize: 15 }}>{g}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+            </>
+          )}
+
+          {/* Spiritual */}
+          {step.type === 'spiritual' && (
+            <>
+              <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+                <IconSymbol name="sparkles" size={18} color={accentColor} />
+                <Text style={[styles.infoText, { color: colors.foreground }]}>
+                  A spiritual reflection or message will be shown during your ritual — a moment of gratitude, presence, or faith.
+                </Text>
+              </View>
+              <CRow label="Duration (seconds, 0 = tap to continue)" colors={colors}>
+                <TextInput
+                  style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  value={String(config.durationSeconds ?? 0)}
+                  onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 0 })}
+                />
               </CRow>
             </>
           )}

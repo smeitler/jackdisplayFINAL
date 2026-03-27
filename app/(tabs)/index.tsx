@@ -34,6 +34,8 @@ const STEP_ICON_MAP: Record<StepType, string> = {
   priming:      'flame.fill',
   reminder:     'bell.fill',
   melatonin:    'moon.fill',
+  motivational: 'bolt.fill',
+  spiritual:    'sparkles',
   custom:       'pencil',
 };
 
@@ -1312,71 +1314,6 @@ export default function HomeScreen() {
               />
             </View>
           </View>}
-
-          {/* ── Motivational Message Card ── */}
-          <View style={[styles.motivCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
-            <View style={styles.motivHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <IconSymbol name="quote.bubble.fill" size={16} color="#F59E0B" />
-                <Text style={[styles.motivLabel, { color: '#F59E0B' }]}>Motivation</Text>
-              </View>
-              <Pressable
-                onPress={() => setShowGenrePicker(true)}
-                style={({ pressed }) => [styles.genreBtn, { borderColor: isCalm ? '#3A4070' : colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Text style={[styles.genreBtnText, { color: isCalm ? 'rgba(255,255,255,0.7)' : colors.muted }]}>
-                  {GENRE_LABELS[motivationalGenre]}
-                </Text>
-                <IconSymbol name="chevron.down" size={12} color={isCalm ? 'rgba(255,255,255,0.5)' : colors.muted} />
-              </Pressable>
-            </View>
-            <Text style={[styles.motivQuote, { color: isCalm ? '#fff' : colors.foreground }]}>
-              “{getGenreQuote(motivationalGenre)}”
-            </Text>
-          </View>
-
-          {/* ── Spiritual Message Card ── */}
-          <View style={[styles.motivCard, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
-            <View style={styles.motivHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <IconSymbol name="sparkles" size={16} color="#8B5CF6" />
-                <Text style={[styles.motivLabel, { color: '#8B5CF6' }]}>Spiritual</Text>
-              </View>
-            </View>
-            <Text style={[styles.motivQuote, { color: isCalm ? '#fff' : colors.foreground }]}>
-              “{getSpiritualQuote()}”
-            </Text>
-          </View>
-
-          {/* Genre picker modal */}
-          <Modal visible={showGenrePicker} transparent animationType="fade" onRequestClose={() => setShowGenrePicker(false)}>
-            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setShowGenrePicker(false)} />
-            <View style={[styles.genreSheet, { backgroundColor: colors.surface }]}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.35)', alignSelf: 'center', marginBottom: 16 }} />
-              <Text style={[{ fontSize: 17, fontWeight: '800', color: colors.foreground, marginBottom: 12, textAlign: 'center' }]}>Motivational Style</Text>
-              {(Object.keys(GENRE_LABELS) as MotivationalGenre[]).map((g) => (
-                <Pressable
-                  key={g}
-                  onPress={() => {
-                    setMotivationalGenre(g);
-                    AsyncStorage.setItem(MOTIVATIONAL_GENRE_KEY, g);
-                    setShowGenrePicker(false);
-                  }}
-                  style={({ pressed }) => [{
-                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                    paddingVertical: 13, paddingHorizontal: 4,
-                    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
-                    opacity: pressed ? 0.7 : 1,
-                  }]}
-                >
-                  <Text style={{ fontSize: 15, color: g === motivationalGenre ? '#F59E0B' : colors.foreground, fontWeight: g === motivationalGenre ? '700' : '400' }}>
-                    {GENRE_LABELS[g]}
-                  </Text>
-                  {g === motivationalGenre && <IconSymbol name="checkmark" size={16} color="#F59E0B" />}
-                </Pressable>
-              ))}
-            </View>
-          </Modal>
 
           {/* ── Stack Widgets: Wake Up + Sleep (full-width, stacked) ── */}
           {(['wakeup', 'sleep'] as const).map((kind) => {
