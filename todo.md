@@ -1587,3 +1587,6 @@
 - [x] Stack player: render Motivational Message and Spiritual Message steps (show quote full-screen, tap to continue)
 - [x] Stack widgets: increase "Wake Up Stack" / "Sleep Stack" title font size to be much larger
 - [x] Stack widgets: full visual redesign — subtle tinted background (no border), large bare icon, bold large title, muted dot-separated step list, generous padding, minimal/sexy aesthetic
+- [ ] Stack editor: fix drag-to-reorder — replace broken implementation with reliable PanGestureHandler + Reanimated drag
+
+- [x] Fix drag-to-reorder in stack editor — replaced broken PanResponder+ScrollView approach with onMoveShouldSetPanResponderCapture on the drag handle so it wins the gesture before the ScrollView can claim it

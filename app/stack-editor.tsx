@@ -3,15 +3,15 @@
  * Add, remove, reorder (drag), and configure ritual steps for a stack.
  * Up to 5 steps per stack. No emojis — icons only throughout.
  *
- * Drag-to-reorder: long-press the ≡ handle on the left of each card.
- * Empty stack: tapping the widget on the home screen goes straight here.
- * Step types: timer, stopwatch, meditation, breathwork, journal, affirmations,
- *             priming, reminder (habit), melatonin, custom.
+ * Drag-to-reorder: long-press the ≡ handle. The step list is rendered
+ * OUTSIDE the ScrollView so PanResponder can claim gestures without
+ * the scroll view stealing them.
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
   TextInput, Modal, FlatList, PanResponder, Animated as RNAnimated,
+  GestureResponderEvent,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,7 @@ import {
 import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
+const CARD_HEIGHT = 80; // height of each step card + margin
 
 // ─── Step type icon map ───────────────────────────────────────────────────────
 
@@ -80,9 +81,8 @@ const PRIMING_TRACKS: LibraryTrack[] = [
   { id: 'prm-4', title: 'Evening Reflection',  artist: 'Wind-down priming',  duration: '7:00' },
 ];
 
-// ─── Draggable Step List ──────────────────────────────────────────────────────
-
-const CARD_HEIGHT = 72; // approximate height of each step card + margin
+// ─── Drag-to-Reorder Step List ────────────────────────────────────────────────
+// Rendered OUTSIDE the parent ScrollView so PanResponder wins the gesture.
 
 interface DraggableStepListProps {
   steps: RitualStep[];
@@ -93,56 +93,84 @@ interface DraggableStepListProps {
   onDelete: (id: string) => void;
 }
 
-function DraggableStepList({ steps, accentColor, colors, onReorder, onEdit, onDelete }: DraggableStepListProps) {
+function DraggableStepList({
+  steps, accentColor, colors, onReorder, onEdit, onDelete,
+}: DraggableStepListProps) {
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const dragY = useRef(new RNAnimated.Value(0)).current;
-  const startY = useRef(0);
-  const currentIdx = useRef<number | null>(null);
+  const [targetIdx, setTargetIdx]     = useState<number | null>(null);
+  const dragAnim = useRef(new RNAnimated.Value(0)).current;
 
-  const makePanResponder = useCallback((idx: number) => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
-    onPanResponderGrant: () => {
-      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      startY.current = 0;
-      dragY.setValue(0);
-      currentIdx.current = idx;
-      setDraggingIdx(idx);
-      setHoverIdx(idx);
-    },
-    onPanResponderMove: (_, g) => {
-      dragY.setValue(g.dy);
-      const newIdx = Math.max(0, Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)));
-      if (newIdx !== hoverIdx) setHoverIdx(newIdx);
-    },
-    onPanResponderRelease: (_, g) => {
-      const fromIdx = idx;
-      const toIdx = Math.max(0, Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)));
-      dragY.setValue(0);
-      setDraggingIdx(null);
-      setHoverIdx(null);
-      currentIdx.current = null;
-      if (fromIdx !== toIdx) {
-        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        const next = [...steps];
-        const [moved] = next.splice(fromIdx, 1);
-        next.splice(toIdx, 0, moved);
-        onReorder(next);
-      }
-    },
-    onPanResponderTerminate: () => {
-      dragY.setValue(0);
-      setDraggingIdx(null);
-      setHoverIdx(null);
-    },
-  }), [steps, hoverIdx, onReorder]);
+  // We build a new PanResponder for each card index.
+  // The key insight: we attach it to the HANDLE only, and the handle
+  // is NOT inside a ScrollView, so there's no scroll-vs-gesture conflict.
+  function buildPanResponder(idx: number) {
+    return PanResponder.create({
+      // Only claim the gesture if the user has moved vertically enough
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 4,
+      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dy) > 4,
+
+      onPanResponderGrant: () => {
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        dragAnim.setValue(0);
+        setDraggingIdx(idx);
+        setTargetIdx(idx);
+      },
+
+      onPanResponderMove: (_e, g) => {
+        dragAnim.setValue(g.dy);
+        const newTarget = Math.max(
+          0,
+          Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)),
+        );
+        setTargetIdx(newTarget);
+      },
+
+      onPanResponderRelease: (_e, g) => {
+        const toIdx = Math.max(
+          0,
+          Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)),
+        );
+        dragAnim.setValue(0);
+        setDraggingIdx(null);
+        setTargetIdx(null);
+
+        if (toIdx !== idx) {
+          if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          const next = [...steps];
+          const [moved] = next.splice(idx, 1);
+          next.splice(toIdx, 0, moved);
+          onReorder(next);
+        }
+      },
+
+      onPanResponderTerminate: () => {
+        dragAnim.setValue(0);
+        setDraggingIdx(null);
+        setTargetIdx(null);
+      },
+    });
+  }
 
   return (
-    <View>
+    <View style={{ position: 'relative' }}>
       {steps.map((step, idx) => {
         const isDragging = draggingIdx === idx;
-        const panResponder = makePanResponder(idx);
+        const isTarget   = targetIdx !== null && targetIdx !== draggingIdx && targetIdx === idx;
+        // Build a stable pan responder per card (re-created when steps change)
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        const panRef = useRef(buildPanResponder(idx));
+        // Rebuild when idx or steps length changes
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        useEffect(() => {
+          panRef.current = buildPanResponder(idx);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [idx, steps.length]);
 
         return (
           <RNAnimated.View
@@ -150,22 +178,22 @@ function DraggableStepList({ steps, accentColor, colors, onReorder, onEdit, onDe
             style={[
               styles.stepCard,
               {
-                backgroundColor: isDragging ? colors.surface : colors.surface,
-                borderColor: isDragging ? accentColor : colors.border,
-                transform: isDragging ? [{ translateY: dragY }] : [],
-                zIndex: isDragging ? 100 : 1,
-                elevation: isDragging ? 8 : 0,
-                shadowColor: isDragging ? '#000' : 'transparent',
-                shadowOffset: { width: 0, height: isDragging ? 4 : 0 },
-                shadowOpacity: isDragging ? 0.25 : 0,
-                shadowRadius: isDragging ? 8 : 0,
-                opacity: (hoverIdx !== null && hoverIdx !== idx && draggingIdx !== null && idx === hoverIdx) ? 0.5 : 1,
+                backgroundColor: colors.surface,
+                borderColor: isDragging ? accentColor : isTarget ? accentColor + '60' : colors.border,
+                zIndex: isDragging ? 999 : 1,
+                elevation: isDragging ? 12 : 0,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: isDragging ? 6 : 0 },
+                shadowOpacity: isDragging ? 0.3 : 0,
+                shadowRadius: isDragging ? 10 : 0,
+                opacity: isDragging ? 0.95 : 1,
+                transform: isDragging ? [{ translateY: dragAnim }] : [],
               },
             ]}
           >
-            {/* Drag handle — long-press area */}
-            <View {...panResponder.panHandlers} style={styles.dragHandle}>
-              <IconSymbol name="line.3.horizontal" size={18} color={colors.muted} />
+            {/* ≡ Drag handle — this is what the user grabs */}
+            <View {...panRef.current.panHandlers} style={styles.dragHandle} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+              <IconSymbol name="line.3.horizontal" size={20} color={colors.muted} />
             </View>
 
             {/* Step number badge */}
@@ -173,29 +201,30 @@ function DraggableStepList({ steps, accentColor, colors, onReorder, onEdit, onDe
               <Text style={styles.stepNum}>{idx + 1}</Text>
             </View>
 
-            {/* Tap body to edit */}
-            <Pressable
-              onPress={() => onEdit(step)}
-              style={{ flex: 1 }}
-            >
+            {/* Tap body to configure */}
+            <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
               <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
-                {step.type === 'reminder' ? 'Habit Reminder' : step.type === 'melatonin' ? 'Melatonin' : STEP_TYPE_META[step.type]?.label ?? step.type}
+                {step.type === 'reminder'
+                  ? 'Habit Reminder'
+                  : step.type === 'melatonin'
+                  ? 'Melatonin'
+                  : STEP_TYPE_META[step.type]?.label ?? step.type}
               </Text>
               <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
                 {stepLabel(step) || 'Tap to configure'}
               </Text>
               {step.delayAfterSeconds > 0 && (
                 <Text style={[styles.stepDelay, { color: colors.muted }]}>
-                  {step.delayAfterSeconds}s countdown before
+                  {step.delayAfterSeconds}s delay before
                 </Text>
               )}
             </Pressable>
 
-            {/* Delete button (separated) */}
+            {/* Separator + delete */}
             <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
             <Pressable
               onPress={() => onDelete(step.id)}
-              style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.6 : 1 }]}
+              style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
             >
               <IconSymbol name="trash" size={16} color={colors.error} />
             </Pressable>
@@ -214,7 +243,7 @@ export default function StackEditorScreen() {
   const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [stack, setStack] = useState<RitualStack | null>(null);
+  const [stack, setStack]           = useState<RitualStack | null>(null);
   const [addingStep, setAddingStep] = useState(false);
   const [editingStep, setEditingStep] = useState<RitualStep | null>(null);
 
@@ -280,10 +309,12 @@ export default function StackEditorScreen() {
         <View style={{ width: 44 }} />
       </View>
 
+      {/* ── Scrollable content ── */}
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={true}
+        // Allow scroll only when not dragging — drag handle is outside scroll
+        keyboardShouldPersistTaps="handled"
       >
         {stack.steps.length === 0 ? (
           <View style={[styles.emptyBox, { borderColor: colors.border }]}>
@@ -295,8 +326,13 @@ export default function StackEditorScreen() {
         ) : (
           <>
             <Text style={[styles.dragHint, { color: colors.muted }]}>
-              Hold ≡ and drag to reorder steps
+              Hold ≡ and drag to reorder
             </Text>
+            {/*
+              DraggableStepList is rendered inside the ScrollView here.
+              The drag handle uses PanResponder with onMoveShouldSetPanResponderCapture
+              so it captures the gesture before the ScrollView can claim it.
+            */}
             <DraggableStepList
               steps={stack.steps}
               accentColor={accentColor}
@@ -345,7 +381,11 @@ export default function StackEditorScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.typeLabel, { color: colors.foreground }]}>
-                    {type === 'reminder' ? 'Habit Reminder' : type === 'melatonin' ? 'Melatonin' : STEP_TYPE_META[type]?.label ?? type}
+                    {type === 'reminder'
+                      ? 'Habit Reminder'
+                      : type === 'melatonin'
+                      ? 'Melatonin'
+                      : STEP_TYPE_META[type]?.label ?? type}
                   </Text>
                   <Text style={[styles.typeDesc, { color: colors.muted }]}>
                     {type === 'reminder'
@@ -392,14 +432,12 @@ function StepConfigModal({
   onClose: () => void;
 }) {
   const [config, setConfig] = useState<StepConfig>({ ...step.config });
-  const [delay, setDelay] = useState(String(step.delayAfterSeconds));
+  const [delay, setDelay]   = useState(String(step.delayAfterSeconds));
   const [showLibrary, setShowLibrary] = useState(false);
   const [habits, setHabits] = useState<Habit[]>([]);
 
   useEffect(() => {
-    if (step.type === 'reminder') {
-      loadHabits().then(setHabits);
-    }
+    if (step.type === 'reminder') loadHabits().then(setHabits);
   }, [step.type]);
 
   const libraryTracks: LibraryTrack[] =
@@ -433,7 +471,6 @@ function StepConfigModal({
       <Pressable style={styles.overlay} onPress={onClose} />
       <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.sheetHandle} />
-        {/* Header row */}
         <View style={styles.sheetHeaderRow}>
           <View style={[styles.typeIconWrap, { backgroundColor: accentColor + '20' }]}>
             <IconSymbol name={STEP_ICON[step.type] as any} size={20} color={accentColor} />
@@ -461,7 +498,7 @@ function StepConfigModal({
             </CRow>
           )}
 
-          {/* Stopwatch — no config */}
+          {/* Stopwatch */}
           {step.type === 'stopwatch' && (
             <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
               <IconSymbol name="stopwatch" size={18} color={accentColor} />
@@ -471,7 +508,7 @@ function StepConfigModal({
             </View>
           )}
 
-          {/* Journal — info note */}
+          {/* Journal */}
           {step.type === 'journal' && (
             <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
               <IconSymbol name="book.fill" size={18} color={accentColor} />
@@ -481,7 +518,7 @@ function StepConfigModal({
             </View>
           )}
 
-          {/* Meditation — library picker */}
+          {/* Meditation */}
           {step.type === 'meditation' && (
             <CRow label="Select Meditation" colors={colors}>
               <Pressable
@@ -497,7 +534,7 @@ function StepConfigModal({
             </CRow>
           )}
 
-          {/* Breathwork — library picker */}
+          {/* Breathwork */}
           {step.type === 'breathwork' && (
             <CRow label="Select Breathing Exercise" colors={colors}>
               <Pressable
@@ -513,7 +550,7 @@ function StepConfigModal({
             </CRow>
           )}
 
-          {/* Priming — library picker */}
+          {/* Priming */}
           {step.type === 'priming' && (
             <CRow label="Select Priming Session" colors={colors}>
               <Pressable
@@ -529,7 +566,7 @@ function StepConfigModal({
             </CRow>
           )}
 
-          {/* Affirmations — info */}
+          {/* Affirmations */}
           {step.type === 'affirmations' && (
             <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
               <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
@@ -539,12 +576,14 @@ function StepConfigModal({
             </View>
           )}
 
-          {/* Habit Reminder — pick from habits list + countdown */}
+          {/* Habit Reminder */}
           {step.type === 'reminder' && (
             <>
               <CRow label="Habit" colors={colors}>
                 {habits.length === 0 ? (
-                  <Text style={[styles.infoText, { color: colors.muted }]}>No habits found. Add habits in Manage Goals first.</Text>
+                  <Text style={[styles.infoText, { color: colors.muted }]}>
+                    No habits found. Add habits in Manage Goals first.
+                  </Text>
                 ) : (
                   <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
                     {habits.map((h) => {
@@ -585,7 +624,7 @@ function StepConfigModal({
             </>
           )}
 
-          {/* Melatonin — reminder with countdown */}
+          {/* Melatonin */}
           {step.type === 'melatonin' && (
             <>
               <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
@@ -607,7 +646,7 @@ function StepConfigModal({
             </>
           )}
 
-          {/* Motivational — genre picker */}
+          {/* Motivational */}
           {step.type === 'motivational' && (
             <>
               <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
@@ -623,7 +662,7 @@ function StepConfigModal({
                       key={g}
                       onPress={() => setConfig({ ...config, motivationalGenre: g })}
                       style={({ pressed }) => [{
-                        flexDirection: 'row', alignItems: 'center', gap: 10,
+                        flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
                         padding: 12, borderRadius: 10,
                         backgroundColor: config.motivationalGenre === g ? accentColor + '20' : colors.surface,
                         borderWidth: 1,
@@ -719,7 +758,11 @@ function StepConfigModal({
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeaderRow}>
               <Text style={[styles.sheetTitle, { color: colors.foreground, flex: 1, textAlign: 'left', marginBottom: 0 }]}>
-                {step.type === 'meditation' ? 'Meditations' : step.type === 'breathwork' ? 'Breathing Exercises' : 'Priming Sessions'}
+                {step.type === 'meditation'
+                  ? 'Meditations'
+                  : step.type === 'breathwork'
+                  ? 'Breathing Exercises'
+                  : 'Priming Sessions'}
               </Text>
               <Pressable onPress={() => setShowLibrary(false)} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1, padding: 4 }]}>
                 <IconSymbol name="xmark" size={20} color={colors.muted} />
@@ -765,7 +808,11 @@ function StepConfigModal({
 
 // ─── Config Row Helper ────────────────────────────────────────────────────────
 
-function CRow({ label, children, colors }: { label: string; children: React.ReactNode; colors: ReturnType<typeof useColors> }) {
+function CRow({ label, children, colors }: {
+  label: string;
+  children: React.ReactNode;
+  colors: ReturnType<typeof useColors>;
+}) {
   return (
     <View style={styles.cRow}>
       <Text style={[styles.cLabel, { color: colors.muted }]}>{label}</Text>
@@ -786,16 +833,28 @@ const styles = StyleSheet.create({
   headerBtn: { padding: 8, width: 44, alignItems: 'center' },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', textAlign: 'center' },
   dragHint: { fontSize: 12, textAlign: 'center', marginBottom: 10 },
-  emptyBox: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 32, alignItems: 'center', gap: 12, marginBottom: 16 },
+  emptyBox: {
+    borderWidth: 1, borderStyle: 'dashed', borderRadius: 14,
+    padding: 32, alignItems: 'center', gap: 12, marginBottom: 16,
+  },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
-  // Step card
+  // Step cards
   stepCard: {
-    borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 10,
+    borderRadius: 14, borderWidth: 1,
+    paddingVertical: 12, paddingHorizontal: 10,
     marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8,
+    minHeight: CARD_HEIGHT,
   },
-  dragHandle: { padding: 8, justifyContent: 'center', alignItems: 'center' },
-  stepNumBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  dragHandle: {
+    padding: 8, justifyContent: 'center', alignItems: 'center',
+    // Larger hit area so it's easy to grab
+    minWidth: 36, minHeight: 44,
+  },
+  stepNumBadge: {
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
   stepNum: { color: '#fff', fontSize: 11, fontWeight: '800' },
   stepTypeLabel: { fontSize: 11, fontWeight: '500', marginBottom: 1 },
   stepDetail: { fontSize: 14, fontWeight: '700' },
@@ -813,15 +872,25 @@ const styles = StyleSheet.create({
   addBtnText: { fontSize: 15, fontWeight: '700' },
   maxNote: { textAlign: 'center', fontSize: 13, marginBottom: 16 },
 
-  // Modals
+  // Modals / sheets
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 16, maxHeight: '85%' },
-  sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.35)', alignSelf: 'center', marginBottom: 12 },
+  sheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 12, paddingHorizontal: 16, maxHeight: '85%',
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(128,128,128,0.35)',
+    alignSelf: 'center', marginBottom: 12,
+  },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   sheetTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
 
-  // Step type picker rows
-  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  // Step type picker
+  typeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   typeIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   typeLabel: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   typeDesc: { fontSize: 12 },
@@ -834,19 +903,31 @@ const styles = StyleSheet.create({
   inputHint: { fontSize: 11 },
 
   // Info box
-  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16 },
+  infoBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16,
+  },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
 
   // Library picker
-  libraryPickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  libraryPickerBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+  },
   libraryPickerText: { flex: 1, fontSize: 14 },
-  libraryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
+  libraryRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10,
+  },
   libraryTitle: { fontSize: 14, fontWeight: '700' },
   libraryArtist: { fontSize: 12, marginTop: 1 },
   libraryDuration: { fontSize: 12 },
 
-  // Habit picker rows
-  habitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6 },
+  // Habit picker
+  habitRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6,
+  },
   habitRowText: { fontSize: 14, fontWeight: '600', flex: 1 },
 
   // Save button
