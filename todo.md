@@ -1510,3 +1510,10 @@
 - [x] Fix journal editor — photos now embed inline at cursor position (not in bottom strip)
 - [x] Fix journal editor — photo button moved to right side of keyboard toolbar
 - [x] Fix journal editor — no auto-focus on open; user sees full view with photos before typing
+
+- [x] Fix: AM/PM wheel column overflows below hour/minute — reduce visible rows or match heights
+- [x] Fix: Journal calendar modal X button too high (behind status bar) — move inside safe area with explicit insets.top
+- [x] Fix: Journal calendar modal slow to open — converted to FlatList with getItemLayout + initialScrollIndex
+- [x] Fix: Journal top bar — replaced fire icon (left) with "List" text button opening all-entries sheet
+- [x] Fix: Journal top bar — replaced calendar widget icon (right) with "Calendar" text button
+- [x] Feature: Home screen — added fire streak icon + journal entry count badge next to profile picture

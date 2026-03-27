@@ -10,6 +10,10 @@
  * - onMomentumScrollEnd fires after snap to read the selected index
  * - Haptic tick on every item change
  * - LinearGradient fade masks + selection band for iOS look
+ *
+ * AM/PM fix: the period column uses visibleRows=3 so it doesn't overflow
+ * below the hour/minute columns. All columns share the same container height
+ * (PICKER_H = ITEM_H * 5) so the selection band aligns across all three.
  */
 
 import React, {
@@ -35,9 +39,9 @@ import { useColors } from '@/hooks/use-colors';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ITEM_H   = 50;   // height of each row
-const VISIBLE  = 5;    // rows visible at once (must be odd)
-const PICKER_H = ITEM_H * VISIBLE;
-const PAD      = ITEM_H * Math.floor(VISIBLE / 2); // top/bottom padding to center first/last item
+const VISIBLE  = 5;    // rows visible at once for hour/minute (must be odd)
+const PICKER_H = ITEM_H * VISIBLE;  // shared container height for all columns
+const PAD      = ITEM_H * Math.floor(VISIBLE / 2); // padding for 5-row columns
 
 // Number of list repetitions — 3 is enough for a smooth infinite feel
 const N_REPEAT = 3;
@@ -52,6 +56,12 @@ interface ColumnProps {
   accentColor?: string;
   /** Background color for gradient masks (must match parent bg) */
   bgColor: string;
+  /**
+   * Number of visible rows in this column. Defaults to VISIBLE (5).
+   * Use a smaller value (e.g. 3) for short lists like AM/PM so the
+   * column doesn't overflow the shared container height.
+   */
+  visibleRows?: number;
 }
 
 export function WheelColumn({
@@ -61,6 +71,7 @@ export function WheelColumn({
   width,
   accentColor,
   bgColor,
+  visibleRows = VISIBLE,
 }: ColumnProps) {
   const colors  = useColors();
   const count   = items.length;
@@ -68,6 +79,10 @@ export function WheelColumn({
   const scrollRef = useRef<ScrollView>(null);
   const lastEmitted = useRef(selectedIndex);
   const [visibleIndex, setVisibleIndex] = useState(selectedIndex);
+
+  // Per-column sizing
+  const colH = ITEM_H * visibleRows;
+  const pad  = ITEM_H * Math.floor(visibleRows / 2);
 
   // Build repeated list
   const repeated = useMemo(() => {
@@ -94,7 +109,6 @@ export function WheelColumn({
   useEffect(() => {
     const flat = midFlatIndex(selectedIndex);
     const offset = offsetFor(flat);
-    // Use a short timeout so the ScrollView has laid out before we scroll
     const t = setTimeout(() => {
       scrollRef.current?.scrollTo({ y: offset, animated: false });
     }, 50);
@@ -149,101 +163,105 @@ export function WheelColumn({
     [count, visibleIndex],
   );
 
+  const fadeH = ITEM_H * Math.floor(visibleRows / 2);
+
   return (
-    <View style={{ width, height: PICKER_H, overflow: 'hidden' }}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_H}
-        decelerationRate="fast"
-        scrollEventThrottle={16}
-        onScroll={handleScroll}
-        onMomentumScrollEnd={handleScrollEnd}
-        onScrollEndDrag={handleScrollEnd}
-        nestedScrollEnabled
-        contentContainerStyle={{ paddingTop: PAD, paddingBottom: PAD }}
-        // Disable bouncing so it doesn't fly past the ends
-        bounces={false}
-        overScrollMode="never"
-      >
-        {repeated.map((label, idx) => {
-          const realIdx = idx % count;
-          const isSelected = realIdx === visibleIndex;
-          const dist = Math.abs(realIdx - visibleIndex);
-          // Also check wrap-around distance
-          const wrapDist = Math.min(dist, count - dist);
+    // Outer view is PICKER_H tall so all columns share the same container height.
+    // The inner clip view is colH tall and centered vertically.
+    <View style={{ width, height: PICKER_H, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width, height: colH, overflow: 'hidden' }}>
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          snapToInterval={ITEM_H}
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          onScroll={handleScroll}
+          onMomentumScrollEnd={handleScrollEnd}
+          onScrollEndDrag={handleScrollEnd}
+          nestedScrollEnabled
+          contentContainerStyle={{ paddingTop: pad, paddingBottom: pad }}
+          bounces={false}
+          overScrollMode="never"
+        >
+          {repeated.map((label, idx) => {
+            const realIdx = idx % count;
+            const isSelected = realIdx === visibleIndex;
+            const dist = Math.abs(realIdx - visibleIndex);
+            const wrapDist = Math.min(dist, count - dist);
 
-          let fontSize: number;
-          let fontWeight: '700' | '500' | '400' | '300';
-          let opacity: number;
-          let color: string;
+            let fontSize: number;
+            let fontWeight: '700' | '500' | '400' | '300';
+            let opacity: number;
+            let color: string;
 
-          if (isSelected) {
-            fontSize   = 28;
-            fontWeight = '700';
-            opacity    = 1;
-            color      = accent;
-          } else if (wrapDist === 1) {
-            fontSize   = 20;
-            fontWeight = '400';
-            opacity    = 0.5;
-            color      = colors.muted;
-          } else if (wrapDist === 2) {
-            fontSize   = 15;
-            fontWeight = '300';
-            opacity    = 0.2;
-            color      = colors.muted;
-          } else {
-            fontSize   = 12;
-            fontWeight = '300';
-            opacity    = 0.05;
-            color      = colors.muted;
-          }
+            if (isSelected) {
+              fontSize   = 28;
+              fontWeight = '700';
+              opacity    = 1;
+              color      = accent;
+            } else if (wrapDist === 1) {
+              fontSize   = 20;
+              fontWeight = '400';
+              opacity    = 0.5;
+              color      = colors.muted;
+            } else if (wrapDist === 2) {
+              fontSize   = 15;
+              fontWeight = '300';
+              opacity    = 0.2;
+              color      = colors.muted;
+            } else {
+              fontSize   = 12;
+              fontWeight = '300';
+              opacity    = 0.05;
+              color      = colors.muted;
+            }
 
-          return (
-            <View key={idx} style={[styles.item, { height: ITEM_H, width }]}>
-              <Text
-                style={{
-                  fontSize,
-                  fontWeight,
-                  opacity,
-                  color,
-                  letterSpacing: 0.5,
-                }}
-                numberOfLines={1}
-              >
-                {label}
-              </Text>
-            </View>
-          );
-        })}
-      </ScrollView>
+            return (
+              <View key={idx} style={[styles.item, { height: ITEM_H, width }]}>
+                <Text
+                  style={{
+                    fontSize,
+                    fontWeight,
+                    opacity,
+                    color,
+                    letterSpacing: 0.5,
+                  }}
+                  numberOfLines={1}
+                >
+                  {label}
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
 
-      {/* Selection band — hairline rules around center row */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.selectionBand,
-          {
-            top:         PAD,
-            height:      ITEM_H,
-            borderColor: colors.border,
-          },
-        ]}
-      />
+        {/* Selection band — hairline rules around center row */}
+        <View
+          pointerEvents="none"
+          style={[
+            styles.selectionBand,
+            {
+              top:         pad,
+              height:      ITEM_H,
+              borderColor: colors.border,
+            },
+          ]}
+        />
 
-      {/* Top fade */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[bgColor, bgColor + 'E0', bgColor + '00']}
-        style={[styles.fadeMask, { top: 0 }]}
-      />
-      {/* Bottom fade */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[bgColor + '00', bgColor + 'E0', bgColor]}
-        style={[styles.fadeMask, { bottom: 0 }]}
-      />
+        {/* Top fade */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={[bgColor, bgColor + 'E0', bgColor + '00']}
+          style={[styles.fadeMask, { top: 0, height: fadeH }]}
+        />
+        {/* Bottom fade */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={[bgColor + '00', bgColor + 'E0', bgColor]}
+          style={[styles.fadeMask, { bottom: 0, height: fadeH }]}
+        />
+      </View>
     </View>
   );
 }
@@ -322,6 +340,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           width={hourW}
           accentColor={colors.foreground}
           bgColor={bgColor}
+          visibleRows={5}
         />
         <WheelColumn
           items={MINUTES}
@@ -330,7 +349,9 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           width={minuteW}
           accentColor={colors.foreground}
           bgColor={bgColor}
+          visibleRows={5}
         />
+        {/* AM/PM: only 2 items, use visibleRows=3 so it doesn't overflow */}
         <WheelColumn
           items={PERIODS}
           selectedIndex={periodIdx}
@@ -338,6 +359,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           width={periodW}
           accentColor={colors.primary}
           bgColor={bgColor}
+          visibleRows={3}
         />
       </View>
     </View>
@@ -345,8 +367,6 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
-const FADE_H = ITEM_H * 2;
 
 const styles = StyleSheet.create({
   container: {
@@ -356,6 +376,7 @@ const styles = StyleSheet.create({
   columns: {
     flexDirection: 'row',
     height:        PICKER_H,
+    alignItems:    'center',
   },
   item: {
     alignItems:     'center',
@@ -374,7 +395,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left:     0,
     right:    0,
-    height:   FADE_H,
   },
   colonWrap: {
     position:       'absolute',

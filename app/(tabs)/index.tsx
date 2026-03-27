@@ -969,6 +969,8 @@ export default function HomeScreen() {
 
   // Track whether the user already completed a journal/check-in for yesterday
   const [hasYesterdayEntry, setHasYesterdayEntry] = useState(false);
+  const [journalEntryCount, setJournalEntryCount] = useState(0);
+  const [journalStreak, setJournalStreak] = useState(0);
 
   // Reload on every screen focus so it stays fresh after the user does their check-in
   useFocusEffect(
@@ -978,6 +980,23 @@ export default function HomeScreen() {
         const loaded = await loadEntries(uid || 'default');
         const yest = yesterdayString();
         setHasYesterdayEntry(loaded.some((e) => e.date === yest));
+        setJournalEntryCount(loaded.length);
+        // Compute journal streak (consecutive days with at least one entry)
+        const dateSet = new Set(loaded.map((e) => e.date));
+        const todayStr = todayDateStr();
+        const ystStr = yest;
+        let jStreak = 0;
+        if (dateSet.has(todayStr) || dateSet.has(ystStr)) {
+          const anchor = dateSet.has(todayStr) ? new Date() : new Date(ystStr + 'T12:00:00');
+          const check = new Date(anchor);
+          while (true) {
+            const s = `${check.getFullYear()}-${String(check.getMonth()+1).padStart(2,'0')}-${String(check.getDate()).padStart(2,'0')}`;
+            if (!dateSet.has(s)) break;
+            jStreak++;
+            check.setDate(check.getDate() - 1);
+          }
+        }
+        setJournalStreak(jStreak);
       })();
     }, [])
   );
@@ -1127,6 +1146,24 @@ export default function HomeScreen() {
                 }]}
               >
                 <IconSymbol name="list.bullet" size={18} color={colors.foreground} />
+              </Pressable>
+              {/* Journal fire streak + entry count badge */}
+              <Pressable
+                onPress={() => router.push('/(tabs)/journal' as never)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', gap: 4,
+                  backgroundColor: '#F59E0B18', borderRadius: 12,
+                  paddingHorizontal: 8, paddingVertical: 5,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <IconSymbol name="flame.fill" size={16} color="#F59E0B" />
+                {journalStreak > 0 && (
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#F59E0B' }}>{journalStreak}</Text>
+                )}
+                <Text style={{ fontSize: 12, fontWeight: '500', color: '#F59E0B', opacity: 0.8 }}>
+                  {journalEntryCount} {journalEntryCount === 1 ? 'entry' : 'entries'}
+                </Text>
               </Pressable>
               <ProfileAvatar
                 uri={profilePicUri}

@@ -1979,24 +1979,43 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
   }, [calEntries]);
 
   const CELL_GAP = 2;
-  const containerPadding = 24; // reduced from 40 to prevent Saturday column cutoff
+  const containerPadding = 24;
   const cellWidth = Math.floor(((winWidth > 0 ? winWidth : 390) - containerPadding - CELL_GAP * 6) / 7);
   const cellHeight = cellWidth;
 
-  const scrollRef = useRef<ScrollView>(null);
-  const [didScroll, setDidScroll] = useState(false);
-  const monthOffsets = useRef<number[]>([]);
+  // Estimate month item height for FlatList getItemLayout (avoids measuring all items)
+  // Each month: header ~36px + day-labels row ~20px + rows * (cellHeight + gap) + marginBottom 8
+  const estimateMonthH = useCallback((month: number, year: number) => {
+    const days = jcGetMonthDays(year, month);
+    const first = jcGetFirstDay(year, month);
+    const totalCells = first + days;
+    const numRows = Math.ceil(totalCells / 7);
+    return 36 + 20 + numRows * (cellHeight + CELL_GAP) + 8;
+  }, [cellHeight]);
 
-  useEffect(() => {
-    if (!didScroll && todayMonthIndex >= 0 && monthOffsets.current[todayMonthIndex] != null) {
-      scrollRef.current?.scrollTo({ y: monthOffsets.current[todayMonthIndex], animated: false });
-      setDidScroll(true);
+  // Precompute cumulative offsets for getItemLayout
+  const itemOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let acc = 0;
+    for (const { year, month } of months) {
+      offsets.push(acc);
+      acc += estimateMonthH(month, year);
     }
-  }, [didScroll, todayMonthIndex]);
+    return offsets;
+  }, [months, estimateMonthH]);
 
-  return (
-    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={fullScreen ? { flex: 1 } : { maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 12 }}>
-      {months.map(({ year, month }, monthIndex) => {
+  const flatRef = useRef<FlatList>(null);
+  useEffect(() => {
+    if (todayMonthIndex >= 0) {
+      // Small delay to let FlatList mount
+      const t = setTimeout(() => {
+        flatRef.current?.scrollToIndex({ index: todayMonthIndex, animated: false, viewOffset: 0 });
+      }, 80);
+      return () => clearTimeout(t);
+    }
+  }, [todayMonthIndex]);
+
+  const renderMonth = useCallback(({ item: { year, month } }: { item: { year: number; month: number } }) => {
         const daysInMonth = jcGetMonthDays(year, month);
         const firstDay = jcGetFirstDay(year, month);
         const cells: (number | null)[] = [];
@@ -2006,13 +2025,7 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
         const rows: (number | null)[][] = [];
         for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
         return (
-          <View key={`${year}-${month}`} onLayout={(e) => {
-            monthOffsets.current[monthIndex] = e.nativeEvent.layout.y;
-            if (monthIndex === todayMonthIndex && !didScroll) {
-              scrollRef.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
-              setDidScroll(true);
-            }
-          }} style={{ marginBottom: 8 }}>
+          <View key={`${year}-${month}`} style={{ marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, paddingTop: 12, paddingBottom: 6 }}>
               <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{JC_MONTH_NAMES[month - 1]}</Text>
               <Text style={{ fontSize: 12, fontWeight: '500', color: colors.muted }}>{year}</Text>
@@ -2064,10 +2077,106 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
             ))}
           </View>
         );
-      })}
-    </ScrollView>
+  }, [entryMap, todayStr, cellWidth, cellHeight, CELL_GAP, colors, onDayPress]);
+
+  if (fullScreen) {
+    return (
+      <FlatList
+        ref={flatRef}
+        data={months}
+        keyExtractor={({ year, month }) => `${year}-${month}`}
+        renderItem={renderMonth}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 12 }}
+        getItemLayout={(_, index) => ({
+          length: estimateMonthH(months[index].month, months[index].year),
+          offset: itemOffsets[index] ?? 0,
+          index,
+        })}
+        initialScrollIndex={todayMonthIndex >= 0 ? todayMonthIndex : 0}
+        onScrollToIndexFailed={() => {
+          // Fallback: scroll after a short delay
+          setTimeout(() => {
+            flatRef.current?.scrollToIndex({ index: todayMonthIndex, animated: false });
+          }, 300);
+        }}
+        windowSize={5}
+        maxToRenderPerBatch={3}
+        initialNumToRender={4}
+        removeClippedSubviews
+      />
+    );
+  }
+
+  return (
+    <FlatList
+      data={months}
+      keyExtractor={({ year, month }) => `${year}-${month}`}
+      renderItem={renderMonth}
+      showsVerticalScrollIndicator={false}
+      style={{ maxHeight: 500 }}
+      contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 12 }}
+      windowSize={3}
+      maxToRenderPerBatch={2}
+      initialNumToRender={2}
+      removeClippedSubviews
+    />
   );
 }
+// ─── CalendarModalContent ────────────────────────────────────────────────────
+// Wrapper for the full-screen calendar modal that uses useSafeAreaInsets
+// directly so the header and X button always clear the Dynamic Island / notch.
+function CalendarModalContent({
+  colors,
+  entries: calEntries,
+  onClose,
+  onDayPress,
+}: {
+  colors: any;
+  entries: JournalEntry[];
+  onClose: () => void;
+  onDayPress: (dateStr: string) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header with explicit top inset so X clears notch/Dynamic Island */}
+      <View
+        style={[
+          dvStyles.pickerHeader,
+          {
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surface,
+            paddingTop: Math.max(insets.top, 16),
+          },
+        ]}
+      >
+        <View style={{ width: 40 }} />
+        <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
+        <Pressable
+          onPress={onClose}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.5 : 1,
+            width: 44,
+            height: 44,
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            paddingRight: 4,
+          })}
+        >
+          <IconSymbol name="xmark" size={22} color={colors.foreground} />
+        </Pressable>
+      </View>
+      <JournalCalendarView
+        colors={colors}
+        entries={calEntries}
+        fullScreen
+        onDayPress={onDayPress}
+      />
+    </View>
+  );
+}
+
 // ─── RichTextEditor ────────────────────────────────────────────────────────────────────────────────────
 // Single seamless TextInput — no title/body split.
 // When focused: raw text is editable. When blurred: styled preview renders markdown visually.
@@ -2810,6 +2919,7 @@ export default function JournalScreen() {
   const pickerTempDate = useRef(selectedDate);
   const { habits, checkIns, categories, submitCheckIn, streak } = useApp();
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
+  const [listModalVisible, setListModalVisible] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goDay = useCallback((delta: number) => {
@@ -3373,13 +3483,12 @@ export default function JournalScreen() {
     <ScreenContainer edges={['left', 'right']} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
       <View style={[dvStyles.header, { paddingTop: insets.top + 4 }]}>
-        {/* Fire streak icon — left */}
+        {/* List button — left */}
         <Pressable
-          onPress={() => {}}
-          style={({ pressed }) => [dvStyles.navBtn, { flexDirection: 'row', alignItems: 'center', gap: 3, opacity: pressed ? 0.7 : 1 }]}
+          onPress={() => setListModalVisible(true)}
+          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
-          <IconSymbol name="flame.fill" size={20} color="#F59E0B" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#F59E0B' }}>{streak}</Text>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>List</Text>
         </Pressable>
 
         {/* Day nav: left arrow + label + right arrow */}
@@ -3416,12 +3525,12 @@ export default function JournalScreen() {
           </Pressable>
         </View>
 
-        {/* Calendar icon — right */}
+        {/* Calendar button — right */}
         <Pressable
           onPress={() => setCalendarModalVisible(true)}
           style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
-          <IconSymbol name="calendar" size={22} color={colors.primary} />
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Calendar</Text>
         </Pressable>
       </View>
 
@@ -3950,6 +4059,41 @@ export default function JournalScreen() {
         </>
       )}
 
+      {/* ── List Modal ── */}
+      <Modal
+        visible={listModalVisible}
+        animationType="slide"
+        onRequestClose={() => setListModalVisible(false)}
+        presentationStyle="pageSheet"
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Header */}
+          <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+            <View style={{ width: 40 }} />
+            <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>All Entries</Text>
+            <Pressable
+              onPress={() => setListModalVisible(false)}
+              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 4 })}
+            >
+              <IconSymbol name="xmark" size={22} color={colors.foreground} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <JournalListTab
+              entries={entries}
+              colors={colors}
+              onDelete={async (id) => {
+                await handleDeleteEntry(id);
+              }}
+              onEdit={(entry) => {
+                setListModalVisible(false);
+                openEditEntry(entry);
+              }}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+
       {/* ── Calendar Modal ── */}
       <Modal
         visible={calendarModalVisible}
@@ -3957,26 +4101,15 @@ export default function JournalScreen() {
         onRequestClose={() => setCalendarModalVisible(false)}
         presentationStyle="fullScreen"
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top', 'left', 'right', 'bottom']}>
-          {/* Header inside SafeAreaView so X button clears Dynamic Island / notch */}
-          <View style={[dvStyles.pickerHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
-            <View style={{ width: 40 }} />
-            <Text style={[dvStyles.pickerTitle, { color: colors.foreground }]}>Calendar</Text>
-            <Pressable onPress={() => setCalendarModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 4 })}>
-              <IconSymbol name="xmark" size={22} color={colors.foreground} />
-            </Pressable>
-          </View>
-          {/* Calendar fills remaining space with no maxHeight constraint */}
-          <JournalCalendarView
-            colors={colors}
-            entries={entries}
-            fullScreen
-            onDayPress={(dateStr) => {
-              setSelectedDate(dateStr);
-              setCalendarModalVisible(false);
-            }}
-          />
-        </SafeAreaView>
+        <CalendarModalContent
+          colors={colors}
+          entries={entries}
+          onClose={() => setCalendarModalVisible(false)}
+          onDayPress={(dateStr) => {
+            setSelectedDate(dateStr);
+            setCalendarModalVisible(false);
+          }}
+        />
       </Modal>
 
       {/* ── Date Picker Bottom Sheet ── */}
