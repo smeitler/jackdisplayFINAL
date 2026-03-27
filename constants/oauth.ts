@@ -45,7 +45,7 @@ export function getApiBaseUrl(): string {
   // Native (Expo Go) fallback — use the current sandbox public URL
   // This is the only way native can reach the backend without a baked-in env var
   if (ReactNative.Platform.OS !== "web") {
-    return "https://3000-iuc7exgd4mzfj29y5qtky-a7ce3332.us2.manus.computer";
+    return "https://3000-ipdzewvi1uvuqb695kcjx-7ec38a38.us1.manus.computer";
   }
 
   // Fallback to empty (will use relative URL)
