@@ -1586,3 +1586,4 @@
 - [x] Stacks: add Spiritual Message step type
 - [x] Stack player: render Motivational Message and Spiritual Message steps (show quote full-screen, tap to continue)
 - [x] Stack widgets: increase "Wake Up Stack" / "Sleep Stack" title font size to be much larger
+- [x] Stack widgets: full visual redesign — subtle tinted background (no border), large bare icon, bold large title, muted dot-separated step list, generous padding, minimal/sexy aesthetic
