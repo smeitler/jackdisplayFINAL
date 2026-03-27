@@ -1569,3 +1569,7 @@
 - [x] Stack editor: back button clipped under notch — fix safe area padding
 - [x] Home widget: step list shows plain words only (no icons), lighter font weight, subtle color
 - [x] Home widget: icon fills more of the left side (larger, no wasted space)
+
+- [x] Stack editor: redesign step cards (drag handle left, cleaner layout, separated delete, smart placeholder text)
+- [x] Stack editor: Journal step opens in-app journal entry (manual or voice)
+- [x] Stack editor: Reminder step renamed "Habit Reminder", picks from habits list

@@ -2,6 +2,13 @@
  * Stack Editor Screen
  * Add, remove, reorder, and configure ritual steps for a stack.
  * Up to 5 steps per stack. No emojis — icons only throughout.
+ *
+ * Design:
+ *  - Clean step cards: number badge left, type label + detail, edit tap on card body, delete far right
+ *  - Up/down reorder arrows kept for simplicity (long-press drag requires GestureHandler setup)
+ *  - "Add Step" is a solid subtle row, not dashed
+ *  - Journal step → navigates to /alarm-journal (manual or voice)
+ *  - Reminder step → renamed "Habit Reminder", picks from habits list
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -19,10 +26,11 @@ import {
   stepLabel, STEP_TYPE_META,
   type RitualStack, type RitualStep, type StepType, type StepConfig,
 } from '@/lib/stacks';
+import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
 
-// ─── Step type icon map (no emojis) ──────────────────────────────────────────
+// ─── Step type icon map (SF Symbols → Material Icons via icon-symbol.tsx) ──────
 
 const STEP_ICON: Record<StepType, string> = {
   timer:        'timer',
@@ -41,33 +49,33 @@ const STEP_TYPES: StepType[] = [
   'journal', 'affirmations', 'priming', 'reminder', 'custom',
 ];
 
-// ─── Audio library data (from wellness-audio catalog) ────────────────────────
+// ─── Audio library data (mirrors wellness-audio catalog) ─────────────────────
 
 interface LibraryTrack { id: string; title: string; artist: string; duration: string; }
 
 const MEDITATION_TRACKS: LibraryTrack[] = [
-  { id: 'med-1', title: 'Meditation',         artist: 'FreeMusicForVideo', duration: '1:27' },
-  { id: 'med-2', title: 'Peaceful Zen Garden',artist: 'Ambient Sounds',    duration: '3:00' },
-  { id: 'med-3', title: 'Deep Calm',           artist: 'Relaxation Music',  duration: '2:30' },
-  { id: 'med-4', title: 'Morning Mindset',     artist: 'Mindful Start',     duration: '5:00' },
-  { id: 'med-5', title: 'Anxiety Release',     artist: 'Calm Mind',         duration: '8:00' },
-  { id: 'med-6', title: 'Body Scan',           artist: 'Deep Rest',         duration: '15:00' },
-  { id: 'med-7', title: 'Confidence Builder',  artist: 'Inner Power',       duration: '6:00' },
-  { id: 'med-8', title: 'Anger Cooldown',      artist: 'Emotional Balance', duration: '4:00' },
+  { id: 'med-1', title: 'Meditation',          artist: 'FreeMusicForVideo', duration: '1:27' },
+  { id: 'med-2', title: 'Peaceful Zen Garden', artist: 'Ambient Sounds',    duration: '3:00' },
+  { id: 'med-3', title: 'Deep Calm',            artist: 'Relaxation Music',  duration: '2:30' },
+  { id: 'med-4', title: 'Morning Mindset',      artist: 'Mindful Start',     duration: '5:00' },
+  { id: 'med-5', title: 'Anxiety Release',      artist: 'Calm Mind',         duration: '8:00' },
+  { id: 'med-6', title: 'Body Scan',            artist: 'Deep Rest',         duration: '15:00' },
+  { id: 'med-7', title: 'Confidence Builder',   artist: 'Inner Power',       duration: '6:00' },
+  { id: 'med-8', title: 'Anger Cooldown',       artist: 'Emotional Balance', duration: '4:00' },
 ];
 
 const BREATHWORK_TRACKS: LibraryTrack[] = [
-  { id: 'bw-box',     title: 'Box Breathing',      artist: '4-4-4-4 pattern',  duration: '5:00' },
-  { id: 'bw-478',     title: '4-7-8 Breathing',    artist: 'Relaxation breath', duration: '4:00' },
-  { id: 'bw-wimhof',  title: 'Wim Hof Method',     artist: '3 rounds',          duration: '8:00' },
-  { id: 'bw-coherent',title: 'Coherent Breathing',  artist: '5-5 pattern',       duration: '6:00' },
+  { id: 'bw-box',      title: 'Box Breathing',     artist: '4-4-4-4 pattern',   duration: '5:00' },
+  { id: 'bw-478',      title: '4-7-8 Breathing',   artist: 'Relaxation breath',  duration: '4:00' },
+  { id: 'bw-wimhof',   title: 'Wim Hof Method',    artist: '3 rounds',           duration: '8:00' },
+  { id: 'bw-coherent', title: 'Coherent Breathing', artist: '5-5 pattern',        duration: '6:00' },
 ];
 
 const PRIMING_TRACKS: LibraryTrack[] = [
-  { id: 'prm-1', title: 'Morning Priming',      artist: 'Tony Robbins style', duration: '10:00' },
-  { id: 'prm-2', title: 'Gratitude Priming',    artist: 'Visualization',      duration: '8:00' },
-  { id: 'prm-3', title: 'Power Visualization',  artist: 'Goal activation',    duration: '12:00' },
-  { id: 'prm-4', title: 'Evening Reflection',   artist: 'Wind-down priming',  duration: '7:00' },
+  { id: 'prm-1', title: 'Morning Priming',     artist: 'Tony Robbins style', duration: '10:00' },
+  { id: 'prm-2', title: 'Gratitude Priming',   artist: 'Visualization',      duration: '8:00' },
+  { id: 'prm-3', title: 'Power Visualization', artist: 'Goal activation',    duration: '12:00' },
+  { id: 'prm-4', title: 'Evening Reflection',  artist: 'Wind-down priming',  duration: '7:00' },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -139,7 +147,7 @@ export default function StackEditorScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Header — inside safe area */}
+      {/* Header — safely below notch */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -164,61 +172,73 @@ export default function StackEditorScreen() {
           </View>
         ) : (
           stack.steps.map((step, idx) => (
-            <View
+            <Pressable
               key={step.id}
-              style={[styles.stepCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => setEditingStep(step)}
+              style={({ pressed }) => [
+                styles.stepCard,
+                { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+              ]}
             >
-              {/* Step number badge */}
+              {/* Left: step number */}
               <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
                 <Text style={styles.stepNum}>{idx + 1}</Text>
               </View>
 
-              {/* Step icon */}
-              <View style={[styles.stepIconWrap, { backgroundColor: accentColor + '18' }]}>
-                <IconSymbol name={STEP_ICON[step.type] as any} size={18} color={accentColor} />
-              </View>
-
-              {/* Step info */}
+              {/* Center: type label + detail */}
               <View style={{ flex: 1 }}>
                 <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
-                  {STEP_TYPE_META[step.type].label}
+                  {step.type === 'reminder' ? 'Habit Reminder' : STEP_TYPE_META[step.type].label}
                 </Text>
                 <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
-                  {stepLabel(step)}
+                  {step.type === 'journal'
+                    ? (step.config.customLabel || 'Journal Entry')
+                    : stepLabel(step) || 'Tap to configure'}
                 </Text>
                 {step.delayAfterSeconds > 0 && (
                   <Text style={[styles.stepDelay, { color: colors.muted }]}>
-                    {step.delayAfterSeconds}s delay before
+                    {step.delayAfterSeconds}s countdown before
                   </Text>
                 )}
               </View>
 
-              {/* Actions */}
+              {/* Right: reorder + delete (visually separated) */}
               <View style={styles.stepActions}>
-                <Pressable onPress={() => setEditingStep(step)} style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="pencil" size={16} color={colors.muted} />
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); moveStep(step.id, 'up'); }}
+                  disabled={idx === 0}
+                  style={({ pressed }) => [styles.actionBtn, { opacity: idx === 0 ? 0.2 : pressed ? 0.6 : 1 }]}
+                >
+                  <IconSymbol name="arrow.up" size={15} color={colors.muted} />
                 </Pressable>
-                <Pressable onPress={() => moveStep(step.id, 'up')} disabled={idx === 0}
-                  style={({ pressed }) => [styles.actionBtn, { opacity: idx === 0 ? 0.2 : pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="arrow.up" size={16} color={colors.muted} />
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); moveStep(step.id, 'down'); }}
+                  disabled={idx === stack.steps.length - 1}
+                  style={({ pressed }) => [styles.actionBtn, { opacity: idx === stack.steps.length - 1 ? 0.2 : pressed ? 0.6 : 1 }]}
+                >
+                  <IconSymbol name="arrow.down" size={15} color={colors.muted} />
                 </Pressable>
-                <Pressable onPress={() => moveStep(step.id, 'down')} disabled={idx === stack.steps.length - 1}
-                  style={({ pressed }) => [styles.actionBtn, { opacity: idx === stack.steps.length - 1 ? 0.2 : pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="arrow.down" size={16} color={colors.muted} />
-                </Pressable>
-                <Pressable onPress={() => removeStep(step.id)}
-                  style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="trash" size={16} color={colors.error} />
+                {/* Separator */}
+                <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); removeStep(step.id); }}
+                  style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <IconSymbol name="trash" size={15} color={colors.error} />
                 </Pressable>
               </View>
-            </View>
+            </Pressable>
           ))
         )}
 
+        {/* Add Step button — solid, not dashed */}
         {stack.steps.length < MAX_STEPS ? (
           <Pressable
             onPress={() => setAddingStep(true)}
-            style={({ pressed }) => [styles.addBtn, { borderColor: accentColor, opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [
+              styles.addBtn,
+              { backgroundColor: accentColor + '15', borderColor: accentColor + '40', opacity: pressed ? 0.7 : 1 },
+            ]}
           >
             <IconSymbol name="plus" size={18} color={accentColor} />
             <Text style={[styles.addBtnText, { color: accentColor }]}>
@@ -230,10 +250,11 @@ export default function StackEditorScreen() {
         )}
       </ScrollView>
 
-      {/* Step type picker sheet */}
+      {/* Step type picker bottom sheet */}
       <Modal visible={addingStep} transparent animationType="slide" onRequestClose={() => setAddingStep(false)}>
         <Pressable style={styles.overlay} onPress={() => setAddingStep(false)} />
         <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.sheetHandle} />
           <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Choose Step Type</Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             {STEP_TYPES.map((type) => (
@@ -246,8 +267,16 @@ export default function StackEditorScreen() {
                   <IconSymbol name={STEP_ICON[type] as any} size={20} color={accentColor} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.typeLabel, { color: colors.foreground }]}>{STEP_TYPE_META[type].label}</Text>
-                  <Text style={[styles.typeDesc, { color: colors.muted }]}>{STEP_TYPE_META[type].description}</Text>
+                  <Text style={[styles.typeLabel, { color: colors.foreground }]}>
+                    {type === 'reminder' ? 'Habit Reminder' : STEP_TYPE_META[type].label}
+                  </Text>
+                  <Text style={[styles.typeDesc, { color: colors.muted }]}>
+                    {type === 'reminder'
+                      ? 'Pick a habit from your list with a countdown timer'
+                      : type === 'journal'
+                      ? 'Open a journal entry — type or record your voice'
+                      : STEP_TYPE_META[type].description}
+                  </Text>
                 </View>
                 <IconSymbol name="chevron.right" size={16} color={colors.muted} />
               </Pressable>
@@ -286,6 +315,13 @@ function StepConfigModal({
   const [config, setConfig] = useState<StepConfig>({ ...step.config });
   const [delay, setDelay] = useState(String(step.delayAfterSeconds));
   const [showLibrary, setShowLibrary] = useState(false);
+  const [habits, setHabits] = useState<Habit[]>([]);
+
+  useEffect(() => {
+    if (step.type === 'reminder') {
+      loadHabits().then(setHabits);
+    }
+  }, [step.type]);
 
   const libraryTracks: LibraryTrack[] =
     step.type === 'meditation' ? MEDITATION_TRACKS :
@@ -308,17 +344,20 @@ function StepConfigModal({
     step.type === 'breathwork' ? config.breathworkTrackTitle :
     step.type === 'priming'    ? config.primingTrackTitle    : undefined;
 
+  const stepDisplayName = step.type === 'reminder' ? 'Habit Reminder' : STEP_TYPE_META[step.type].label;
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose} />
       <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.sheetHandle} />
         {/* Header row */}
         <View style={styles.sheetHeaderRow}>
           <View style={[styles.typeIconWrap, { backgroundColor: accentColor + '20' }]}>
             <IconSymbol name={STEP_ICON[step.type] as any} size={20} color={accentColor} />
           </View>
           <Text style={[styles.sheetTitle, { color: colors.foreground, flex: 1, textAlign: 'left', marginBottom: 0 }]}>
-            {STEP_TYPE_META[step.type].label}
+            {stepDisplayName}
           </Text>
           <Pressable onPress={onClose} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1, padding: 4 }]}>
             <IconSymbol name="xmark" size={20} color={colors.muted} />
@@ -333,10 +372,21 @@ function StepConfigModal({
               <TextInput
                 style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
                 keyboardType="number-pad"
+                returnKeyType="done"
                 value={String(config.durationSeconds ?? 60)}
                 onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 60 })}
               />
             </CRow>
+          )}
+
+          {/* Journal — info note, no config needed */}
+          {step.type === 'journal' && (
+            <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+              <IconSymbol name="book.fill" size={18} color={accentColor} />
+              <Text style={[styles.infoText, { color: colors.foreground }]}>
+                When this step runs, the journal entry screen will open so you can type or record a voice entry — exactly like the morning alarm flow.
+              </Text>
+            </View>
           )}
 
           {/* Meditation — library picker */}
@@ -387,28 +437,60 @@ function StepConfigModal({
             </CRow>
           )}
 
-          {/* Reminder — countdown with default 2 min */}
+          {/* Habit Reminder — pick from habits list + countdown */}
           {step.type === 'reminder' && (
             <>
-              <CRow label="Reminder text" colors={colors}>
-                <TextInput
-                  style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
-                  placeholder="e.g. Drink a glass of water"
-                  placeholderTextColor={colors.muted}
-                  value={config.reminderText ?? ''}
-                  onChangeText={(v) => setConfig({ ...config, reminderText: v })}
-                />
+              <CRow label="Habit" colors={colors}>
+                {habits.length === 0 ? (
+                  <Text style={[styles.infoText, { color: colors.muted }]}>No habits found. Add habits in Manage Goals first.</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                    {habits.map((h) => {
+                      const isSelected = config.reminderText === h.name;
+                      return (
+                        <Pressable
+                          key={h.id}
+                          onPress={() => setConfig({ ...config, reminderText: h.name })}
+                          style={({ pressed }) => [
+                            styles.habitRow,
+                            {
+                              borderColor: isSelected ? accentColor : colors.border,
+                              backgroundColor: isSelected ? accentColor + '15' : colors.background,
+                              opacity: pressed ? 0.7 : 1,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.habitRowText, { color: isSelected ? accentColor : colors.foreground }]}>
+                            {h.name}
+                          </Text>
+                          {isSelected && <IconSymbol name="checkmark" size={14} color={accentColor} />}
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                )}
               </CRow>
               <CRow label="Countdown duration (seconds)" colors={colors}>
                 <TextInput
                   style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
                   keyboardType="number-pad"
+                  returnKeyType="done"
                   value={String(config.durationSeconds ?? 120)}
                   onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 120 })}
                 />
                 <Text style={[styles.inputHint, { color: colors.muted }]}>Default: 120s (2 min)</Text>
               </CRow>
             </>
+          )}
+
+          {/* Affirmations — no config needed, just info */}
+          {step.type === 'affirmations' && (
+            <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+              <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
+              <Text style={[styles.infoText, { color: colors.foreground }]}>
+                Your saved voice affirmations will play during this step.
+              </Text>
+            </View>
           )}
 
           {/* Custom */}
@@ -418,17 +500,19 @@ function StepConfigModal({
                 style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
                 placeholder="e.g. Do 20 push-ups"
                 placeholderTextColor={colors.muted}
+                returnKeyType="done"
                 value={config.customLabel ?? ''}
                 onChangeText={(v) => setConfig({ ...config, customLabel: v })}
               />
             </CRow>
           )}
 
-          {/* Delay before step */}
+          {/* Countdown delay before step */}
           <CRow label="Countdown delay before this step (seconds)" colors={colors}>
             <TextInput
               style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
               keyboardType="number-pad"
+              returnKeyType="done"
               value={delay}
               onChangeText={setDelay}
             />
@@ -449,6 +533,7 @@ function StepConfigModal({
         <Modal visible transparent animationType="slide" onRequestClose={() => setShowLibrary(false)}>
           <Pressable style={styles.overlay} onPress={() => setShowLibrary(false)} />
           <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
             <View style={styles.sheetHeaderRow}>
               <Text style={[styles.sheetTitle, { color: colors.foreground, flex: 1, textAlign: 'left', marginBottom: 0 }]}>
                 {step.type === 'meditation' ? 'Meditations' : step.type === 'breathwork' ? 'Breathing Exercises' : 'Priming Sessions'}
@@ -471,7 +556,11 @@ function StepConfigModal({
                     onPress={() => pickTrack(item)}
                     style={({ pressed }) => [
                       styles.libraryRow,
-                      { borderBottomColor: colors.border, backgroundColor: isSelected ? accentColor + '15' : 'transparent', opacity: pressed ? 0.7 : 1 },
+                      {
+                        borderBottomColor: colors.border,
+                        backgroundColor: isSelected ? accentColor + '15' : 'transparent',
+                        opacity: pressed ? 0.7 : 1,
+                      },
                     ]}
                   >
                     <View style={{ flex: 1 }}>
@@ -490,6 +579,8 @@ function StepConfigModal({
     </Modal>
   );
 }
+
+// ─── Config Row Helper ────────────────────────────────────────────────────────
 
 function CRow({ label, children, colors }: { label: string; children: React.ReactNode; colors: ReturnType<typeof useColors> }) {
   return (
@@ -513,37 +604,68 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', textAlign: 'center' },
   emptyBox: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 32, alignItems: 'center', gap: 12, marginBottom: 16 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  stepCard: { borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepNumBadge: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+
+  // Step card — tap whole card to edit
+  stepCard: {
+    borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12,
+    marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  stepNumBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   stepNum: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  stepIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   stepTypeLabel: { fontSize: 11, fontWeight: '500', marginBottom: 1 },
   stepDetail: { fontSize: 14, fontWeight: '700' },
   stepDelay: { fontSize: 11, marginTop: 2 },
-  stepActions: { flexDirection: 'row', gap: 2 },
-  actionBtn: { padding: 6 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 14, paddingVertical: 14, marginBottom: 16 },
+
+  // Actions: up/down + separator + delete
+  stepActions: { flexDirection: 'row', alignItems: 'center', gap: 0 },
+  actionBtn: { padding: 7 },
+  actionSep: { width: 1, height: 20, marginHorizontal: 4 },
+
+  // Add Step — solid subtle button
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, borderWidth: 1, borderRadius: 14, paddingVertical: 14, marginBottom: 16,
+  },
   addBtnText: { fontSize: 15, fontWeight: '700' },
   maxNote: { textAlign: 'center', fontSize: 13, marginBottom: 16 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 20, paddingHorizontal: 16, maxHeight: '80%' },
+
+  // Modals
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 16, maxHeight: '85%' },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.35)', alignSelf: 'center', marginBottom: 12 },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   sheetTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
+
+  // Step type picker rows
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
   typeIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   typeLabel: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   typeDesc: { fontSize: 12 },
+
+  // Config rows
   cRow: { marginBottom: 16 },
   cLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   cContent: { gap: 6 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   inputHint: { fontSize: 11 },
+
+  // Info box (journal, affirmations)
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16 },
+  infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
+
+  // Library picker
   libraryPickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   libraryPickerText: { flex: 1, fontSize: 14 },
   libraryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
   libraryTitle: { fontSize: 14, fontWeight: '700' },
   libraryArtist: { fontSize: 12, marginTop: 1 },
   libraryDuration: { fontSize: 12 },
+
+  // Habit picker rows
+  habitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6 },
+  habitRowText: { fontSize: 14, fontWeight: '600', flex: 1 },
+
+  // Save button
   saveBtn: { paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });
