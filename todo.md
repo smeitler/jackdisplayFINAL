@@ -1522,3 +1522,8 @@
 - [x] Fix: Home screen header — remove "manage goals" list icon and second crossed-out icon
 - [x] Fix: Home screen header — date text wrapping vertically, now single line with adjustsFontSizeToFit
 - [x] Fix: Home screen header — clean redesign: date left, streak pill + journal badge + AI coach + avatar right
+
+- [x] Fix: AI chat send button hidden behind keyboard — always visible above keyboard
+- [x] Fix: AI coach context — enriched with journal entries, habit notes, full check-in history for deep personalized answers
+- [x] Fix: Voice summary edited text not saving — editedDescriptions now used in handleLog
+- [x] Feature: Voice check-in review — tappable date header (defaults to today, opens bottom sheet picker for past 30 days)

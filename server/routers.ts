@@ -1026,6 +1026,8 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
           })).optional(),
           streak: z.number().optional(),
           totalDaysLogged: z.number().optional(),
+          journalSummary: z.string().optional(),
+          habitNotesSummary: z.string().optional(),
         }).optional(),
         history: z.array(z.object({
           role: z.enum(['user', 'assistant']),
@@ -1038,11 +1040,11 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         // Build context string from habit data
         let contextStr = '';
         if (input.habitContext) {
-          const { habits, recentRatings, streak, totalDaysLogged } = input.habitContext;
+          const { habits, recentRatings, streak, totalDaysLogged, journalSummary, habitNotesSummary } = input.habitContext;
           if (habits.length > 0) {
-            contextStr += `\nUser's habits:\n${habits.map((h) => `- ${h.name}${h.category ? ` (${h.category})` : ''}`).join('\n')}`;
+            contextStr += `\nUser's habits (${habits.length} total):\n${habits.map((h) => `- ${h.name}${h.category ? ` (${h.category})` : ''}`).join('\n')}`;
           }
-          if (streak !== undefined) contextStr += `\nCurrent streak: ${streak} days`;
+          if (streak !== undefined) contextStr += `\nCurrent check-in streak: ${streak} days`;
           if (totalDaysLogged !== undefined) contextStr += `\nTotal days logged: ${totalDaysLogged}`;
           if (recentRatings && recentRatings.length > 0) {
             // Compute per-habit success rates from recent data
@@ -1059,25 +1061,41 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             const habitMap = Object.fromEntries(habits.map((h) => [h.id, h.name]));
             const scoreLines = Object.entries(habitScores)
               .filter(([id]) => habitMap[id])
+              .sort(([, a], [, b]) => {
+                const pctA = a.total > 0 ? a.green / a.total : 0;
+                const pctB = b.total > 0 ? b.green / b.total : 0;
+                return pctA - pctB; // worst first so coach focuses on struggles
+              })
               .map(([id, s]) => {
                 const pct = s.total > 0 ? Math.round((s.green / s.total) * 100) : 0;
-                return `- ${habitMap[id]}: ${pct}% green (${s.green}/${s.total} days, ${s.yellow} yellow, ${s.red} red)`;
+                const trend = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+                return `${trend} ${habitMap[id]}: ${pct}% success (${s.green} green, ${s.yellow} yellow, ${s.red} red out of ${s.total} days)`;
               });
             if (scoreLines.length > 0) {
-              contextStr += `\n\nRecent performance (last ${recentRatings.length} days):\n${scoreLines.join('\n')}`;
+              contextStr += `\n\nHabit performance (last ${recentRatings.length} days, sorted worst→best):\n${scoreLines.join('\n')}`;
             }
+          }
+          if (habitNotesSummary) {
+            contextStr += `\n\nHabit notes from voice check-ins (what the user actually said about each habit):\n${habitNotesSummary}`;
+          }
+          if (journalSummary) {
+            contextStr += `\n\nJournal entries (last 30, chronological):\n${journalSummary}`;
           }
         }
 
-        const systemPrompt = `You are a supportive, insightful habit coach. Your role is to help the user build better habits, stay consistent, and achieve their goals. You are direct, warm, and practical — like a knowledgeable friend, not a corporate chatbot.
+        const systemPrompt = `You are a deeply insightful personal habit coach with full access to this user's habit history, check-in data, voice notes, and journal entries. Your job is to give genuinely personalized, research-backed coaching — not generic advice.
 
-Guidelines:
-- Give specific, actionable advice based on the user's actual habit data
-- Celebrate wins and streaks genuinely
-- Be honest about patterns you see in the data
-- Keep responses concise (2-4 paragraphs max) unless the user asks for detail
-- Use the user's habit names directly when referencing their data
-- Don't be preachy or lecture-y; be conversational${contextStr ? `\n\nUser context:${contextStr}` : ''}`;
+Core principles:
+- ALWAYS ground your response in the user's actual data. Reference specific habits by name, specific dates, specific patterns you see.
+- Take your time to think through the question carefully before answering. Quality over speed.
+- When the user asks a complex question, reason through the data step by step before giving advice.
+- Be honest: if you see a pattern of struggle, name it directly and compassionately. Don't sugarcoat.
+- Be specific: "You've missed Exercise 4 of the last 7 days" is more useful than "you could work on consistency."
+- Draw connections across data sources: if their journal says they were stressed and their habits dipped that week, point that out.
+- Celebrate real wins with specifics: "You hit Sleep 7+ hours 6 out of 7 days this week — that's exceptional."
+- Give actionable next steps, not just observations. What should they do differently tomorrow?
+- Match the user's tone: if they're casual, be casual. If they want depth, go deep.
+- Don't be preachy, don't lecture, don't repeat yourself.${contextStr ? `\n\n═══ USER DATA ═══${contextStr}` : ''}`;
 
         const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
           { role: 'system', content: systemPrompt },

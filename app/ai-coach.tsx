@@ -3,7 +3,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -11,6 +11,9 @@ import { useApp } from '@/lib/app-context';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { loadEntries } from '@/lib/journal-store';
+import { loadDayNotes, getLastUserId } from '@/lib/storage';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ChatMessage = {
@@ -70,12 +73,57 @@ function MessageBubble({ message, colors }: { message: ChatMessage; colors: any 
 export default function AiCoachScreen() {
   const router = useRouter();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const { activeHabits, categories, checkIns: checkInEntries, streak, getRatingsForDate } = useApp();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  // Load journal entries and habit notes for deep AI context
+  const [journalSummary, setJournalSummary] = useState<string>('');
+  const [habitNotesSummary, setHabitNotesSummary] = useState<string>('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const uid = await getLastUserId();
+        const userId = uid || 'default';
+        // Load last 30 journal entries
+        const entries = await loadEntries(userId);
+        const recent = entries
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .slice(0, 30);
+        if (recent.length > 0) {
+          const lines = recent.map((e) => {
+            const body = (e.body || '').replace(/\[photo:[^\]]+\]/g, '[photo]').slice(0, 300);
+            return `[${e.date}] ${body}`;
+          });
+          setJournalSummary(lines.join('\n'));
+        }
+        // Load habit notes (voice check-in descriptions) for last 30 days
+        const allNotes = await loadDayNotes();
+        const noteLines: string[] = [];
+        const today = new Date();
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().slice(0, 10);
+          for (const [key, note] of Object.entries(allNotes)) {
+            if (key.endsWith(`:${dateStr}`) && note) {
+              const habitId = key.replace(`:${dateStr}`, '');
+              const habit = activeHabits.find((h) => h.id === habitId);
+              if (habit) noteLines.push(`[${dateStr}] ${habit.name}: ${note}`);
+            }
+          }
+        }
+        if (noteLines.length > 0) setHabitNotesSummary(noteLines.join('\n'));
+      } catch {
+        // non-critical
+      }
+    })();
+  }, [activeHabits]);
 
   const chatMutation = trpc.aiCoach.chat.useMutation();
 
@@ -111,8 +159,10 @@ export default function AiCoachScreen() {
       recentRatings: recentRatings.length > 0 ? recentRatings : undefined,
       streak,
       totalDaysLogged: uniqueDays,
+      journalSummary: journalSummary || undefined,
+      habitNotesSummary: habitNotesSummary || undefined,
     };
-  }, [activeHabits, categories, checkInEntries, streak, getRatingsForDate]);
+  }, [activeHabits, categories, checkInEntries, streak, getRatingsForDate, journalSummary, habitNotesSummary]);
 
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -187,7 +237,7 @@ export default function AiCoachScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={insets.top + 60}
       >
         {/* Message list */}
         <FlatList
@@ -244,7 +294,7 @@ export default function AiCoachScreen() {
         )}
 
         {/* Input row */}
-        <View style={[styles.inputRow, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <View style={[styles.inputRow, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TextInput
             style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
             placeholder="Ask your coach anything…"
@@ -317,7 +367,7 @@ const styles = StyleSheet.create({
 
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 10,
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28,
+    paddingHorizontal: 16, paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   input: {

@@ -761,6 +761,9 @@ export default function VoiceCheckinScreen() {
 
   // Editable transcript (full text shown in Journal Entry)
   const [editedTranscript, setEditedTranscript] = useState("");
+  // Date being saved — defaults to today, user can change it
+  const [saveDate, setSaveDate] = useState<string>(todayDateStr());
+  const [datepickerVisible, setDatepickerVisible] = useState(false);
 
   // Journal popup — auto-opens when results arrive
   const [journalModalVisible, setJournalModalVisible] = useState(false);
@@ -1064,7 +1067,7 @@ export default function VoiceCheckinScreen() {
     if (!results) return;
     setIsSaving(true);
     try {
-      const today = todayDateStr();
+      const today = saveDate; // use user-selected date (defaults to today)
       const allHabitIds = habits.map((h) => h.id);
 
       // 1. Save habit check-ins (use vcRatings which reflects user edits)
@@ -1079,13 +1082,20 @@ export default function VoiceCheckinScreen() {
         await appSubmitCheckIn(today, ratingsMap);
       }
 
-      // 2. Save AI-generated habit notes (descriptions) so journal day-view can display them
-      const aiHabitNotes = results.habitResults
-        .filter((r) => r.note && r.note.trim())
-        .map((r) => ({ habitId: r.habitId, note: r.note.trim() }));
-      if (aiHabitNotes.length > 0) {
+      // 2. Save habit notes — use editedDescriptions (user-edited) if available, else fall back to AI results
+      const habitNotesToSave: Array<{ habitId: string; note: string }> = [];
+      for (const [habitId, note] of Object.entries(editedDescriptions)) {
+        if (note && note.trim()) habitNotesToSave.push({ habitId, note: note.trim() });
+      }
+      // Fall back to original AI notes for any habit not in editedDescriptions
+      for (const r of results.habitResults) {
+        if (!editedDescriptions[r.habitId] && r.note && r.note.trim()) {
+          habitNotesToSave.push({ habitId: r.habitId, note: r.note.trim() });
+        }
+      }
+      if (habitNotesToSave.length > 0) {
         const allNotes = await loadDayNotes();
-        for (const { habitId, note } of aiHabitNotes) {
+        for (const { habitId, note } of habitNotesToSave) {
           allNotes[`${habitId}:${today}`] = note;
         }
         await saveDayNotes(allNotes);
@@ -1154,7 +1164,7 @@ export default function VoiceCheckinScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [results, habits, router, vcRatings, editedTranscript, appSubmitCheckIn]);
+  }, [results, habits, router, vcRatings, editedTranscript, editedDescriptions, appSubmitCheckIn, saveDate]);
 
   const handleTryAgain = useCallback(() => {
     setResults(null);
@@ -1178,9 +1188,25 @@ export default function VoiceCheckinScreen() {
         >
           <IconSymbol name="xmark" size={20} color={colors.muted} />
         </TouchableOpacity>
-        <Text style={[headerStyles.title, { color: colors.foreground }]}>
-          {phase === "results" ? "Review Your Check-in" : "Voice Check-in"}
-        </Text>
+        {phase === 'results' ? (
+          <TouchableOpacity
+            onPress={() => setDatepickerVisible(true)}
+            activeOpacity={0.7}
+            style={{ flex: 1, alignItems: 'center' }}
+          >
+            <Text style={[headerStyles.title, { color: colors.foreground }]}>
+              {(() => {
+                const [y, m, d] = saveDate.split('-').map(Number);
+                return new Date(y, m - 1, d).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+              })()}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.primary, marginTop: 1 }}>tap to change date</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={[headerStyles.title, { color: colors.foreground, flex: 1, textAlign: 'center' }]}>
+            Voice Check-in
+          </Text>
+        )}
         <View style={{ width: 36 }} />
       </View>
 
@@ -1668,6 +1694,56 @@ export default function VoiceCheckinScreen() {
           </View>
         </KeyboardAvoidingView>
       )}
+
+      {/* Date picker modal for changing the save date */}
+      <Modal
+        visible={datepickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDatepickerVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }}
+          onPress={() => setDatepickerVisible(false)}
+        />
+        <View style={{
+          backgroundColor: colors.surface,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32,
+          paddingTop: 16,
+        }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.muted + '55', alignSelf: 'center', marginBottom: 16 }} />
+          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground, textAlign: 'center', marginBottom: 20 }}>Select Date</Text>
+          {/* Simple date picker: go back up to 30 days */}
+          <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+            {Array.from({ length: 31 }, (_, i) => {
+              const d = new Date();
+              d.setDate(d.getDate() - i);
+              const ds = d.toISOString().slice(0, 10);
+              const label = i === 0 ? 'Today' : i === 1 ? 'Yesterday' : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+              const isSelected = ds === saveDate;
+              return (
+                <Pressable
+                  key={ds}
+                  onPress={() => { setSaveDate(ds); setDatepickerVisible(false); }}
+                  style={({ pressed }) => ({
+                    paddingVertical: 14,
+                    paddingHorizontal: 24,
+                    backgroundColor: isSelected ? colors.primary + '22' : pressed ? colors.border + '44' : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  })}
+                >
+                  <Text style={{ fontSize: 16, color: isSelected ? colors.primary : colors.foreground, fontWeight: isSelected ? '600' : '400' }}>{label}</Text>
+                  <Text style={{ fontSize: 13, color: colors.muted }}>{ds}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* DONE phase */}
       {phase === "done" && (
