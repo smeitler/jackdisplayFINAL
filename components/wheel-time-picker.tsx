@@ -1,24 +1,24 @@
 /**
- * WheelTimePicker — FlatList-based infinite drum roll picker
+ * WheelTimePicker — ScrollView-based infinite drum roll picker
  *
- * Uses FlatList with a large repeated item array so the user always has
- * plenty of items to scroll through in both directions (like Apple's native
- * time picker). FlatList handles its own gesture recognition natively, so
- * it works correctly even inside a parent ScrollView.
+ * Uses a plain ScrollView (NOT FlatList) so it can be safely nested inside
+ * a parent ScrollView without triggering the "VirtualizedLists should never
+ * be nested" error that breaks scrolling.
  *
  * Key design decisions:
  * - Items are repeated N_REPEAT times so there's always content above/below
- * - On mount we scroll to the center of the repeated list (so user can go up or down)
- * - On scroll end we snap to the nearest item using scrollToOffset
- * - The parent ScrollView is disabled while the picker column is being touched
+ * - On mount we scroll to the center of the repeated list
+ * - snapToInterval + decelerationRate="fast" gives native-feel snapping
+ * - nestedScrollEnabled={true} lets the inner scroll work inside a parent ScrollView
+ * - paddingVertical = 2 * ITEM_HEIGHT so selected item sits in the center row
  */
 
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -27,10 +27,10 @@ import { useColors } from '@/hooks/use-colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_HEIGHT = 48;
-const VISIBLE_ITEMS = 5;          // how many rows show in the window
+const ITEM_HEIGHT = 52;
+const VISIBLE_ITEMS = 5;
 const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
-const N_REPEAT = 100;             // repeat items this many times for "infinite" feel
+const N_REPEAT = 80; // repeat items this many times for "infinite" feel
 
 // ─── WheelColumn ─────────────────────────────────────────────────────────────
 
@@ -45,12 +45,12 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
   const colors = useColors();
   const count = items.length;
 
-  // Build a large repeated array so there's plenty of content in both directions
+  // Build a large repeated array
   const repeated = React.useMemo(() => {
-    const arr: { label: string; realIndex: number; key: string }[] = [];
+    const arr: { label: string; realIndex: number }[] = [];
     for (let rep = 0; rep < N_REPEAT; rep++) {
       for (let i = 0; i < count; i++) {
-        arr.push({ label: items[i], realIndex: i, key: `${rep}-${i}` });
+        arr.push({ label: items[i], realIndex: i });
       }
     }
     return arr;
@@ -59,11 +59,17 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
   // Start in the middle of the repeated list at the correct initial item
   const midRepeat = Math.floor(N_REPEAT / 2);
   const initialFlatIndex = midRepeat * count + initialIndex;
+  // paddingVertical = 2 * ITEM_HEIGHT, so offset is just flatIndex * ITEM_HEIGHT
   const initialOffset = initialFlatIndex * ITEM_HEIGHT;
 
-  const listRef = useRef<FlatList>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const currentRealIdx = useRef(initialIndex);
   const [selectedReal, setSelectedReal] = useState(initialIndex);
+
+  // Scroll to initial position after mount
+  const onLayout = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: initialOffset, animated: false });
+  }, [initialOffset]);
 
   // Snap to nearest item on scroll end
   const handleScrollEnd = useCallback(
@@ -73,7 +79,7 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
       const snappedOffset = flatIndex * ITEM_HEIGHT;
 
       // Scroll to exact snap position
-      listRef.current?.scrollToOffset({ offset: snappedOffset, animated: true });
+      scrollRef.current?.scrollTo({ y: snappedOffset, animated: true });
 
       const realIdx = ((flatIndex % count) + count) % count;
       if (realIdx !== currentRealIdx.current) {
@@ -83,63 +89,6 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
       }
     },
     [count, onSelect],
-  );
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: { label: string; realIndex: number; key: string }; index: number }) => {
-      const dist = item.realIndex - selectedReal;
-      // Wrap distance for circular feel
-      const wrappedDist = ((dist + count / 2 + count) % count) - count / 2;
-      const isSelected = wrappedDist === 0;
-      const isAdjacent = Math.abs(wrappedDist) === 1;
-      const isOuter = Math.abs(wrappedDist) === 2;
-
-      let color: string;
-      let fontSize: number;
-      let fontWeight: '700' | '400' | '300';
-      let opacity: number;
-
-      if (isSelected) {
-        color = colors.foreground;
-        fontSize = 26;
-        fontWeight = '700';
-        opacity = 1;
-      } else if (isAdjacent) {
-        color = colors.muted;
-        fontSize = 19;
-        fontWeight = '400';
-        opacity = 0.55;
-      } else if (isOuter) {
-        color = colors.muted;
-        fontSize = 16;
-        fontWeight = '300';
-        opacity = 0.25;
-      } else {
-        color = 'transparent';
-        fontSize = 14;
-        fontWeight = '300';
-        opacity = 0;
-      }
-
-      return (
-        <View style={styles.item}>
-          <Text
-            style={[
-              styles.itemText,
-              {
-                color,
-                fontSize,
-                fontWeight,
-                opacity,
-              },
-            ]}
-          >
-            {item.label}
-          </Text>
-        </View>
-      );
-    },
-    [selectedReal, count, colors],
   );
 
   return (
@@ -157,32 +106,67 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
           },
         ]}
       />
-      <FlatList
-        ref={listRef}
-        data={repeated}
-        keyExtractor={(item) => item.key}
-        renderItem={renderItem}
+      <ScrollView
+        ref={scrollRef}
+        onLayout={onLayout}
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
         decelerationRate="fast"
-        getItemLayout={(_, index) => ({
-          length: ITEM_HEIGHT,
-          offset: ITEM_HEIGHT * index,
-          index,
-        })}
-        initialScrollIndex={initialFlatIndex}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
-        // Prevent parent ScrollView from stealing touches
         nestedScrollEnabled={true}
         scrollEventThrottle={16}
-        style={{ flex: 1 }}
         contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
-        // Remove the extra padding offset since we use paddingVertical
-        initialNumToRender={VISIBLE_ITEMS + 4}
-        maxToRenderPerBatch={VISIBLE_ITEMS + 4}
-        windowSize={5}
-      />
+        style={{ flex: 1 }}
+      >
+        {repeated.map((item, index) => {
+          const dist = item.realIndex - selectedReal;
+          const wrappedDist = ((dist + count / 2 + count) % count) - count / 2;
+          const isSelected = wrappedDist === 0;
+          const isAdjacent = Math.abs(wrappedDist) === 1;
+          const isOuter = Math.abs(wrappedDist) === 2;
+
+          let color: string;
+          let fontSize: number;
+          let fontWeight: '700' | '400' | '300';
+          let opacity: number;
+
+          if (isSelected) {
+            color = colors.foreground;
+            fontSize = 26;
+            fontWeight = '700';
+            opacity = 1;
+          } else if (isAdjacent) {
+            color = colors.muted;
+            fontSize = 20;
+            fontWeight = '400';
+            opacity = 0.55;
+          } else if (isOuter) {
+            color = colors.muted;
+            fontSize = 16;
+            fontWeight = '300';
+            opacity = 0.25;
+          } else {
+            color = 'transparent';
+            fontSize = 14;
+            fontWeight = '300';
+            opacity = 0;
+          }
+
+          return (
+            <View key={`${index}`} style={styles.item}>
+              <Text
+                style={[
+                  styles.itemText,
+                  { color, fontSize, fontWeight, opacity },
+                ]}
+              >
+                {item.label}
+              </Text>
+            </View>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -238,13 +222,12 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
     emit(hourIdxRef.current, minuteIdxRef.current, idx);
   }, [emit]);
 
-  const hourW   = 72;
-  const minuteW = 72;
-  const periodW = 68;
-  const totalW  = hourW + minuteW + periodW;
+  const hourW   = 76;
+  const minuteW = 76;
+  const periodW = 72;
 
   return (
-    <View style={[styles.container, { width: totalW }]}>
+    <View style={[styles.container, { width: hourW + minuteW + periodW }]}>
       <View style={styles.columns}>
         <WheelColumn items={HOURS_12} initialIndex={initialHourIdx}   onSelect={onHourSelect}   width={hourW} />
         <WheelColumn items={MINUTES}  initialIndex={initialMinuteIdx} onSelect={onMinuteSelect} width={minuteW} />

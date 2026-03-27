@@ -2442,6 +2442,17 @@ function FullScreenJournalEditor({
   const [toolbarHeight, setToolbarHeight] = useState(80);
   // inputHeight grows with content so all text is visible inside the ScrollView
   const [inputHeight, setInputHeight] = useState(500);
+  // Track keyboard height manually — KeyboardAvoidingView doesn't work inside Modal on iOS
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardWillShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   // Sync value prop when entry changes
   useEffect(() => { setText(value); }, [value]);
@@ -2522,11 +2533,8 @@ function FullScreenJournalEditor({
             />
           </ScrollView>
 
-          {/* Photo strip + toolbar — KeyboardAvoidingView pushes them above the keyboard */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
-          >
+          {/* Photo strip + toolbar — manually offset by keyboard height (KAV doesn't work in Modal on iOS) */}
+          <View style={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
             {/* Photo strip — shown above toolbar when photos exist */}
             {photos.length > 0 && (
               <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
@@ -2539,7 +2547,10 @@ function FullScreenJournalEditor({
               </View>
             )}
             {/* Keyboard accessory toolbar — measure height so ScrollView paddingBottom matches */}
-            <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'rgba(28,28,30,0.98)' }} onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}>
+            <View
+              style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingBottom: keyboardHeight > 0 ? 0 : insets.bottom }}
+              onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
+            >
               <View style={fsStyles.toolbar}>
                 {/* Photos */}
                 <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
@@ -2549,8 +2560,8 @@ function FullScreenJournalEditor({
                 {/* Character count */}
                 <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
               </View>
-            </SafeAreaView>
-          </KeyboardAvoidingView>
+            </View>
+          </View>
         </View>
       </View>
     </Modal>
