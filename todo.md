@@ -1543,3 +1543,5 @@
 - [x] Alarm: after journal entry, show meditation player with selected duration from alarm settings
 - [x] Meditation player: display gratitudes, vision board photos, and journal photos during playback (existing practice-player already does this)
 - [x] Alarm: fix alarm sound not playing in Expo Go (alarm-ring screen plays sound directly via expo-audio on wake-up)
+
+- [x] Add Tasks tab to the right of Rewards in the You/Profile section
