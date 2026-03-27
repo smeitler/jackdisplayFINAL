@@ -1535,3 +1535,5 @@
 
 - [x] Fix Apple Sign-In failure: native clients now ignore stale EXPO_PUBLIC_API_BASE_URL env var and always use hardcoded current sandbox URL in constants/oauth.ts
 - [x] Add backend API reachability tests (api-base-url.test.ts) verifying health, Apple auth JSON response, and dev-login
+
+- [x] Fix voice check-in habit notes: use exact words from transcript relevant to the habit, not AI summaries. AI may only add context that is directly relevant to the habit.
