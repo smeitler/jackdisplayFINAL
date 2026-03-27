@@ -74,9 +74,17 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
   for (const day of config.days) {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Good morning! Time to check in 🌅",
-        body: "How did yesterday go? Tap to log your progress.",
-        data: { action: 'open_checkin' },
+        title: "Good morning! ☀️",
+        body: "Your alarm is ringing — tap to wake up.",
+        data: {
+          action: 'open_alarm_ring',
+          soundId: config.soundId ?? 'classic',
+          snoozeMinutes: String(config.snoozeMinutes ?? 10),
+          meditationId: config.meditationId ?? 'none',
+          practiceDuration: String(
+            config.practiceDurations?.[config.meditationId ?? 'none'] ?? 10
+          ),
+        },
         sound: soundFile,
         // Time-Sensitive: breaks through Focus modes and DND on iOS 15+
         ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),

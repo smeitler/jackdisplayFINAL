@@ -59,25 +59,45 @@ function NotificationHandler() {
 
   useEffect(() => {
     // Handle notification tapped while app was running (warm launch)
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { action?: string };
-      if (data?.action === 'open_checkin') {
+      responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string };
+      if (data?.action === 'open_alarm_ring') {
+        router.push({
+          pathname: '/alarm-ring',
+          params: {
+            soundId: data.soundId ?? 'classic',
+            snoozeMinutes: data.snoozeMinutes ?? '10',
+            meditationId: data.meditationId ?? 'none',
+            practiceDuration: data.practiceDuration ?? '10',
+          },
+        } as never);
+      } else if (data?.action === 'open_checkin') {
         router.push('/checkin?fromAlarm=1' as never);
       }
     });
 
-    // Handle notification tapped from killed state (cold launch)
-    // getLastNotificationResponseAsync is not available on web
-    if (Platform.OS !== 'web') {
-      Notifications.getLastNotificationResponseAsync().then((response) => {
-        if (response) {
-          const data = response.notification.request.content.data as { action?: string };
-          if (data?.action === 'open_checkin') {
-            router.push('/checkin?fromAlarm=1' as never);
+      // Handle notification tapped from killed state (cold launch)
+      // getLastNotificationResponseAsync is not available on web
+      if (Platform.OS !== 'web') {
+        Notifications.getLastNotificationResponseAsync().then((response) => {
+          if (response) {
+            const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string };
+            if (data?.action === 'open_alarm_ring') {
+              router.push({
+                pathname: '/alarm-ring',
+                params: {
+                  soundId: data.soundId ?? 'classic',
+                  snoozeMinutes: data.snoozeMinutes ?? '10',
+                  meditationId: data.meditationId ?? 'none',
+                  practiceDuration: data.practiceDuration ?? '10',
+                },
+              } as never);
+            } else if (data?.action === 'open_checkin') {
+              router.push('/checkin?fromAlarm=1' as never);
+            }
           }
-        }
-      });
-    }
+        });
+      }
 
     return () => { responseListener.current?.remove(); };
   }, [router]);
@@ -152,6 +172,9 @@ export default function RootLayout() {
               <Stack.Screen name="practice-player" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="morning-practice-catalog" options={{ presentation: 'modal' }} />
               <Stack.Screen name="voice-checkin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+              <Stack.Screen name="alarm-ring" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="alarm-journal" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+              <Stack.Screen name="alarm-meditation" options={{ presentation: 'fullScreenModal', headerShown: false }} />
             </Stack>
             <StatusBar style="auto" />
             </JournalProvider>

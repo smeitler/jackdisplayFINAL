@@ -923,6 +923,37 @@ export default function AlarmsScreen() {
                 </Text>
               </View>
             )}
+            {/* Test Alarm Flow button */}
+            {alarms.length > 0 && (
+              <Pressable
+                onPress={() => {
+                  const a = alarms[0];
+                  router.push({
+                    pathname: '/alarm-ring',
+                    params: {
+                      soundId: a.soundId ?? 'classic',
+                      snoozeMinutes: String(a.snoozeMinutes ?? 10),
+                      meditationId: a.meditationId ?? 'none',
+                      practiceDuration: String(a.practiceDurations?.[a.meditationId ?? 'none'] ?? 10),
+                    },
+                  } as never);
+                }}
+                style={({ pressed }) => [{
+                  marginTop: 8,
+                  borderRadius: 14,
+                  paddingVertical: 14,
+                  paddingHorizontal: 20,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: 'center' as const,
+                  opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.muted }}>⏰ Test Alarm Flow</Text>
+                <Text style={{ fontSize: 12, color: colors.muted, opacity: 0.6, marginTop: 2 }}>Preview wake up → journal → meditation</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </ScrollView>
