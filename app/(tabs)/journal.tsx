@@ -2457,10 +2457,11 @@ function FullScreenJournalEditor({
   // Sync value prop when entry changes
   useEffect(() => { setText(value); }, [value]);
 
-  // Auto-focus when modal opens
-  useEffect(() => {
-    if (visible) setTimeout(() => inputRef.current?.focus(), 120);
-  }, [visible]);
+  // Track whether keyboard is active (user tapped into the text area)
+  const [isEditing, setIsEditing] = useState(false);
+
+  // DO NOT auto-focus on open — user should see the full view first
+  // Focus only happens when user taps the text area (onFocus handler below)
 
   // Cleanup autosave on unmount
   useEffect(() => {
@@ -2495,25 +2496,34 @@ function FullScreenJournalEditor({
             <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
         </View>
-        {/* Editor + keyboard toolbar — no KeyboardAvoidingView; toolbar has SafeAreaView bottom
-             which naturally moves up with the keyboard, no offset calculation needed. */}
+        {/* Main content area — flex:1 so it fills between header and bottom toolbar */}
         <View style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: toolbarHeight + 24 }}
-            keyboardShouldPersistTaps="always"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator
             directionalLockEnabled
             canCancelContentTouches
           >
+            {/* Tap-to-edit hint when not editing and no text */}
+            {!isEditing && !text && !readOnly && (
+              <Pressable
+                onPress={() => { inputRef.current?.focus(); }}
+                style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 20, zIndex: 1 }}
+              />
+            )}
             <TextInput
               ref={inputRef}
               value={text}
               onChangeText={readOnly ? undefined : handleChangeText}
               editable={!readOnly}
               multiline
-              placeholder={readOnly ? '' : 'Start writing...'}
-              placeholderTextColor="rgba(255,255,255,0.3)"
+              placeholder={readOnly ? '' : 'Tap to start writing...'}
+              placeholderTextColor="rgba(255,255,255,0.25)"
+              onFocus={() => setIsEditing(true)}
+              onBlur={() => setIsEditing(false)}
               onContentSizeChange={(e) => {
                 const h = e.nativeEvent.contentSize.height;
                 if (h > inputHeight) setInputHeight(h);
@@ -2533,9 +2543,9 @@ function FullScreenJournalEditor({
             />
           </ScrollView>
 
-          {/* Photo strip + toolbar — manually offset by keyboard height (KAV doesn't work in Modal on iOS) */}
+          {/* Bottom toolbar + photo strip — lifts above keyboard when active */}
           <View style={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
-            {/* Photo strip — shown above toolbar when photos exist */}
+            {/* Photo strip — always visible above toolbar */}
             {photos.length > 0 && (
               <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
                 <DraggablePhotoStrip
@@ -2546,19 +2556,30 @@ function FullScreenJournalEditor({
                 />
               </View>
             )}
-            {/* Keyboard accessory toolbar — measure height so ScrollView paddingBottom matches */}
+            {/* Toolbar — photo button left, Done button right (when keyboard open), char count */}
             <View
               style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingBottom: keyboardHeight > 0 ? 0 : insets.bottom }}
               onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
             >
               <View style={fsStyles.toolbar}>
-                {/* Photos */}
+                {/* Add photo */}
                 <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
                   <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
                 </Pressable>
                 <View style={{ flex: 1 }} />
                 {/* Character count */}
-                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
+                {!isEditing && (
+                  <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
+                )}
+                {/* Done button — dismisses keyboard */}
+                {isEditing && (
+                  <Pressable
+                    onPress={() => { Keyboard.dismiss(); }}
+                    style={({ pressed }) => [fsStyles.doneBtn, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Text style={fsStyles.doneBtnText}>Done</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           </View>
@@ -2577,6 +2598,8 @@ const fsStyles = StyleSheet.create({
   textInput: { fontSize: 17, lineHeight: 26, color: '#ffffff', textAlignVertical: 'top', padding: 0 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(28,28,30,0.98)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   toolbarBtn: { width: 44, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  doneBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
+  doneBtnText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
 });
 
 export default function JournalScreen() {

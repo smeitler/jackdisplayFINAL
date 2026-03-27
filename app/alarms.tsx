@@ -114,8 +114,6 @@ function AlarmEditModal({
   const previewPlayerRef = useRef<AudioPlayer | null>(null);
   const previewTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Scroll lock — disabled while user is touching the time picker
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Re-sync when alarm changes
@@ -220,7 +218,7 @@ function AlarmEditModal({
           contentContainerStyle={[em.scroll, { paddingBottom: insets.bottom + 40 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
-          scrollEnabled={scrollEnabled}
+          scrollEnabled={true}
         >
           {/* ── Time Picker ── */}
           <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>

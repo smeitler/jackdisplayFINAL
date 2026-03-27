@@ -1,36 +1,64 @@
 /**
- * WheelTimePicker — ScrollView-based infinite drum roll picker
+ * WheelTimePicker — PanResponder + Animated iOS-style drum roll
  *
- * Uses a plain ScrollView (NOT FlatList) so it can be safely nested inside
- * a parent ScrollView without triggering the "VirtualizedLists should never
- * be nested" error that breaks scrolling.
- *
- * Key design decisions:
- * - Items are repeated N_REPEAT times so there's always content above/below
- * - On mount we scroll to the center of the repeated list
- * - snapToInterval + decelerationRate="fast" gives native-feel snapping
- * - nestedScrollEnabled={true} lets the inner scroll work inside a parent ScrollView
- * - paddingVertical = 2 * ITEM_HEIGHT so selected item sits in the center row
+ * Architecture:
+ * - NO ScrollView / FlatList — zero nesting conflicts with parent scroll
+ * - PanResponder captures vertical touch directly on each column View
+ * - Animated.Value drives the translateY of the item list
+ * - On release: physics-based momentum decay → snap to nearest item
+ * - Haptic tick on every item change (iOS only)
+ * - LinearGradient fade masks top/bottom for authentic iOS look
+ * - Cylindrical opacity/scale gradient (selected = large+opaque, outer = small+faded)
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  Animated,
+  Easing,
   Platform,
-  ScrollView,
+  PanResponder,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/use-colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_HEIGHT = 52;
-const VISIBLE_ITEMS = 5;
-const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
-const N_REPEAT = 80; // repeat items this many times for "infinite" feel
+const ITEM_H      = 52;   // height of each row
+const VISIBLE     = 5;    // rows visible at once (must be odd)
+const PICKER_H    = ITEM_H * VISIBLE;
+const CENTER_ROW  = Math.floor(VISIBLE / 2); // index of the center row = 2
+
+// How many times to repeat the list for "infinite" feel
+const N_REPEAT    = 80;
+
+// Friction for momentum: deceleration constant (px/ms²)
+const FRICTION    = 0.0028;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function snapY(y: number): number {
+  return -Math.round(-y / ITEM_H) * ITEM_H;
+}
+
+function initialY(initialIndex: number, count: number): number {
+  const midRep = Math.floor(N_REPEAT / 2);
+  const flatIndex = midRep * count + initialIndex;
+  return -(flatIndex * ITEM_H) + CENTER_ROW * ITEM_H;
+}
 
 // ─── WheelColumn ─────────────────────────────────────────────────────────────
 
@@ -39,139 +67,229 @@ interface ColumnProps {
   initialIndex: number;
   onSelect: (index: number) => void;
   width: number;
+  accentColor?: string;
 }
 
-export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProps) {
-  const colors = useColors();
-  const count = items.length;
+export function WheelColumn({
+  items,
+  initialIndex,
+  onSelect,
+  width,
+  accentColor,
+}: ColumnProps) {
+  const colors   = useColors();
+  const count    = items.length;
+  const accent   = accentColor ?? colors.foreground;
 
-  // Build a large repeated array
-  const repeated = React.useMemo(() => {
-    const arr: { label: string; realIndex: number }[] = [];
-    for (let rep = 0; rep < N_REPEAT; rep++) {
-      for (let i = 0; i < count; i++) {
-        arr.push({ label: items[i], realIndex: i });
-      }
+  // Build repeated list once
+  const repeated = useMemo(() => {
+    const arr: string[] = [];
+    for (let r = 0; r < N_REPEAT; r++) {
+      for (let i = 0; i < count; i++) arr.push(items[i]);
     }
     return arr;
   }, [items, count]);
 
-  // Start in the middle of the repeated list at the correct initial item
-  const midRepeat = Math.floor(N_REPEAT / 2);
-  const initialFlatIndex = midRepeat * count + initialIndex;
-  // paddingVertical = 2 * ITEM_HEIGHT, so offset is just flatIndex * ITEM_HEIGHT
-  const initialOffset = initialFlatIndex * ITEM_HEIGHT;
+  const totalItems = repeated.length;
 
-  const scrollRef = useRef<ScrollView>(null);
-  const currentRealIdx = useRef(initialIndex);
-  const [selectedReal, setSelectedReal] = useState(initialIndex);
+  // Animated Y position of the list
+  const startY   = initialY(initialIndex, count);
+  const animY    = useRef(new Animated.Value(startY)).current;
+  const currentY = useRef(startY);
 
-  // Scroll to initial position after mount
-  const onLayout = useCallback(() => {
-    scrollRef.current?.scrollTo({ y: initialOffset, animated: false });
-  }, [initialOffset]);
+  // Track which real index is currently centered for visual rendering
+  const lastEmitted = useRef(initialIndex);
+  const [selectedFlat, setSelectedFlat] = useState(
+    Math.floor(N_REPEAT / 2) * count + initialIndex,
+  );
 
-  // Snap to nearest item on scroll end
-  const handleScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = e.nativeEvent.contentOffset.y;
-      const flatIndex = Math.round(y / ITEM_HEIGHT);
-      const snappedOffset = flatIndex * ITEM_HEIGHT;
-
-      // Scroll to exact snap position
-      scrollRef.current?.scrollTo({ y: snappedOffset, animated: true });
-
-      const realIdx = ((flatIndex % count) + count) % count;
-      if (realIdx !== currentRealIdx.current) {
-        currentRealIdx.current = realIdx;
-        setSelectedReal(realIdx);
-        onSelect(realIdx);
+  // Keep currentY in sync with animY; fire haptic + callback on index change
+  useEffect(() => {
+    const id = animY.addListener(({ value }) => {
+      currentY.current = value;
+      const flatCenter = Math.round(-value / ITEM_H);
+      const ri = ((flatCenter % count) + count) % count;
+      setSelectedFlat(flatCenter);
+      if (ri !== lastEmitted.current) {
+        lastEmitted.current = ri;
+        onSelect(ri);
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }
       }
-    },
-    [count, onSelect],
+    });
+    return () => animY.removeListener(id);
+  }, [animY, count, onSelect]);
+
+  // Bounds: keep the list from flying too far off screen
+  const minY = -(totalItems * ITEM_H) + (CENTER_ROW + 1) * ITEM_H;
+  const maxY = CENTER_ROW * ITEM_H;
+
+  // Velocity tracking for momentum
+  const lastTouchY    = useRef(0);
+  const lastTouchTime = useRef(0);
+  const velocityY     = useRef(0);
+  const momentumAnim  = useRef<Animated.CompositeAnimation | null>(null);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Claim the touch immediately — prevents parent ScrollView from stealing it
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 1,
+        onMoveShouldSetPanResponderCapture: (_, gs) => Math.abs(gs.dy) > 1,
+
+        onPanResponderGrant: (e) => {
+          momentumAnim.current?.stop();
+          momentumAnim.current = null;
+          animY.stopAnimation();
+          lastTouchY.current    = e.nativeEvent.pageY;
+          lastTouchTime.current = Date.now();
+          velocityY.current     = 0;
+        },
+
+        onPanResponderMove: (e) => {
+          const now = Date.now();
+          const dy  = e.nativeEvent.pageY - lastTouchY.current;
+          const dt  = now - lastTouchTime.current;
+          if (dt > 0) velocityY.current = dy / dt;
+          lastTouchY.current    = e.nativeEvent.pageY;
+          lastTouchTime.current = now;
+          const next = clamp(currentY.current + dy, minY, maxY);
+          animY.setValue(next);
+        },
+
+        onPanResponderRelease: () => {
+          const vel  = velocityY.current; // px/ms
+          const sign = vel >= 0 ? 1 : -1;
+          // distance = v² / (2 * friction)
+          const dist      = sign * (vel * vel) / (2 * FRICTION);
+          const projected = clamp(currentY.current + dist, minY, maxY);
+          const snapped   = snapY(projected);
+          const duration  = clamp(Math.abs(dist) * 0.35, 80, 550);
+
+          const anim = Animated.timing(animY, {
+            toValue:         snapped,
+            duration,
+            easing:          Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          });
+          momentumAnim.current = anim;
+          anim.start(() => { momentumAnim.current = null; });
+        },
+
+        onPanResponderTerminate: () => {
+          const snapped = snapY(currentY.current);
+          Animated.timing(animY, {
+            toValue:         snapped,
+            duration:        150,
+            easing:          Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [minY, maxY],
   );
 
   return (
-    <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
-      {/* Selection highlight band */}
+    <View
+      style={{ width, height: PICKER_H, overflow: 'hidden' }}
+      {...panResponder.panHandlers}
+    >
+      {/* Animated list */}
+      <Animated.View style={{ transform: [{ translateY: animY }] }}>
+        {repeated.map((label, idx) => {
+          const dist = idx - selectedFlat;
+
+          const isSelected = dist === 0;
+          const isAdj1     = Math.abs(dist) === 1;
+          const isAdj2     = Math.abs(dist) === 2;
+
+          let fontSize: number;
+          let fontWeight: '700' | '500' | '400' | '300';
+          let opacity: number;
+          let color: string;
+          let scale: number;
+
+          if (isSelected) {
+            fontSize   = 30;
+            fontWeight = '700';
+            opacity    = 1;
+            color      = accent;
+            scale      = 1;
+          } else if (isAdj1) {
+            fontSize   = 22;
+            fontWeight = '400';
+            opacity    = 0.45;
+            color      = colors.muted;
+            scale      = 0.9;
+          } else if (isAdj2) {
+            fontSize   = 16;
+            fontWeight = '300';
+            opacity    = 0.18;
+            color      = colors.muted;
+            scale      = 0.78;
+          } else {
+            fontSize   = 13;
+            fontWeight = '300';
+            opacity    = 0;
+            color      = 'transparent';
+            scale      = 0.65;
+          }
+
+          return (
+            <View key={idx} style={[styles.item, { height: ITEM_H, width }]}>
+              <Text
+                style={{
+                  fontSize,
+                  fontWeight,
+                  opacity,
+                  color,
+                  transform: [{ scale }],
+                  letterSpacing: 0.5,
+                  ...(Platform.OS === 'ios' ? { fontFamily: 'System' } : {}),
+                }}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+            </View>
+          );
+        })}
+      </Animated.View>
+
+      {/* Selection band — two hairline rules around center row */}
       <View
         pointerEvents="none"
         style={[
           styles.selectionBand,
           {
-            backgroundColor: colors.surface,
+            top:         CENTER_ROW * ITEM_H,
+            height:      ITEM_H,
             borderColor: colors.border,
-            top: ITEM_HEIGHT * 2,
-            width,
           },
         ]}
       />
-      <ScrollView
-        ref={scrollRef}
-        onLayout={onLayout}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_HEIGHT}
-        decelerationRate="fast"
-        onMomentumScrollEnd={handleScrollEnd}
-        onScrollEndDrag={handleScrollEnd}
-        nestedScrollEnabled={true}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
-        style={{ flex: 1 }}
-      >
-        {repeated.map((item, index) => {
-          const dist = item.realIndex - selectedReal;
-          const wrappedDist = ((dist + count / 2 + count) % count) - count / 2;
-          const isSelected = wrappedDist === 0;
-          const isAdjacent = Math.abs(wrappedDist) === 1;
-          const isOuter = Math.abs(wrappedDist) === 2;
 
-          let color: string;
-          let fontSize: number;
-          let fontWeight: '700' | '400' | '300';
-          let opacity: number;
-
-          if (isSelected) {
-            color = colors.foreground;
-            fontSize = 26;
-            fontWeight = '700';
-            opacity = 1;
-          } else if (isAdjacent) {
-            color = colors.muted;
-            fontSize = 20;
-            fontWeight = '400';
-            opacity = 0.55;
-          } else if (isOuter) {
-            color = colors.muted;
-            fontSize = 16;
-            fontWeight = '300';
-            opacity = 0.25;
-          } else {
-            color = 'transparent';
-            fontSize = 14;
-            fontWeight = '300';
-            opacity = 0;
-          }
-
-          return (
-            <View key={`${index}`} style={styles.item}>
-              <Text
-                style={[
-                  styles.itemText,
-                  { color, fontSize, fontWeight, opacity },
-                ]}
-              >
-                {item.label}
-              </Text>
-            </View>
-          );
-        })}
-      </ScrollView>
+      {/* Top fade — LinearGradient from background to transparent */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[colors.background, colors.background + 'CC', 'transparent']}
+        style={[styles.fadeMask, { top: 0 }]}
+      />
+      {/* Bottom fade */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['transparent', colors.background + 'CC', colors.background]}
+        style={[styles.fadeMask, { bottom: 0 }]}
+      />
     </View>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── WheelTimePicker ─────────────────────────────────────────────────────────
 
 interface WheelTimePickerProps {
   hour: number;   // 0-23
@@ -186,8 +304,8 @@ const PERIODS  = ['AM', 'PM'];
 export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps) {
   const colors = useColors();
 
-  const isPM   = hour >= 12;
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const isPM    = hour >= 12;
+  const hour12  = hour % 12 === 0 ? 12 : hour % 12;
 
   const initialHourIdx   = hour12 - 1;
   const initialMinuteIdx = minute;
@@ -222,16 +340,43 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
     emit(hourIdxRef.current, minuteIdxRef.current, idx);
   }, [emit]);
 
-  const hourW   = 76;
-  const minuteW = 76;
-  const periodW = 72;
+  const hourW   = 84;
+  const minuteW = 84;
+  const periodW = 76;
+  const totalW  = hourW + minuteW + periodW;
 
   return (
-    <View style={[styles.container, { width: hourW + minuteW + periodW }]}>
+    <View style={[styles.container, { width: totalW }]}>
+      {/* Colon separator — positioned between hour and minute columns */}
+      <View
+        pointerEvents="none"
+        style={[styles.colonWrap, { left: hourW - 6, bottom: 0, top: 0 }]}
+      >
+        <Text style={[styles.colon, { color: colors.foreground }]}>:</Text>
+      </View>
+
       <View style={styles.columns}>
-        <WheelColumn items={HOURS_12} initialIndex={initialHourIdx}   onSelect={onHourSelect}   width={hourW} />
-        <WheelColumn items={MINUTES}  initialIndex={initialMinuteIdx} onSelect={onMinuteSelect} width={minuteW} />
-        <WheelColumn items={PERIODS}  initialIndex={initialPeriodIdx} onSelect={onPeriodSelect} width={periodW} />
+        <WheelColumn
+          items={HOURS_12}
+          initialIndex={initialHourIdx}
+          onSelect={onHourSelect}
+          width={hourW}
+          accentColor={colors.foreground}
+        />
+        <WheelColumn
+          items={MINUTES}
+          initialIndex={initialMinuteIdx}
+          onSelect={onMinuteSelect}
+          width={minuteW}
+          accentColor={colors.foreground}
+        />
+        <WheelColumn
+          items={PERIODS}
+          initialIndex={initialPeriodIdx}
+          onSelect={onPeriodSelect}
+          width={periodW}
+          accentColor={colors.primary}
+        />
       </View>
     </View>
   );
@@ -239,35 +384,48 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
+const FADE_H = ITEM_H * 2 + 4;
+
 const styles = StyleSheet.create({
   container: {
-    height: PICKER_HEIGHT,
+    height:    PICKER_H,
     alignSelf: 'center',
-    overflow: 'hidden',
   },
   columns: {
     flexDirection: 'row',
-    height: PICKER_HEIGHT,
+    height:        PICKER_H,
   },
   item: {
-    height: ITEM_HEIGHT,
-    alignItems: 'center',
+    alignItems:     'center',
     justifyContent: 'center',
   },
-  itemText: {
-    letterSpacing: 0.2,
-    ...(Platform.OS === 'ios' ? { fontFamily: 'System' } : {}),
-  },
   selectionBand: {
+    position:          'absolute',
+    left:              12,
+    right:             12,
+    borderTopWidth:    StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth:   0,
+    borderRightWidth:  0,
+    pointerEvents:     'none',
+  },
+  fadeMask: {
     position: 'absolute',
-    height: ITEM_HEIGHT,
-    borderRadius: 10,
-    borderTopWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
-    zIndex: 0,
-    left: 0,
-    right: 0,
+    left:     0,
+    right:    0,
+    height:   FADE_H,
+    pointerEvents: 'none',
+  },
+  colonWrap: {
+    position:       'absolute',
+    width:          16,
+    alignItems:     'center',
+    justifyContent: 'center',
+    zIndex:         10,
+  },
+  colon: {
+    fontSize:   30,
+    fontWeight: '700',
+    marginTop:  -6,
   },
 });
