@@ -1,22 +1,23 @@
 /**
- * WheelTimePicker — PanResponder-based drum roll picker
+ * WheelTimePicker — FlatList-based infinite drum roll picker
  *
- * Uses PanResponder + Animated.Value instead of ScrollView.
- * This gives us 100% control over position and snapping on ALL platforms
- * (iOS, Android, web) without any browser scroll-snap interference.
+ * Uses FlatList with a large repeated item array so the user always has
+ * plenty of items to scroll through in both directions (like Apple's native
+ * time picker). FlatList handles its own gesture recognition natively, so
+ * it works correctly even inside a parent ScrollView.
  *
- * How it works:
- * - A single Animated.Value `offsetY` tracks the vertical translation of the item list.
- * - Dragging moves the list by the pan delta.
- * - On release, we spring-snap to the nearest item's grid position.
- * - The visible window is 3 rows tall; the center row is the selected item.
- * - Items outside ±1 of selected are rendered transparent (still in DOM for layout).
+ * Key design decisions:
+ * - Items are repeated N_REPEAT times so there's always content above/below
+ * - On mount we scroll to the center of the repeated list (so user can go up or down)
+ * - On scroll end we snap to the nearest item using scrollToOffset
+ * - The parent ScrollView is disabled while the picker column is being touched
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
-  Animated,
-  PanResponder,
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   StyleSheet,
   Text,
@@ -26,28 +27,10 @@ import { useColors } from '@/hooks/use-colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_HEIGHT   = 48;
-const PICKER_HEIGHT = ITEM_HEIGHT * 3;   // 3 visible rows
-const SNAP_TENSION  = 200;
-const SNAP_FRICTION = 20;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-// Convert offsetY (list translation) to selected index
-// offsetY = 0  → item[0] is in center row
-// offsetY = -ITEM_HEIGHT → item[1] is in center row
-// So: index = round(-offsetY / ITEM_HEIGHT)
-function offsetToIndex(offset: number, count: number) {
-  return clamp(Math.round(-offset / ITEM_HEIGHT), 0, count - 1);
-}
-
-function indexToOffset(index: number) {
-  return -index * ITEM_HEIGHT;
-}
+const ITEM_HEIGHT = 48;
+const VISIBLE_ITEMS = 5;          // how many rows show in the window
+const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
+const N_REPEAT = 100;             // repeat items this many times for "infinite" feel
 
 // ─── WheelColumn ─────────────────────────────────────────────────────────────
 
@@ -62,151 +45,144 @@ export function WheelColumn({ items, initialIndex, onSelect, width }: ColumnProp
   const colors = useColors();
   const count = items.length;
 
-  // Animated offset: starts at position showing initialIndex in center
-  const offsetY = useRef(new Animated.Value(indexToOffset(initialIndex))).current;
-  // Track current index for styling (non-animated)
-  const currentIdx = useRef(initialIndex);
-  // Force re-render when index changes
-  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+  // Build a large repeated array so there's plenty of content in both directions
+  const repeated = React.useMemo(() => {
+    const arr: { label: string; realIndex: number; key: string }[] = [];
+    for (let rep = 0; rep < N_REPEAT; rep++) {
+      for (let i = 0; i < count; i++) {
+        arr.push({ label: items[i], realIndex: i, key: `${rep}-${i}` });
+      }
+    }
+    return arr;
+  }, [items, count]);
 
-  // Snap to nearest item with spring animation
-  const snapToNearest = useCallback((currentOffset: number) => {
-    const idx = offsetToIndex(currentOffset, count);
-    const targetOffset = indexToOffset(idx);
-    currentIdx.current = idx;
-    forceUpdate();
-    Animated.spring(offsetY, {
-      toValue: targetOffset,
-      tension: SNAP_TENSION,
-      friction: SNAP_FRICTION,
-      useNativeDriver: true,
-    }).start();
-    onSelect(idx);
-  }, [count, offsetY, onSelect]);
+  // Start in the middle of the repeated list at the correct initial item
+  const midRepeat = Math.floor(N_REPEAT / 2);
+  const initialFlatIndex = midRepeat * count + initialIndex;
+  const initialOffset = initialFlatIndex * ITEM_HEIGHT;
 
-  // PanResponder
-  const startOffset = useRef(indexToOffset(initialIndex));
+  const listRef = useRef<FlatList>(null);
+  const currentRealIdx = useRef(initialIndex);
+  const [selectedReal, setSelectedReal] = useState(initialIndex);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      // Capture phase: claim the touch BEFORE the parent ScrollView can intercept it
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponderCapture: (_, gs) => Math.abs(gs.dy) > 1,
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 1,
-      onPanResponderGrant: () => {
-        // Capture current animated value
-        (offsetY as any).stopAnimation((val: number) => {
-          startOffset.current = val;
-        });
-        // Also read synchronously for immediate response
-        startOffset.current = (offsetY as any)._value ?? startOffset.current;
-      },
-      onPanResponderMove: (_, gs) => {
-        const newOffset = startOffset.current + gs.dy;
-        // Clamp with rubber-band feel at edges
-        const minOffset = indexToOffset(count - 1);
-        const maxOffset = 0;
-        let clamped = newOffset;
-        if (newOffset > maxOffset) {
-          clamped = maxOffset + (newOffset - maxOffset) * 0.3;
-        } else if (newOffset < minOffset) {
-          clamped = minOffset + (newOffset - minOffset) * 0.3;
-        }
-        offsetY.setValue(clamped);
-        // Update live index for styling
-        const idx = offsetToIndex(clamped, count);
-        if (idx !== currentIdx.current) {
-          currentIdx.current = idx;
-          forceUpdate();
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        const currentOffset = startOffset.current + gs.dy;
-        // Add velocity-based momentum
-        const velocityBoost = gs.vy * 80;
-        const momentumOffset = currentOffset + velocityBoost;
-        snapToNearest(momentumOffset);
-      },
-      onPanResponderTerminate: (_, gs) => {
-        const currentOffset = startOffset.current + gs.dy;
-        snapToNearest(currentOffset);
-      },
-    })
-  ).current;
+  // Snap to nearest item on scroll end
+  const handleScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const flatIndex = Math.round(y / ITEM_HEIGHT);
+      const snappedOffset = flatIndex * ITEM_HEIGHT;
 
-  const liveIdx = currentIdx.current;
+      // Scroll to exact snap position
+      listRef.current?.scrollToOffset({ offset: snappedOffset, animated: true });
+
+      const realIdx = ((flatIndex % count) + count) % count;
+      if (realIdx !== currentRealIdx.current) {
+        currentRealIdx.current = realIdx;
+        setSelectedReal(realIdx);
+        onSelect(realIdx);
+      }
+    },
+    [count, onSelect],
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: { label: string; realIndex: number; key: string }; index: number }) => {
+      const dist = item.realIndex - selectedReal;
+      // Wrap distance for circular feel
+      const wrappedDist = ((dist + count / 2 + count) % count) - count / 2;
+      const isSelected = wrappedDist === 0;
+      const isAdjacent = Math.abs(wrappedDist) === 1;
+      const isOuter = Math.abs(wrappedDist) === 2;
+
+      let color: string;
+      let fontSize: number;
+      let fontWeight: '700' | '400' | '300';
+      let opacity: number;
+
+      if (isSelected) {
+        color = colors.foreground;
+        fontSize = 26;
+        fontWeight = '700';
+        opacity = 1;
+      } else if (isAdjacent) {
+        color = colors.muted;
+        fontSize = 19;
+        fontWeight = '400';
+        opacity = 0.55;
+      } else if (isOuter) {
+        color = colors.muted;
+        fontSize = 16;
+        fontWeight = '300';
+        opacity = 0.25;
+      } else {
+        color = 'transparent';
+        fontSize = 14;
+        fontWeight = '300';
+        opacity = 0;
+      }
+
+      return (
+        <View style={styles.item}>
+          <Text
+            style={[
+              styles.itemText,
+              {
+                color,
+                fontSize,
+                fontWeight,
+                opacity,
+              },
+            ]}
+          >
+            {item.label}
+          </Text>
+        </View>
+      );
+    },
+    [selectedReal, count, colors],
+  );
 
   return (
-    <View
-      style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}
-      {...panResponder.panHandlers}
-    >
-      {/* The animated list — translateY moves it up/down */}
-      <Animated.View
-        style={{
-          transform: [{ translateY: Animated.add(offsetY, new Animated.Value(ITEM_HEIGHT)) }],
-        }}
-      >
-        {items.map((label, i) => {
-          const dist = i - liveIdx;
-          const isSelected = dist === 0;
-          const isAdjacent = Math.abs(dist) === 1;
-
-          let textColor: string;
-          let fontSize: number;
-          let fontWeight: '700' | '300' | '400';
-          let opacity: number;
-          let rotateX: string;
-          let scaleY: number;
-
-          if (isSelected) {
-            textColor = colors.foreground;
-            fontSize = 28;
-            fontWeight = '700';
-            opacity = 1;
-            rotateX = '0deg';
-            scaleY = 1;
-          } else if (isAdjacent) {
-            textColor = colors.muted;
-            fontSize = 17;
-            fontWeight = '300';
-            opacity = 0.45;
-            rotateX = dist < 0 ? '-28deg' : '28deg';
-            scaleY = 0.82;
-          } else {
-            textColor = 'transparent';
-            fontSize = 17;
-            fontWeight = '300';
-            opacity = 0;
-            rotateX = '0deg';
-            scaleY = 1;
-          }
-
-          return (
-            <View key={i} style={styles.item}>
-              <Text
-                style={[
-                  styles.itemText,
-                  {
-                    color: textColor,
-                    fontSize,
-                    fontWeight,
-                    opacity,
-                    transform: [
-                      { perspective: 300 },
-                      { rotateX: rotateX as string },
-                      { scaleY },
-                    ],
-                  },
-                ]}
-              >
-                {label}
-              </Text>
-            </View>
-          );
+    <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
+      {/* Selection highlight band */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.selectionBand,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            top: ITEM_HEIGHT * 2,
+            width,
+          },
+        ]}
+      />
+      <FlatList
+        ref={listRef}
+        data={repeated}
+        keyExtractor={(item) => item.key}
+        renderItem={renderItem}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_HEIGHT}
+        decelerationRate="fast"
+        getItemLayout={(_, index) => ({
+          length: ITEM_HEIGHT,
+          offset: ITEM_HEIGHT * index,
+          index,
         })}
-      </Animated.View>
+        initialScrollIndex={initialFlatIndex}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        // Prevent parent ScrollView from stealing touches
+        nestedScrollEnabled={true}
+        scrollEventThrottle={16}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
+        // Remove the extra padding offset since we use paddingVertical
+        initialNumToRender={VISIBLE_ITEMS + 4}
+        maxToRenderPerBatch={VISIBLE_ITEMS + 4}
+        windowSize={5}
+      />
     </View>
   );
 }
@@ -262,28 +238,13 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
     emit(hourIdxRef.current, minuteIdxRef.current, idx);
   }, [emit]);
 
-  const hourW   = 68;
-  const minuteW = 68;
-  const periodW = 64;
+  const hourW   = 72;
+  const minuteW = 72;
+  const periodW = 68;
   const totalW  = hourW + minuteW + periodW;
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Selection band — top/bottom border lines mark the center row */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.selectionBand,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            top: ITEM_HEIGHT,
-            width: totalW + 32,
-            left: -16,
-          },
-        ]}
-      />
-
       <View style={styles.columns}>
         <WheelColumn items={HOURS_12} initialIndex={initialHourIdx}   onSelect={onHourSelect}   width={hourW} />
         <WheelColumn items={MINUTES}  initialIndex={initialMinuteIdx} onSelect={onMinuteSelect} width={minuteW} />
@@ -299,7 +260,6 @@ const styles = StyleSheet.create({
   container: {
     height: PICKER_HEIGHT,
     alignSelf: 'center',
-    position: 'relative',
     overflow: 'hidden',
   },
   columns: {
@@ -324,5 +284,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 0,
     borderRightWidth: 0,
     zIndex: 0,
+    left: 0,
+    right: 0,
   },
 });

@@ -1504,3 +1504,6 @@
 - [x] Fix: Journal calendar modal — now full-screen (presentationStyle=fullScreen, no transparent overlay)
 - [x] Fix: Edit Alarm time picker — scroll locked on parent ScrollView when touching picker (onTouchStart/End)
 - [x] Feature: Edit Alarm meditation picker — Priming now shows amber RECOMMENDED badge
+
+- [ ] Fix WheelTimePicker — dials frozen/unresponsive to scroll, rebuild with infinite-scroll FlatList columns
+- [ ] Fix journal entry keyboard avoidance — photo attachments hidden under keyboard when typing

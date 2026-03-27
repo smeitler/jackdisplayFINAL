@@ -2522,30 +2522,35 @@ function FullScreenJournalEditor({
             />
           </ScrollView>
 
-          {/* Photo strip — shown above toolbar when photos exist */}
-          {photos.length > 0 && (
-            <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-              <DraggablePhotoStrip
-                photos={photos}
-                colors={{ muted: 'rgba(255,255,255,0.4)', primary: colors?.primary ?? '#3B82F6' }}
-                onDelete={onDeletePhoto}
-                onReorder={onReorderPhotos}
-              />
-            </View>
-          )}
-
-          {/* Keyboard accessory toolbar — measure height so ScrollView paddingBottom matches */}
-          <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'rgba(28,28,30,0.98)' }} onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}>
-            <View style={fsStyles.toolbar}>
-              {/* Photos */}
-              <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
-              </Pressable>
-              <View style={{ flex: 1 }} />
-              {/* Character count */}
-              <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
-            </View>
-          </SafeAreaView>
+          {/* Photo strip + toolbar — KeyboardAvoidingView pushes them above the keyboard */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={0}
+          >
+            {/* Photo strip — shown above toolbar when photos exist */}
+            {photos.length > 0 && (
+              <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
+                <DraggablePhotoStrip
+                  photos={photos}
+                  colors={{ muted: 'rgba(255,255,255,0.4)', primary: colors?.primary ?? '#3B82F6' }}
+                  onDelete={onDeletePhoto}
+                  onReorder={onReorderPhotos}
+                />
+              </View>
+            )}
+            {/* Keyboard accessory toolbar — measure height so ScrollView paddingBottom matches */}
+            <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'rgba(28,28,30,0.98)' }} onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}>
+              <View style={fsStyles.toolbar}>
+                {/* Photos */}
+                <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+                  <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
+                </Pressable>
+                <View style={{ flex: 1 }} />
+                {/* Character count */}
+                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
+              </View>
+            </SafeAreaView>
+          </KeyboardAvoidingView>
         </View>
       </View>
     </Modal>

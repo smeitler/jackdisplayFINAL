@@ -29,8 +29,10 @@ export const API_BASE_URL = env.apiBaseUrl;
 export function getApiBaseUrl(): string {
   // If API_BASE_URL is set, use it
   if (API_BASE_URL) {
+    console.log('[getApiBaseUrl] Using EXPO_PUBLIC_API_BASE_URL:', API_BASE_URL);
     return API_BASE_URL.replace(/\/$/, "");
   }
+  console.log('[getApiBaseUrl] EXPO_PUBLIC_API_BASE_URL not set, using fallback');
 
   // On web, derive from current hostname by replacing port 8081 with 3000
   if (ReactNative.Platform.OS === "web" && typeof window !== "undefined" && window.location) {
