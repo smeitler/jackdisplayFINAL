@@ -22,6 +22,102 @@ import { trpc } from '@/lib/trpc';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const TASKS_STORAGE_KEY = '@you_tasks_v1';
+
+// ─── Quick-Add Task Bar ───────────────────────────────────────────────────────
+function QuickAddTaskBar() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [text, setText] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  async function handleAdd() {
+    const title = text.trim();
+    if (!title) return;
+    setSaving(true);
+    try {
+      const raw = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+      const existing: any[] = raw ? JSON.parse(raw) : [];
+      const newTask = {
+        id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        title,
+        notes: '',
+        priority: 'medium' as const,
+        dueDate: null,
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify([newTask, ...existing]));
+      setText('');
+    } catch (e) {
+      console.warn('[QuickAddTask] save error:', e);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={insets.bottom + 8}
+    >
+      <View style={[
+        quickTaskStyles.bar,
+        { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: insets.bottom + 8 },
+      ]}>
+        <TextInput
+          style={[quickTaskStyles.input, { backgroundColor: colors.background, color: colors.foreground, borderColor: colors.border }]}
+          placeholder="Add a task..."
+          placeholderTextColor={colors.muted}
+          value={text}
+          onChangeText={setText}
+          onSubmitEditing={handleAdd}
+          returnKeyType="done"
+          blurOnSubmit={false}
+        />
+        <TouchableOpacity
+          style={[quickTaskStyles.addBtn, { backgroundColor: text.trim() ? colors.primary : colors.border }]}
+          onPress={handleAdd}
+          disabled={!text.trim() || saving}
+          activeOpacity={0.7}
+        >
+          <Text style={[quickTaskStyles.addBtnText, { color: text.trim() ? '#fff' : colors.muted }]}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const quickTaskStyles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    fontSize: 15,
+  },
+  addBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnText: {
+    fontSize: 22,
+    fontWeight: '400',
+    lineHeight: 26,
+  },
+});
 
 // Reusable swipeable sheet wrapper
 function SwipeableSheet({ children, onClose, style, sheetColors }: { children: React.ReactNode; onClose: () => void; style?: object; sheetColors?: ReturnType<typeof useColors> }) {
@@ -1139,6 +1235,7 @@ export default function HabitsScreen() {
         onDelete={(id) => deleteCategory(id)}
         onClose={() => setCategoryModal({ open: false })}
       />
+      <QuickAddTaskBar />
     </ScreenContainer>
   );
 }

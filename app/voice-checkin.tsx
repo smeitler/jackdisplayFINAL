@@ -31,7 +31,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -744,6 +744,7 @@ const cardStyles = StyleSheet.create({
 export default function VoiceCheckinScreen() {
   const colors = useColors();
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ returnTo?: string; meditationId?: string; practiceDuration?: string }>();
   const { habits, activeHabits, categories, submitCheckIn: appSubmitCheckIn } = useApp();
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const habitsByCategory = useMemo(() => {
@@ -1202,7 +1203,20 @@ export default function VoiceCheckinScreen() {
       if (Platform.OS !== "web")
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setPhase("done");
-      setTimeout(() => router.back(), 1200);
+      // If launched from alarm flow, navigate forward to Prime instead of going back
+      const returnTo = routeParams.returnTo;
+      const meditationId = routeParams.meditationId;
+      const practiceDuration = routeParams.practiceDuration;
+      if (returnTo && returnTo !== '/(tabs)') {
+        setTimeout(() => {
+          router.replace({
+            pathname: returnTo as any,
+            params: meditationId ? { meditationId, practiceDuration: practiceDuration ?? '10' } : {},
+          } as never);
+        }, 1200);
+      } else {
+        setTimeout(() => router.back(), 1200);
+      }
     } catch (err: any) {
       console.error("[VoiceCheckin] save error:", err);
       Alert.alert("Error", "Could not save your check-in. Please try again.");

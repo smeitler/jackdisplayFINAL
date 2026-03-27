@@ -1547,3 +1547,8 @@
 - [x] Add Tasks tab to the right of Rewards in the You/Profile section
 
 - [x] Auto-extract tasks from voice journal transcripts ("remind me to...", "don't forget...", "I need to...") and add them to the Tasks list
+
+- [x] Fix alarm morning flow: all paths (Yes/No+journal/Skip) must route to Prime step if selected in alarm settings
+
+- [x] Add quick-add task input bar at the bottom of the Habits screen
+- [x] Add quick-add task input bar at the bottom of the Journal screen
