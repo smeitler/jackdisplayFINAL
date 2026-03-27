@@ -140,7 +140,7 @@ export default function StackEditorScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Header — inside safe area */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}

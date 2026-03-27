@@ -1564,3 +1564,8 @@
 - [x] Stack editor: Reminder step — countdown timer defaulting to 2 min, user can change
 - [x] Stack player: Cancel button always top-left, Skip button always top-right, both inside safe area
 - [x] Stack player/editor: fix X/back button clipped outside safe area
+
+- [x] Stack player: top bar (Cancel/Skip) clipped under notch — fix safe area padding
+- [x] Stack editor: back button clipped under notch — fix safe area padding
+- [x] Home widget: step list shows plain words only (no icons), lighter font weight, subtle color
+- [x] Home widget: icon fills more of the left side (larger, no wasted space)

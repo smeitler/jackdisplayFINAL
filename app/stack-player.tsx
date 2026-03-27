@@ -149,7 +149,7 @@ export default function StackPlayerScreen() {
   if (stack.steps.length === 0) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
           <Pressable onPress={cancelStack} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
             <Text style={[styles.topBarBtnText, { color: colors.muted }]}>Cancel</Text>
           </Pressable>
@@ -172,7 +172,7 @@ export default function StackPlayerScreen() {
   if (phase === 'done') {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
           <View style={{ width: 64 }} />
           <Text style={[styles.topBarTitle, { color: colors.foreground }]}>{stack.name}</Text>
           <View style={{ width: 64 }} />
@@ -206,7 +206,7 @@ export default function StackPlayerScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* ── Top bar: Cancel (left) · title · Skip (right) — always visible ── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
         <Pressable onPress={cancelStack} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
           <Text style={[styles.topBarBtnText, { color: colors.muted }]}>Cancel</Text>
         </Pressable>
@@ -289,6 +289,7 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 8, paddingBottom: 10,
+    backgroundColor: 'transparent',
   },
   topBarBtn: { paddingHorizontal: 12, paddingVertical: 6, minWidth: 64 },
   topBarBtnText: { fontSize: 15, fontWeight: '600' },

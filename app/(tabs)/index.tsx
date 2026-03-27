@@ -1244,47 +1244,33 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                {/* Left: icon (no background) + name */}
-                <View style={styles.stackWidgetLeft}>
-                  <IconSymbol name={iconName as any} size={32} color={accentColor} />
+                {/* Top row: icon + name + Edit */}
+                <View style={styles.stackWidgetTopRow}>
+                  <IconSymbol name={iconName as any} size={40} color={accentColor} />
                   <Text style={[styles.stackWidgetTitle, { color: isCalm ? '#fff' : colors.foreground }]}>
                     {stack.name}
                   </Text>
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push(`/stack-editor?id=${stack.id}` as never);
+                    }}
+                    style={({ pressed }) => [styles.stackEditBtn, { opacity: pressed ? 0.6 : 1 }]}
+                  >
+                    <Text style={[styles.stackEditBtnText, { color: accentColor }]}>Edit</Text>
+                  </Pressable>
                 </View>
 
-                {/* Right: Edit button */}
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push(`/stack-editor?id=${stack.id}` as never);
-                  }}
-                  style={({ pressed }) => [styles.stackEditBtn, { opacity: pressed ? 0.6 : 1 }]}
-                >
-                  <Text style={[styles.stackEditBtnText, { color: accentColor }]}>Edit</Text>
-                </Pressable>
-
-                {/* Step flow: icon → icon → icon with arrows */}
+                {/* Step names: plain words separated by · */}
                 {stack.steps.length === 0 ? (
-                  <Text style={[styles.stackNoSteps, { color: isCalm ? 'rgba(255,255,255,0.4)' : colors.muted }]}>
+                  <Text style={[styles.stackNoSteps, { color: isCalm ? 'rgba(255,255,255,0.35)' : colors.muted }]}>
                     Tap Edit to add steps
                   </Text>
                 ) : (
-                  <View style={styles.stackStepFlow}>
-                    {stack.steps.map((step, idx) => (
-                      <Fragment key={step.id}>
-                        <View style={styles.stackStepChip}>
-                          <IconSymbol name={STEP_ICON_MAP[step.type] as any} size={14} color={accentColor} />
-                          <Text style={[styles.stackStepChipText, { color: isCalm ? 'rgba(255,255,255,0.8)' : colors.foreground }]} numberOfLines={1}>
-                            {stepLabel(step)}
-                          </Text>
-                        </View>
-                        {idx < stack.steps.length - 1 && (
-                          <IconSymbol name="chevron.right" size={12} color={isCalm ? 'rgba(255,255,255,0.3)' : colors.muted} />
-                        )}
-                      </Fragment>
-                    ))}
-                  </View>
+                  <Text style={[styles.stackStepWords, { color: isCalm ? 'rgba(255,255,255,0.5)' : colors.muted }]} numberOfLines={2}>
+                    {stack.steps.map((step) => stepLabel(step)).join('  ·  ')}
+                  </Text>
                 )}
               </Pressable>
             );
@@ -2201,10 +2187,14 @@ const styles = StyleSheet.create({
   stackWidgetLeft: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
   },
-  stackWidgetTitle: { fontSize: 17, fontWeight: '800' },
+  stackWidgetTopRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  stackWidgetTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
+  stackStepWords: { fontSize: 13, fontWeight: '400', lineHeight: 19, marginTop: 2 },
   stackEditBtn: {
-    position: 'absolute', top: 12, right: 12,
     paddingHorizontal: 8, paddingVertical: 3,
+    marginLeft: 'auto',
   },
   stackEditBtnText: { fontSize: 13, fontWeight: '700' },
   stackIconCircle: {
