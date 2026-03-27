@@ -94,6 +94,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "play.fill": "play-arrow",
   "stop.fill": "stop",
   "moon.stars.fill": "bedtime",
+  "moon.fill": "nightlight",
   "waveform": "graphic-eq",
   "mic.fill": "mic",
   "mic": "mic-none",

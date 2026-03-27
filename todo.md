@@ -1553,11 +1553,4 @@
 - [x] Add quick-add task input bar at the bottom of the Habits screen
 - [x] Add quick-add task input bar at the bottom of the Journal screen
 
-- [x] Stack data models: RitualStack, RitualStep, step-type registry (timer, meditation, journal, affirmations, stopwatch, breathwork, priming, reminder, custom)
-- [x] Stack storage layer: loadStacks, saveStacks, default Wake Up / Sleep stacks in AsyncStorage
-- [x] Stack Editor screen: add/remove/reorder steps, configure each step type, delay between steps
-- [x] Stack Player screen: auto-advance steps, countdown timer to next step, skip/adjust controls, full-screen
-- [x] Sounds section: Meditate, Focus, Sleep sub-categories inside a Sounds screen
-- [x] Home screen: replace Meditate/Focus/Sleep 3-card row with Wake Up Stack widget, Sleep Stack widget, and Sounds card
-- [x] Wire navigation from home screen widgets to Stack Editor and Stack Player
-- [x] Add new icon mappings needed for stack step types (all icons already present)
+- [x] Stack widget redesign: large icon (sun/moon), step names as text, tap card to start, small Edit button top-right, no emojis, no play button
