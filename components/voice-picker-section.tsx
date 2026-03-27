@@ -1,16 +1,17 @@
 /**
  * VoicePickerSection
- * Lets the user pick one of 4 voices for the app.
- * - Only 4 hardcoded voices: Christopher, Michael, Rachael, Jessa
- * - Voice can only be changed once per month
- * - Confirmation modal before committing the change
- * - Preview button next to each voice plays a short TTS sample
+ * Global voice selection component for the More tab.
+ * Shows only "professional" category voices from the user's ElevenLabs account
+ * (i.e. voices they have personally saved — not the default premade library).
+ *
+ * On voice selection:
+ *  1. Saves the voice ID globally (AsyncStorage)
+ *  2. Triggers habit pre-recording in the background
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -18,262 +19,177 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
-import { setAudioModeAsync } from 'expo-audio';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColors } from '@/hooks/use-colors';
+import { trpc } from '@/lib/trpc';
 import {
   clearHabitAudioCache,
   getGlobalVoiceId,
+  getHabitReadAloud,
   setGlobalVoiceId,
+  setHabitReadAloud,
   syncHabitAudio,
 } from '@/lib/voice-settings';
 import { loadHabits } from '@/lib/storage';
-import { trpc } from '@/lib/trpc';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const VOICE_LAST_CHANGED_KEY = '@voice_last_changed_v1';
-
-const VOICES: { id: string; name: string; description: string }[] = [
-  { id: 'christopher', name: 'Christopher', description: 'Clear, confident male voice' },
-  { id: 'michael',     name: 'Michael',     description: 'Warm, authoritative male voice' },
-  { id: 'rachael',     name: 'Rachael',     description: 'Bright, expressive female voice' },
-  { id: 'jessa',       name: 'Jessa',       description: 'Calm, soothing female voice' },
-];
-
-// ElevenLabs voice IDs mapped to our names
-const ELEVENLABS_IDS: Record<string, string> = {
-  christopher: 'IKne3meq5aSn9XLyUdCD',
-  michael:     'flq6f7yk4E4fJM5XTYuZ',
-  rachael:     '21m00Tcm4TlvDq8ikWAM',
-  jessa:       'cgSgspJ2msm6clMCkdW9',
-};
-
-// ─── Voice Preview Hook ───────────────────────────────────────────────────────
-
-/**
- * Generates a short TTS sample for a voice and plays it.
- * Uses ElevenLabs TTS API directly on-device for fast preview.
- * On web, falls back to the browser Audio API.
- */
-function useVoicePreview(apiKey: string | undefined) {
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const audioRef = useRef<any>(null); // web Audio element
-  const playerRef = useRef<any>(null); // AudioPlayer instance
-
-  async function playPreview(voiceKey: string) {
-    if (!apiKey) {
-      setPreviewError('API key not available');
-      return;
-    }
-    if (previewingId === voiceKey) {
-      // Stop if already playing this voice
-      stopPreview();
-      return;
-    }
-
-    stopPreview();
-    setPreviewingId(voiceKey);
-    setPreviewError(null);
-
-    const elevenLabsId = ELEVENLABS_IDS[voiceKey] ?? voiceKey;
-    const sampleText = `Hi, I'm ${VOICES.find(v => v.id === voiceKey)?.name ?? voiceKey}. Good morning!`;
-
-    try {
-      const resp = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${elevenLabsId}`,
-        {
-          method: 'POST',
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-            'Accept': 'audio/mpeg',
-          },
-          body: JSON.stringify({
-            text: sampleText,
-            model_id: 'eleven_multilingual_v2',
-            voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-          }),
-        }
-      );
-
-      if (!resp.ok) {
-        throw new Error(`ElevenLabs error ${resp.status}`);
-      }
-
-      if (Platform.OS === 'web') {
-        // Web: use blob URL + HTML Audio
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new (window as any).Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => {
-          setPreviewingId(null);
-          URL.revokeObjectURL(url);
-        };
-        audio.onerror = () => {
-          setPreviewingId(null);
-          URL.revokeObjectURL(url);
-        };
-        await audio.play();
-      } else {
-        // Native: write to temp file and use expo-audio AudioPlayer
-        const arrayBuffer = await resp.arrayBuffer();
-        const uint8 = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < uint8.length; i++) {
-          binary += String.fromCharCode(uint8[i]);
-        }
-        const base64 = btoa(binary);
-        const tmpPath = (FileSystem.cacheDirectory ?? '') + `voice_preview_${voiceKey}.mp3`;
-        await FileSystem.writeAsStringAsync(tmpPath, base64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await setAudioModeAsync({ playsInSilentMode: true });
-        const { AudioPlayer } = await import('expo-audio');
-        // AudioPlayer constructor: (source, updateInterval, keepAudioSessionActive)
-        const player = new AudioPlayer({ uri: tmpPath }, 250, false);
-        playerRef.current = player as any;
-        player.play();
-        // Poll for completion
-        const checkDone = setInterval(() => {
-          if (!player.playing) {
-            clearInterval(checkDone);
-            setPreviewingId(null);
-            player.release();
-          }
-        }, 500);
-        // Safety timeout: clear after 15s
-        setTimeout(() => {
-          clearInterval(checkDone);
-          setPreviewingId(null);
-          try { player.release(); } catch {}
-        }, 15000);
-      }
-    } catch (err: any) {
-      console.error('[VoicePreview] error:', err);
-      setPreviewError(err?.message ?? 'Preview failed');
-      setPreviewingId(null);
-    }
-  }
-
-  function stopPreview() {
-    if (Platform.OS === 'web') {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    } else {
-      if (playerRef.current) {
-        try { (playerRef.current as any).release(); } catch {}
-        playerRef.current = null;
-      }
-    }
-    setPreviewingId(null);
-  }
-
-  return { previewingId, previewError, playPreview, stopPreview };
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
+type VoiceEntry = { voice_id: string; name: string; category: string; preview_url?: string };
 
 export function VoicePickerSection() {
   const colors = useColors();
-  const apiKeyQuery = trpc.voice.getApiKey.useQuery();
-  const apiKey = apiKeyQuery.data?.apiKey;
 
+  // ── State ──────────────────────────────────────────────────────────────────
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const [pendingVoice, setPendingVoice] = useState<typeof VOICES[0] | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [lastChangedDate, setLastChangedDate] = useState<Date | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+  const [readAloud, setReadAloud] = useState(true);
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
 
-  const { previewingId, previewError, playPreview } = useVoicePreview(apiKey);
+  // ── tRPC ───────────────────────────────────────────────────────────────────
+  const voicesQuery = trpc.voice.listVoices.useQuery();
+  const apiKeyQuery = trpc.voice.getApiKey.useQuery();
 
-  // Load persisted voice + last changed date on mount
+  // Filter to professional (saved) voices only
+  const voices: VoiceEntry[] = (voicesQuery.data ?? []).filter(
+    (v) => v.category === 'professional'
+  );
+
+  // ── Audio preview refs ─────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const previewPlayerRef = useRef<any>(null);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function stopPreview() {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    try { previewPlayerRef.current?.remove(); } catch {}
+    previewPlayerRef.current = null;
+  }
+
+  useEffect(() => () => stopPreview(), []);
+
+  // ── Load persisted voice on mount ─────────────────────────────────────────
   useEffect(() => {
     getGlobalVoiceId().then((id) => { if (id) setSelectedVoiceId(id); });
-    AsyncStorage.getItem(VOICE_LAST_CHANGED_KEY).then((val) => {
-      if (val) setLastChangedDate(new Date(val));
-    });
+    getHabitReadAloud().then(setReadAloud);
   }, []);
 
-  // Check if user is allowed to change voice this month
-  function canChangeVoice(): boolean {
-    if (!lastChangedDate) return true;
-    const now = new Date();
-    return (
-      now.getFullYear() !== lastChangedDate.getFullYear() ||
-      now.getMonth() !== lastChangedDate.getMonth()
-    );
+  // ── Handle voice selection ─────────────────────────────────────────────────
+  const handleSelectVoice = useCallback(
+    async (voiceId: string) => {
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSelectedVoiceId(voiceId);
+      await setGlobalVoiceId(voiceId);
+      setVoiceOpen(false);
+
+      // Trigger background pre-recording of all habits
+      const apiKey = apiKeyQuery.data?.apiKey;
+      if (!apiKey) return;
+
+      try {
+        // Clear old cache since voice changed
+        await clearHabitAudioCache();
+        const habits = await loadHabits();
+        const activeHabits = habits.filter((h) => h.isActive).map((h) => ({ id: h.id, name: h.name }));
+
+        setSyncProgress({ done: 0, total: activeHabits.length });
+        await syncHabitAudio(activeHabits, voiceId, apiKey, (done, total) => {
+          setSyncProgress({ done, total });
+        });
+        setSyncProgress(null);
+      } catch (err) {
+        console.error('[VoicePickerSection] sync error:', err);
+        setSyncProgress(null);
+      }
+    },
+    [apiKeyQuery.data?.apiKey]
+  );
+
+  // ── Handle read-aloud toggle ───────────────────────────────────────────────
+  async function handleToggleReadAloud(val: boolean) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReadAloud(val);
+    await setHabitReadAloud(val);
   }
 
-  function getDaysUntilNextChange(): number {
-    if (!lastChangedDate) return 0;
-    const now = new Date();
-    const firstOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    return Math.ceil((firstOfNextMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
-  function handleTapVoice(voice: typeof VOICES[0]) {
-    if (voice.id === selectedVoiceId) return;
-    if (!canChangeVoice()) {
-      const days = getDaysUntilNextChange();
-      Alert.alert(
-        'Monthly Limit',
-        `You can only change your voice once per month. You can change it again in ${days} day${days !== 1 ? 's' : ''}.`
-      );
+  // ── Preview a voice using the built-in ElevenLabs preview_url (CDN MP3) ────
+  async function handlePreview(voice: VoiceEntry) {
+    if (previewLoading) return;
+    const previewUrl = voice.preview_url;
+    if (!previewUrl) {
+      Alert.alert('No preview', 'This voice does not have a preview available.');
       return;
     }
-    setPendingVoice(voice);
-    setShowConfirm(true);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPreviewLoading(voice.voice_id);
+    try {
+      stopPreview();
+      await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+
+      let audioUri: string;
+
+      if (Platform.OS === 'web') {
+        // Web: play directly from URL
+        audioUri = previewUrl;
+      } else {
+        // Native: download CDN MP3 to cache, play from local file
+        const tempPath = `${FileSystem.cacheDirectory}voice_preview_${voice.voice_id}.mp3`;
+        // Check if already cached
+        const info = await FileSystem.getInfoAsync(tempPath);
+        if (!info.exists) {
+          const dlResp = await fetch(previewUrl);
+          if (!dlResp.ok) throw new Error(`Download error ${dlResp.status}`);
+          const arrayBuffer = await dlResp.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuffer);
+          let binary = '';
+          for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+          const base64 = btoa(binary);
+          await FileSystem.writeAsStringAsync(tempPath, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        }
+        audioUri = tempPath;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const player = createAudioPlayer({ uri: audioUri } as any);
+      previewPlayerRef.current = player;
+      player.play();
+      previewTimerRef.current = setTimeout(() => stopPreview(), 20000);
+    } catch (err) {
+      console.error('[VoicePickerSection] preview error:', err);
+      Alert.alert('Preview failed', 'Could not load voice preview. Check your connection.');
+    } finally {
+      setPreviewLoading(null);
+    }
   }
 
-  async function handleConfirmChange() {
-    if (!pendingVoice) return;
-    setShowConfirm(false);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    const elevenLabsId = ELEVENLABS_IDS[pendingVoice.id] ?? pendingVoice.id;
-    setSelectedVoiceId(pendingVoice.id);
-    await setGlobalVoiceId(elevenLabsId);
-
-    const now = new Date().toISOString();
-    await AsyncStorage.setItem(VOICE_LAST_CHANGED_KEY, now);
-    setLastChangedDate(new Date(now));
-
-    setVoiceOpen(false);
-    setPendingVoice(null);
-
-    // Trigger background pre-recording of all habits
-    if (!apiKey) return;
+  // ── Re-record all habits manually ─────────────────────────────────────────
+  async function handleReRecord() {
+    const apiKey = apiKeyQuery.data?.apiKey;
+    if (!apiKey || !selectedVoiceId) {
+      Alert.alert('No voice selected', 'Please select a voice first.');
+      return;
+    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await clearHabitAudioCache();
       const habits = await loadHabits();
       const activeHabits = habits.filter((h) => h.isActive).map((h) => ({ id: h.id, name: h.name }));
       setSyncProgress({ done: 0, total: activeHabits.length });
-      await syncHabitAudio(activeHabits, elevenLabsId, apiKey, (done, total) => {
+      await syncHabitAudio(activeHabits, selectedVoiceId, apiKey, (done, total) => {
         setSyncProgress({ done, total });
       });
       setSyncProgress(null);
-    } catch (err) {
-      console.error('[VoicePickerSection] sync error:', err);
+      Alert.alert('Done', 'All habits have been pre-recorded.');
+    } catch {
       setSyncProgress(null);
+      Alert.alert('Error', 'Failed to pre-record habits. Please try again.');
     }
   }
 
-  function handleCancelChange() {
-    setShowConfirm(false);
-    setPendingVoice(null);
-  }
-
-  const selectedVoice = VOICES.find((v) => v.id === selectedVoiceId);
-  const selectedLabel = selectedVoice?.name ?? 'None selected';
+  const selectedVoiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? 'None selected';
 
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -298,8 +214,8 @@ export function VoicePickerSection() {
       >
         <IconSymbol name="person.fill" size={16} color={colors.muted} />
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={[styles.rowLabel, { color: colors.muted }]}>Selected Voice</Text>
-          <Text style={[styles.rowValue, { color: colors.foreground }]}>{selectedLabel}</Text>
+          <Text style={[styles.rowLabel, { color: colors.muted }]}>Jack Voice</Text>
+          <Text style={[styles.rowValue, { color: colors.foreground }]}>{selectedVoiceName}</Text>
         </View>
         <IconSymbol name={voiceOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
       </Pressable>
@@ -307,26 +223,19 @@ export function VoicePickerSection() {
       {/* Voice List */}
       {voiceOpen && (
         <View style={[styles.voiceList, { borderTopColor: colors.border }]}>
-          {!canChangeVoice() && (
-            <View style={[styles.limitBanner, { backgroundColor: '#F59E0B18', borderBottomColor: colors.border }]}>
-              <IconSymbol name="clock" size={14} color="#F59E0B" />
-              <Text style={[styles.limitText, { color: '#F59E0B' }]}>
-                Voice locked until next month ({getDaysUntilNextChange()} days)
-              </Text>
+          {voicesQuery.isLoading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.muted }]}>Loading voices…</Text>
             </View>
           )}
-          {previewError && (
-            <View style={[styles.limitBanner, { backgroundColor: colors.error + '18', borderBottomColor: colors.border }]}>
-              <Text style={[styles.limitText, { color: colors.error }]}>Preview error: {previewError}</Text>
-            </View>
-          )}
-          {VOICES.map((voice) => {
-            const isSelected = selectedVoiceId === voice.id;
-            const isPreviewing = previewingId === voice.id;
+          {voices.map((voice) => {
+            const isSelected = selectedVoiceId === voice.voice_id;
+            const isPreviewing = previewLoading === voice.voice_id;
             return (
               <Pressable
-                key={voice.id}
-                onPress={() => handleTapVoice(voice)}
+                key={voice.voice_id}
+                onPress={() => handleSelectVoice(voice.voice_id)}
                 style={({ pressed }) => [
                   styles.voiceItem,
                   isSelected && { backgroundColor: colors.primary + '18' },
@@ -334,37 +243,21 @@ export function VoicePickerSection() {
                 ]}
               >
                 <Text style={styles.voiceEmoji}>🎙️</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.voiceName, { color: isSelected ? colors.primary : colors.foreground }]}>
-                    {voice.name}
-                  </Text>
-                  <Text style={[styles.voiceDesc, { color: colors.muted }]}>{voice.description}</Text>
-                </View>
+                <Text style={[styles.voiceName, { color: isSelected ? colors.primary : colors.foreground }]}>
+                  {voice.name}
+                </Text>
                 {/* Preview button */}
                 <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    playPreview(voice.id);
-                  }}
+                  onPress={() => handlePreview(voice)}
                   style={({ pressed }) => [
                     styles.previewBtn,
-                    {
-                      backgroundColor: isPreviewing ? colors.primary : colors.primary + '22',
-                      opacity: pressed ? 0.7 : 1,
-                    },
+                    { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
                   ]}
-                  hitSlop={8}
                 >
-                  {isPreviewing ? (
-                    <ActivityIndicator size="small" color="#fff" style={{ width: 16, height: 16 }} />
-                  ) : (
-                    <IconSymbol
-                      name="play.fill"
-                      size={12}
-                      color={isPreviewing ? '#fff' : colors.primary}
-                    />
-                  )}
+                  {isPreviewing
+                    ? <ActivityIndicator size="small" color={colors.primary} />
+                    : <Text style={[styles.previewBtnText, { color: colors.primary }]}>Preview</Text>
+                  }
                 </Pressable>
                 {isSelected && (
                   <IconSymbol name="checkmark" size={14} color={colors.primary} style={{ marginLeft: 6 }} />
@@ -372,11 +265,6 @@ export function VoicePickerSection() {
               </Pressable>
             );
           })}
-          <View style={[styles.previewHint, { borderTopColor: colors.border }]}>
-            <Text style={[styles.previewHintText, { color: colors.muted }]}>
-              Tap ▶ to hear a sample before selecting
-            </Text>
-          </View>
         </View>
       )}
 
@@ -390,47 +278,50 @@ export function VoicePickerSection() {
         </View>
       )}
 
-      {/* Monthly-change confirmation modal */}
-      <Modal
-        visible={showConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelChange}
+      {/* Read Aloud Toggle */}
+      <Pressable
+        onPress={() => handleToggleReadAloud(!readAloud)}
+        style={({ pressed }) => [
+          styles.row,
+          { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+        ]}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Change Voice?</Text>
-            <Text style={[styles.modalBody, { color: colors.muted }]}>
-              You are switching to{' '}
-              <Text style={{ fontWeight: '700', color: colors.foreground }}>{pendingVoice?.name}</Text>.
-              {'\n\n'}
-              You can only change your voice{' '}
-              <Text style={{ fontWeight: '700', color: colors.foreground }}>once per month</Text>.
-              {'\n'}Are you sure?
-            </Text>
-            <View style={styles.modalButtons}>
-              <Pressable
-                onPress={handleCancelChange}
-                style={({ pressed }) => [
-                  styles.modalBtn,
-                  { backgroundColor: colors.border, opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <Text style={[styles.modalBtnText, { color: colors.foreground }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleConfirmChange}
-                style={({ pressed }) => [
-                  styles.modalBtn,
-                  { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
-                ]}
-              >
-                <Text style={[styles.modalBtnText, { color: '#fff' }]}>Yes, switch</Text>
-              </Pressable>
-            </View>
-          </View>
+        <IconSymbol name="speaker.wave.2.fill" size={16} color={colors.muted} />
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={[styles.rowLabel, { color: colors.muted }]}>Read Habits Aloud</Text>
+          <Text style={[styles.rowValue, { color: colors.foreground }]}>
+            {readAloud ? 'On — plays habit name as it appears' : 'Off'}
+          </Text>
         </View>
-      </Modal>
+        <View
+          style={[
+            styles.toggle,
+            { backgroundColor: readAloud ? colors.primary : colors.border },
+          ]}
+        >
+          <View style={[styles.toggleThumb, { left: readAloud ? 18 : 2 }]} />
+        </View>
+      </Pressable>
+
+      {/* Re-record button */}
+      {selectedVoiceId && syncProgress === null && (
+        <Pressable
+          onPress={handleReRecord}
+          style={({ pressed }) => [
+            styles.row,
+            { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <IconSymbol name="arrow.right.circle.fill" size={16} color={colors.muted} />
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={[styles.rowLabel, { color: colors.muted }]}>Re-record All Habits</Text>
+            <Text style={[styles.rowValue, { color: colors.foreground }]}>
+              Regenerate audio for all active habits
+            </Text>
+          </View>
+          <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -480,52 +371,43 @@ const styles = StyleSheet.create({
   voiceList: {
     borderTopWidth: 1,
   },
-  limitBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  limitText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
   voiceItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 10,
   },
   voiceEmoji: {
     fontSize: 18,
+    marginRight: 10,
   },
   voiceName: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 14,
     fontWeight: '600',
   },
-  voiceDesc: {
-    fontSize: 12,
-    marginTop: 1,
-  },
   previewBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 64,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewHint: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  previewHintText: {
+  previewBtnText: {
     fontSize: 12,
-    textAlign: 'center',
+    fontWeight: '600',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
   },
   syncRow: {
     flexDirection: 'row',
@@ -538,44 +420,18 @@ const styles = StyleSheet.create({
   syncText: {
     fontSize: 13,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 340,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 24,
-    gap: 16,
-  },
-  modalTitle: {
-    fontSize: 19,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  modalBody: {
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 13,
+  toggle: {
+    width: 40,
+    height: 24,
     borderRadius: 12,
-    alignItems: 'center',
+    justifyContent: 'center',
   },
-  modalBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
+  toggleThumb: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    top: 2,
   },
 });

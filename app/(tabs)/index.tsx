@@ -22,6 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { CalmHeader, useIsCalm } from "@/components/calm-effects";
 import { WellnessIcon } from "@/components/wellness-icon";
+import { loadStacks, type RitualStack } from "@/lib/stacks";
 
 const SCREEN_H = Dimensions.get('window').height;
 
@@ -955,6 +956,14 @@ export default function HomeScreen() {
     saveWidgets(next);
   }
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
+  const [ritualStacks, setRitualStacks] = useState<RitualStack[]>([]);
+
+  // Load stacks on every focus so they stay fresh after editing
+  useFocusEffect(
+    useCallback(() => {
+      loadStacks().then(setRitualStacks);
+    }, [])
+  );
 
   const totalDaysLogged = useMemo(() => new Set(checkIns.map((e) => e.date)).size, [checkIns]);
   const sortedCategories = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
@@ -1201,34 +1210,85 @@ export default function HomeScreen() {
             </Pressable>
           )}
 
-          {/* ── Wellness Audio Row (3 items: Meditate, Sleep, Focus) ── */}
-          <View style={styles.wellnessRow}>
-            {[
-              { key: 'meditate', label: 'Meditate', color: '#FF8C42' },
-              { key: 'sleep', label: 'Sleep', color: '#B07FD0' },
-              { key: 'focus', label: 'Focus', color: '#3B82F6' },
-            ].map((item) => (
-              <Pressable
-                key={item.key}
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/wellness-audio?category=${item.key}` as never);
-                }}
-                style={({ pressed }) => [
-                  styles.wellnessCard,
-                  {
-                    backgroundColor: isCalm ? '#1A2050' : colors.surface,
-                    borderColor: isCalm ? '#252D6E' : colors.border,
-                    opacity: pressed ? 0.85 : 1,
-                    transform: [{ scale: pressed ? 0.97 : 1 }],
-                  },
-                ]}
-              >
-                <WellnessIcon category={item.key as any} size={36} color={item.color} />
-                <Text style={[styles.wellnessLabel, { color: isCalm ? '#FFFFFF' : colors.foreground }]}>{item.label}</Text>
-              </Pressable>
-            ))}
+          {/* ── Stack Widgets: Wake Up + Sleep ── */}
+          <View style={styles.stackWidgetsRow}>
+            {(['wakeup', 'sleep'] as const).map((kind) => {
+              const stack = ritualStacks.find((s) => s.id === kind);
+              if (!stack) return null;
+              const accentColor = kind === 'wakeup' ? '#F97316' : '#8B5CF6';
+              const stepCount = stack.steps.length;
+              return (
+                <View key={kind} style={[styles.stackWidget, { backgroundColor: isCalm ? '#1A2050' : colors.surface, borderColor: isCalm ? '#252D6E' : colors.border }]}>
+                  {/* Header row */}
+                  <View style={styles.stackWidgetHeader}>
+                    <Text style={{ fontSize: 20 }}>{stack.emoji}</Text>
+                    <Text style={[styles.stackWidgetTitle, { color: isCalm ? '#fff' : colors.foreground }]} numberOfLines={1}>
+                      {stack.name}
+                    </Text>
+                    {!stack.isEnabled && (
+                      <View style={[styles.stackOffBadge, { backgroundColor: colors.border }]}>
+                        <Text style={[styles.stackOffText, { color: colors.muted }]}>Off</Text>
+                      </View>
+                    )}
+                  </View>
+                  {/* Step preview */}
+                  <Text style={[styles.stackStepPreview, { color: isCalm ? 'rgba(255,255,255,0.6)' : colors.muted }]}>
+                    {stepCount === 0 ? 'No steps yet' : stack.steps.slice(0, 3).map((s) => s.type === 'reminder' ? '💧' : s.type === 'breathwork' ? '💨' : s.type === 'timer' ? '⏱️' : s.type === 'journal' ? '📓' : s.type === 'meditation' ? '🧘' : s.type === 'affirmations' ? '🗣️' : s.type === 'priming' ? '🔥' : s.type === 'stopwatch' ? '⏲️' : '✏️').join('  ')}
+                    {stepCount > 3 ? ` +${stepCount - 3}` : ''}
+                  </Text>
+                  {/* Action buttons */}
+                  <View style={styles.stackWidgetActions}>
+                    <Pressable
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/stack-player?id=${stack.id}` as never);
+                      }}
+                      style={({ pressed }) => [styles.stackPlayBtn, { backgroundColor: accentColor, opacity: pressed ? 0.8 : 1 }]}
+                    >
+                      <IconSymbol name="play.fill" size={12} color="#fff" />
+                      <Text style={styles.stackPlayBtnText}>Start</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/stack-editor?id=${stack.id}` as never);
+                      }}
+                      style={({ pressed }) => [styles.stackEditBtn, { borderColor: accentColor + '55', opacity: pressed ? 0.7 : 1 }]}
+                    >
+                      <IconSymbol name="pencil" size={12} color={accentColor} />
+                      <Text style={[styles.stackEditBtnText, { color: accentColor }]}>Edit</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
           </View>
+
+          {/* ── Sounds Card ── */}
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/sounds' as never);
+            }}
+            style={({ pressed }) => [
+              styles.soundsCard,
+              {
+                backgroundColor: isCalm ? '#1A2050' : colors.surface,
+                borderColor: isCalm ? '#252D6E' : colors.border,
+                opacity: pressed ? 0.85 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              },
+            ]}
+          >
+            <View style={[styles.soundsIconWrap, { backgroundColor: '#10B98122' }]}>
+              <IconSymbol name="headphones" size={24} color="#10B981" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.soundsTitle, { color: isCalm ? '#fff' : colors.foreground }]}>Sounds</Text>
+              <Text style={[styles.soundsSub, { color: isCalm ? 'rgba(255,255,255,0.6)' : colors.muted }]}>Meditate · Focus · Sleep</Text>
+            </View>
+            <IconSymbol name="chevron.right" size={16} color={isCalm ? 'rgba(255,255,255,0.4)' : colors.muted} />
+          </Pressable>
 
           {/* ── Alarms section (up to 4) ── */}
           <AlarmsSection colors={colors} router={router} formatAlarmTime={formatAlarmTime} />
@@ -2104,6 +2164,54 @@ const styles = StyleSheet.create({
   wellnessLabel: {
     fontSize: 17, fontWeight: '700',
   },
+
+  // Stack widgets
+  stackWidgetsRow: {
+    flexDirection: 'row', gap: 10, marginBottom: 10,
+  },
+  stackWidget: {
+    flex: 1, borderRadius: 16, borderWidth: 1,
+    padding: 12, gap: 8,
+  },
+  stackWidgetHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  stackWidgetTitle: {
+    flex: 1, fontSize: 13, fontWeight: '700',
+  },
+  stackOffBadge: {
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8,
+  },
+  stackOffText: { fontSize: 10, fontWeight: '600' },
+  stackStepPreview: {
+    fontSize: 18, letterSpacing: 2,
+  },
+  stackWidgetActions: {
+    flexDirection: 'row', gap: 6, marginTop: 2,
+  },
+  stackPlayBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 7, borderRadius: 10,
+  },
+  stackPlayBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  stackEditBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 7, borderRadius: 10, borderWidth: 1,
+  },
+  stackEditBtnText: { fontSize: 12, fontWeight: '700' },
+
+  // Sounds card
+  soundsCard: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 16, borderWidth: 1,
+    padding: 14, gap: 12, marginBottom: 16,
+  },
+  soundsIconWrap: {
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  soundsTitle: { fontSize: 16, fontWeight: '700' },
+  soundsSub: { fontSize: 12, marginTop: 2 },
 
   // Stats row (2 cards now)
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },

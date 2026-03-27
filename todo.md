@@ -1553,13 +1553,11 @@
 - [x] Add quick-add task input bar at the bottom of the Habits screen
 - [x] Add quick-add task input bar at the bottom of the Journal screen
 
-- [x] Settings: condense Appearance section to inline color dots next to the header title
-- [x] Settings: remove Mind Dump section entirely
-- [x] Settings: remove Voice Journal section entirely
-- [x] Settings: remove Morning Practice section entirely
-- [x] Settings Voice: only show Christopher, Michael, Rachael, Jessa as voice options
-- [x] Settings Voice: add monthly-change confirmation modal (once per month limit)
-- [x] Settings Voice: remove Read Aloud toggle (moved to Alarm Settings)
-
-- [x] Voice settings: add Preview button next to each voice name to hear a sample clip
-- [x] Journal screen: move task quick-add bar to below the Gratitude section (scrollable, not fixed to bottom)
+- [x] Stack data models: RitualStack, RitualStep, step-type registry (timer, meditation, journal, affirmations, stopwatch, breathwork, priming, reminder, custom)
+- [x] Stack storage layer: loadStacks, saveStacks, default Wake Up / Sleep stacks in AsyncStorage
+- [x] Stack Editor screen: add/remove/reorder steps, configure each step type, delay between steps
+- [x] Stack Player screen: auto-advance steps, countdown timer to next step, skip/adjust controls, full-screen
+- [x] Sounds section: Meditate, Focus, Sleep sub-categories inside a Sounds screen
+- [x] Home screen: replace Meditate/Focus/Sleep 3-card row with Wake Up Stack widget, Sleep Stack widget, and Sounds card
+- [x] Wire navigation from home screen widgets to Stack Editor and Stack Player
+- [x] Add new icon mappings needed for stack step types (all icons already present)
