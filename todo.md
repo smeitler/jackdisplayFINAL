@@ -1554,3 +1554,13 @@
 - [x] Add quick-add task input bar at the bottom of the Journal screen
 
 - [x] Stack widget redesign: large icon (sun/moon), step names as text, tap card to start, small Edit button top-right, no emojis, no play button
+
+- [x] Stack widgets: full-width stacked layout (not side-by-side), icon-only step flow with arrows between steps, no colored background on main icon
+- [x] Stack widgets: step list shows icon + label with → arrows, not numbered list
+- [x] Stack editor: replace emoji step type picker with icon-only rows, no emojis anywhere
+- [x] Stack editor: Meditation step — pick from existing meditation library
+- [x] Stack editor: Breathwork step — pick from existing breathing exercise library
+- [x] Stack editor: Priming step — pick from existing priming library
+- [x] Stack editor: Reminder step — countdown timer defaulting to 2 min, user can change
+- [x] Stack player: Cancel button always top-left, Skip button always top-right, both inside safe area
+- [x] Stack player/editor: fix X/back button clipped outside safe area

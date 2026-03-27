@@ -1,6 +1,7 @@
 /**
  * Stack Player Screen
- * Runs a ritual stack step by step with auto-advance, countdown delay, and skip controls.
+ * Runs a ritual stack step by step with auto-advance, countdown delay,
+ * and always-visible Cancel (top-left) + Skip (top-right) controls.
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Animated } from 'react-native';
@@ -14,6 +15,18 @@ import {
   loadStacks, stepLabel, stepDefaultDuration, stepIsAutoComplete, STEP_TYPE_META,
   type RitualStack,
 } from '@/lib/stacks';
+
+const STEP_ICON: Record<string, string> = {
+  timer:        'timer',
+  stopwatch:    'stopwatch',
+  meditation:   'sparkles',
+  breathwork:   'wind',
+  journal:      'book.fill',
+  affirmations: 'quote.bubble.fill',
+  priming:      'flame.fill',
+  reminder:     'bell.fill',
+  custom:       'pencil',
+};
 
 type Phase = 'delay' | 'running' | 'done';
 
@@ -38,11 +51,12 @@ export default function StackPlayerScreen() {
     });
   }, [id]);
 
+  // Pulse animation for step icon
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,    duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,   duration: 1000, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -62,11 +76,7 @@ export default function StackPlayerScreen() {
         if (e >= dur) {
           clearInterval(intervalRef.current!);
           const next = idx + 1;
-          if (next >= s.steps.length) {
-            setPhase('done');
-          } else {
-            setStepIdx(next);
-          }
+          if (next >= s.steps.length) { setPhase('done'); } else { setStepIdx(next); }
         }
       }, 1000);
     }
@@ -81,11 +91,7 @@ export default function StackPlayerScreen() {
       setCountdown(step.delayAfterSeconds);
       intervalRef.current = setInterval(() => {
         setCountdown((c) => {
-          if (c <= 1) {
-            clearInterval(intervalRef.current!);
-            beginRunning(idx, s);
-            return 0;
-          }
+          if (c <= 1) { clearInterval(intervalRef.current!); beginRunning(idx, s); return 0; }
           return c - 1;
         });
       }, 1000);
@@ -94,12 +100,13 @@ export default function StackPlayerScreen() {
     }
   }, [beginRunning]);
 
+  // Start first step when stack loads
   useEffect(() => {
     if (stack && stack.steps.length > 0) startStep(0, stack);
     return () => clearInterval(intervalRef.current!);
   }, [stack, startStep]);
 
-  // When stepIdx changes due to auto-advance, restart
+  // Re-trigger when stepIdx advances
   const prevIdxRef = useRef(0);
   useEffect(() => {
     if (!stack || stepIdx === prevIdxRef.current) return;
@@ -122,28 +129,38 @@ export default function StackPlayerScreen() {
     if (next >= stack.steps.length) { setPhase('done'); } else { setStepIdx(next); }
   }
 
-  const accentColor = stack?.id === 'wakeup' ? '#F97316' : '#8B5CF6';
-
-  if (!stack) {
-    return <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-      <Text style={{ color: colors.muted, textAlign: 'center', marginTop: 40 }}>Loading…</Text>
-    </View>;
+  function cancelStack() {
+    clearInterval(intervalRef.current!);
+    router.back();
   }
 
+  const accentColor = stack?.id === 'wakeup' ? '#F97316' : '#8B5CF6';
+
+  // ── Loading ──
+  if (!stack) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.muted, textAlign: 'center', marginTop: 80 }}>Loading…</Text>
+      </View>
+    );
+  }
+
+  // ── Empty stack ──
   if (stack.steps.length === 0) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.6 : 1 }]}>
-            <IconSymbol name="xmark" size={22} color={colors.foreground} />
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={cancelStack} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+            <Text style={[styles.topBarBtnText, { color: colors.muted }]}>Cancel</Text>
           </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>{stack.name}</Text>
-          <View style={{ width: 40 }} />
+          <Text style={[styles.topBarTitle, { color: colors.foreground }]}>{stack.name}</Text>
+          <View style={{ width: 64 }} />
         </View>
         <View style={styles.centerContent}>
+          <IconSymbol name="list.bullet" size={48} color={colors.muted} />
           <Text style={[styles.doneTitle, { color: colors.foreground }]}>No steps yet</Text>
           <Text style={[styles.doneSub, { color: colors.muted }]}>Add steps in the editor first.</Text>
-          <Pressable onPress={() => router.back()} style={[styles.doneBtn, { backgroundColor: accentColor }]}>
+          <Pressable onPress={cancelStack} style={[styles.doneBtn, { backgroundColor: accentColor }]}>
             <Text style={styles.doneBtnText}>Go Back</Text>
           </Pressable>
         </View>
@@ -151,11 +168,17 @@ export default function StackPlayerScreen() {
     );
   }
 
+  // ── Done ──
   if (phase === 'done') {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+          <View style={{ width: 64 }} />
+          <Text style={[styles.topBarTitle, { color: colors.foreground }]}>{stack.name}</Text>
+          <View style={{ width: 64 }} />
+        </View>
         <View style={styles.centerContent}>
-          <Text style={{ fontSize: 72 }}>🎉</Text>
+          <IconSymbol name="checkmark.circle.fill" size={72} color={accentColor} />
           <Text style={[styles.doneTitle, { color: colors.foreground }]}>Stack Complete!</Text>
           <Text style={[styles.doneSub, { color: colors.muted }]}>
             You finished all {stack.steps.length} steps of your {stack.name}.
@@ -181,16 +204,21 @@ export default function StackPlayerScreen() {
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => { clearInterval(intervalRef.current!); router.back(); }}
-          style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.6 : 1 }]}>
-          <IconSymbol name="xmark" size={22} color={colors.foreground} />
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {/* ── Top bar: Cancel (left) · title · Skip (right) — always visible ── */}
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <Pressable onPress={cancelStack} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+          <Text style={[styles.topBarBtnText, { color: colors.muted }]}>Cancel</Text>
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>{stack.name}</Text>
-        <Text style={[styles.stepCounter, { color: colors.muted }]}>{stepIdx + 1}/{stack.steps.length}</Text>
+        <Text style={[styles.topBarTitle, { color: colors.foreground }]}>
+          {stepIdx + 1} / {stack.steps.length}
+        </Text>
+        <Pressable onPress={skipStep} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
+          <Text style={[styles.topBarBtnText, { color: accentColor }]}>Skip</Text>
+        </Pressable>
       </View>
 
+      {/* ── Progress bar ── */}
       <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
         <View style={[styles.progressFill, {
           backgroundColor: accentColor,
@@ -198,45 +226,55 @@ export default function StackPlayerScreen() {
         }]} />
       </View>
 
+      {/* ── Delay phase ── */}
       {phase === 'delay' && (
         <View style={styles.centerContent}>
           <Text style={[styles.delayLabel, { color: colors.muted }]}>Next step in</Text>
           <Text style={[styles.delayCountdown, { color: accentColor }]}>{countdown}</Text>
-          <Text style={[styles.delayStepName, { color: colors.foreground }]}>
-            {STEP_TYPE_META[currentStep.type].emoji} {stepLabel(currentStep)}
-          </Text>
-          <Pressable onPress={skipStep} style={({ pressed }) => [styles.skipBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}>
-            <Text style={[styles.skipText, { color: colors.muted }]}>Skip delay</Text>
-          </Pressable>
+          <View style={styles.upcomingRow}>
+            <IconSymbol name={STEP_ICON[currentStep.type] as any} size={20} color={accentColor} />
+            <Text style={[styles.delayStepName, { color: colors.foreground }]}>{stepLabel(currentStep)}</Text>
+          </View>
         </View>
       )}
 
+      {/* ── Running phase ── */}
       {phase === 'running' && (
         <View style={styles.centerContent}>
-          <Animated.View style={[styles.bigIconWrap, { backgroundColor: accentColor + '22', transform: [{ scale: pulseAnim }] }]}>
-            <Text style={styles.bigEmoji}>{STEP_TYPE_META[currentStep.type].emoji}</Text>
+          {/* Pulsing icon — no background circle */}
+          <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 24 }}>
+            <IconSymbol name={STEP_ICON[currentStep.type] as any} size={80} color={accentColor} />
           </Animated.View>
-          <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
+
+          <Text style={[styles.stepTypeLabelBig, { color: colors.muted }]}>
             {STEP_TYPE_META[currentStep.type].label.toUpperCase()}
           </Text>
-          <Text style={[styles.stepNameBig, { color: colors.foreground }]}>{stepLabel(currentStep)}</Text>
+          <Text style={[styles.stepNameBig, { color: colors.foreground }]}>
+            {stepLabel(currentStep)}
+          </Text>
+
+          {/* Countdown timer */}
           {remaining !== null && (
             <Text style={[styles.timerText, { color: accentColor }]}>{formatTime(remaining)}</Text>
           )}
+
+          {/* Manual "Done" button for non-auto steps */}
           {isManual && (
             <Pressable onPress={markDone} style={[styles.doneStepBtn, { backgroundColor: accentColor }]}>
               <Text style={styles.doneStepBtnText}>Done</Text>
             </Pressable>
           )}
-          <Pressable onPress={skipStep} style={({ pressed }) => [styles.skipBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1, marginTop: 16 }]}>
-            <Text style={[styles.skipText, { color: colors.muted }]}>Skip step</Text>
-          </Pressable>
+
+          {/* Up next */}
           {stepIdx < stack.steps.length - 1 && (
             <View style={[styles.upcomingBox, { borderColor: colors.border }]}>
               <Text style={[styles.upcomingLabel, { color: colors.muted }]}>Up next</Text>
-              <Text style={[styles.upcomingStep, { color: colors.foreground }]}>
-                {STEP_TYPE_META[stack.steps[stepIdx + 1].type].emoji} {stepLabel(stack.steps[stepIdx + 1])}
-              </Text>
+              <View style={styles.upcomingRow}>
+                <IconSymbol name={STEP_ICON[stack.steps[stepIdx + 1].type] as any} size={16} color={colors.muted} />
+                <Text style={[styles.upcomingStep, { color: colors.foreground }]}>
+                  {stepLabel(stack.steps[stepIdx + 1])}
+                </Text>
+              </View>
             </View>
           )}
         </View>
@@ -247,30 +285,31 @@ export default function StackPlayerScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  backBtn: { padding: 4, width: 40 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  stepCounter: { fontSize: 13, fontWeight: '600', width: 40, textAlign: 'right' },
+  // Top bar — always rendered, always in safe area
+  topBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 8, paddingBottom: 10,
+  },
+  topBarBtn: { paddingHorizontal: 12, paddingVertical: 6, minWidth: 64 },
+  topBarBtnText: { fontSize: 15, fontWeight: '600' },
+  topBarTitle: { flex: 1, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   progressTrack: { height: 3 },
   progressFill: { height: 3 },
   centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   delayLabel: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  delayCountdown: { fontSize: 80, fontWeight: '900', lineHeight: 88 },
-  delayStepName: { fontSize: 20, fontWeight: '700', marginTop: 16, textAlign: 'center' },
-  bigIconWrap: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-  bigEmoji: { fontSize: 56 },
-  stepTypeLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8 },
+  delayCountdown: { fontSize: 88, fontWeight: '900', lineHeight: 96 },
+  delayStepName: { fontSize: 18, fontWeight: '700', marginLeft: 8 },
+  stepTypeLabelBig: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8 },
   stepNameBig: { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 16 },
-  timerText: { fontSize: 52, fontWeight: '900', letterSpacing: -1, marginBottom: 24 },
-  doneStepBtn: { paddingHorizontal: 48, paddingVertical: 16, borderRadius: 30, marginBottom: 8 },
+  timerText: { fontSize: 56, fontWeight: '900', letterSpacing: -1, marginBottom: 28 },
+  doneStepBtn: { paddingHorizontal: 52, paddingVertical: 16, borderRadius: 30, marginBottom: 8 },
   doneStepBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  skipBtn: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8 },
-  skipText: { fontSize: 14, fontWeight: '600' },
-  upcomingBox: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 32, alignItems: 'center', minWidth: 200 },
-  upcomingLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  upcomingBox: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 32, alignItems: 'center', minWidth: 200 },
+  upcomingLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  upcomingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   upcomingStep: { fontSize: 15, fontWeight: '700' },
   doneTitle: { fontSize: 28, fontWeight: '900', marginTop: 16, marginBottom: 8 },
   doneSub: { fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  doneBtn: { paddingHorizontal: 48, paddingVertical: 16, borderRadius: 30 },
+  doneBtn: { paddingHorizontal: 52, paddingVertical: 16, borderRadius: 30 },
   doneBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 });

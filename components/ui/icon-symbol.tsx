@@ -85,6 +85,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "crown.fill": "workspace-premium",
   "medal.fill": "military-tech",
   "arrow.up": "arrow-upward",
+  "arrow.down": "arrow-downward",
   "arrow.up.right": "north-east",
   "music.note": "music-note",
   "headphones": "headphones",
@@ -160,6 +161,11 @@ const MAPPING: Record<string, MaterialIconName> = {
   "increase.indent": "format-indent-increase",
   "decrease.indent": "format-indent-decrease",
   "arrow.up.left.and.arrow.down.right": "open-in-full",
+  // Stack step type icons
+  "timer": "timer",
+  "stopwatch": "timer",
+  "wind": "air",
+  "quote.bubble.fill": "format-quote",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;

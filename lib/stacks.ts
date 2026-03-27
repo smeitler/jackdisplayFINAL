@@ -44,6 +44,13 @@ export interface StepConfig {
   breathworkStyle?: 'box' | '4-7-8' | 'wim-hof' | 'coherent';
   breathworkRounds?: number;
   meditationDurationSeconds?: number;
+  // Library track selections
+  meditationTrackId?: string;
+  meditationTrackTitle?: string;
+  breathworkTrackId?: string;
+  breathworkTrackTitle?: string;
+  primingTrackId?: string;
+  primingTrackTitle?: string;
   voiceId?: string;
   reminderText?: string;
   customLabel?: string;

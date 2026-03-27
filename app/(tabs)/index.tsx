@@ -22,7 +22,19 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { CalmHeader, useIsCalm } from "@/components/calm-effects";
 import { WellnessIcon } from "@/components/wellness-icon";
-import { loadStacks, stepLabel, STEP_TYPE_META, type RitualStack } from "@/lib/stacks";
+import { loadStacks, stepLabel, STEP_TYPE_META, type RitualStack, type StepType } from "@/lib/stacks";
+
+const STEP_ICON_MAP: Record<StepType, string> = {
+  timer:        'timer',
+  stopwatch:    'stopwatch',
+  meditation:   'sparkles',
+  breathwork:   'wind',
+  journal:      'book.fill',
+  affirmations: 'quote.bubble.fill',
+  priming:      'flame.fill',
+  reminder:     'bell.fill',
+  custom:       'pencil',
+};
 
 const SCREEN_H = Dimensions.get('window').height;
 
@@ -1209,68 +1221,74 @@ export default function HomeScreen() {
             </Pressable>
           )}
 
-          {/* ── Stack Widgets: Wake Up + Sleep ── */}
-          <View style={styles.stackWidgetsRow}>
-            {(['wakeup', 'sleep'] as const).map((kind) => {
-              const stack = ritualStacks.find((s) => s.id === kind);
-              if (!stack) return null;
-              const accentColor = kind === 'wakeup' ? '#F97316' : '#8B5CF6';
-              const iconName = kind === 'wakeup' ? 'sun.max.fill' : 'moon.fill';
-              return (
-                <Pressable
-                  key={kind}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push(`/stack-player?id=${stack.id}` as never);
-                  }}
-                  style={({ pressed }) => [
-                    styles.stackWidget,
-                    {
-                      backgroundColor: isCalm ? '#1A2050' : colors.surface,
-                      borderColor: isCalm ? '#252D6E' : colors.border,
-                      opacity: pressed ? 0.88 : 1,
-                      transform: [{ scale: pressed ? 0.97 : 1 }],
-                    },
-                  ]}
-                >
-                  {/* Edit button top-right */}
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push(`/stack-editor?id=${stack.id}` as never);
-                    }}
-                    style={({ pressed }) => [styles.stackEditBtn, { opacity: pressed ? 0.6 : 1 }]}
-                  >
-                    <Text style={[styles.stackEditBtnText, { color: accentColor }]}>Edit</Text>
-                  </Pressable>
-
-                  {/* Big icon */}
-                  <View style={[styles.stackIconCircle, { backgroundColor: accentColor + '20' }]}>
-                    <IconSymbol name={iconName as any} size={40} color={accentColor} />
-                  </View>
-
-                  {/* Stack name */}
-                  <Text style={[styles.stackWidgetName, { color: isCalm ? '#fff' : colors.foreground }]}>
+          {/* ── Stack Widgets: Wake Up + Sleep (full-width, stacked) ── */}
+          {(['wakeup', 'sleep'] as const).map((kind) => {
+            const stack = ritualStacks.find((s) => s.id === kind);
+            if (!stack) return null;
+            const accentColor = kind === 'wakeup' ? '#F97316' : '#8B5CF6';
+            const iconName = kind === 'wakeup' ? 'sun.max.fill' : 'moon.fill';
+            return (
+              <Pressable
+                key={kind}
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/stack-player?id=${stack.id}` as never);
+                }}
+                style={({ pressed }) => [
+                  styles.stackWidgetFull,
+                  {
+                    backgroundColor: isCalm ? '#1A2050' : colors.surface,
+                    borderColor: isCalm ? '#252D6E' : colors.border,
+                    opacity: pressed ? 0.88 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                  },
+                ]}
+              >
+                {/* Left: icon (no background) + name */}
+                <View style={styles.stackWidgetLeft}>
+                  <IconSymbol name={iconName as any} size={32} color={accentColor} />
+                  <Text style={[styles.stackWidgetTitle, { color: isCalm ? '#fff' : colors.foreground }]}>
                     {stack.name}
                   </Text>
+                </View>
 
-                  {/* Step names as text list */}
-                  {stack.steps.length === 0 ? (
-                    <Text style={[styles.stackNoSteps, { color: isCalm ? 'rgba(255,255,255,0.4)' : colors.muted }]}>Tap Edit to add steps</Text>
-                  ) : (
-                    <View style={styles.stackStepsList}>
-                      {stack.steps.map((step, idx) => (
-                        <Text key={step.id} style={[styles.stackStepItem, { color: isCalm ? 'rgba(255,255,255,0.7)' : colors.muted }]} numberOfLines={1}>
-                          {idx + 1}. {stepLabel(step)}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
+                {/* Right: Edit button */}
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push(`/stack-editor?id=${stack.id}` as never);
+                  }}
+                  style={({ pressed }) => [styles.stackEditBtn, { opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Text style={[styles.stackEditBtnText, { color: accentColor }]}>Edit</Text>
                 </Pressable>
-              );
-            })}
-          </View>
+
+                {/* Step flow: icon → icon → icon with arrows */}
+                {stack.steps.length === 0 ? (
+                  <Text style={[styles.stackNoSteps, { color: isCalm ? 'rgba(255,255,255,0.4)' : colors.muted }]}>
+                    Tap Edit to add steps
+                  </Text>
+                ) : (
+                  <View style={styles.stackStepFlow}>
+                    {stack.steps.map((step, idx) => (
+                      <Fragment key={step.id}>
+                        <View style={styles.stackStepChip}>
+                          <IconSymbol name={STEP_ICON_MAP[step.type] as any} size={14} color={accentColor} />
+                          <Text style={[styles.stackStepChipText, { color: isCalm ? 'rgba(255,255,255,0.8)' : colors.foreground }]} numberOfLines={1}>
+                            {stepLabel(step)}
+                          </Text>
+                        </View>
+                        {idx < stack.steps.length - 1 && (
+                          <IconSymbol name="chevron.right" size={12} color={isCalm ? 'rgba(255,255,255,0.3)' : colors.muted} />
+                        )}
+                      </Fragment>
+                    ))}
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
 
           {/* ── Sounds Card ── */}
           <Pressable
@@ -2173,27 +2191,39 @@ const styles = StyleSheet.create({
     fontSize: 17, fontWeight: '700',
   },
 
-  // Stack widgets
+  // Stack widgets (full-width)
   stackWidgetsRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  stackWidget: {
-    flex: 1, borderRadius: 18, borderWidth: 1,
-    padding: 14, alignItems: 'center', gap: 8,
-    position: 'relative',
+  stackWidgetFull: {
+    borderRadius: 18, borderWidth: 1,
+    padding: 16, marginBottom: 10,
+    gap: 10,
   },
+  stackWidgetLeft: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  stackWidgetTitle: { fontSize: 17, fontWeight: '800' },
   stackEditBtn: {
-    position: 'absolute', top: 10, right: 10,
+    position: 'absolute', top: 12, right: 12,
     paddingHorizontal: 8, paddingVertical: 3,
   },
-  stackEditBtnText: { fontSize: 12, fontWeight: '700' },
+  stackEditBtnText: { fontSize: 13, fontWeight: '700' },
   stackIconCircle: {
     width: 72, height: 72, borderRadius: 36,
     alignItems: 'center', justifyContent: 'center',
     marginTop: 8,
   },
   stackWidgetName: { fontSize: 13, fontWeight: '800', textAlign: 'center', marginTop: 4 },
-  stackNoSteps: { fontSize: 11, textAlign: 'center', marginTop: 2 },
+  stackNoSteps: { fontSize: 12, marginTop: 2 },
   stackStepsList: { width: '100%', gap: 2, marginTop: 2 },
   stackStepItem: { fontSize: 11, lineHeight: 16 },
+  stackStepFlow: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    alignItems: 'center', gap: 4,
+  },
+  stackStepChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  stackStepChipText: { fontSize: 12, fontWeight: '600' },
 
   // Sounds card
   soundsCard: {
