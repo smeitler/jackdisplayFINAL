@@ -2417,12 +2417,39 @@ function DraggablePhotoStrip({ photos, onReorder = () => {}, onDelete, colors }:
 }
 
 // ─── FullScreenJournalEditor ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── Inline photo marker helpers ──────────────────────────────────────────────
+// Photos are embedded in text as \n[photo:ATTACHMENT_ID]\n markers.
+// The editor splits on these to render alternating TextInput + Image blocks.
+const PHOTO_MARKER_RE = /\[photo:([^\]]+)\]/g;
+
+function insertPhotoMarker(text: string, cursor: number, attachmentId: string): string {
+  const marker = `\n[photo:${attachmentId}]\n`;
+  return text.slice(0, cursor) + marker + text.slice(cursor);
+}
+
+function splitIntoBlocks(text: string): Array<{ type: 'text'; value: string } | { type: 'photo'; id: string }> {
+  const blocks: Array<{ type: 'text'; value: string } | { type: 'photo'; id: string }> = [];
+  let last = 0;
+  const re = /\[photo:([^\]]+)\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const before = text.slice(last, m.index).replace(/^\n/, '').replace(/\n$/, '');
+    if (before) blocks.push({ type: 'text', value: before });
+    blocks.push({ type: 'photo', id: m[1] });
+    last = m.index + m[0].length;
+  }
+  const tail = text.slice(last).replace(/^\n/, '');
+  if (tail || blocks.length === 0) blocks.push({ type: 'text', value: tail });
+  return blocks;
+}
+
 interface FullScreenJournalEditorProps {
   visible: boolean;
   value: string;
   onChange: (text: string) => void;
   onClose: () => void;
-  onPickPhoto: () => void;
+  /** Called when user taps the photo button — should pick photo(s) and call onPhotoInserted */
+  onPickPhoto: (insertAtCursor: (attachmentId: string) => void) => void;
   onPickCamera: () => void;
   photos?: JournalAttachment[];
   onDeletePhoto?: (id: string) => void;
@@ -2433,43 +2460,37 @@ interface FullScreenJournalEditorProps {
 }
 function FullScreenJournalEditor({
   visible, value, onChange, onClose, onPickPhoto, onPickCamera,
-  photos = [], onDeletePhoto, onReorderPhotos, colors, readOnly = false,
+  photos = [], onDeletePhoto, colors, readOnly = false,
 }: FullScreenJournalEditorProps) {
-  const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
+  const { width: screenW } = useWindowDimensions();
   const [text, setText] = useState(value);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const insets = useSafeAreaInsets();
-  const [toolbarHeight, setToolbarHeight] = useState(80);
-  // inputHeight grows with content so all text is visible inside the ScrollView
-  const [inputHeight, setInputHeight] = useState(500);
+  // Track cursor position so photos insert at the right place
+  const cursorPos = useRef(value.length);
   // Track keyboard height manually — KeyboardAvoidingView doesn't work inside Modal on iOS
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [toolbarHeight, setToolbarHeight] = useState(56);
+  // Refs for each text segment's TextInput so we can focus the right one
+  const segmentRefs = useRef<Record<number, TextInput | null>>({});
+  const focusedSegment = useRef<number>(0);
+
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardWillShow', (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardHeight(0);
-    });
+    const showSub = Keyboard.addListener('keyboardWillShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardWillHide', () => setKeyboardHeight(0));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
-  // Sync value prop when entry changes
+  // Sync value prop when entry changes externally
   useEffect(() => { setText(value); }, [value]);
-
-  // Track whether keyboard is active (user tapped into the text area)
-  const [isEditing, setIsEditing] = useState(false);
-
-  // DO NOT auto-focus on open — user should see the full view first
-  // Focus only happens when user taps the text area (onFocus handler below)
 
   // Cleanup autosave on unmount
   useEffect(() => {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, []);
 
-  const handleChangeText = useCallback((newText: string) => {
-    setText(newText);
+  const save = useCallback((newText: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => onChange(newText), 500);
   }, [onChange]);
@@ -2479,16 +2500,58 @@ function FullScreenJournalEditor({
     onClose();
   }, [onClose, onChange, text]);
 
+  // Split text into blocks for rendering
+  const blocks = useMemo(() => splitIntoBlocks(text), [text]);
+
+  // Build a flat text for each segment so edits can be merged back
+  // Each text block has a startOffset into the full text string
+  const segmentOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let pos = 0;
+    const re = /\[photo:([^\]]+)\]/g;
+    let m: RegExpExecArray | null;
+    let blockIdx = 0;
+    let lastEnd = 0;
+    while ((m = re.exec(text)) !== null) {
+      offsets[blockIdx] = lastEnd;
+      blockIdx += 2; // skip the photo block
+      lastEnd = m.index + m[0].length;
+    }
+    offsets[blockIdx] = lastEnd;
+    return offsets;
+  }, [text]);
+
+  const handleSegmentChange = useCallback((segIdx: number, newSegText: string) => {
+    // Rebuild the full text by replacing the segment at segIdx
+    const newBlocks = [...blocks];
+    newBlocks[segIdx] = { type: 'text', value: newSegText };
+    // Reconstruct full text from blocks
+    const rebuilt = newBlocks.map((b) => b.type === 'text' ? b.value : `\n[photo:${b.id}]\n`).join('');
+    setText(rebuilt);
+    save(rebuilt);
+  }, [blocks, save]);
+
+  // Insert a photo marker at the current cursor position
+  const insertPhoto = useCallback((attachmentId: string) => {
+    const newText = insertPhotoMarker(text, cursorPos.current, attachmentId);
+    setText(newText);
+    save(newText);
+  }, [text, save]);
+
+  const handlePickPhoto = useCallback(() => {
+    onPickPhoto(insertPhoto);
+  }, [onPickPhoto, insertPhoto]);
+
+  const imgW = screenW - 40; // 20px padding each side
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose} transparent={false}>
-      {/* Outer View fills the screen and sets background. paddingTop from insets ensures
-           content never overlaps the status bar, even on pageSheet modals. */}
       <View style={{ flex: 1, backgroundColor: '#000000', paddingTop: Platform.OS === 'ios' ? 0 : insets.top }}>
         {/* Drag handle */}
         <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' }} />
         </View>
-        {/* Top navigation bar — checkmark lives here, safely below status bar */}
+        {/* Top bar */}
         <View style={fsStyles.topBar}>
           <View style={{ width: 40 }} />
           <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>Journal Entry</Text>
@@ -2496,88 +2559,107 @@ function FullScreenJournalEditor({
             <IconSymbol name="checkmark" size={20} color="#ffffff" />
           </Pressable>
         </View>
-        {/* Main content area — flex:1 so it fills between header and bottom toolbar */}
+
+        {/* Content area */}
         <View style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1, padding: 20, paddingBottom: toolbarHeight + 24 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: toolbarHeight + 32 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator
-            directionalLockEnabled
-            canCancelContentTouches
           >
-            {/* Tap-to-edit hint when not editing and no text */}
-            {!isEditing && !text && !readOnly && (
-              <Pressable
-                onPress={() => { inputRef.current?.focus(); }}
-                style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 20, zIndex: 1 }}
-              />
-            )}
-            <TextInput
-              ref={inputRef}
-              value={text}
-              onChangeText={readOnly ? undefined : handleChangeText}
-              editable={!readOnly}
-              multiline
-              placeholder={readOnly ? '' : 'Tap to start writing...'}
-              placeholderTextColor="rgba(255,255,255,0.25)"
-              onFocus={() => setIsEditing(true)}
-              onBlur={() => setIsEditing(false)}
-              onContentSizeChange={(e) => {
-                const h = e.nativeEvent.contentSize.height;
-                if (h > inputHeight) setInputHeight(h);
-              }}
-              style={[
-                fsStyles.textInput,
-                { height: Math.max(inputHeight, 500) },
-                Platform.OS === 'web'
-                  ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: readOnly ? 'transparent' : '#ffffff' } as any)
-                  : {},
-              ]}
-              textAlignVertical="top"
-              autoCorrect={!readOnly}
-              autoCapitalize={readOnly ? 'none' : 'sentences'}
-              spellCheck={!readOnly}
-              scrollEnabled={false}
-            />
+            {blocks.map((block, idx) => {
+              if (block.type === 'photo') {
+                const att = photos.find((p) => p.id === block.id);
+                if (!att) return null;
+                return (
+                  <View key={`photo-${block.id}`} style={{ marginVertical: 8 }}>
+                    <ExpoImage
+                      source={{ uri: att.uri }}
+                      style={{ width: imgW, height: imgW * 0.65, borderRadius: 10 }}
+                      contentFit="cover"
+                    />
+                    {!readOnly && onDeletePhoto && (
+                      <Pressable
+                        onPress={() => {
+                          // Remove the photo marker from text and call onDeletePhoto
+                          const newText = text.replace(`\n[photo:${block.id}]\n`, '').replace(`[photo:${block.id}]`, '');
+                          setText(newText);
+                          save(newText);
+                          onDeletePhoto(block.id);
+                        }}
+                        style={{ position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', lineHeight: 18 }}>×</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              }
+              // Text block
+              const segIdx = idx;
+              return (
+                <TextInput
+                  key={`text-${idx}`}
+                  ref={(r) => { segmentRefs.current[segIdx] = r; }}
+                  value={block.value}
+                  onChangeText={readOnly ? undefined : (v) => handleSegmentChange(segIdx, v)}
+                  editable={!readOnly}
+                  multiline
+                  placeholder={idx === 0 && !readOnly ? 'Tap to start writing...' : ''}
+                  placeholderTextColor="rgba(255,255,255,0.25)"
+                  onFocus={() => { setIsEditing(true); focusedSegment.current = segIdx; }}
+                  onBlur={() => setIsEditing(false)}
+                  onSelectionChange={(e) => {
+                    // Track cursor as offset within this segment + segment start
+                    const segStart = segmentOffsets[segIdx] ?? 0;
+                    cursorPos.current = segStart + e.nativeEvent.selection.end;
+                  }}
+                  style={[
+                    fsStyles.textInput,
+                    Platform.OS === 'web'
+                      ? ({ outlineWidth: 0, outlineStyle: 'none', caretColor: readOnly ? 'transparent' : '#ffffff' } as any)
+                      : {},
+                  ]}
+                  textAlignVertical="top"
+                  autoCorrect={!readOnly}
+                  autoCapitalize={readOnly ? 'none' : 'sentences'}
+                  spellCheck={!readOnly}
+                  scrollEnabled={false}
+                />
+              );
+            })}
           </ScrollView>
 
-          {/* Bottom toolbar + photo strip — lifts above keyboard when active */}
+          {/* Toolbar — lifts above keyboard */}
           <View style={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }}>
-            {/* Photo strip — always visible above toolbar */}
-            {photos.length > 0 && (
-              <View style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-                <DraggablePhotoStrip
-                  photos={photos}
-                  colors={{ muted: 'rgba(255,255,255,0.4)', primary: colors?.primary ?? '#3B82F6' }}
-                  onDelete={onDeletePhoto}
-                  onReorder={onReorderPhotos}
-                />
-              </View>
-            )}
-            {/* Toolbar — photo button left, Done button right (when keyboard open), char count */}
             <View
               style={{ backgroundColor: 'rgba(28,28,30,0.98)', paddingBottom: keyboardHeight > 0 ? 0 : insets.bottom }}
               onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
             >
               <View style={fsStyles.toolbar}>
-                {/* Add photo */}
-                <Pressable onPress={onPickPhoto} style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-                  <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
-                </Pressable>
-                <View style={{ flex: 1 }} />
-                {/* Character count */}
-                {!isEditing && (
-                  <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', paddingRight: 8 }}>{text.length} chars</Text>
-                )}
-                {/* Done button — dismisses keyboard */}
-                {isEditing && (
+                {/* Left: keyboard dismiss when editing */}
+                {isEditing ? (
                   <Pressable
-                    onPress={() => { Keyboard.dismiss(); }}
+                    onPress={() => Keyboard.dismiss()}
                     style={({ pressed }) => [fsStyles.doneBtn, { opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Text style={fsStyles.doneBtnText}>Done</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', paddingLeft: 4 }}>
+                    {text.replace(PHOTO_MARKER_RE, '').length} chars
+                  </Text>
+                )}
+                <View style={{ flex: 1 }} />
+                {/* Right: add photo button */}
+                {!readOnly && (
+                  <Pressable
+                    onPress={handlePickPhoto}
+                    style={({ pressed }) => [fsStyles.toolbarBtn, { opacity: pressed ? 0.6 : 1 }]}
+                  >
+                    <IconSymbol name="photo.stack.fill" size={22} color="rgba(255,255,255,0.8)" />
                   </Pressable>
                 )}
               </View>
@@ -3453,7 +3535,35 @@ export default function JournalScreen() {
               if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
               saveDvNoteAndGrat(dvJournalNote, dvGratItems);
             }}
-            onPickPhoto={dvPickPhoto}
+            onPickPhoto={async (insertAtCursor) => {
+              // Reuse dvPickPhoto logic but also call insertAtCursor for each new photo
+              try {
+                if (Platform.OS !== 'web') {
+                  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                  if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.'); return; }
+                }
+                const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.85 });
+                if (result.canceled || !userId) return;
+                let entryId = dvPrimaryEntryId.current;
+                if (!entryId) {
+                  const now = new Date().toISOString();
+                  const newEntry: JournalEntry = { id: generateId(), userId, date: selectedDate, createdAt: now, updatedAt: now, title: '', body: '', template: 'blank', attachments: [], tags: [] };
+                  const updated = await addEntry(userId, newEntry);
+                  dvPrimaryEntryId.current = newEntry.id;
+                  setEntries(updated);
+                  entryId = newEntry.id;
+                }
+                const newAtts: JournalAttachment[] = await Promise.all(
+                  result.assets.map(async (asset) => ({ id: generateId(), type: 'photo' as const, uri: await copyToDocuments(asset.uri, 'jpg'), mimeType: asset.mimeType || 'image/jpeg' }))
+                );
+                const existingEntry = entries.find((e) => e.id === entryId);
+                const merged = [...(existingEntry?.attachments ?? []), ...newAtts];
+                await updateEntryInStore(userId, entryId, { attachments: merged });
+                setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, attachments: merged } : e));
+                // Insert photo markers into the text at cursor position
+                newAtts.forEach((att) => insertAtCursor(att.id));
+              } catch (e) { console.warn('inline photo pick error:', e); }
+            }}
             onPickCamera={dvPickCamera}
             colors={colors}
             photos={(
@@ -3467,14 +3577,6 @@ export default function JournalScreen() {
               const updated = allAtts.filter((a) => a.id !== id);
               await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: updated });
               setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: updated } : e));
-            }}
-            onReorderPhotos={async (reordered) => {
-              if (!dvPrimaryEntryId.current || !userId) return;
-              const allAtts = entries.find((e) => e.id === dvPrimaryEntryId.current)?.attachments ?? [];
-              const nonPhotos = allAtts.filter((a) => a.type !== 'photo');
-              const merged = [...reordered, ...nonPhotos];
-              await updateEntryInStore(userId, dvPrimaryEntryId.current, { attachments: merged });
-              setEntries((prev) => prev.map((e) => e.id === dvPrimaryEntryId.current ? { ...e, attachments: merged } : e));
             }}
           />
 
@@ -3915,29 +4017,32 @@ export default function JournalScreen() {
           <View style={{ flexDirection: 'row', height: 144, paddingHorizontal: 16 }}>
             <WheelColumn
               items={MONTHS}
-              initialIndex={new Date(selectedDate + 'T12:00:00').getMonth()}
+              selectedIndex={new Date(selectedDate + 'T12:00:00').getMonth()}
               onSelect={(idx) => {
                 pickerMonthRef.current = idx;
                 setPickerMonth(idx);
                 setPickerDayCount(getDaysInMonth(idx));
               }}
               width={160}
+              bgColor={colors.surface}
             />
             <WheelColumn
               key={`day-${pickerDayCount}`}
               items={Array.from({ length: pickerDayCount }, (_, i) => String(i + 1))}
-              initialIndex={Math.min(pickerDayRef.current, pickerDayCount - 1)}
+              selectedIndex={Math.min(pickerDayRef.current, pickerDayCount - 1)}
               onSelect={(idx) => { pickerDayRef.current = idx; }}
               width={60}
+              bgColor={colors.surface}
             />
             <WheelColumn
               items={YEARS}
-              initialIndex={pickerYearRef.current}
+              selectedIndex={pickerYearRef.current}
               onSelect={(idx) => {
                 pickerYearRef.current = idx;
                 setPickerDayCount(getDaysInMonth(pickerMonthRef.current));
               }}
               width={80}
+              bgColor={colors.surface}
             />
           </View>
         </View>

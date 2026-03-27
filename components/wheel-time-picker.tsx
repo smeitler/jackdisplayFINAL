@@ -1,14 +1,15 @@
 /**
- * WheelTimePicker — PanResponder + Animated iOS-style drum roll
+ * WheelTimePicker — Native ScrollView snap-based iOS drum roll
  *
  * Architecture:
- * - NO ScrollView / FlatList — zero nesting conflicts with parent scroll
- * - PanResponder captures vertical touch directly on each column View
- * - Animated.Value drives the translateY of the item list
- * - On release: physics-based momentum decay → snap to nearest item
- * - Haptic tick on every item change (iOS only)
- * - LinearGradient fade masks top/bottom for authentic iOS look
- * - Cylindrical opacity/scale gradient (selected = large+opaque, outer = small+faded)
+ * - Uses native ScrollView with snapToInterval + decelerationRate="fast"
+ * - Renders instantly (small list, no Animated overhead)
+ * - nestedScrollEnabled so it works inside a parent ScrollView
+ * - 3 repeats of items for infinite-feel without memory cost
+ * - Starts scrolled to the middle repeat so user can scroll up or down
+ * - onMomentumScrollEnd fires after snap to read the selected index
+ * - Haptic tick on every item change
+ * - LinearGradient fade masks + selection band for iOS look
  */
 
 import React, {
@@ -19,13 +20,13 @@ import React, {
   useState,
 } from 'react';
 import {
-  Animated,
-  Easing,
   Platform,
-  PanResponder,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -33,55 +34,42 @@ import { useColors } from '@/hooks/use-colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_H      = 52;   // height of each row
-const VISIBLE     = 5;    // rows visible at once (must be odd)
-const PICKER_H    = ITEM_H * VISIBLE;
-const CENTER_ROW  = Math.floor(VISIBLE / 2); // index of the center row = 2
+const ITEM_H   = 50;   // height of each row
+const VISIBLE  = 5;    // rows visible at once (must be odd)
+const PICKER_H = ITEM_H * VISIBLE;
+const PAD      = ITEM_H * Math.floor(VISIBLE / 2); // top/bottom padding to center first/last item
 
-// How many times to repeat the list for "infinite" feel
-const N_REPEAT    = 80;
-
-// Friction for momentum: deceleration constant (px/ms²)
-const FRICTION    = 0.0028;
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-function snapY(y: number): number {
-  return -Math.round(-y / ITEM_H) * ITEM_H;
-}
-
-function initialY(initialIndex: number, count: number): number {
-  const midRep = Math.floor(N_REPEAT / 2);
-  const flatIndex = midRep * count + initialIndex;
-  return -(flatIndex * ITEM_H) + CENTER_ROW * ITEM_H;
-}
+// Number of list repetitions — 3 is enough for a smooth infinite feel
+const N_REPEAT = 3;
 
 // ─── WheelColumn ─────────────────────────────────────────────────────────────
 
 interface ColumnProps {
   items: string[];
-  initialIndex: number;
+  selectedIndex: number;
   onSelect: (index: number) => void;
   width: number;
   accentColor?: string;
+  /** Background color for gradient masks (must match parent bg) */
+  bgColor: string;
 }
 
 export function WheelColumn({
   items,
-  initialIndex,
+  selectedIndex,
   onSelect,
   width,
   accentColor,
+  bgColor,
 }: ColumnProps) {
-  const colors   = useColors();
-  const count    = items.length;
-  const accent   = accentColor ?? colors.foreground;
+  const colors  = useColors();
+  const count   = items.length;
+  const accent  = accentColor ?? colors.foreground;
+  const scrollRef = useRef<ScrollView>(null);
+  const lastEmitted = useRef(selectedIndex);
+  const [visibleIndex, setVisibleIndex] = useState(selectedIndex);
 
-  // Build repeated list once
+  // Build repeated list
   const repeated = useMemo(() => {
     const arr: string[] = [];
     for (let r = 0; r < N_REPEAT; r++) {
@@ -90,153 +78,126 @@ export function WheelColumn({
     return arr;
   }, [items, count]);
 
-  const totalItems = repeated.length;
-
-  // Animated Y position of the list
-  const startY   = initialY(initialIndex, count);
-  const animY    = useRef(new Animated.Value(startY)).current;
-  const currentY = useRef(startY);
-
-  // Track which real index is currently centered for visual rendering
-  const lastEmitted = useRef(initialIndex);
-  const [selectedFlat, setSelectedFlat] = useState(
-    Math.floor(N_REPEAT / 2) * count + initialIndex,
+  // Offset for a given flat index (centers the item in the picker)
+  const offsetFor = useCallback(
+    (flatIdx: number) => flatIdx * ITEM_H,
+    [],
   );
 
-  // Keep currentY in sync with animY; fire haptic + callback on index change
+  // The flat index in the middle repeat for a given real index
+  const midFlatIndex = useCallback(
+    (realIdx: number) => Math.floor(N_REPEAT / 2) * count + realIdx,
+    [count],
+  );
+
+  // Scroll to initial position on mount (no animation — instant)
   useEffect(() => {
-    const id = animY.addListener(({ value }) => {
-      currentY.current = value;
-      const flatCenter = Math.round(-value / ITEM_H);
-      const ri = ((flatCenter % count) + count) % count;
-      setSelectedFlat(flatCenter);
-      if (ri !== lastEmitted.current) {
-        lastEmitted.current = ri;
-        onSelect(ri);
+    const flat = midFlatIndex(selectedIndex);
+    const offset = offsetFor(flat);
+    // Use a short timeout so the ScrollView has laid out before we scroll
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: offset, animated: false });
+    }, 50);
+    return () => clearTimeout(t);
+  // Only run on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When selectedIndex prop changes externally, scroll to match
+  const prevSelected = useRef(selectedIndex);
+  useEffect(() => {
+    if (selectedIndex === prevSelected.current) return;
+    prevSelected.current = selectedIndex;
+    const flat = midFlatIndex(selectedIndex);
+    scrollRef.current?.scrollTo({ y: offsetFor(flat), animated: true });
+  }, [selectedIndex, midFlatIndex, offsetFor]);
+
+  const handleScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const flatIdx = Math.round(y / ITEM_H);
+      const realIdx = ((flatIdx % count) + count) % count;
+
+      setVisibleIndex(realIdx);
+
+      if (realIdx !== lastEmitted.current) {
+        lastEmitted.current = realIdx;
+        onSelect(realIdx);
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         }
       }
-    });
-    return () => animY.removeListener(id);
-  }, [animY, count, onSelect]);
 
-  // Bounds: keep the list from flying too far off screen
-  const minY = -(totalItems * ITEM_H) + (CENTER_ROW + 1) * ITEM_H;
-  const maxY = CENTER_ROW * ITEM_H;
+      // Re-center to middle repeat to keep scrolling room in both directions
+      const targetFlat = midFlatIndex(realIdx);
+      const targetOffset = offsetFor(targetFlat);
+      if (Math.abs(y - targetOffset) > ITEM_H * 0.5) {
+        scrollRef.current?.scrollTo({ y: targetOffset, animated: false });
+      }
+    },
+    [count, onSelect, midFlatIndex, offsetFor],
+  );
 
-  // Velocity tracking for momentum
-  const lastTouchY    = useRef(0);
-  const lastTouchTime = useRef(0);
-  const velocityY     = useRef(0);
-  const momentumAnim  = useRef<Animated.CompositeAnimation | null>(null);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        // Claim the touch immediately — prevents parent ScrollView from stealing it
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 1,
-        onMoveShouldSetPanResponderCapture: (_, gs) => Math.abs(gs.dy) > 1,
-
-        onPanResponderGrant: (e) => {
-          momentumAnim.current?.stop();
-          momentumAnim.current = null;
-          animY.stopAnimation();
-          lastTouchY.current    = e.nativeEvent.pageY;
-          lastTouchTime.current = Date.now();
-          velocityY.current     = 0;
-        },
-
-        onPanResponderMove: (e) => {
-          const now = Date.now();
-          const dy  = e.nativeEvent.pageY - lastTouchY.current;
-          const dt  = now - lastTouchTime.current;
-          if (dt > 0) velocityY.current = dy / dt;
-          lastTouchY.current    = e.nativeEvent.pageY;
-          lastTouchTime.current = now;
-          const next = clamp(currentY.current + dy, minY, maxY);
-          animY.setValue(next);
-        },
-
-        onPanResponderRelease: () => {
-          const vel  = velocityY.current; // px/ms
-          const sign = vel >= 0 ? 1 : -1;
-          // distance = v² / (2 * friction)
-          const dist      = sign * (vel * vel) / (2 * FRICTION);
-          const projected = clamp(currentY.current + dist, minY, maxY);
-          const snapped   = snapY(projected);
-          const duration  = clamp(Math.abs(dist) * 0.35, 80, 550);
-
-          const anim = Animated.timing(animY, {
-            toValue:         snapped,
-            duration,
-            easing:          Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          });
-          momentumAnim.current = anim;
-          anim.start(() => { momentumAnim.current = null; });
-        },
-
-        onPanResponderTerminate: () => {
-          const snapped = snapY(currentY.current);
-          Animated.timing(animY, {
-            toValue:         snapped,
-            duration:        150,
-            easing:          Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }).start();
-        },
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [minY, maxY],
+  // Track scroll position to update visual selection during drag
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const flatIdx = Math.round(y / ITEM_H);
+      const realIdx = ((flatIdx % count) + count) % count;
+      if (realIdx !== visibleIndex) setVisibleIndex(realIdx);
+    },
+    [count, visibleIndex],
   );
 
   return (
-    <View
-      style={{ width, height: PICKER_H, overflow: 'hidden' }}
-      {...panResponder.panHandlers}
-    >
-      {/* Animated list */}
-      <Animated.View style={{ transform: [{ translateY: animY }] }}>
+    <View style={{ width, height: PICKER_H, overflow: 'hidden' }}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_H}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        nestedScrollEnabled
+        contentContainerStyle={{ paddingTop: PAD, paddingBottom: PAD }}
+        // Disable bouncing so it doesn't fly past the ends
+        bounces={false}
+        overScrollMode="never"
+      >
         {repeated.map((label, idx) => {
-          const dist = idx - selectedFlat;
-
-          const isSelected = dist === 0;
-          const isAdj1     = Math.abs(dist) === 1;
-          const isAdj2     = Math.abs(dist) === 2;
+          const realIdx = idx % count;
+          const isSelected = realIdx === visibleIndex;
+          const dist = Math.abs(realIdx - visibleIndex);
+          // Also check wrap-around distance
+          const wrapDist = Math.min(dist, count - dist);
 
           let fontSize: number;
           let fontWeight: '700' | '500' | '400' | '300';
           let opacity: number;
           let color: string;
-          let scale: number;
 
           if (isSelected) {
-            fontSize   = 30;
+            fontSize   = 28;
             fontWeight = '700';
             opacity    = 1;
             color      = accent;
-            scale      = 1;
-          } else if (isAdj1) {
-            fontSize   = 22;
+          } else if (wrapDist === 1) {
+            fontSize   = 20;
             fontWeight = '400';
-            opacity    = 0.45;
+            opacity    = 0.5;
             color      = colors.muted;
-            scale      = 0.9;
-          } else if (isAdj2) {
-            fontSize   = 16;
+          } else if (wrapDist === 2) {
+            fontSize   = 15;
             fontWeight = '300';
-            opacity    = 0.18;
+            opacity    = 0.2;
             color      = colors.muted;
-            scale      = 0.78;
           } else {
-            fontSize   = 13;
+            fontSize   = 12;
             fontWeight = '300';
-            opacity    = 0;
-            color      = 'transparent';
-            scale      = 0.65;
+            opacity    = 0.05;
+            color      = colors.muted;
           }
 
           return (
@@ -247,9 +208,7 @@ export function WheelColumn({
                   fontWeight,
                   opacity,
                   color,
-                  transform: [{ scale }],
                   letterSpacing: 0.5,
-                  ...(Platform.OS === 'ios' ? { fontFamily: 'System' } : {}),
                 }}
                 numberOfLines={1}
               >
@@ -258,31 +217,31 @@ export function WheelColumn({
             </View>
           );
         })}
-      </Animated.View>
+      </ScrollView>
 
-      {/* Selection band — two hairline rules around center row */}
+      {/* Selection band — hairline rules around center row */}
       <View
         pointerEvents="none"
         style={[
           styles.selectionBand,
           {
-            top:         CENTER_ROW * ITEM_H,
+            top:         PAD,
             height:      ITEM_H,
             borderColor: colors.border,
           },
         ]}
       />
 
-      {/* Top fade — LinearGradient from background to transparent */}
+      {/* Top fade */}
       <LinearGradient
         pointerEvents="none"
-        colors={[colors.background, colors.background + 'CC', 'transparent']}
+        colors={[bgColor, bgColor + 'E0', bgColor + '00']}
         style={[styles.fadeMask, { top: 0 }]}
       />
       {/* Bottom fade */}
       <LinearGradient
         pointerEvents="none"
-        colors={['transparent', colors.background + 'CC', colors.background]}
+        colors={[bgColor + '00', bgColor + 'E0', bgColor]}
         style={[styles.fadeMask, { bottom: 0 }]}
       />
     </View>
@@ -304,17 +263,14 @@ const PERIODS  = ['AM', 'PM'];
 export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps) {
   const colors = useColors();
 
-  const isPM    = hour >= 12;
-  const hour12  = hour % 12 === 0 ? 12 : hour % 12;
+  const isPM   = hour >= 12;
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
 
-  const initialHourIdx   = hour12 - 1;
-  const initialMinuteIdx = minute;
-  const initialPeriodIdx = isPM ? 1 : 0;
+  const [hourIdx,   setHourIdx]   = useState(hour12 - 1);
+  const [minuteIdx, setMinuteIdx] = useState(minute);
+  const [periodIdx, setPeriodIdx] = useState(isPM ? 1 : 0);
 
-  const hourIdxRef   = useRef(initialHourIdx);
-  const minuteIdxRef = useRef(initialMinuteIdx);
-  const periodIdxRef = useRef(initialPeriodIdx);
-
+  // Emit whenever any column changes
   const emit = useCallback(
     (hIdx: number, mIdx: number, pIdx: number) => {
       const h12 = hIdx + 1;
@@ -326,31 +282,34 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
   );
 
   const onHourSelect = useCallback((idx: number) => {
-    hourIdxRef.current = idx;
-    emit(idx, minuteIdxRef.current, periodIdxRef.current);
-  }, [emit]);
+    setHourIdx(idx);
+    emit(idx, minuteIdx, periodIdx);
+  }, [emit, minuteIdx, periodIdx]);
 
   const onMinuteSelect = useCallback((idx: number) => {
-    minuteIdxRef.current = idx;
-    emit(hourIdxRef.current, idx, periodIdxRef.current);
-  }, [emit]);
+    setMinuteIdx(idx);
+    emit(hourIdx, idx, periodIdx);
+  }, [emit, hourIdx, periodIdx]);
 
   const onPeriodSelect = useCallback((idx: number) => {
-    periodIdxRef.current = idx;
-    emit(hourIdxRef.current, minuteIdxRef.current, idx);
-  }, [emit]);
+    setPeriodIdx(idx);
+    emit(hourIdx, minuteIdx, idx);
+  }, [emit, hourIdx, minuteIdx]);
 
-  const hourW   = 84;
-  const minuteW = 84;
-  const periodW = 76;
+  // Use surface color as the bg for gradient masks (picker sits on surface card)
+  const bgColor = colors.surface;
+
+  const hourW   = 80;
+  const minuteW = 80;
+  const periodW = 72;
   const totalW  = hourW + minuteW + periodW;
 
   return (
     <View style={[styles.container, { width: totalW }]}>
-      {/* Colon separator — positioned between hour and minute columns */}
+      {/* Colon separator */}
       <View
         pointerEvents="none"
-        style={[styles.colonWrap, { left: hourW - 6, bottom: 0, top: 0 }]}
+        style={[styles.colonWrap, { left: hourW - 8 }]}
       >
         <Text style={[styles.colon, { color: colors.foreground }]}>:</Text>
       </View>
@@ -358,24 +317,27 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
       <View style={styles.columns}>
         <WheelColumn
           items={HOURS_12}
-          initialIndex={initialHourIdx}
+          selectedIndex={hourIdx}
           onSelect={onHourSelect}
           width={hourW}
           accentColor={colors.foreground}
+          bgColor={bgColor}
         />
         <WheelColumn
           items={MINUTES}
-          initialIndex={initialMinuteIdx}
+          selectedIndex={minuteIdx}
           onSelect={onMinuteSelect}
           width={minuteW}
           accentColor={colors.foreground}
+          bgColor={bgColor}
         />
         <WheelColumn
           items={PERIODS}
-          initialIndex={initialPeriodIdx}
+          selectedIndex={periodIdx}
           onSelect={onPeriodSelect}
           width={periodW}
           accentColor={colors.primary}
+          bgColor={bgColor}
         />
       </View>
     </View>
@@ -384,7 +346,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const FADE_H = ITEM_H * 2 + 4;
+const FADE_H = ITEM_H * 2;
 
 const styles = StyleSheet.create({
   container: {
@@ -401,31 +363,31 @@ const styles = StyleSheet.create({
   },
   selectionBand: {
     position:          'absolute',
-    left:              12,
-    right:             12,
+    left:              8,
+    right:             8,
     borderTopWidth:    StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderLeftWidth:   0,
     borderRightWidth:  0,
-    pointerEvents:     'none',
   },
   fadeMask: {
     position: 'absolute',
     left:     0,
     right:    0,
     height:   FADE_H,
-    pointerEvents: 'none',
   },
   colonWrap: {
     position:       'absolute',
     width:          16,
+    top:            0,
+    bottom:         0,
     alignItems:     'center',
     justifyContent: 'center',
     zIndex:         10,
   },
   colon: {
-    fontSize:   30,
+    fontSize:   28,
     fontWeight: '700',
-    marginTop:  -6,
+    marginTop:  -4,
   },
 });

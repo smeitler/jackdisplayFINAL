@@ -1505,5 +1505,8 @@
 - [x] Fix: Edit Alarm time picker — scroll locked on parent ScrollView when touching picker (onTouchStart/End)
 - [x] Feature: Edit Alarm meditation picker — Priming now shows amber RECOMMENDED badge
 
-- [ ] Fix WheelTimePicker — dials frozen/unresponsive to scroll, rebuild with infinite-scroll FlatList columns
-- [ ] Fix journal entry keyboard avoidance — photo attachments hidden under keyboard when typing
+- [x] Fix WheelTimePicker — dials frozen/unresponsive to scroll, rebuild with native ScrollView snapToInterval (fast, instant load, no JS overhead)
+- [x] Fix journal entry keyboard avoidance — photo attachments hidden under keyboard when typing
+- [x] Fix journal editor — photos now embed inline at cursor position (not in bottom strip)
+- [x] Fix journal editor — photo button moved to right side of keyboard toolbar
+- [x] Fix journal editor — no auto-focus on open; user sees full view with photos before typing
