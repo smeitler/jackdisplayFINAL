@@ -49,6 +49,7 @@ import { useApp } from "@/lib/app-context";
 import { trpc } from "@/lib/trpc";
 import { addEntry, loadEntries, updateEntry, generateId, todayDateStr } from "@/lib/journal-store";
 import { getLastUserId, loadDayNotes, saveDayNotes, type Rating } from "@/lib/storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /// ─── Scrolling Waveform (iOS Voice Memos style) ─────────────────────────────
 // Renders a horizontal scrolling waveform with bars flowing left.
@@ -317,11 +318,40 @@ interface HabitResult {
   note: string;
 }
 
+interface ExtractedTask {
+  title: string;
+  notes: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
 interface ParsedResults {
   habitResults: HabitResult[];
   journalEntries: string[];
   gratitudeItems: string[];
   transcript: string;
+  extractedTasks?: ExtractedTask[];
+}
+
+const VC_TASKS_KEY = '@you_tasks_v1';
+
+async function appendExtractedTasksToStorage(tasks: ExtractedTask[]) {
+  if (!tasks.length) return;
+  try {
+    const raw = await AsyncStorage.getItem(VC_TASKS_KEY);
+    const existing: any[] = raw ? JSON.parse(raw) : [];
+    const newTasks = tasks.map((t) => ({
+      id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title: t.title.trim(),
+      notes: t.notes?.trim() ?? '',
+      priority: (['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium') as 'high' | 'medium' | 'low',
+      dueDate: null,
+      completed: false,
+      createdAt: new Date().toISOString(),
+    }));
+    await AsyncStorage.setItem(VC_TASKS_KEY, JSON.stringify([...newTasks, ...existing]));
+  } catch (e) {
+    console.warn('[VoiceCheckin] Failed to save extracted tasks:', e);
+  }
 }
 
 // ─── Waveform bars ────────────────────────────────────────────────────────────
@@ -955,6 +985,11 @@ export default function VoiceCheckinScreen() {
           journalEntries: combined.journalEntries,
           gratitudeItems: combined.gratitudeItems,
           transcript: combined.transcript,
+          extractedTasks: (combined.extractedTasks ?? []).map((t: any) => ({
+            title: t.title,
+            notes: t.notes ?? '',
+            priority: (['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium') as 'high' | 'medium' | 'low',
+          })),
         });
         setPhase("results");
         return;
@@ -1021,6 +1056,11 @@ export default function VoiceCheckinScreen() {
         journalEntries: analysis.journalEntries,
         gratitudeItems: analysis.gratitudeItems,
         transcript: fullTranscript,
+        extractedTasks: (analysis.extractedTasks ?? []).map((t: any) => ({
+          title: t.title,
+          notes: t.notes ?? '',
+          priority: (['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium') as 'high' | 'medium' | 'low',
+        })),
       });
       setPhase("results");
       // Auto-open journal popup after a short delay so the results screen renders first
@@ -1152,6 +1192,11 @@ export default function VoiceCheckinScreen() {
           transcriptionText: editedTranscript || results.transcript,
         };
         await addEntry(userId, entry);
+      }
+
+      // 4. Save extracted tasks to the Tasks list
+      if (results.extractedTasks && results.extractedTasks.length > 0) {
+        await appendExtractedTasksToStorage(results.extractedTasks);
       }
 
       if (Platform.OS !== "web")
@@ -1549,6 +1594,31 @@ export default function VoiceCheckinScreen() {
                       placeholderTextColor={colors.muted + "66"}
                       placeholder="What are you grateful for?"
                     />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Extracted Tasks from transcript */}
+            {results.extractedTasks && results.extractedTasks.length > 0 && (
+              <View style={classicStyles.journalSection}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 }}>
+                  <Text style={[classicStyles.journalTitle, { color: colors.foreground, marginBottom: 0 }]}>Tasks Added</Text>
+                  <View style={{ backgroundColor: colors.primary + '22', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>{results.extractedTasks.length}</Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 10 }}>Detected from your recording and added to Tasks</Text>
+                {results.extractedTasks.map((task, i) => (
+                  <View key={i} style={[classicStyles.gratitudeItem, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }]}>
+                    <Text style={{ fontSize: 16, marginTop: 1 }}>☑</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: '500' }}>{task.title}</Text>
+                      {task.notes ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{task.notes}</Text> : null}
+                    </View>
+                    <View style={{ backgroundColor: task.priority === 'high' ? colors.error + '22' : task.priority === 'low' ? colors.success + '22' : colors.warning + '22', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 11, color: task.priority === 'high' ? colors.error : task.priority === 'low' ? colors.success : colors.warning, fontWeight: '600', textTransform: 'uppercase' }}>{task.priority}</Text>
+                    </View>
                   </View>
                 ))}
               </View>

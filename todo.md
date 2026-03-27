@@ -1545,3 +1545,5 @@
 - [x] Alarm: fix alarm sound not playing in Expo Go (alarm-ring screen plays sound directly via expo-audio on wake-up)
 
 - [x] Add Tasks tab to the right of Rewards in the You/Profile section
+
+- [x] Auto-extract tasks from voice journal transcripts ("remind me to...", "don't forget...", "I need to...") and add them to the Tasks list

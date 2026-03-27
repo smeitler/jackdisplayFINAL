@@ -849,12 +849,12 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         const habitSection = habitList
           ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "rich 2-3 sentence description"}. Habits:\n${habitList}`
           : '';
-        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Completed a challenging 8-hour round-trip hike up Mount Timpanogos with friends. The elevation gain was intense but they pushed through and felt incredible at the summit. Mentioned legs were sore but the sense of accomplishment made it totally worth it."}}` : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Hit the gym for about 45 minutes, did chest and arms."}}` : '';
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the transcript lightly cleaned up — add punctuation, fix capitalization, and split run-on sentences, but DO NOT change, add, or remove any words. Keep the speaker's exact voice and meaning.${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords. Examples: "climbed a mountain" = exercise, "drank lots of water" = hydration, "read for an hour" = reading, "went to bed early" = sleep\n- If the user mentions ANY physical activity (hike, run, walk, gym, sport, climb, swim, bike, workout, exercise) → rate the exercise habit\n- If they mention doing it exceptionally well (5-hour workout, 30-mile run, climbed a mountain) → green (crushed)\n- If they mention doing it partially or okay → yellow\n- If they explicitly say they missed it → red\n- If not mentioned at all → omit (null)\n- HABIT NOTE RULES (critical):\n  * Use the user's EXACT words from the transcript — do NOT paraphrase, summarize, or rewrite\n  * Copy or closely follow the actual phrases the user said that relate to this habit\n  * You may add a short clarifying phrase ONLY if it directly connects what was said to the habit\n  * Do NOT invent details, emotions, or outcomes the user did not say\n  * 1-3 sentences using the user's own language\n  * GOOD: user said "hit the gym for like 45 minutes, did chest and arms" → note: "Hit the gym for about 45 minutes, did chest and arms."\n  * BAD: "Completed a productive gym session focusing on upper body strength training for 45 minutes."\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the transcript lightly cleaned up — add punctuation, fix capitalization, and split run-on sentences, but DO NOT change, add, or remove any words. Keep the speaker's exact voice and meaning.\n4. "extractedTasks": array of task objects for anything the user wants to remember, do, or be reminded about. Look for phrases like "remind me to", "don't forget", "I need to", "make sure I", "I should", "I have to", "I want to", "I gotta", "put on my list", "add to my list", or any clear to-do intent. Each task: {"title": "short action phrase using user's exact words", "notes": "optional context from transcript", "priority": "medium"}.${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords\n- HABIT NOTE RULES: use the user's EXACT words, do NOT paraphrase\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "...", "extractedTasks": [...]${habitJsonExample}}`,
             },
             {
               role: 'user',
@@ -866,6 +866,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         let journalEntries: string[] = [];
         let gratitudeItems: string[] = [];
         let habitResults: Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> = {};
+        let extractedTasks: Array<{ title: string; notes: string; priority: string }> = [];
         try {
           const parsed = JSON.parse(llmResp.choices[0].message.content as string);
           journalEntries = Array.isArray(parsed.journalEntries)
@@ -873,6 +874,9 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             : [];
           gratitudeItems = Array.isArray(parsed.gratitudeItems)
             ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+            : [];
+          extractedTasks = Array.isArray(parsed.extractedTasks)
+            ? parsed.extractedTasks.filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
             : [];
           if (parsed.habitResults && typeof parsed.habitResults === 'object') {
             habitResults = Object.fromEntries(
@@ -884,7 +888,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         } catch {
           journalEntries = [transcript];
         }
-        return { transcript, journalEntries, gratitudeItems, habitResults, audioUrl: storageResult.url };
+        return { transcript, journalEntries, gratitudeItems, habitResults, extractedTasks, audioUrl: storageResult.url };
       }),
 
     /**
@@ -909,12 +913,12 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         const habitSection = habitList
           ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "rich 2-3 sentence description"}. Habits:\n${habitList}`
           : '';
-        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Completed a challenging 8-hour round-trip hike up Mount Timpanogos with friends. The elevation gain was intense but they pushed through and felt incredible at the summit. Mentioned legs were sore but the sense of accomplishment made it totally worth it."}}` : '';
+        const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Hit the gym for about 45 minutes, did chest and arms."}}` : '';
         const llmResp = await invokeLLM({
           messages: [
             {
               role: 'system',
-              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords. Examples: "climbed a mountain" = exercise, "drank lots of water" = hydration, "read for an hour" = reading, "went to bed early" = sleep\n- If the user mentions ANY physical activity (hike, run, walk, gym, sport, climb, swim, bike, workout, exercise) → rate the exercise habit\n- If they mention doing it exceptionally well (5-hour workout, 30-mile run, climbed a mountain) → green (crushed)\n- If they mention doing it partially or okay → yellow\n- If they explicitly say they missed it → red\n- If not mentioned at all → omit (null)\n- HABIT NOTE RULES (critical):\n  * Use the user's EXACT words from the transcript — do NOT paraphrase, summarize, or rewrite\n  * Copy or closely follow the actual phrases the user said that relate to this habit\n  * You may add a short clarifying phrase ONLY if it directly connects what was said to the habit\n  * Do NOT invent details, emotions, or outcomes the user did not say\n  * 1-3 sentences using the user's own language\n  * GOOD: user said "hit the gym for like 45 minutes, did chest and arms" → note: "Hit the gym for about 45 minutes, did chest and arms."\n  * BAD: "Completed a productive gym session focusing on upper body strength training for 45 minutes."\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "..."${habitJsonExample}}`,
+              content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "transcript": the original transcript verbatim\n4. "extractedTasks": array of task objects for anything the user wants to remember, do, or be reminded about. Look for phrases like "remind me to", "don't forget", "I need to", "make sure I", "I should", "I have to", "I want to", "I gotta", "put on my list", "add to my list", or any clear to-do intent. Each task: {"title": "short action phrase using user's exact words", "notes": "optional context from transcript", "priority": "medium"}.${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords\n- HABIT NOTE RULES: use the user's EXACT words, do NOT paraphrase\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "transcript": "...", "extractedTasks": [...]${habitJsonExample}}`,
             },
             {
               role: 'user',
@@ -926,6 +930,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         let journalEntries: string[] = [];
         let gratitudeItems: string[] = [];
         let habitResults: Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> = {};
+        let extractedTasks: Array<{ title: string; notes: string; priority: string }> = [];
         try {
           const parsed = JSON.parse(llmResp.choices[0].message.content as string);
           journalEntries = Array.isArray(parsed.journalEntries)
@@ -933,6 +938,9 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
             : [];
           gratitudeItems = Array.isArray(parsed.gratitudeItems)
             ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+            : [];
+          extractedTasks = Array.isArray(parsed.extractedTasks)
+            ? parsed.extractedTasks.filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
             : [];
           if (parsed.habitResults && typeof parsed.habitResults === 'object') {
             habitResults = Object.fromEntries(
@@ -944,7 +952,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
         } catch {
           journalEntries = [input.transcript];
         }
-        return { journalEntries, gratitudeItems, habitResults };
+        return { journalEntries, gratitudeItems, habitResults, extractedTasks };
       }),
   }),
 
