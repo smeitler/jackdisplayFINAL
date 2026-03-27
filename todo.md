@@ -1517,3 +1517,8 @@
 - [x] Fix: Journal top bar — replaced fire icon (left) with "List" text button opening all-entries sheet
 - [x] Fix: Journal top bar — replaced calendar widget icon (right) with "Calendar" text button
 - [x] Feature: Home screen — added fire streak icon + journal entry count badge next to profile picture
+
+- [x] Fix: Backend server restart so Apple login works (upstream_connect_failed on port 3000)
+- [x] Fix: Home screen header — remove "manage goals" list icon and second crossed-out icon
+- [x] Fix: Home screen header — date text wrapping vertically, now single line with adjustsFontSizeToFit
+- [x] Fix: Home screen header — clean redesign: date left, streak pill + journal badge + AI coach + avatar right

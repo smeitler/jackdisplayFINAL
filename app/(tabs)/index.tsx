@@ -1094,81 +1094,68 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={[styles.scroll, isCalm && { paddingTop: 20 }]} showsVerticalScrollIndicator={false}>
         <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
 
-          {/* ── Header: date + streak pill + profile pic (non-Calm) ── */}
+          {/* ── Header: date + right-side actions (non-Calm) ── */}
           {!isCalm && <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.dateText, { color: colors.foreground }]}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {/* Left: date — single line, shrinks if needed */}
+            <Text
+              style={[styles.dateText, { color: colors.foreground, flexShrink: 1 }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </Text>
+
+            {/* Right: streak pill + journal badge + AI coach + profile */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Habit streak pill */}
               {streak > 0 && (
                 <View style={styles.streakPill}>
-                  <IconSymbol name="flame.fill" size={16} color="#FF6B35" />
+                  <IconSymbol name="flame.fill" size={14} color="#FF6B35" />
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
-              {/* AI Coach button — pulsing gradient ring */}
+
+              {/* Journal fire badge — taps to journal */}
+              <Pressable
+                onPress={() => router.push('/(tabs)/journal' as never)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', gap: 3,
+                  backgroundColor: '#F59E0B18', borderRadius: 10,
+                  paddingHorizontal: 7, paddingVertical: 4,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <IconSymbol name="flame.fill" size={13} color="#F59E0B" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#F59E0B' }}>
+                  {journalStreak > 0 ? journalStreak : journalEntryCount}
+                </Text>
+              </Pressable>
+
+              {/* AI Coach button */}
               <Pressable
                 onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/ai-coach'); }}
                 style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
               >
-                {/* AI Coach icon ring */}
                 <View style={{
-                  width: 44, height: 44, borderRadius: 22,
+                  width: 36, height: 36, borderRadius: 18,
                   alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: colors.primary + '22',
+                  backgroundColor: colors.primary,
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.5,
+                  shadowRadius: 6,
+                  elevation: 4,
                 }}>
-                  {/* Inner gradient-style circle */}
-                  <View style={{
-                    width: 36, height: 36, borderRadius: 18,
-                    alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: colors.primary,
-                    shadowColor: colors.primary,
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.6,
-                    shadowRadius: 8,
-                    elevation: 6,
-                  }}>
-                    <Text style={{ fontSize: 17 }}>✦</Text>
-                  </View>
+                  <Text style={{ fontSize: 15 }}>✦</Text>
                 </View>
               </Pressable>
-              {/* Manage Goals shortcut */}
-              <Pressable
-                onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/habits'); }}
-                style={({ pressed }) => [{
-                  width: 40, height: 40, borderRadius: 20,
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: colors.surface,
-                  borderWidth: 1, borderColor: colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                }]}
-              >
-                <IconSymbol name="list.bullet" size={18} color={colors.foreground} />
-              </Pressable>
-              {/* Journal fire streak + entry count badge */}
-              <Pressable
-                onPress={() => router.push('/(tabs)/journal' as never)}
-                style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center', gap: 4,
-                  backgroundColor: '#F59E0B18', borderRadius: 12,
-                  paddingHorizontal: 8, paddingVertical: 5,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <IconSymbol name="flame.fill" size={16} color="#F59E0B" />
-                {journalStreak > 0 && (
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#F59E0B' }}>{journalStreak}</Text>
-                )}
-                <Text style={{ fontSize: 12, fontWeight: '500', color: '#F59E0B', opacity: 0.8 }}>
-                  {journalEntryCount} {journalEntryCount === 1 ? 'entry' : 'entries'}
-                </Text>
-              </Pressable>
+
+              {/* Profile avatar */}
               <ProfileAvatar
                 uri={profilePicUri}
                 onPress={handlePickProfilePic}
-                size={40}
+                size={36}
               />
             </View>
           </View>}
@@ -1951,8 +1938,8 @@ const styles = StyleSheet.create({
   scroll: { padding: 20, paddingTop: 24, paddingBottom: 40 },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
-  dateText: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  dateText: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3, flexShrink: 1, marginRight: 8 },
   streakPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FF6B3520', borderRadius: 20,
