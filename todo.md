@@ -1596,3 +1596,5 @@
 - [x] Make streak flame pills in home screen header bolder and more visually prominent
 
 - [x] Redesign Wake Up Stack and Sleep Stack cards: Headspace-style with vibrant illustrated gradient top half (sun/sunrise for wake up, moon/night for sleep) and dark info panel below
+
+- [x] Lay Wake Up Stack and Sleep Stack cards side-by-side in a two-column row

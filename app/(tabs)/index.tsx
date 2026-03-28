@@ -1299,112 +1299,98 @@ export default function HomeScreen() {
             </View>
           </View>}
 
-          {/* ── Stack Widgets: Wake Up + Sleep (full-width, stacked) ── */}
-          {(['wakeup', 'sleep'] as const).map((kind) => {
-            const stack = ritualStacks.find((s) => s.id === kind);
-            if (!stack) return null;
-            const isWakeup = kind === 'wakeup';
+          {/* ── Stack Widgets: Wake Up + Sleep (side-by-side) ── */}
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+            {(['wakeup', 'sleep'] as const).map((kind) => {
+              const stack = ritualStacks.find((s) => s.id === kind);
+              if (!stack) return null;
+              const isWakeup = kind === 'wakeup';
 
-            // Gradient colours
-            const gradTop    = isWakeup ? '#FFD93D' : '#1A1040';
-            const gradMid    = isWakeup ? '#FF8C42' : '#2D1B69';
-            const gradBottom = isWakeup ? '#FF4500' : '#0D0820';
+              const gradTop    = isWakeup ? '#FFD93D' : '#1A1040';
+              const gradMid    = isWakeup ? '#FF8C42' : '#2D1B69';
+              const gradBottom = isWakeup ? '#FF4500' : '#0D0820';
+              const panelBg    = isWakeup ? '#1C0A00' : '#0D0820';
+              const accentColor = isWakeup ? '#FF8C42' : '#A78BFA';
 
-            // Info panel colours
-            const panelBg    = isWakeup ? '#1C0A00' : '#0D0820';
-            const accentColor = isWakeup ? '#FF8C42' : '#A78BFA';
-
-            return (
-              <Pressable
-                key={kind}
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (stack.steps.length === 0) {
-                    router.push(`/stack-editor?id=${stack.id}` as never);
-                  } else {
-                    router.push(`/stack-player?id=${stack.id}` as never);
-                  }
-                }}
-                style={({ pressed }) => ({
-                  borderRadius: 24, overflow: 'hidden', marginBottom: 12,
-                  opacity: pressed ? 0.88 : 1,
-                  transform: [{ scale: pressed ? 0.985 : 1 }],
-                })}
-              >
-                {/* ── Illustrated gradient top half ── */}
-                <LinearGradient
-                  colors={[gradTop, gradMid, gradBottom]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={{ height: 140, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 0, overflow: 'hidden' }}
+              return (
+                <Pressable
+                  key={kind}
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (stack.steps.length === 0) {
+                      router.push(`/stack-editor?id=${stack.id}` as never);
+                    } else {
+                      router.push(`/stack-player?id=${stack.id}` as never);
+                    }
+                  }}
+                  style={({ pressed }) => ({
+                    flex: 1, borderRadius: 20, overflow: 'hidden',
+                    opacity: pressed ? 0.88 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  })}
                 >
-                  {isWakeup ? (
-                    // Sun illustration: horizon hill + sun rays
-                    <Svg width="100%" height="140" viewBox="0 0 360 140" style={{ position: 'absolute', bottom: 0 }}>
-                      {/* Horizon hill */}
-                      <Circle cx="180" cy="185" r="130" fill="#FF6B00" opacity={0.55} />
-                      {/* Sun body */}
-                      <Circle cx="180" cy="88" r="38" fill="#FFE566" opacity={0.95} />
-                      {/* Glow */}
-                      <Circle cx="180" cy="88" r="54" fill="#FFD93D" opacity={0.18} />
-                      <Circle cx="180" cy="88" r="70" fill="#FFD93D" opacity={0.09} />
-                    </Svg>
-                  ) : (
-                    // Moon illustration: night sky + crescent
-                    <Svg width="100%" height="140" viewBox="0 0 360 140" style={{ position: 'absolute', bottom: 0 }}>
-                      {/* Stars */}
-                      <Circle cx="60"  cy="30"  r="2" fill="#fff" opacity={0.8} />
-                      <Circle cx="120" cy="18"  r="1.5" fill="#fff" opacity={0.6} />
-                      <Circle cx="200" cy="25"  r="2.5" fill="#fff" opacity={0.9} />
-                      <Circle cx="270" cy="15"  r="1.5" fill="#fff" opacity={0.7} />
-                      <Circle cx="310" cy="40"  r="2" fill="#fff" opacity={0.5} />
-                      <Circle cx="40"  cy="70"  r="1.5" fill="#fff" opacity={0.4} />
-                      <Circle cx="330" cy="75"  r="1.5" fill="#fff" opacity={0.5} />
-                      {/* Moon glow */}
-                      <Circle cx="230" cy="62" r="52" fill="#7C3AED" opacity={0.18} />
-                      {/* Moon body */}
-                      <Circle cx="230" cy="62" r="36" fill="#C4B5FD" opacity={0.95} />
-                      {/* Crescent cutout */}
-                      <Circle cx="248" cy="54" r="30" fill={gradMid} />
-                      {/* Rolling hills */}
-                      <Circle cx="80"  cy="175" r="110" fill="#1A1040" opacity={0.9} />
-                      <Circle cx="280" cy="185" r="120" fill="#12082E" opacity={0.9} />
-                    </Svg>
-                  )}
-                </LinearGradient>
+                  {/* Illustrated gradient top */}
+                  <LinearGradient
+                    colors={[gradTop, gradMid, gradBottom]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={{ height: 110, overflow: 'hidden' }}
+                  >
+                    {isWakeup ? (
+                      <Svg width="100%" height="110" viewBox="0 0 180 110" style={{ position: 'absolute', bottom: 0 }}>
+                        <Circle cx="90" cy="145" r="90" fill="#FF6B00" opacity={0.5} />
+                        <Circle cx="90" cy="58" r="28" fill="#FFE566" opacity={0.95} />
+                        <Circle cx="90" cy="58" r="40" fill="#FFD93D" opacity={0.18} />
+                        <Circle cx="90" cy="58" r="54" fill="#FFD93D" opacity={0.09} />
+                      </Svg>
+                    ) : (
+                      <Svg width="100%" height="110" viewBox="0 0 180 110" style={{ position: 'absolute', bottom: 0 }}>
+                        <Circle cx="30"  cy="22" r="1.5" fill="#fff" opacity={0.8} />
+                        <Circle cx="70"  cy="12" r="1.2" fill="#fff" opacity={0.6} />
+                        <Circle cx="120" cy="18" r="2"   fill="#fff" opacity={0.9} />
+                        <Circle cx="155" cy="30" r="1.5" fill="#fff" opacity={0.6} />
+                        <Circle cx="15"  cy="55" r="1.2" fill="#fff" opacity={0.4} />
+                        <Circle cx="165" cy="58" r="1.2" fill="#fff" opacity={0.5} />
+                        <Circle cx="115" cy="50" r="26" fill="#7C3AED" opacity={0.18} />
+                        <Circle cx="115" cy="50" r="18" fill="#C4B5FD" opacity={0.95} />
+                        <Circle cx="127" cy="43" r="15" fill={gradMid} />
+                        <Circle cx="40"  cy="140" r="80" fill="#1A1040" opacity={0.9} />
+                        <Circle cx="145" cy="145" r="85" fill="#12082E" opacity={0.9} />
+                      </Svg>
+                    )}
+                  </LinearGradient>
 
-                {/* ── Dark info panel ── */}
-                <View style={{ backgroundColor: panelBg, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18 }}>
-                  {/* Title row + Edit */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <Text style={{ fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.4 }}>
-                      {stack.name}
-                    </Text>
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(`/stack-editor?id=${stack.id}` as never);
-                      }}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-                    >
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: accentColor, opacity: 0.9 }}>Edit</Text>
-                    </Pressable>
+                  {/* Dark info panel */}
+                  <View style={{ backgroundColor: panelBg, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.3, flexShrink: 1, marginRight: 4 }} numberOfLines={1}>
+                        {stack.name}
+                      </Text>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          router.push(`/stack-editor?id=${stack.id}` as never);
+                        }}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: accentColor }}>Edit</Text>
+                      </Pressable>
+                    </View>
+                    {stack.steps.length === 0 ? (
+                      <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 15 }} numberOfLines={2}>
+                        Tap Edit to build your ritual
+                      </Text>
+                    ) : (
+                      <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 15 }} numberOfLines={2}>
+                        {stack.steps.map((step) => stepLabel(step)).join(' · ')}
+                      </Text>
+                    )}
                   </View>
-                  {/* Step names */}
-                  {stack.steps.length === 0 ? (
-                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
-                      Tap Edit to build your ritual
-                    </Text>
-                  ) : (
-                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 19 }} numberOfLines={2}>
-                      {stack.steps.map((step) => stepLabel(step)).join('  ·  ')}
-                    </Text>
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
+                </Pressable>
+              );
+            })}
+          </View>
 
           {/* ── Sounds Card ── */}
           <Pressable
