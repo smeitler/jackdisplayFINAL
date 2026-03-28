@@ -1392,30 +1392,22 @@ export default function HomeScreen() {
             })}
           </View>
 
-          {/* ── Sounds Card ── */}
+          {/* ── Sounds inline link ── */}
           <Pressable
             onPress={() => {
               if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push('/sounds' as never);
             }}
-            style={({ pressed }) => [
-              styles.soundsCard,
-              {
-                backgroundColor: isCalm ? '#1A2050' : colors.surface,
-                borderColor: isCalm ? '#252D6E' : colors.border,
-                opacity: pressed ? 0.85 : 1,
-                transform: [{ scale: pressed ? 0.98 : 1 }],
-              },
-            ]}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              paddingVertical: 6, marginBottom: 4,
+              opacity: pressed ? 0.6 : 1,
+            })}
           >
-            <View style={[styles.soundsIconWrap, { backgroundColor: '#10B98122' }]}>
-              <IconSymbol name="headphones" size={24} color="#10B981" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.soundsTitle, { color: isCalm ? '#fff' : colors.foreground }]}>Sounds</Text>
-              <Text style={[styles.soundsSub, { color: isCalm ? 'rgba(255,255,255,0.6)' : colors.muted }]}>Meditate · Focus · Sleep</Text>
-            </View>
-            <IconSymbol name="chevron.right" size={16} color={isCalm ? 'rgba(255,255,255,0.4)' : colors.muted} />
+            <IconSymbol name="headphones" size={14} color="#10B981" />
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#10B981' }}>Sounds</Text>
+            <Text style={{ fontSize: 13, color: colors.muted }}>Meditate · Focus · Sleep</Text>
+            <IconSymbol name="chevron.right" size={12} color={colors.muted} />
           </Pressable>
 
           {/* ── Alarms section (up to 4) ── */}
