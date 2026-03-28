@@ -21,6 +21,7 @@ import { PERMISSIONS_DONE_KEY } from "@/app/permissions-setup";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { CalmHeader, useIsCalm } from "@/components/calm-effects";
+import { LinearGradient } from "expo-linear-gradient";
 import { WellnessIcon } from "@/components/wellness-icon";
 import { loadStacks, stepLabel, STEP_TYPE_META, type RitualStack, type StepType } from "@/lib/stacks";
 
@@ -1266,7 +1267,7 @@ export default function HomeScreen() {
               {/* Habit streak pill */}
               {streak > 0 && (
                 <View style={styles.streakPill}>
-                  <IconSymbol name="flame.fill" size={14} color="#FF6B35" />
+                  <IconSymbol name="flame.fill" size={18} color="#FF6B35" />
                   <Text style={styles.streakNum}>{streak}</Text>
                 </View>
               )}
@@ -1275,14 +1276,15 @@ export default function HomeScreen() {
               <Pressable
                 onPress={() => router.push('/(tabs)/journal' as never)}
                 style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center', gap: 3,
-                  backgroundColor: '#F59E0B18', borderRadius: 10,
-                  paddingHorizontal: 7, paddingVertical: 4,
+                  flexDirection: 'row', alignItems: 'center', gap: 4,
+                  backgroundColor: '#F59E0B28', borderRadius: 14,
+                  paddingHorizontal: 11, paddingVertical: 7,
+                  borderWidth: 1, borderColor: '#F59E0B44',
                   opacity: pressed ? 0.7 : 1,
                 })}
               >
-                <IconSymbol name="flame.fill" size={13} color="#F59E0B" />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#F59E0B' }}>
+                <IconSymbol name="flame.fill" size={17} color="#F59E0B" />
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#F59E0B', letterSpacing: -0.3 }}>
                   {journalStreak > 0 ? journalStreak : journalEntryCount}
                 </Text>
               </Pressable>
@@ -1301,8 +1303,17 @@ export default function HomeScreen() {
           {(['wakeup', 'sleep'] as const).map((kind) => {
             const stack = ritualStacks.find((s) => s.id === kind);
             if (!stack) return null;
-            const accentColor = kind === 'wakeup' ? '#F97316' : '#8B5CF6';
-            const iconName = kind === 'wakeup' ? 'sun.max.fill' : 'moon.fill';
+            const isWakeup = kind === 'wakeup';
+
+            // Gradient colours
+            const gradTop    = isWakeup ? '#FFD93D' : '#1A1040';
+            const gradMid    = isWakeup ? '#FF8C42' : '#2D1B69';
+            const gradBottom = isWakeup ? '#FF4500' : '#0D0820';
+
+            // Info panel colours
+            const panelBg    = isWakeup ? '#1C0A00' : '#0D0820';
+            const accentColor = isWakeup ? '#FF8C42' : '#A78BFA';
+
             return (
               <Pressable
                 key={kind}
@@ -1314,48 +1325,83 @@ export default function HomeScreen() {
                     router.push(`/stack-player?id=${stack.id}` as never);
                   }
                 }}
-                style={({ pressed }) => [
-                  styles.stackWidgetFull,
-                  {
-                    backgroundColor: accentColor + '14',
-                    opacity: pressed ? 0.88 : 1,
-                    transform: [{ scale: pressed ? 0.985 : 1 }],
-                  },
-                ]}
+                style={({ pressed }) => ({
+                  borderRadius: 24, overflow: 'hidden', marginBottom: 12,
+                  opacity: pressed ? 0.88 : 1,
+                  transform: [{ scale: pressed ? 0.985 : 1 }],
+                })}
               >
-                {/* Top row: Edit button only */}
-                <View style={styles.stackWidgetTopRow}>
-                  <View style={{ flex: 1 }} />
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push(`/stack-editor?id=${stack.id}` as never);
-                    }}
-                    style={({ pressed }) => [styles.stackEditBtn, { opacity: pressed ? 0.5 : 1 }]}
-                  >
-                    <Text style={[styles.stackEditBtnText, { color: accentColor }]}>Edit</Text>
-                  </Pressable>
+                {/* ── Illustrated gradient top half ── */}
+                <LinearGradient
+                  colors={[gradTop, gradMid, gradBottom]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={{ height: 140, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 0, overflow: 'hidden' }}
+                >
+                  {isWakeup ? (
+                    // Sun illustration: horizon hill + sun rays
+                    <Svg width="100%" height="140" viewBox="0 0 360 140" style={{ position: 'absolute', bottom: 0 }}>
+                      {/* Horizon hill */}
+                      <Circle cx="180" cy="185" r="130" fill="#FF6B00" opacity={0.55} />
+                      {/* Sun body */}
+                      <Circle cx="180" cy="88" r="38" fill="#FFE566" opacity={0.95} />
+                      {/* Glow */}
+                      <Circle cx="180" cy="88" r="54" fill="#FFD93D" opacity={0.18} />
+                      <Circle cx="180" cy="88" r="70" fill="#FFD93D" opacity={0.09} />
+                    </Svg>
+                  ) : (
+                    // Moon illustration: night sky + crescent
+                    <Svg width="100%" height="140" viewBox="0 0 360 140" style={{ position: 'absolute', bottom: 0 }}>
+                      {/* Stars */}
+                      <Circle cx="60"  cy="30"  r="2" fill="#fff" opacity={0.8} />
+                      <Circle cx="120" cy="18"  r="1.5" fill="#fff" opacity={0.6} />
+                      <Circle cx="200" cy="25"  r="2.5" fill="#fff" opacity={0.9} />
+                      <Circle cx="270" cy="15"  r="1.5" fill="#fff" opacity={0.7} />
+                      <Circle cx="310" cy="40"  r="2" fill="#fff" opacity={0.5} />
+                      <Circle cx="40"  cy="70"  r="1.5" fill="#fff" opacity={0.4} />
+                      <Circle cx="330" cy="75"  r="1.5" fill="#fff" opacity={0.5} />
+                      {/* Moon glow */}
+                      <Circle cx="230" cy="62" r="52" fill="#7C3AED" opacity={0.18} />
+                      {/* Moon body */}
+                      <Circle cx="230" cy="62" r="36" fill="#C4B5FD" opacity={0.95} />
+                      {/* Crescent cutout */}
+                      <Circle cx="248" cy="54" r="30" fill={gradMid} />
+                      {/* Rolling hills */}
+                      <Circle cx="80"  cy="175" r="110" fill="#1A1040" opacity={0.9} />
+                      <Circle cx="280" cy="185" r="120" fill="#12082E" opacity={0.9} />
+                    </Svg>
+                  )}
+                </LinearGradient>
+
+                {/* ── Dark info panel ── */}
+                <View style={{ backgroundColor: panelBg, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18 }}>
+                  {/* Title row + Edit */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.4 }}>
+                      {stack.name}
+                    </Text>
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/stack-editor?id=${stack.id}` as never);
+                      }}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: accentColor, opacity: 0.9 }}>Edit</Text>
+                    </Pressable>
+                  </View>
+                  {/* Step names */}
+                  {stack.steps.length === 0 ? (
+                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
+                      Tap Edit to build your ritual
+                    </Text>
+                  ) : (
+                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 19 }} numberOfLines={2}>
+                      {stack.steps.map((step) => stepLabel(step)).join('  ·  ')}
+                    </Text>
+                  )}
                 </View>
-
-                {/* Icon */}
-                <IconSymbol name={iconName as any} size={44} color={accentColor} style={{ marginBottom: 12 }} />
-
-                {/* Title */}
-                <Text style={[styles.stackWidgetTitle, { color: colors.foreground, marginBottom: 8 }]}>
-                  {stack.name}
-                </Text>
-
-                {/* Step names */}
-                {stack.steps.length === 0 ? (
-                  <Text style={[styles.stackNoSteps, { color: colors.muted }]}>
-                    Tap Edit to build your ritual
-                  </Text>
-                ) : (
-                  <Text style={[styles.stackStepWords, { color: colors.foreground }]} numberOfLines={2}>
-                    {stack.steps.map((step) => stepLabel(step)).join('  ·  ')}
-                  </Text>
-                )}
               </Pressable>
             );
           })}
@@ -2097,11 +2143,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   dateText: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3, flexShrink: 1, marginRight: 8 },
   streakPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#FF6B3520', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 7,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#FF6B3528', borderRadius: 14,
+    paddingHorizontal: 11, paddingVertical: 7,
+    borderWidth: 1, borderColor: '#FF6B3544',
   },
-  streakNum: { fontSize: 17, fontWeight: '800', color: '#FF6B35' },
+  streakNum: { fontSize: 16, fontWeight: '800', color: '#FF6B35', letterSpacing: -0.3 },
 
   // Profile avatar
   profileAvatar: {
