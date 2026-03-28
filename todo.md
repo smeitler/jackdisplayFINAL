@@ -1606,3 +1606,5 @@
 - [x] Fix drag-to-reorder in stack editor — rewrite with RNGH LongPress+Pan gestures so it works on iOS device
 
 - [x] Polish drag-to-reorder visuals: floating lifted card with strong shadow, animated placeholder gap at drop target, smooth spring snapping
+
+- [x] Fix glitching drag: use single shared hoverIdx value so gap animation and drop position always agree
