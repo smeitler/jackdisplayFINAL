@@ -1608,10 +1608,3 @@
 - [x] Polish drag-to-reorder visuals: floating lifted card with strong shadow, animated placeholder gap at drop target, smooth spring snapping
 
 - [x] Fix glitching drag: use single shared hoverIdx value so gap animation and drop position always agree
-
-- [x] Drag improvement 1: live card height measurement via onLayout (fix CARD_HEIGHT mismatch)
-- [x] Drag improvement 2: move DraggableStepList outside ScrollView to eliminate scroll gesture conflict
-- [x] Drag improvement 3: haptic tick on each slot change during drag
-- [x] Drag improvement 4: floating overlay clone card so dragged card doesn't overlap neighbours
-- [x] Drag improvement 5: tune spring to damping:30 / use withTiming for neighbour shifts (no overshoot)
-- [x] Drag improvement 6: thin accent-coloured drop-zone indicator line at hoverIdx position
