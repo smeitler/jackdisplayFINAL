@@ -1602,3 +1602,5 @@
 - [x] Replace Sounds card widget with compact inline text link row on home screen
 
 - [x] Remove one of the two flame streak pills from the home screen header
+
+- [x] Fix drag-to-reorder in stack editor — rewrite with RNGH LongPress+Pan gestures so it works on iOS device

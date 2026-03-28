@@ -7,12 +7,15 @@
  * OUTSIDE the ScrollView so PanResponder can claim gestures without
  * the scroll view stealing them.
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
-  TextInput, Modal, FlatList, PanResponder, Animated as RNAnimated,
-  GestureResponderEvent,
+  TextInput, Modal, FlatList,
 } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -27,7 +30,7 @@ import {
 import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
-const CARD_HEIGHT = 80; // height of each step card + margin
+const CARD_HEIGHT = 84; // height of each step card including margin
 
 // ─── Step type icon map ───────────────────────────────────────────────────────
 
@@ -82,7 +85,8 @@ const PRIMING_TRACKS: LibraryTrack[] = [
 ];
 
 // ─── Drag-to-Reorder Step List ────────────────────────────────────────────────
-// Rendered OUTSIDE the parent ScrollView so PanResponder wins the gesture.
+// Uses RNGH LongPress + Pan gesture composition so it reliably beats
+// the iOS scroll view gesture recogniser.
 
 interface DraggableStepListProps {
   steps: RitualStep[];
@@ -93,144 +97,165 @@ interface DraggableStepListProps {
   onDelete: (id: string) => void;
 }
 
+/** A single draggable row. Gesture state is managed per-row. */
+function DraggableRow({
+  step, idx, totalSteps, accentColor, colors,
+  onEdit, onDelete, onReorder,
+}: {
+  step: RitualStep;
+  idx: number;
+  totalSteps: number;
+  accentColor: string;
+  colors: ReturnType<typeof useColors>;
+  onEdit: (s: RitualStep) => void;
+  onDelete: (id: string) => void;
+  onReorder: (fromIdx: number, toIdx: number) => void;
+}) {
+  const translateY  = useSharedValue(0);
+  const isDragging  = useSharedValue(false);
+  const startY      = useSharedValue(0);
+
+  function handleDragStart() {
+    isDragging.value = true;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  }
+
+  function handleDragEnd(dy: number) {
+    const toIdx = Math.max(0, Math.min(totalSteps - 1, idx + Math.round(dy / CARD_HEIGHT)));
+    isDragging.value = false;
+    translateY.value = withTiming(0, { duration: 180 });
+    if (toIdx !== idx) {
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      onReorder(idx, toIdx);
+    }
+  }
+
+  function handleDragCancel() {
+    isDragging.value = false;
+    translateY.value = withTiming(0, { duration: 180 });
+  }
+
+  const longPress = Gesture.LongPress()
+    .minDuration(300)
+    .maxDistance(8)
+    .onStart(() => {
+      startY.value = 0;
+      runOnJS(handleDragStart)();
+    });
+
+  const pan = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesMove((e, state) => {
+      if (isDragging.value) {
+        state.activate();
+      } else {
+        state.fail();
+      }
+    })
+    .onUpdate((e) => {
+      translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      runOnJS(handleDragEnd)(e.translationY);
+    })
+    .onFinalize(() => {
+      if (isDragging.value) {
+        runOnJS(handleDragCancel)();
+      }
+    });
+
+  const composed = Gesture.Simultaneous(longPress, pan);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    zIndex: isDragging.value ? 999 : 1,
+    shadowOpacity: isDragging.value ? 0.3 : 0,
+    shadowRadius: isDragging.value ? 10 : 0,
+    elevation: isDragging.value ? 12 : 0,
+    opacity: isDragging.value ? 0.95 : 1,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.stepCard,
+        { backgroundColor: colors.surface, borderColor: colors.border,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 4 } },
+        animStyle,
+      ]}
+    >
+      {/* ≡ Drag handle — long-press here to drag */}
+      <GestureDetector gesture={composed}>
+        <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <IconSymbol name="line.3.horizontal" size={20} color={colors.muted} />
+        </View>
+      </GestureDetector>
+
+      {/* Step number badge */}
+      <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
+        <Text style={styles.stepNum}>{idx + 1}</Text>
+      </View>
+
+      {/* Tap body to configure */}
+      <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
+        <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
+          {step.type === 'reminder'
+            ? 'Habit Reminder'
+            : step.type === 'melatonin'
+            ? 'Melatonin'
+            : STEP_TYPE_META[step.type]?.label ?? step.type}
+        </Text>
+        <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
+          {stepLabel(step) || 'Tap to configure'}
+        </Text>
+        {step.delayAfterSeconds > 0 && (
+          <Text style={[styles.stepDelay, { color: colors.muted }]}>
+            {step.delayAfterSeconds}s delay before
+          </Text>
+        )}
+      </Pressable>
+
+      {/* Separator + delete */}
+      <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
+      <Pressable
+        onPress={() => onDelete(step.id)}
+        style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
+      >
+        <IconSymbol name="trash" size={16} color={colors.error} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function DraggableStepList({
   steps, accentColor, colors, onReorder, onEdit, onDelete,
 }: DraggableStepListProps) {
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [targetIdx, setTargetIdx]     = useState<number | null>(null);
-  const dragAnim = useRef(new RNAnimated.Value(0)).current;
-
-  // We build a new PanResponder for each card index.
-  // The key insight: we attach it to the HANDLE only, and the handle
-  // is NOT inside a ScrollView, so there's no scroll-vs-gesture conflict.
-  function buildPanResponder(idx: number) {
-    return PanResponder.create({
-      // Only claim the gesture if the user has moved vertically enough
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 4,
-      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dy) > 4,
-
-      onPanResponderGrant: () => {
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-        dragAnim.setValue(0);
-        setDraggingIdx(idx);
-        setTargetIdx(idx);
-      },
-
-      onPanResponderMove: (_e, g) => {
-        dragAnim.setValue(g.dy);
-        const newTarget = Math.max(
-          0,
-          Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)),
-        );
-        setTargetIdx(newTarget);
-      },
-
-      onPanResponderRelease: (_e, g) => {
-        const toIdx = Math.max(
-          0,
-          Math.min(steps.length - 1, idx + Math.round(g.dy / CARD_HEIGHT)),
-        );
-        dragAnim.setValue(0);
-        setDraggingIdx(null);
-        setTargetIdx(null);
-
-        if (toIdx !== idx) {
-          if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          }
-          const next = [...steps];
-          const [moved] = next.splice(idx, 1);
-          next.splice(toIdx, 0, moved);
-          onReorder(next);
-        }
-      },
-
-      onPanResponderTerminate: () => {
-        dragAnim.setValue(0);
-        setDraggingIdx(null);
-        setTargetIdx(null);
-      },
-    });
+  function handleReorder(fromIdx: number, toIdx: number) {
+    const next = [...steps];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    onReorder(next);
   }
 
   return (
-    <View style={{ position: 'relative' }}>
-      {steps.map((step, idx) => {
-        const isDragging = draggingIdx === idx;
-        const isTarget   = targetIdx !== null && targetIdx !== draggingIdx && targetIdx === idx;
-        // Build a stable pan responder per card (re-created when steps change)
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        const panRef = useRef(buildPanResponder(idx));
-        // Rebuild when idx or steps length changes
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        useEffect(() => {
-          panRef.current = buildPanResponder(idx);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [idx, steps.length]);
-
-        return (
-          <RNAnimated.View
-            key={step.id}
-            style={[
-              styles.stepCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: isDragging ? accentColor : isTarget ? accentColor + '60' : colors.border,
-                zIndex: isDragging ? 999 : 1,
-                elevation: isDragging ? 12 : 0,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: isDragging ? 6 : 0 },
-                shadowOpacity: isDragging ? 0.3 : 0,
-                shadowRadius: isDragging ? 10 : 0,
-                opacity: isDragging ? 0.95 : 1,
-                transform: isDragging ? [{ translateY: dragAnim }] : [],
-              },
-            ]}
-          >
-            {/* ≡ Drag handle — this is what the user grabs */}
-            <View {...panRef.current.panHandlers} style={styles.dragHandle} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
-              <IconSymbol name="line.3.horizontal" size={20} color={colors.muted} />
-            </View>
-
-            {/* Step number badge */}
-            <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
-              <Text style={styles.stepNum}>{idx + 1}</Text>
-            </View>
-
-            {/* Tap body to configure */}
-            <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
-              <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
-                {step.type === 'reminder'
-                  ? 'Habit Reminder'
-                  : step.type === 'melatonin'
-                  ? 'Melatonin'
-                  : STEP_TYPE_META[step.type]?.label ?? step.type}
-              </Text>
-              <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
-                {stepLabel(step) || 'Tap to configure'}
-              </Text>
-              {step.delayAfterSeconds > 0 && (
-                <Text style={[styles.stepDelay, { color: colors.muted }]}>
-                  {step.delayAfterSeconds}s delay before
-                </Text>
-              )}
-            </Pressable>
-
-            {/* Separator + delete */}
-            <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
-            <Pressable
-              onPress={() => onDelete(step.id)}
-              style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
-            >
-              <IconSymbol name="trash" size={16} color={colors.error} />
-            </Pressable>
-          </RNAnimated.View>
-        );
-      })}
+    <View>
+      {steps.map((step, idx) => (
+        <DraggableRow
+          key={step.id}
+          step={step}
+          idx={idx}
+          totalSteps={steps.length}
+          accentColor={accentColor}
+          colors={colors}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onReorder={handleReorder}
+        />
+      ))}
     </View>
   );
 }
