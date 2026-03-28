@@ -1600,3 +1600,5 @@
 - [x] Lay Wake Up Stack and Sleep Stack cards side-by-side in a two-column row
 
 - [x] Replace Sounds card widget with compact inline text link row on home screen
+
+- [x] Remove one of the two flame streak pills from the home screen header

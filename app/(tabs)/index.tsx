@@ -1272,23 +1272,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Journal fire badge — taps to journal */}
-              <Pressable
-                onPress={() => router.push('/(tabs)/journal' as never)}
-                style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center', gap: 4,
-                  backgroundColor: '#F59E0B28', borderRadius: 14,
-                  paddingHorizontal: 11, paddingVertical: 7,
-                  borderWidth: 1, borderColor: '#F59E0B44',
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <IconSymbol name="flame.fill" size={17} color="#F59E0B" />
-                <Text style={{ fontSize: 16, fontWeight: '800', color: '#F59E0B', letterSpacing: -0.3 }}>
-                  {journalStreak > 0 ? journalStreak : journalEntryCount}
-                </Text>
-              </Pressable>
-
 
               {/* Profile avatar */}
               <ProfileAvatar
