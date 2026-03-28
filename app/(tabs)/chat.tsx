@@ -11,20 +11,15 @@ import {
   StyleSheet,
   Share,
   Platform,
-  Linking,
-  Animated,
-  Easing,
 } from "react-native";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { ScreenContainer } from "@/components/screen-container";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useRouter } from "expo-router";
 import { useApp } from "@/lib/app-context";
 import { useIsCalm } from "@/components/calm-effects";
-import CoachApplyModal from "@/app/coach-apply";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,88 +32,11 @@ type TeamItem = {
   role: "owner" | "member";
 };
 
-// ─── Coach Upsell Card ───────────────────────────────────────────────────────
+// ─── Demo data ────────────────────────────────────────────────────────────────
 
-const COACH_URL = "https://jackalarm.com/coach"; // TODO: replace with your landing page
-
-function CoachCard() {
-  const colors = useColors();
-  const pulseAnim = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
-        Animated.timing(pulseAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
-      ])
-    ).start();
-  }, []);
-
-  const glowOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.85] });
-  const glowRadius = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 20] });
-
-  const handlePress = () => {
-    Linking.openURL(COACH_URL).catch(() =>
-      Alert.alert("Coming Soon", "The coaching page will be available shortly.")
-    );
-  };
-
-  return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.85} style={{ marginBottom: 20 }}>
-      <Animated.View
-        style={[
-          styles.coachCard,
-          {
-            borderColor: glowOpacity.interpolate({ inputRange: [0.35, 0.85], outputRange: ["rgba(251,191,36,0.5)", "rgba(251,191,36,1)"] }),
-            shadowColor: "#FBBF24",
-            shadowOpacity: glowOpacity as unknown as number,
-            shadowRadius: glowRadius as unknown as number,
-            shadowOffset: { width: 0, height: 0 },
-            elevation: 8,
-          },
-        ]}
-      >
-        {/* Badge */}
-        <View style={styles.coachBadgeRow}>
-          <View style={styles.coachBadge}>
-            <Text style={styles.coachBadgeText}>8-WEEK SPRINT</Text>
-          </View>
-          <View style={styles.coachLimitBadge}>
-            <Text style={styles.coachLimitText}>LIMITED SPOTS</Text>
-          </View>
-        </View>
-
-        {/* Headline */}
-        <Text style={styles.coachHeadline}>Accountability Coach</Text>
-        <Text style={styles.coachSubheadline}>Daily voice feedback based on your actual app data.</Text>
-
-        {/* Feature bullets */}
-        <View style={styles.coachFeatures}>
-          <View style={styles.coachFeatureRow}>
-            <View style={styles.coachFeatureDot} />
-            <Text style={styles.coachFeatureText}>Daily 1–3 min voice memo from your coach (Mon–Fri)</Text>
-          </View>
-          <View style={styles.coachFeatureRow}>
-            <View style={styles.coachFeatureDot} />
-            <Text style={styles.coachFeatureText}>Weekly strategy note — what to fix, where to push harder</Text>
-          </View>
-          <View style={styles.coachFeatureRow}>
-            <View style={styles.coachFeatureDot} />
-            <Text style={styles.coachFeatureText}>No Zoom calls. No scheduling. Real feedback in your ear every day.</Text>
-          </View>
-          <View style={styles.coachFeatureRow}>
-            <View style={styles.coachFeatureDot} />
-            <Text style={styles.coachFeatureText}>Coach responds within 24 business hours to your check-ins</Text>
-          </View>
-        </View>
-
-        <View style={styles.coachBtn}>
-          <Text style={styles.coachBtnText}>Get Your Coach  →</Text>
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
+const DEMO_TEAMS: TeamItem[] = [
+  { id: 1, name: 'Morning Warriors', description: 'Early risers holding each other to their daily habits.', joinCode: 'DEMO1234', creatorId: 0, role: 'owner' },
+];
 
 // ─── Referral Banner ──────────────────────────────────────────────────────────
 
@@ -230,15 +148,11 @@ function TeamCard({ team, onPress }: { team: TeamItem; onPress: () => void }) {
   const colors = useColors();
   const { data: rankData } = trpc.teams.myRank.useQuery({ teamId: team.id });
 
-  const rankLabel = rankData
-    ? `#${rankData.rank} of ${rankData.total}`
-    : null;
-
+  const rankLabel = rankData ? `#${rankData.rank} of ${rankData.total}` : null;
   const rankEmoji =
     rankData?.rank === 1 ? "🥇" :
     rankData?.rank === 2 ? "🥈" :
     rankData?.rank === 3 ? "🥉" : null;
-
   const scoreColor =
     (rankData?.weeklyScore ?? 0) >= 70 ? "#22C55E" :
     (rankData?.weeklyScore ?? 0) >= 40 ? "#F59E0B" : colors.muted;
@@ -264,17 +178,19 @@ function TeamCard({ team, onPress }: { team: TeamItem; onPress: () => void }) {
           <View style={styles.rankBadge}>
             {rankEmoji ? (
               <Text style={styles.rankEmoji}>{rankEmoji}</Text>
-            ) : null}
-            <Text style={[styles.rankLabel, { color: scoreColor }]}>{rankLabel}</Text>
-            <Text style={[styles.rankScore, { color: scoreColor }]}>{rankData.weeklyScore}%</Text>
+            ) : (
+              <Text style={[styles.rankLabel, { color: scoreColor }]}>{rankLabel}</Text>
+            )}
+            {rankData.weeklyScore != null && (
+              <Text style={[styles.rankScore, { color: scoreColor }]}>{Math.round(rankData.weeklyScore)}%</Text>
+            )}
           </View>
         )}
-        {team.role === "owner" && !rankData && (
+        {team.role === "owner" && (
           <View style={[styles.ownerBadge, { backgroundColor: colors.primary + "20" }]}>
             <Text style={[styles.ownerBadgeText, { color: colors.primary }]}>Owner</Text>
           </View>
         )}
-        <IconSymbol name="chevron.right" size={18} color={colors.muted} />
       </View>
     </TouchableOpacity>
   );
@@ -293,41 +209,41 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
 
   const createMutation = trpc.teams.create.useMutation({
     onSuccess: () => { utils.teams.list.invalidate(); onClose(); setName(""); setDescription(""); },
-    onError: (err) => Alert.alert("Error", err.message),
+    onError: (e) => Alert.alert("Error", e.message),
     onSettled: () => setLoading(false),
   });
 
   const joinMutation = trpc.teams.join.useMutation({
     onSuccess: () => { utils.teams.list.invalidate(); onClose(); setJoinCode(""); },
-    onError: (err) => Alert.alert("Error", err.message),
+    onError: (e) => Alert.alert("Error", e.message),
     onSettled: () => setLoading(false),
   });
 
-  const handleCreate = useCallback(() => {
-    if (!name.trim()) { Alert.alert("Required", "Please enter a team name."); return; }
+  const handleCreate = () => {
+    if (!name.trim()) return Alert.alert("Name required", "Please enter a team name.");
     setLoading(true);
     createMutation.mutate({ name: name.trim(), description: description.trim() || undefined });
-  }, [name, description, createMutation]);
+  };
 
-  const handleJoin = useCallback(() => {
-    if (!joinCode.trim()) { Alert.alert("Required", "Please enter a join code."); return; }
+  const handleJoin = () => {
+    if (!joinCode.trim()) return Alert.alert("Code required", "Please enter a join code.");
     setLoading(true);
     joinMutation.mutate({ joinCode: joinCode.trim().toUpperCase() });
-  }, [joinCode, joinMutation]);
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
-        {/* Header */}
+      <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.modalTitle, { color: colors.foreground }]}>Teams</Text>
+          <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+            {tab === "create" ? "Create a Team" : "Join a Team"}
+          </Text>
           <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn} activeOpacity={0.7}>
-            <IconSymbol name="xmark" size={20} color={colors.muted} />
+            <IconSymbol name="xmark" size={18} color={colors.muted} />
           </TouchableOpacity>
         </View>
 
-        {/* Tab switcher */}
-        <View style={[styles.tabRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={[styles.tabRow, { borderColor: colors.border }]}>
           {(["create", "join"] as const).map((t) => (
             <TouchableOpacity
               key={t}
@@ -336,7 +252,7 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
               activeOpacity={0.8}
             >
               <Text style={[styles.tabBtnText, { color: tab === t ? "#fff" : colors.muted }]}>
-                {t === "create" ? "Create Team" : "Join Team"}
+                {t === "create" ? "Create" : "Join"}
               </Text>
             </TouchableOpacity>
           ))}
@@ -345,30 +261,27 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
         <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
           {tab === "create" ? (
             <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: colors.muted }]}>Team Name *</Text>
+              <Text style={[styles.formLabel, { color: colors.muted }]}>TEAM NAME</Text>
               <TextInput
                 style={[styles.formInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
                 placeholder="e.g. Morning Warriors"
                 placeholderTextColor={colors.muted}
                 value={name}
                 onChangeText={setName}
-                maxLength={100}
                 returnKeyType="next"
               />
-              <Text style={[styles.formLabel, { color: colors.muted, marginTop: 16 }]}>Description (optional)</Text>
+              <Text style={[styles.formLabel, { color: colors.muted, marginTop: 16 }]}>DESCRIPTION (optional)</Text>
               <TextInput
                 style={[styles.formInput, styles.formTextarea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
-                placeholder="What is this team about?"
+                placeholder="What's this team about?"
                 placeholderTextColor={colors.muted}
                 value={description}
                 onChangeText={setDescription}
-                maxLength={500}
                 multiline
-                numberOfLines={3}
                 returnKeyType="done"
               />
               <TouchableOpacity
-                style={[styles.primaryBtn, { backgroundColor: loading ? colors.muted : colors.primary }]}
+                style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading ? 0.6 : 1 }]}
                 onPress={handleCreate}
                 disabled={loading}
                 activeOpacity={0.8}
@@ -378,21 +291,20 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
             </View>
           ) : (
             <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: colors.muted }]}>Join Code</Text>
-              <Text style={[styles.formHint, { color: colors.muted }]}>Ask your team owner for the 8-character code.</Text>
+              <Text style={[styles.formLabel, { color: colors.muted }]}>JOIN CODE</Text>
+              <Text style={[styles.formHint, { color: colors.muted }]}>Ask a team member for their 8-character code.</Text>
               <TextInput
-                style={[styles.formInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground, letterSpacing: 4, textAlign: "center", fontSize: 20, fontWeight: "700" }]}
-                placeholder="XXXXXXXX"
+                style={[styles.formInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+                placeholder="e.g. DEMO1234"
                 placeholderTextColor={colors.muted}
                 value={joinCode}
-                onChangeText={(t) => setJoinCode(t.toUpperCase())}
-                maxLength={12}
+                onChangeText={setJoinCode}
                 autoCapitalize="characters"
                 returnKeyType="done"
                 onSubmitEditing={handleJoin}
               />
               <TouchableOpacity
-                style={[styles.primaryBtn, { backgroundColor: loading ? colors.muted : colors.primary }]}
+                style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading ? 0.6 : 1 }]}
                 onPress={handleJoin}
                 disabled={loading}
                 activeOpacity={0.8}
@@ -402,18 +314,12 @@ function CreateJoinModal({ visible, onClose }: { visible: boolean; onClose: () =
             </View>
           )}
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-
-// Demo mode mock teams shown to Apple reviewers
-const DEMO_TEAMS: TeamItem[] = [
-  { id: 1, name: 'Morning Warriors', description: 'Early risers holding each other accountable every day.', joinCode: 'DEMO1234', creatorId: 0, role: 'owner' },
-  { id: 2, name: 'Fitness Squad', description: 'Gym and nutrition goals — no excuses.', joinCode: 'DEMO5678', creatorId: 1, role: 'member' },
-];
 
 export default function CommunityScreen() {
   const colors = useColors();
@@ -422,7 +328,6 @@ export default function CommunityScreen() {
   const maxWidth = useContentMaxWidth();
   const [showModal, setShowModal] = useState(false);
   const [showReferral, setShowReferral] = useState(false);
-  const [showCoachApply, setShowCoachApply] = useState(false);
   const { isDemoMode } = useApp();
 
   const { data: serverTeams, isLoading } = trpc.teams.list.useQuery(
@@ -445,30 +350,8 @@ export default function CommunityScreen() {
             <Text style={[styles.pageTitle, { color: colors.foreground }]}>Community</Text>
           </View>
 
-          {/* ── Large Coach CTA Banner (TOP) ── */}
-          <TouchableOpacity
-            style={styles.coachCtaBanner}
-            onPress={() => setShowCoachApply(true)}
-            activeOpacity={0.88}
-          >
-            <View style={styles.coachCtaTopRow}>
-              <View style={styles.coachCtaBadge}>
-                <Text style={styles.coachCtaBadgeText}>LIMITED SPOTS</Text>
-              </View>
-              <View style={styles.coachCtaBadge2}>
-                <Text style={styles.coachCtaBadge2Text}>8-WEEK SPRINT</Text>
-              </View>
-            </View>
-            <Text style={styles.coachCtaHeadline}>Hire an{`\n`}Accountability Coach</Text>
-            <Text style={styles.coachCtaSub}>Daily voice feedback based on your real app data. No Zoom calls. No scheduling.</Text>
-            <View style={styles.coachCtaBtn}>
-              <Text style={styles.coachCtaBtnText}>Get Your Coach  →</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* ── Compact action rows ── */}
+          {/* ── Refer a Friend ── */}
           <View style={styles.compactRowsContainer}>
-            {/* Refer a Friend */}
             <TouchableOpacity
               style={[styles.compactRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => setShowReferral(!showReferral)}
@@ -484,14 +367,11 @@ export default function CommunityScreen() {
               <IconSymbol name={showReferral ? 'chevron.down' : 'chevron.right'} size={16} color={colors.muted} />
             </TouchableOpacity>
 
-            {/* Referral panel (expandable) */}
             {showReferral && (
               <View style={{ marginTop: -4, marginBottom: 4 }}>
                 <ReferralBanner />
               </View>
             )}
-
-
           </View>
 
           {/* ── My Teams ── */}
@@ -540,7 +420,6 @@ export default function CommunityScreen() {
       </ScrollView>
 
       <CreateJoinModal visible={showModal} onClose={() => setShowModal(false)} />
-      <CoachApplyModal visible={showCoachApply} onClose={() => setShowCoachApply(false)} />
     </ScreenContainer>
   );
 }
@@ -552,44 +431,8 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, paddingBottom: 32 },
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   pageTitle: { fontSize: 28, fontWeight: "700" },
-  headerBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   addBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
-  coachHeaderBtn: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: "rgba(251,191,36,0.15)",
-    borderWidth: 1, borderColor: "rgba(251,191,36,0.6)",
-  },
-  coachHeaderBtnText: { color: "#FBBF24", fontWeight: "700", fontSize: 13, letterSpacing: 0.3 },
-
-  // Coach upsell card
-  coachCard: {
-    borderRadius: 18, borderWidth: 1.5,
-    backgroundColor: "rgba(251,191,36,0.06)",
-    padding: 18, gap: 12,
-  },
-  coachBadgeRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  coachBadge: { backgroundColor: "#FBBF24", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  coachBadgeText: { color: "#000", fontWeight: "800", fontSize: 11, letterSpacing: 0.5 },
-  coachLimitBadge: { backgroundColor: "rgba(239,68,68,0.15)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: "rgba(239,68,68,0.4)" },
-  coachLimitText: { color: "#EF4444", fontWeight: "700", fontSize: 11, letterSpacing: 0.5 },
-  coachHeadline: { fontSize: 20, fontWeight: "800", color: "#FBBF24", lineHeight: 26 },
-  coachSubheadline: { fontSize: 14, color: "rgba(251,191,36,0.75)", lineHeight: 20, marginTop: -4 },
-  coachFeatures: { gap: 8, marginTop: 4 },
-  coachFeatureRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  coachFeatureDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#FBBF24", marginTop: 8, flexShrink: 0 },
-  coachFeatureText: { flex: 1, fontSize: 13, color: "#E5E7EB", lineHeight: 20 },
-  coachCTA: { backgroundColor: "rgba(251,191,36,0.1)", borderRadius: 12, padding: 12, gap: 4, borderWidth: 1, borderColor: "rgba(251,191,36,0.25)" },
-  coachCTAText: { fontSize: 15, fontWeight: "700", color: "#FBBF24" },
-  coachCTASubtext: { fontSize: 12, color: "rgba(251,191,36,0.7)", lineHeight: 18 },
-  coachBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#FBBF24", borderRadius: 14,
-    paddingVertical: 14, paddingHorizontal: 20,
-    marginTop: 4,
-  },
-  coachBtnText: { color: "#000", fontWeight: "800", fontSize: 16 },
 
   // Referral
   referralCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
@@ -638,37 +481,8 @@ const styles = StyleSheet.create({
   compactRowTitle: { fontSize: 15, fontWeight: '600', marginBottom: 1 },
   compactRowDesc: { fontSize: 12, lineHeight: 16 },
 
-  // Action grid
-  actionGrid: { gap: 10, marginBottom: 24 },
-  actionCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 6 },
-  actionIconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  actionNum: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  actionTitle: { fontSize: 17, fontWeight: '700' },
-  actionDesc: { fontSize: 13, lineHeight: 18 },
-
-  // Section row with title + button
+  // Section row
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, marginTop: 4 },
-
-  // Large coach CTA banner
-  coachCtaBanner: {
-    marginTop: 0, marginBottom: 16, borderRadius: 20, borderWidth: 1.5,
-    borderColor: 'rgba(251,191,36,0.6)',
-    backgroundColor: 'rgba(251,191,36,0.06)',
-    padding: 24, gap: 14,
-  },
-  coachCtaTopRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  coachCtaBadge: { backgroundColor: '#EF4444', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  coachCtaBadgeText: { color: '#fff', fontWeight: '800', fontSize: 10, letterSpacing: 0.5 },
-  coachCtaBadge2: { backgroundColor: '#FBBF24', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  coachCtaBadge2Text: { color: '#000', fontWeight: '800', fontSize: 10, letterSpacing: 0.5 },
-  coachCtaHeadline: { fontSize: 32, fontWeight: '900', color: '#FBBF24', lineHeight: 38, letterSpacing: -0.5 },
-  coachCtaSub: { fontSize: 14, color: 'rgba(251,191,36,0.75)', lineHeight: 20 },
-  coachCtaBtn: {
-    backgroundColor: '#FBBF24', borderRadius: 14,
-    paddingVertical: 16, paddingHorizontal: 20,
-    alignItems: 'center', marginTop: 4,
-  },
-  coachCtaBtnText: { color: '#000', fontWeight: '800', fontSize: 17 },
 
   // Modal
   modalContainer: { flex: 1 },

@@ -1590,3 +1590,5 @@
 - [ ] Stack editor: fix drag-to-reorder — replace broken implementation with reliable PanGestureHandler + Reanimated drag
 
 - [x] Fix drag-to-reorder in stack editor — replaced broken PanResponder+ScrollView approach with onMoveShouldSetPanResponderCapture on the drag handle so it wins the gesture before the ScrollView can claim it
+
+- [x] Remove Accountability Coaching: delete ai-coach.tsx, coach-apply.tsx, remove CoachCard/CoachApplyModal from chat.tsx, remove coach router from server/routers.ts, remove AI coach tab from _layout.tsx if present

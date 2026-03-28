@@ -1287,24 +1287,6 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
 
-              {/* AI Coach button */}
-              <Pressable
-                onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/ai-coach'); }}
-                style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-              >
-                <View style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: colors.primary,
-                  shadowColor: colors.primary,
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.5,
-                  shadowRadius: 6,
-                  elevation: 4,
-                }}>
-                  <Text style={{ fontSize: 15 }}>✦</Text>
-                </View>
-              </Pressable>
 
               {/* Profile avatar */}
               <ProfileAvatar
