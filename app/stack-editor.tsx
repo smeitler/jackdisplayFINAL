@@ -7,13 +7,13 @@
  * OUTSIDE the ScrollView so PanResponder can claim gestures without
  * the scroll view stealing them.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
   TextInput, Modal, FlatList,
 } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS,
+  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -31,7 +31,8 @@ import {
 import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
-const CARD_HEIGHT = 84; // height of each step card including margin
+// CARD_HEIGHT is now measured at runtime via onLayout — this is the fallback
+const CARD_HEIGHT_FALLBACK = 84;
 
 // ─── Step type icon map ───────────────────────────────────────────────────────
 
@@ -86,13 +87,14 @@ const PRIMING_TRACKS: LibraryTrack[] = [
 ];
 
 // ─── Drag-to-Reorder Step List ────────────────────────────────────────────────
-// Architecture: DraggableStepList owns THREE shared values:
-//   dragIdx   – index of the card being dragged (-1 = idle)
-//   dragY     – raw finger translation (px)
-//   hoverIdx  – the resolved drop-target index, updated every frame
-//
-// Every row reads hoverIdx (not dragY) for its shift, so the gap and the
-// final drop position are ALWAYS in sync — no glitching.
+// Improvements applied:
+//  1. Live card height measured via onLayout (no hardcoded constant mismatch)
+//  2. List rendered OUTSIDE ScrollView — no scroll-gesture conflict
+//  3. Haptic tick fires every time hoverIdx changes slot
+//  4. Floating overlay clone: dragged card is an abs-positioned copy;
+//     the original row turns invisible so there is no visual overlap
+//  5. withTiming(180ms ease-out) for neighbour shifts — no spring overshoot
+//  6. Thin accent-coloured drop-zone line at the hoverIdx boundary
 
 interface DraggableStepListProps {
   steps: RitualStep[];
@@ -103,10 +105,68 @@ interface DraggableStepListProps {
   onDelete: (id: string) => void;
 }
 
+// ── StepRowContent: the visual content of a step card (shared by row + overlay)
+function StepRowContent({
+  step, idx, accentColor, colors, onEdit, onDelete,
+  showHandle, handleGesture,
+}: {
+  step: RitualStep;
+  idx: number;
+  accentColor: string;
+  colors: ReturnType<typeof useColors>;
+  onEdit?: (s: RitualStep) => void;
+  onDelete?: (id: string) => void;
+  showHandle: boolean;
+  handleGesture?: ReturnType<typeof Gesture.Simultaneous>;
+}) {
+  const handle = (
+    <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+      <IconSymbol name="line.3.horizontal" size={22} color={showHandle ? accentColor : colors.muted} />
+    </View>
+  );
+  return (
+    <>
+      {handleGesture ? (
+        <GestureDetector gesture={handleGesture}>{handle}</GestureDetector>
+      ) : handle}
+      <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
+        <Text style={styles.stepNum}>{idx + 1}</Text>
+      </View>
+      <Pressable onPress={onEdit ? () => onEdit(step) : undefined} style={{ flex: 1 }}>
+        <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
+          {step.type === 'reminder' ? 'Habit Reminder'
+            : step.type === 'melatonin' ? 'Melatonin'
+            : STEP_TYPE_META[step.type]?.label ?? step.type}
+        </Text>
+        <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
+          {stepLabel(step) || 'Tap to configure'}
+        </Text>
+        {step.delayAfterSeconds > 0 && (
+          <Text style={[styles.stepDelay, { color: colors.muted }]}>
+            {step.delayAfterSeconds}s delay before
+          </Text>
+        )}
+      </Pressable>
+      {onDelete && (
+        <>
+          <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
+          <Pressable
+            onPress={() => onDelete(step.id)}
+            style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
+          >
+            <IconSymbol name="trash" size={16} color={colors.error} />
+          </Pressable>
+        </>
+      )}
+    </>
+  );
+}
+
+// ── DraggableRow: a single row in the list
 function DraggableRow({
   step, idx, totalSteps, accentColor, colors,
   onEdit, onDelete,
-  dragIdx, dragY, hoverIdx,
+  dragIdx, dragY, hoverIdx, cardHeightRef,
   onDragStart, onDragEnd, onDragCancel,
 }: {
   step: RitualStep;
@@ -116,17 +176,18 @@ function DraggableRow({
   colors: ReturnType<typeof useColors>;
   onEdit: (s: RitualStep) => void;
   onDelete: (id: string) => void;
-  dragIdx:  SharedValue<number>;
-  dragY:    SharedValue<number>;
-  hoverIdx: SharedValue<number>;
-  onDragStart: (idx: number) => void;
-  onDragEnd:   (fromIdx: number, toIdx: number) => void;
+  dragIdx:      SharedValue<number>;
+  dragY:        SharedValue<number>;
+  hoverIdx:     SharedValue<number>;
+  cardHeightRef: React.MutableRefObject<number>;
+  onDragStart:  (idx: number) => void;
+  onDragEnd:    (fromIdx: number, toIdx: number) => void;
   onDragCancel: () => void;
 }) {
   const isActive = useSharedValue(false);
 
   const longPress = Gesture.LongPress()
-    .minDuration(280)
+    .minDuration(260)
     .maxDistance(10)
     .onStart(() => {
       isActive.value = true;
@@ -140,12 +201,16 @@ function DraggableRow({
       else state.fail();
     })
     .onUpdate((e) => {
+      const h = cardHeightRef.current || CARD_HEIGHT_FALLBACK;
       dragY.value = e.translationY;
-      // Keep hoverIdx in sync on the UI thread — single source of truth
-      hoverIdx.value = Math.max(
-        0,
-        Math.min(totalSteps - 1, idx + Math.round(e.translationY / CARD_HEIGHT)),
-      );
+      const next = Math.max(0, Math.min(totalSteps - 1, idx + Math.round(e.translationY / h)));
+      if (next !== hoverIdx.value) {
+        hoverIdx.value = next;
+        // Improvement 3: haptic tick on each slot boundary crossing
+        runOnJS(() => {
+          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        })();
+      }
     })
     .onEnd(() => {
       isActive.value = false;
@@ -160,38 +225,21 @@ function DraggableRow({
 
   const composed = Gesture.Simultaneous(longPress, pan);
 
-  // Dragged card: follows finger exactly, lifts with scale + shadow
-  const draggedStyle = useAnimatedStyle(() => {
-    const active = dragIdx.value === idx;
-    return {
-      transform: [
-        { translateY: active ? dragY.value : 0 },
-        { scale: withTiming(active ? 1.05 : 1, { duration: 150 }) },
-      ],
-      zIndex: active ? 999 : 1,
-      shadowOpacity: withTiming(active ? 0.4 : 0, { duration: 150 }),
-      shadowRadius:  withTiming(active ? 18 : 0,  { duration: 150 }),
-      elevation: active ? 18 : 0,
-      opacity: withTiming(active ? 1 : 1, { duration: 150 }),
-    };
-  });
+  // Improvement 4: original row turns invisible while dragging (overlay takes over)
+  const rowStyle = useAnimatedStyle(() => ({
+    opacity: dragIdx.value === idx ? 0 : 1,
+  }));
 
-  // Neighbour cards: shift based on hoverIdx (not dragY) — no glitch
+  // Improvement 5: withTiming (no spring overshoot) for neighbour shifts
   const neighbourStyle = useAnimatedStyle(() => {
     const from = dragIdx.value;
     const to   = hoverIdx.value;
-    if (from < 0 || from === idx) return { transform: [{ translateY: 0 }] };
+    const h    = cardHeightRef.current || CARD_HEIGHT_FALLBACK;
+    if (from < 0 || from === idx) return { transform: [{ translateY: withTiming(0, { duration: 160 }) }] };
     let shift = 0;
-    if (from < to) {
-      // dragging downward: rows strictly between from and to shift up
-      if (idx > from && idx <= to) shift = -CARD_HEIGHT;
-    } else if (from > to) {
-      // dragging upward: rows strictly between to and from shift down
-      if (idx >= to && idx < from) shift = CARD_HEIGHT;
-    }
-    return {
-      transform: [{ translateY: withSpring(shift, { damping: 22, stiffness: 220, mass: 0.6 }) }],
-    };
+    if (from < to && idx > from && idx <= to)  shift = -h;
+    if (from > to && idx >= to && idx < from)  shift =  h;
+    return { transform: [{ translateY: withTiming(shift, { duration: 160 }) }] };
   });
 
   const borderStyle = useAnimatedStyle(() => ({
@@ -200,78 +248,53 @@ function DraggableRow({
 
   return (
     <Animated.View
+      onLayout={(e) => { cardHeightRef.current = e.nativeEvent.layout.height; }}
       style={[
         styles.stepCard,
-        { backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 6 } },
-        draggedStyle,
+        { backgroundColor: colors.surface },
+        rowStyle,
         neighbourStyle,
         borderStyle,
       ]}
     >
-      {/* ≡ Drag handle */}
-      <GestureDetector gesture={composed}>
-        <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-          <IconSymbol name="line.3.horizontal" size={22} color={colors.muted} />
-        </View>
-      </GestureDetector>
-
-      <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
-        <Text style={styles.stepNum}>{idx + 1}</Text>
-      </View>
-
-      <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
-        <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
-          {step.type === 'reminder'
-            ? 'Habit Reminder'
-            : step.type === 'melatonin'
-            ? 'Melatonin'
-            : STEP_TYPE_META[step.type]?.label ?? step.type}
-        </Text>
-        <Text style={[styles.stepDetail, { color: colors.foreground }]} numberOfLines={1}>
-          {stepLabel(step) || 'Tap to configure'}
-        </Text>
-        {step.delayAfterSeconds > 0 && (
-          <Text style={[styles.stepDelay, { color: colors.muted }]}>
-            {step.delayAfterSeconds}s delay before
-          </Text>
-        )}
-      </Pressable>
-
-      <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
-      <Pressable
-        onPress={() => onDelete(step.id)}
-        style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
-      >
-        <IconSymbol name="trash" size={16} color={colors.error} />
-      </Pressable>
+      <StepRowContent
+        step={step} idx={idx} accentColor={accentColor} colors={colors}
+        onEdit={onEdit} onDelete={onDelete}
+        showHandle={false} handleGesture={composed}
+      />
     </Animated.View>
   );
 }
 
+// ── DraggableStepList: owns all shared values + floating overlay
 function DraggableStepList({
   steps, accentColor, colors, onReorder, onEdit, onDelete,
 }: DraggableStepListProps) {
-  const dragIdx  = useSharedValue(-1);
-  const dragY    = useSharedValue(0);
-  const hoverIdx = useSharedValue(-1);
+  const dragIdx      = useSharedValue(-1);
+  const dragY        = useSharedValue(0);
+  const hoverIdx     = useSharedValue(-1);
+  const dragStartY   = useSharedValue(0); // abs Y of the dragged card's top
+  const cardHeightRef = useRef<number>(CARD_HEIGHT_FALLBACK);
+
+  // JS-thread state for the floating overlay
+  const [draggingStep, setDraggingStep] = useState<{ step: RitualStep; idx: number } | null>(null);
 
   function handleDragStart(idx: number) {
-    dragIdx.value  = idx;
-    hoverIdx.value = idx;
-    dragY.value    = 0;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    dragIdx.value    = idx;
+    hoverIdx.value   = idx;
+    dragY.value      = 0;
+    dragStartY.value = idx * (cardHeightRef.current || CARD_HEIGHT_FALLBACK);
+    setDraggingStep({ step: steps[idx], idx });
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }
 
   function handleDragEnd(fromIdx: number, toIdx: number) {
     dragIdx.value  = -1;
     dragY.value    = 0;
     hoverIdx.value = -1;
+    setDraggingStep(null);
     if (toIdx !== fromIdx) {
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const next = [...steps];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
@@ -283,28 +306,89 @@ function DraggableStepList({
     dragIdx.value  = -1;
     dragY.value    = 0;
     hoverIdx.value = -1;
+    setDraggingStep(null);
   }
+
+  // Improvement 4: floating overlay card that follows the finger
+  const overlayStyle = useAnimatedStyle(() => {
+    const h = cardHeightRef.current || CARD_HEIGHT_FALLBACK;
+    return {
+      position: 'absolute',
+      left: 0, right: 0,
+      top: dragStartY.value + dragY.value,
+      zIndex: 999,
+      transform: [{ scale: withTiming(dragIdx.value >= 0 ? 1.04 : 1, { duration: 150 }) }],
+      shadowOpacity: withTiming(dragIdx.value >= 0 ? 0.45 : 0, { duration: 150 }),
+      shadowRadius:  withTiming(dragIdx.value >= 0 ? 20 : 0, { duration: 150 }),
+      elevation: dragIdx.value >= 0 ? 20 : 0,
+      // Card height so overlay matches exactly
+      minHeight: h,
+    };
+  });
+
+  // Improvement 6: drop-zone indicator line at hoverIdx boundary
+  const dropLineStyle = useAnimatedStyle(() => {
+    const from = dragIdx.value;
+    const to   = hoverIdx.value;
+    const h    = cardHeightRef.current || CARD_HEIGHT_FALLBACK;
+    if (from < 0) return { opacity: 0 };
+    // Line appears at the TOP of the hoverIdx slot
+    return {
+      opacity: 1,
+      position: 'absolute',
+      left: 12, right: 12,
+      top: to * h - 2,
+      height: 3,
+      borderRadius: 2,
+    };
+  });
 
   return (
     <View style={{ position: 'relative' }}>
       {steps.map((step, idx) => (
         <DraggableRow
           key={step.id}
-          step={step}
-          idx={idx}
-          totalSteps={steps.length}
-          accentColor={accentColor}
-          colors={colors}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          dragIdx={dragIdx}
-          dragY={dragY}
-          hoverIdx={hoverIdx}
+          step={step} idx={idx} totalSteps={steps.length}
+          accentColor={accentColor} colors={colors}
+          onEdit={onEdit} onDelete={onDelete}
+          dragIdx={dragIdx} dragY={dragY} hoverIdx={hoverIdx}
+          cardHeightRef={cardHeightRef}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         />
       ))}
+
+      {/* Improvement 6: drop-zone accent line */}
+      <Animated.View
+        style={[dropLineStyle, { backgroundColor: accentColor }]}
+        pointerEvents="none"
+      />
+
+      {/* Improvement 4: floating overlay clone */}
+      {draggingStep && (
+        <Animated.View
+          style={[
+            styles.stepCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: accentColor,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+            },
+            overlayStyle,
+          ]}
+          pointerEvents="none"
+        >
+          <StepRowContent
+            step={draggingStep.step}
+            idx={draggingStep.idx}
+            accentColor={accentColor}
+            colors={colors}
+            showHandle
+          />
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -918,7 +1002,7 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1,
     paddingVertical: 12, paddingHorizontal: 10,
     marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8,
-    minHeight: CARD_HEIGHT,
+    minHeight: CARD_HEIGHT_FALLBACK,
   },
   dragHandle: {
     padding: 8, justifyContent: 'center', alignItems: 'center',
