@@ -1608,3 +1608,5 @@
 - [x] Polish drag-to-reorder visuals: floating lifted card with strong shadow, animated placeholder gap at drop target, smooth spring snapping
 
 - [x] Fix glitching drag: use single shared hoverIdx value so gap animation and drop position always agree
+
+- [x] Fix crash when dragging in stack editor (regression from 6-improvement rewrite)
