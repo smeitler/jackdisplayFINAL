@@ -13,7 +13,8 @@ import {
   TextInput, Modal, FlatList,
 } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
+  useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -85,8 +86,13 @@ const PRIMING_TRACKS: LibraryTrack[] = [
 ];
 
 // ─── Drag-to-Reorder Step List ────────────────────────────────────────────────
-// Uses RNGH LongPress + Pan gesture composition so it reliably beats
-// the iOS scroll view gesture recogniser.
+// Full floating-card drag: the dragged card lifts out of the list,
+// neighbours animate to make a gap at the drop target, and the card
+// snaps back with a spring on release.
+//
+// Architecture:
+//   DraggableStepList  — owns drag state (dragIdx, dragY shared values)
+//   DraggableRow       — reads drag state, animates its own position
 
 interface DraggableStepListProps {
   steps: RitualStep[];
@@ -97,10 +103,11 @@ interface DraggableStepListProps {
   onDelete: (id: string) => void;
 }
 
-/** A single draggable row. Gesture state is managed per-row. */
+/** A single row that reads shared drag state and animates accordingly. */
 function DraggableRow({
   step, idx, totalSteps, accentColor, colors,
-  onEdit, onDelete, onReorder,
+  onEdit, onDelete,
+  dragIdx, dragY, onDragStart, onDragEnd, onDragCancel,
 }: {
   step: RitualStep;
   idx: number;
@@ -109,89 +116,100 @@ function DraggableRow({
   colors: ReturnType<typeof useColors>;
   onEdit: (s: RitualStep) => void;
   onDelete: (id: string) => void;
-  onReorder: (fromIdx: number, toIdx: number) => void;
+  dragIdx: SharedValue<number>;
+  dragY: SharedValue<number>;
+  onDragStart: (idx: number) => void;
+  onDragEnd: (fromIdx: number, dy: number) => void;
+  onDragCancel: () => void;
 }) {
-  const translateY  = useSharedValue(0);
-  const isDragging  = useSharedValue(false);
-  const startY      = useSharedValue(0);
-
-  function handleDragStart() {
-    isDragging.value = true;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-  }
-
-  function handleDragEnd(dy: number) {
-    const toIdx = Math.max(0, Math.min(totalSteps - 1, idx + Math.round(dy / CARD_HEIGHT)));
-    isDragging.value = false;
-    translateY.value = withTiming(0, { duration: 180 });
-    if (toIdx !== idx) {
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      onReorder(idx, toIdx);
-    }
-  }
-
-  function handleDragCancel() {
-    isDragging.value = false;
-    translateY.value = withTiming(0, { duration: 180 });
-  }
+  const isActive = useSharedValue(false);
 
   const longPress = Gesture.LongPress()
-    .minDuration(300)
-    .maxDistance(8)
+    .minDuration(280)
+    .maxDistance(10)
     .onStart(() => {
-      startY.value = 0;
-      runOnJS(handleDragStart)();
+      isActive.value = true;
+      runOnJS(onDragStart)(idx);
     });
 
   const pan = Gesture.Pan()
     .manualActivation(true)
-    .onTouchesMove((e, state) => {
-      if (isDragging.value) {
-        state.activate();
-      } else {
-        state.fail();
-      }
+    .onTouchesMove((_e, state) => {
+      if (isActive.value) state.activate();
+      else state.fail();
     })
     .onUpdate((e) => {
-      translateY.value = e.translationY;
+      dragY.value = e.translationY;
     })
     .onEnd((e) => {
-      runOnJS(handleDragEnd)(e.translationY);
+      isActive.value = false;
+      runOnJS(onDragEnd)(idx, e.translationY);
     })
     .onFinalize(() => {
-      if (isDragging.value) {
-        runOnJS(handleDragCancel)();
+      if (isActive.value) {
+        isActive.value = false;
+        runOnJS(onDragCancel)();
       }
     });
 
   const composed = Gesture.Simultaneous(longPress, pan);
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    zIndex: isDragging.value ? 999 : 1,
-    shadowOpacity: isDragging.value ? 0.3 : 0,
-    shadowRadius: isDragging.value ? 10 : 0,
-    elevation: isDragging.value ? 12 : 0,
-    opacity: isDragging.value ? 0.95 : 1,
+  // Dragged card: floats above everything, follows finger, lifts with scale+shadow
+  const draggedStyle = useAnimatedStyle(() => {
+    const active = dragIdx.value === idx;
+    return {
+      transform: [
+        { translateY: active ? dragY.value : 0 },
+        { scale: withTiming(active ? 1.04 : 1, { duration: 200 }) },
+      ],
+      zIndex: active ? 999 : 1,
+      shadowOpacity: withTiming(active ? 0.35 : 0, { duration: 200 }),
+      shadowRadius: withTiming(active ? 16 : 0, { duration: 200 }),
+      elevation: active ? 16 : 0,
+      opacity: withTiming(active ? 0.97 : 1, { duration: 200 }),
+    };
+  });
+
+  // Neighbour cards: shift up or down to show the gap where the card will land
+  const neighbourStyle = useAnimatedStyle(() => {
+    const from = dragIdx.value;
+    const to = from < 0 ? -1 : Math.max(0, Math.min(totalSteps - 1, from + Math.round(dragY.value / CARD_HEIGHT)));
+    if (from < 0 || from === idx) return {}; // not dragging, or this is the dragged card
+    let shift = 0;
+    if (from < to) {
+      // dragging downward: cards between from+1..to shift UP
+      if (idx > from && idx <= to) shift = -CARD_HEIGHT;
+    } else if (from > to) {
+      // dragging upward: cards between to..from-1 shift DOWN
+      if (idx >= to && idx < from) shift = CARD_HEIGHT;
+    }
+    return {
+      transform: [{ translateY: withSpring(shift, { damping: 20, stiffness: 200 }) }],
+    };
+  });
+
+  const isMeDragging = useAnimatedStyle(() => ({
+    borderColor: dragIdx.value === idx ? accentColor : colors.border,
   }));
 
   return (
     <Animated.View
       style={[
         styles.stepCard,
-        { backgroundColor: colors.surface, borderColor: colors.border,
-          shadowColor: '#000', shadowOffset: { width: 0, height: 4 } },
-        animStyle,
+        {
+          backgroundColor: colors.surface,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 6 },
+        },
+        draggedStyle,
+        neighbourStyle,
+        isMeDragging,
       ]}
     >
       {/* ≡ Drag handle — long-press here to drag */}
       <GestureDetector gesture={composed}>
         <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-          <IconSymbol name="line.3.horizontal" size={20} color={colors.muted} />
+          <IconSymbol name="line.3.horizontal" size={22} color={dragIdx.value === idx ? accentColor : colors.muted} />
         </View>
       </GestureDetector>
 
@@ -234,15 +252,40 @@ function DraggableRow({
 function DraggableStepList({
   steps, accentColor, colors, onReorder, onEdit, onDelete,
 }: DraggableStepListProps) {
-  function handleReorder(fromIdx: number, toIdx: number) {
-    const next = [...steps];
-    const [moved] = next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, moved);
-    onReorder(next);
+  // Shared values owned here so all rows can read them
+  const dragIdx = useSharedValue(-1);
+  const dragY   = useSharedValue(0);
+
+  function handleDragStart(idx: number) {
+    dragIdx.value = idx;
+    dragY.value   = 0;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  }
+
+  function handleDragEnd(fromIdx: number, dy: number) {
+    const toIdx = Math.max(0, Math.min(steps.length - 1, fromIdx + Math.round(dy / CARD_HEIGHT)));
+    dragIdx.value = -1;
+    dragY.value   = 0;
+    if (toIdx !== fromIdx) {
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      const next = [...steps];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      onReorder(next);
+    }
+  }
+
+  function handleDragCancel() {
+    dragIdx.value = -1;
+    dragY.value   = 0;
   }
 
   return (
-    <View>
+    <View style={{ position: 'relative' }}>
       {steps.map((step, idx) => (
         <DraggableRow
           key={step.id}
@@ -253,7 +296,11 @@ function DraggableStepList({
           colors={colors}
           onEdit={onEdit}
           onDelete={onDelete}
-          onReorder={handleReorder}
+          dragIdx={dragIdx}
+          dragY={dragY}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
         />
       ))}
     </View>
