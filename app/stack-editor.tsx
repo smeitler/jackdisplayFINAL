@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
-  TextInput, Modal, FlatList, KeyboardAvoidingView,
+  TextInput, Modal, FlatList, KeyboardAvoidingView, useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -520,7 +520,7 @@ export default function StackEditorScreen() {
       <Modal visible={addingStep} transparent animationType="slide" onRequestClose={() => setAddingStep(false)}>
         <Pressable style={styles.overlay} onPress={() => setAddingStep(false)} />
         <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHandleArea}><View style={styles.sheetHandle} /></View>
           <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Choose Step Type</Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             {STEP_TYPES.map((type) => (
@@ -619,6 +619,22 @@ function StepConfigModal({
     step.type === 'melatonin' ? 'Melatonin' :
     STEP_TYPE_META[step.type]?.label ?? step.type;
 
+  const { height: screenHeight } = useWindowDimensions();
+  const translateY = useSharedValue(0);
+  const sheetAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+  const swipeDismiss = Gesture.Pan()
+    .activeOffsetY([10, 9999])
+    .onUpdate((e) => {
+      if (e.translationY > 0) translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      if (e.translationY > 80 || e.velocityY > 600) {
+        runOnJS(onClose)();
+      } else {
+        translateY.value = withTiming(0, { duration: 200 });
+      }
+    });
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose} />
@@ -626,8 +642,12 @@ function StepConfigModal({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ width: '100%' }}
       >
-        <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.sheetHandle} />
+        <Animated.View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16, height: screenHeight * 0.9 }, sheetAnimStyle]}>
+        <GestureDetector gesture={swipeDismiss}>
+          <View style={styles.sheetHandleArea}>
+            <View style={styles.sheetHandle} />
+          </View>
+        </GestureDetector>
         <View style={styles.sheetHeaderRow}>
           <View style={[styles.typeIconWrap, { backgroundColor: accentColor + '20' }]}>
             <IconSymbol name={STEP_ICON[step.type] as any} size={20} color={accentColor} />
@@ -905,7 +925,7 @@ function StepConfigModal({
         >
           <Text style={styles.saveBtnText}>Save</Text>
         </Pressable>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
 
       {/* Library picker sub-sheet */}
@@ -913,7 +933,7 @@ function StepConfigModal({
         <Modal visible transparent animationType="slide" onRequestClose={() => setShowLibrary(false)}>
           <Pressable style={styles.overlay} onPress={() => setShowLibrary(false)} />
           <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHandleArea}><View style={styles.sheetHandle} /></View>
             <View style={styles.sheetHeaderRow}>
               <Text style={[styles.sheetTitle, { color: colors.foreground, flex: 1, textAlign: 'left', marginBottom: 0 }]}>
                 {step.type === 'meditation'
@@ -1043,12 +1063,15 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingTop: 12, paddingHorizontal: 16, maxHeight: '85%',
+    paddingHorizontal: 16,
+  },
+  sheetHandleArea: {
+    paddingTop: 12, paddingBottom: 4, alignItems: 'center',
   },
   sheetHandle: {
     width: 36, height: 4, borderRadius: 2,
     backgroundColor: 'rgba(128,128,128,0.35)',
-    alignSelf: 'center', marginBottom: 12,
+    marginBottom: 8,
   },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   sheetTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
