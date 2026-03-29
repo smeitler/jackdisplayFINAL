@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
-  TextInput, Modal, FlatList, useWindowDimensions, KeyboardAvoidingView,
+  TextInput, Modal, FlatList, useWindowDimensions, Keyboard, Animated as RNAnimated,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -620,6 +620,26 @@ function StepConfigModal({
     STEP_TYPE_META[step.type]?.label ?? step.type;
 
   const { height: screenHeight } = useWindowDimensions();
+  const kbHeight = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', (e) => {
+      RNAnimated.timing(kbHeight, {
+        toValue: e.endCoordinates.height,
+        duration: e.duration || 250,
+        useNativeDriver: false,
+      }).start();
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', (e) => {
+      RNAnimated.timing(kbHeight, {
+        toValue: 0,
+        duration: e.duration || 200,
+        useNativeDriver: false,
+      }).start();
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, [kbHeight]);
+
   const translateY = useSharedValue(0);
   const sheetAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
   const swipeDismiss = Gesture.Pan()
@@ -917,14 +937,14 @@ function StepConfigModal({
           </CRow>
         </ScrollView>
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <RNAnimated.View style={{ paddingBottom: kbHeight }}>
           <Pressable
             onPress={() => onSave({ ...step, config, delayAfterSeconds: parseInt(delay, 10) || 0 })}
             style={({ pressed }) => [styles.saveBtn, { backgroundColor: accentColor, opacity: pressed ? 0.8 : 1 }]}
           >
             <Text style={styles.saveBtnText}>Save</Text>
           </Pressable>
-        </KeyboardAvoidingView>
+        </RNAnimated.View>
         </Animated.View>
 
       {/* Library picker sub-sheet */}
