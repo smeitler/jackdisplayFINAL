@@ -1610,3 +1610,5 @@
 - [x] Fix glitching drag: use single shared hoverIdx value so gap animation and drop position always agree
 
 - [x] Fix crash when dragging in stack editor (regression from 6-improvement rewrite)
+
+- [x] Implement SwiftReorder-style drag: snapshot overlay + invisible spacer + snap-to-destination on release
