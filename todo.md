@@ -1614,3 +1614,5 @@
 - [x] Implement SwiftReorder-style drag: snapshot overlay + invisible spacer + snap-to-destination on release
 
 - [x] Fix drag-to-reorder in stack editor — not working, needs minimal reliable approach
+
+- [x] Polish drag-to-reorder: fix neighbour card flicker, smooth out release snap, ensure card lands in correct position

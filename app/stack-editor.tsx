@@ -7,7 +7,7 @@
  * OUTSIDE the ScrollView so PanResponder can claim gestures without
  * the scroll view stealing them.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
   TextInput, Modal, FlatList,
@@ -129,97 +129,101 @@ function DraggableRow({
   const isActive = useSharedValue(false);
   const dragY    = useSharedValue(0);
 
-  const lp = Gesture.LongPress()
-    .minDuration(280)
-    .maxDistance(12)
-    .onStart(() => {
-      'worklet';
-      isActive.value  = true;
-      dragY.value     = 0;
-      dragIdx.value   = idx;
-      hoverIdx.value  = idx;
-      runOnJS(onDragStart)(idx);
-    });
+  // Memoize gesture so RNGH doesn't get a new object on every re-render
+  const gesture = useMemo(() => {
+    const lp = Gesture.LongPress()
+      .minDuration(280)
+      .maxDistance(12)
+      .onStart(() => {
+        'worklet';
+        isActive.value  = true;
+        dragY.value     = 0;
+        dragIdx.value   = idx;
+        hoverIdx.value  = idx;
+        runOnJS(onDragStart)(idx);
+      });
 
-  const pan = Gesture.Pan()
-    .manualActivation(true)
-    .onTouchesMove((_e, state) => {
-      'worklet';
-      if (isActive.value) state.activate();
-      else state.fail();
-    })
-    .onUpdate((e) => {
-      'worklet';
-      dragY.value    = e.translationY;
-      hoverIdx.value = Math.max(0, Math.min(totalSteps - 1,
-        Math.round((idx * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
-      ));
-    })
-    .onEnd(() => {
-      'worklet';
-      if (!isActive.value) return;
-      const dest = hoverIdx.value;
-      isActive.value = false;
-      dragY.value    = withTiming(0, { duration: 1 });
-      dragIdx.value  = -1;
-      hoverIdx.value = -1;
-      runOnJS(onDragEnd)(idx, dest);
-    })
-    .onFinalize(() => {
-      'worklet';
-      if (isActive.value) {
+    const pan = Gesture.Pan()
+      .manualActivation(true)
+      .onTouchesMove((_e, state) => {
+        'worklet';
+        if (isActive.value) state.activate();
+        else state.fail();
+      })
+      .onUpdate((e) => {
+        'worklet';
+        dragY.value    = e.translationY;
+        hoverIdx.value = Math.max(0, Math.min(totalSteps - 1,
+          Math.round((idx * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
+        ));
+      })
+      .onEnd(() => {
+        'worklet';
+        if (!isActive.value) return;
+        const dest = hoverIdx.value;
         isActive.value = false;
+        // Reset dragY immediately so the row snaps to its new position
+        // after onDragEnd reorders the list (no visible flicker)
         dragY.value    = 0;
         dragIdx.value  = -1;
         hoverIdx.value = -1;
-        runOnJS(onDragCancel)();
-      }
-    });
+        runOnJS(onDragEnd)(idx, dest);
+      })
+      .onFinalize(() => {
+        'worklet';
+        if (isActive.value) {
+          isActive.value = false;
+          dragY.value    = 0;
+          dragIdx.value  = -1;
+          hoverIdx.value = -1;
+          runOnJS(onDragCancel)();
+        }
+      });
 
-  const gesture = Gesture.Simultaneous(lp, pan);
+    return Gesture.Simultaneous(lp, pan);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, totalSteps]);
 
-  // This row's own animated style: lifts and follows finger when active
-  const selfStyle = useAnimatedStyle(() => {
+  // Combine self (lift + drag) and neighbour (shift) into ONE transform array
+  // to avoid React Native only applying the last transform style.
+  const combinedStyle = useAnimatedStyle(() => {
     const active = dragIdx.value === idx;
+    const from   = dragIdx.value;
+    const to     = hoverIdx.value;
+
+    // Neighbour shift
+    let neighbourShift = 0;
+    if (!active && from >= 0) {
+      if (from < to && idx > from && idx <= to)  neighbourShift = -ROW_HEIGHT;
+      if (from > to && idx >= to && idx < from)  neighbourShift =  ROW_HEIGHT;
+    }
+
+    // Self translation (follows finger when active, animates back when not)
+    const selfTranslate = active
+      ? dragY.value
+      : withTiming(neighbourShift, { duration: 180 });
+
     return {
       transform: [
-        { translateY: active ? dragY.value : withTiming(0, { duration: 200 }) },
-        { scale: withTiming(active ? 1.03 : 1, { duration: 120 }) },
+        { translateY: active ? selfTranslate : withTiming(neighbourShift, { duration: 180 }) },
+        { scale: withTiming(active ? 1.04 : 1, { duration: 120 }) },
       ],
       zIndex: active ? 100 : 1,
-      shadowOpacity: withTiming(active ? 0.3 : 0, { duration: 120 }),
-      shadowRadius:  withTiming(active ? 12 : 0, { duration: 120 }),
-      elevation: active ? 12 : 0,
-      opacity: withTiming(active ? 0.95 : 1, { duration: 120 }),
+      shadowOpacity: withTiming(active ? 0.35 : 0, { duration: 120 }),
+      shadowRadius:  withTiming(active ? 14 : 0, { duration: 120 }),
+      elevation: active ? 14 : 0,
+      opacity: withTiming(active ? 0.96 : 1, { duration: 120 }),
+      borderColor: active ? accentColor : colors.border,
+      borderWidth: active ? 1.5 : 1,
     };
   });
-
-  // Neighbour shift: slide up/down to show where the card will land
-  const neighbourStyle = useAnimatedStyle(() => {
-    const from = dragIdx.value;
-    const to   = hoverIdx.value;
-    if (from < 0 || from === idx) {
-      return { transform: [{ translateY: withTiming(0, { duration: 180 }) }] };
-    }
-    let shift = 0;
-    if (from < to && idx > from && idx <= to)  shift = -ROW_HEIGHT;
-    if (from > to && idx >= to && idx < from)  shift =  ROW_HEIGHT;
-    return { transform: [{ translateY: withTiming(shift, { duration: 180 }) }] };
-  });
-
-  const borderStyle = useAnimatedStyle(() => ({
-    borderColor: dragIdx.value === idx ? accentColor : colors.border,
-    borderWidth: dragIdx.value === idx ? 1.5 : 1,
-  }));
 
   return (
     <Animated.View
       style={[
         styles.stepCard,
         { backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 6 } },
-        selfStyle,
-        neighbourStyle,
-        borderStyle,
+        combinedStyle,
       ]}
     >
       <GestureDetector gesture={gesture}>
