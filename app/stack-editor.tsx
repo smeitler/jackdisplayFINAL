@@ -193,19 +193,22 @@ function DraggableRow({
 
     // Neighbour shift
     let neighbourShift = 0;
-    if (!active && from >= 0) {
+    const dragging = from >= 0;
+    if (!active && dragging) {
       if (from < to && idx > from && idx <= to)  neighbourShift = -ROW_HEIGHT;
       if (from > to && idx >= to && idx < from)  neighbourShift =  ROW_HEIGHT;
     }
 
-    // Self translation (follows finger when active, animates back when not)
-    const selfTranslate = active
-      ? dragY.value
-      : withTiming(neighbourShift, { duration: 180 });
+    // When dragging is active: animate neighbours smoothly into position.
+    // When drag just ended (from === -1): snap to 0 instantly (duration 0)
+    // so there's no animation conflicting with the list reorder.
+    const neighbourTranslate = dragging
+      ? withTiming(neighbourShift, { duration: 160 })
+      : 0; // instant snap — avoids bounce fighting the reorder
 
     return {
       transform: [
-        { translateY: active ? selfTranslate : withTiming(neighbourShift, { duration: 180 }) },
+        { translateY: active ? dragY.value : neighbourTranslate },
         { scale: withTiming(active ? 1.04 : 1, { duration: 120 }) },
       ],
       zIndex: active ? 100 : 1,
