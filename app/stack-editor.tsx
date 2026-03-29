@@ -249,9 +249,8 @@ function DraggableRow({
         </View>
       </GestureDetector>
 
-      {/* Number badge is rendered by DraggableStepList OUTSIDE this card */}
-      {/* so reordering never causes this component to re-render */}
-      <View style={[styles.stepNumBadgePlaceholder]} />
+      {/* Number badge is an absolute overlay rendered by DraggableStepList */}
+      {/* No placeholder needed — left padding on the card content provides the gap */}
 
       <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
         <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
@@ -334,6 +333,17 @@ function DraggableStepList({
 
   const handleDragCancel = useCallback(() => {}, []);
 
+  // Stable wrappers so DraggableRowMemo never re-renders due to new function refs.
+  // onEdit and onDelete come from the parent StackEditorScreen as plain functions
+  // (recreated every render). Wrapping them here in refs+stable callbacks means
+  // the memo comparator never sees a changed prop for these.
+  const onEditRef   = useRef(onEdit);
+  const onDeleteRef = useRef(onDelete);
+  onEditRef.current   = onEdit;
+  onDeleteRef.current = onDelete;
+  const stableOnEdit   = useCallback((s: RitualStep) => onEditRef.current(s),   []);
+  const stableOnDelete = useCallback((id: string)    => onDeleteRef.current(id), []);
+
   return (
     <View style={{ position: 'relative' }}>
       {steps.map((step, idx) => (
@@ -344,8 +354,8 @@ function DraggableStepList({
           totalSteps={steps.length}
           accentColor={accentColor}
           colors={colors}
-          onEdit={onEdit}
-          onDelete={onDelete}
+          onEdit={stableOnEdit}
+          onDelete={stableOnDelete}
           dragIdx={dragIdx}
           hoverIdx={hoverIdx}
           onDragStart={handleDragStart}
@@ -353,9 +363,9 @@ function DraggableStepList({
           onDragCancel={handleDragCancel}
         />
       ))}
-      {/* Number badges rendered OUTSIDE each card so card content never
-          re-renders when idx changes after a reorder. Positioned absolutely
-          to sit exactly where the badge placeholder is inside each card. */}
+      {/* Number badges rendered OUTSIDE each card — absolutely positioned
+          over the top-left of each card so they never cause a card re-render.
+          They update independently when the list reorders. */}
       {steps.map((step, idx) => (
         <View
           key={`badge-${step.id}`}
@@ -364,7 +374,8 @@ function DraggableStepList({
             styles.stepNumBadgeOverlay,
             {
               backgroundColor: accentColor,
-              top: idx * ROW_HEIGHT + (CARD_HEIGHT - 28) / 2,
+              // Vertically center the 22px badge within the card height
+              top: idx * ROW_HEIGHT + (CARD_HEIGHT - 22) / 2,
             },
           ]}
         >
@@ -995,15 +1006,12 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  // Placeholder inside the card — reserves space where the badge would be
-  stepNumBadgePlaceholder: {
-    width: 28, height: 28, borderRadius: 14, flexShrink: 0,
-  },
-  // Absolute overlay badge rendered outside the card so card never re-renders
+  // Absolute overlay badge rendered outside the card — floats over the
+  // top-left corner of each card like a notification badge.
   stepNumBadgeOverlay: {
     position: 'absolute',
-    left: 46, // dragHandle width (22) + padding (12) + gap (12)
-    width: 28, height: 28, borderRadius: 14,
+    left: 6,
+    width: 22, height: 22, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center',
     zIndex: 200,
   },
