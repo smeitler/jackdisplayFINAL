@@ -1620,3 +1620,5 @@
 - [x] Fix bounce/flicker on drag release — neighbours animate back to 0 while list reorders, causing a visual conflict
 
 - [x] Fix post-drop flicker/reload flash — wrap DraggableRow in React.memo, stabilise callbacks with useCallback
+
+- [x] Fix text glitch on all step cards after drop — idx prop changes cause all rows to re-render simultaneously

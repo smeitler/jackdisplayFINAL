@@ -129,7 +129,16 @@ function DraggableRow({
   const isActive = useSharedValue(false);
   const dragY    = useSharedValue(0);
 
-  // Memoize gesture so RNGH doesn't get a new object on every re-render
+  // Store idx and totalSteps in shared values so the gesture callbacks
+  // always read the latest values WITHOUT needing to recreate the gesture
+  // (which would cause a re-render flash on every reorder).
+  const idxSV        = useSharedValue(idx);
+  const totalStepsSV = useSharedValue(totalSteps);
+  // Keep shared values in sync when props change (no re-render triggered)
+  idxSV.value        = idx;
+  totalStepsSV.value = totalSteps;
+
+  // Gesture is created ONCE per row mount — reads idxSV/totalStepsSV at runtime
   const gesture = useMemo(() => {
     const lp = Gesture.LongPress()
       .minDuration(280)
@@ -138,9 +147,9 @@ function DraggableRow({
         'worklet';
         isActive.value  = true;
         dragY.value     = 0;
-        dragIdx.value   = idx;
-        hoverIdx.value  = idx;
-        runOnJS(onDragStart)(idx);
+        dragIdx.value   = idxSV.value;
+        hoverIdx.value  = idxSV.value;
+        runOnJS(onDragStart)(idxSV.value);
       });
 
     const pan = Gesture.Pan()
@@ -153,21 +162,20 @@ function DraggableRow({
       .onUpdate((e) => {
         'worklet';
         dragY.value    = e.translationY;
-        hoverIdx.value = Math.max(0, Math.min(totalSteps - 1,
-          Math.round((idx * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
+        hoverIdx.value = Math.max(0, Math.min(totalStepsSV.value - 1,
+          Math.round((idxSV.value * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
         ));
       })
       .onEnd(() => {
         'worklet';
         if (!isActive.value) return;
+        const from = idxSV.value;
         const dest = hoverIdx.value;
         isActive.value = false;
-        // Reset dragY immediately so the row snaps to its new position
-        // after onDragEnd reorders the list (no visible flicker)
         dragY.value    = 0;
         dragIdx.value  = -1;
         hoverIdx.value = -1;
-        runOnJS(onDragEnd)(idx, dest);
+        runOnJS(onDragEnd)(from, dest);
       })
       .onFinalize(() => {
         'worklet';
@@ -181,22 +189,24 @@ function DraggableRow({
       });
 
     return Gesture.Simultaneous(lp, pan);
+  // gesture is created once — idxSV/totalStepsSV are read at runtime
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, totalSteps]);
+  }, []);
 
   // Combine self (lift + drag) and neighbour (shift) into ONE transform array
   // to avoid React Native only applying the last transform style.
   const combinedStyle = useAnimatedStyle(() => {
-    const active = dragIdx.value === idx;
+    const active = dragIdx.value === idxSV.value;
     const from   = dragIdx.value;
     const to     = hoverIdx.value;
+    const myIdx  = idxSV.value;
 
-    // Neighbour shift
+    // Neighbour shift — use myIdx (shared value) not the JS-side idx
     let neighbourShift = 0;
     const dragging = from >= 0;
     if (!active && dragging) {
-      if (from < to && idx > from && idx <= to)  neighbourShift = -ROW_HEIGHT;
-      if (from > to && idx >= to && idx < from)  neighbourShift =  ROW_HEIGHT;
+      if (from < to && myIdx > from && myIdx <= to)  neighbourShift = -ROW_HEIGHT;
+      if (from > to && myIdx >= to && myIdx < from)  neighbourShift =  ROW_HEIGHT;
     }
 
     // When dragging is active: animate neighbours smoothly into position.
@@ -235,9 +245,9 @@ function DraggableRow({
         </View>
       </GestureDetector>
 
-      <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
-        <Text style={styles.stepNum}>{idx + 1}</Text>
-      </View>
+      {/* Number badge is rendered by DraggableStepList OUTSIDE this card */}
+      {/* so reordering never causes this component to re-render */}
+      <View style={[styles.stepNumBadgePlaceholder]} />
 
       <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
         <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
@@ -313,7 +323,7 @@ function DraggableStepList({
   const handleDragCancel = useCallback(() => {}, []);
 
   return (
-    <View>
+    <View style={{ position: 'relative' }}>
       {steps.map((step, idx) => (
         <DraggableRowMemo
           key={step.id}
@@ -330,6 +340,24 @@ function DraggableStepList({
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         />
+      ))}
+      {/* Number badges rendered OUTSIDE each card so card content never
+          re-renders when idx changes after a reorder. Positioned absolutely
+          to sit exactly where the badge placeholder is inside each card. */}
+      {steps.map((step, idx) => (
+        <View
+          key={`badge-${step.id}`}
+          pointerEvents="none"
+          style={[
+            styles.stepNumBadgeOverlay,
+            {
+              backgroundColor: accentColor,
+              top: idx * ROW_HEIGHT + (CARD_HEIGHT - 28) / 2,
+            },
+          ]}
+        >
+          <Text style={styles.stepNum}>{idx + 1}</Text>
+        </View>
       ))}
     </View>
   );
@@ -952,8 +980,20 @@ const styles = StyleSheet.create({
     minWidth: 36, minHeight: 44,
   },
   stepNumBadge: {
-    width: 24, height: 24, borderRadius: 12,
+    width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  // Placeholder inside the card — reserves space where the badge would be
+  stepNumBadgePlaceholder: {
+    width: 28, height: 28, borderRadius: 14, flexShrink: 0,
+  },
+  // Absolute overlay badge rendered outside the card so card never re-renders
+  stepNumBadgeOverlay: {
+    position: 'absolute',
+    left: 46, // dragHandle width (22) + padding (12) + gap (12)
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 200,
   },
   stepNum: { color: '#fff', fontSize: 11, fontWeight: '800' },
   stepTypeLabel: { fontSize: 11, fontWeight: '500', marginBottom: 1 },
