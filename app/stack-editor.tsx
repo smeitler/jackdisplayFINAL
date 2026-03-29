@@ -7,7 +7,7 @@
  * OUTSIDE the ScrollView so PanResponder can claim gestures without
  * the scroll view stealing them.
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
   TextInput, Modal, FlatList,
@@ -266,6 +266,15 @@ function DraggableRow({
   );
 }
 
+// Memoised so it only re-renders when its own step data changes, not when
+// a sibling reorders. This eliminates the post-drop flicker.
+const DraggableRowMemo = memo(DraggableRow, (prev, next) =>
+  prev.step === next.step &&
+  prev.idx === next.idx &&
+  prev.totalSteps === next.totalSteps &&
+  prev.accentColor === next.accentColor,
+);
+
 // ── Container: owns shared values, passes them to each row ───────────────────
 function DraggableStepList({
   steps, accentColor, colors, onReorder, onEdit, onDelete,
@@ -274,9 +283,9 @@ function DraggableStepList({
   const hoverIdx = useSharedValue(-1);
 
   // Haptic tick when slot changes
-  const hapticTick = () => {
+  const hapticTick = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, []);
   useAnimatedReaction(
     () => hoverIdx.value,
     (cur, prev) => {
@@ -286,11 +295,12 @@ function DraggableStepList({
     },
   );
 
-  const handleDragStart = (idx: number) => {
+  const handleDragStart = useCallback((_idx: number) => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
+  }, []);
 
-  const handleDragEnd = (fromIdx: number, toIdx: number) => {
+  // Stable reference — only recreated when steps or onReorder changes
+  const handleDragEnd = useCallback((fromIdx: number, toIdx: number) => {
     if (toIdx !== fromIdx) {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const next = [...steps];
@@ -298,14 +308,14 @@ function DraggableStepList({
       next.splice(toIdx, 0, moved);
       onReorder(next);
     }
-  };
+  }, [steps, onReorder]);
 
-  const handleDragCancel = () => {};
+  const handleDragCancel = useCallback(() => {}, []);
 
   return (
     <View>
       {steps.map((step, idx) => (
-        <DraggableRow
+        <DraggableRowMemo
           key={step.id}
           step={step}
           idx={idx}

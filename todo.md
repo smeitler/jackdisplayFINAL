@@ -1618,3 +1618,5 @@
 - [x] Polish drag-to-reorder: fix neighbour card flicker, smooth out release snap, ensure card lands in correct position
 
 - [x] Fix bounce/flicker on drag release — neighbours animate back to 0 while list reorders, causing a visual conflict
+
+- [x] Fix post-drop flicker/reload flash — wrap DraggableRow in React.memo, stabilise callbacks with useCallback
