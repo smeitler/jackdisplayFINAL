@@ -7,14 +7,14 @@
  * OUTSIDE the ScrollView so PanResponder can claim gestures without
  * the scroll view stealing them.
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
   TextInput, Modal, FlatList,
 } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
-  useAnimatedReaction,
+  useSharedValue, useAnimatedStyle, withTiming, runOnJS, useAnimatedReaction,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -31,9 +31,7 @@ import {
 import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
-const CARD_HEIGHT = 80; // measured: paddingVertical 12×2 + content ~44 + marginBottom 8 = 76, rounded up
-const CARD_GAP    = 8;  // marginBottom on each card
-const ROW_HEIGHT  = CARD_HEIGHT + CARD_GAP; // total slot height
+const CARD_HEIGHT = 84; // height of each step card including margin
 
 // ─── Step type icon map ───────────────────────────────────────────────────────
 
@@ -88,9 +86,13 @@ const PRIMING_TRACKS: LibraryTrack[] = [
 ];
 
 // ─── Drag-to-Reorder Step List ────────────────────────────────────────────────
-// Architecture: each row owns its own gesture (LongPress + Pan composed).
-// The parent DraggableStepList owns the shared values so all rows can read them.
-// Rules of Hooks are respected: no hooks inside regular functions or nested components.
+// Architecture: DraggableStepList owns THREE shared values:
+//   dragIdx   – index of the card being dragged (-1 = idle)
+//   dragY     – raw finger translation (px)
+//   hoverIdx  – the resolved drop-target index, updated every frame
+//
+// Every row reads hoverIdx (not dragY) for its shift, so the gap and the
+// final drop position are ALWAYS in sync — no glitching.
 
 interface DraggableStepListProps {
   steps: RitualStep[];
@@ -101,8 +103,12 @@ interface DraggableStepListProps {
   onDelete: (id: string) => void;
 }
 
-// ── Single draggable row (top-level component — hooks are valid here) ─────────
-interface DraggableRowProps {
+function DraggableRow({
+  step, idx, totalSteps, accentColor, colors,
+  onEdit, onDelete,
+  dragIdx, dragY, hoverIdx,
+  onDragStart, onDragEnd, onDragCancel,
+}: {
   step: RitualStep;
   idx: number;
   totalSteps: number;
@@ -110,148 +116,103 @@ interface DraggableRowProps {
   colors: ReturnType<typeof useColors>;
   onEdit: (s: RitualStep) => void;
   onDelete: (id: string) => void;
-  // Shared values owned by parent
-  dragIdx:  ReturnType<typeof useSharedValue<number>>;
-  hoverIdx: ReturnType<typeof useSharedValue<number>>;
-  // JS callbacks
-  onDragStart:  (idx: number) => void;
-  onDragEnd:    (fromIdx: number, toIdx: number) => void;
+  dragIdx:  SharedValue<number>;
+  dragY:    SharedValue<number>;
+  hoverIdx: SharedValue<number>;
+  onDragStart: (idx: number) => void;
+  onDragEnd:   (fromIdx: number, toIdx: number) => void;
   onDragCancel: () => void;
-}
-
-function DraggableRow({
-  step, idx, totalSteps, accentColor, colors,
-  onEdit, onDelete,
-  dragIdx, hoverIdx,
-  onDragStart, onDragEnd, onDragCancel,
-}: DraggableRowProps) {
-  // Each row owns its own isActive + dragY shared values
+}) {
   const isActive = useSharedValue(false);
-  const dragY    = useSharedValue(0);
 
-  // Store idx and totalSteps in shared values so the gesture callbacks
-  // always read the latest values WITHOUT needing to recreate the gesture
-  // (which would cause a re-render flash on every reorder).
-  const idxSV        = useSharedValue(idx);
-  const totalStepsSV = useSharedValue(totalSteps);
-  // Captures the index at the moment the drag STARTS — never mutated during drag.
-  // This is the true "from" index for the reorder, immune to prop-sync updates.
-  const startIdxSV   = useSharedValue(idx);
-  // Keep shared values in sync when props change (no re-render triggered)
-  idxSV.value        = idx;
-  totalStepsSV.value = totalSteps;
+  const longPress = Gesture.LongPress()
+    .minDuration(280)
+    .maxDistance(10)
+    .onStart(() => {
+      'worklet';
+      isActive.value = true;
+      runOnJS(onDragStart)(idx);
+    });
 
-  // Gesture is created ONCE per row mount — reads idxSV/totalStepsSV at runtime
-  const gesture = useMemo(() => {
-    const lp = Gesture.LongPress()
-      .minDuration(280)
-      .maxDistance(12)
-      .onStart(() => {
-        'worklet';
-        startIdxSV.value = idxSV.value; // freeze the from-index at drag-start
-        isActive.value   = true;
-        dragY.value      = 0;
-        dragIdx.value    = idxSV.value;
-        hoverIdx.value   = idxSV.value;
-        runOnJS(onDragStart)(idxSV.value);
-      });
-
-    const pan = Gesture.Pan()
-      .manualActivation(true)
-      .onTouchesMove((_e, state) => {
-        'worklet';
-        if (isActive.value) state.activate();
-        else state.fail();
-      })
-      .onUpdate((e) => {
-        'worklet';
-        dragY.value    = e.translationY;
-        hoverIdx.value = Math.max(0, Math.min(totalStepsSV.value - 1,
-          Math.round((idxSV.value * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
-        ));
-      })
-      .onEnd(() => {
-        'worklet';
-        if (!isActive.value) return;
-        const from = startIdxSV.value; // use the frozen start index, not the current idxSV
-        const dest = hoverIdx.value;
+  const pan = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesMove((_e, state) => {
+      'worklet';
+      if (isActive.value) state.activate();
+      else state.fail();
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragY.value = e.translationY;
+      hoverIdx.value = Math.max(
+        0,
+        Math.min(totalSteps - 1, idx + Math.round(e.translationY / CARD_HEIGHT)),
+      );
+    })
+    .onEnd(() => {
+      'worklet';
+      isActive.value = false;
+      runOnJS(onDragEnd)(idx, hoverIdx.value);
+    })
+    .onFinalize(() => {
+      'worklet';
+      if (isActive.value) {
         isActive.value = false;
-        dragY.value    = 0;
-        dragIdx.value  = -1;
-        hoverIdx.value = -1;
-        runOnJS(onDragEnd)(from, dest);
-      })
-      .onFinalize(() => {
-        'worklet';
-        if (isActive.value) {
-          isActive.value = false;
-          dragY.value    = 0;
-          dragIdx.value  = -1;
-          hoverIdx.value = -1;
-          runOnJS(onDragCancel)();
-        }
-      });
+        runOnJS(onDragCancel)();
+      }
+    });
 
-    return Gesture.Simultaneous(lp, pan);
-  // gesture is created once — idxSV/totalStepsSV are read at runtime
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const composed = Gesture.Simultaneous(longPress, pan);
 
-  // Combine self (lift + drag) and neighbour (shift) into ONE transform array
-  // to avoid React Native only applying the last transform style.
-  const combinedStyle = useAnimatedStyle(() => {
-    const active = dragIdx.value === idxSV.value;
-    const from   = dragIdx.value;
-    const to     = hoverIdx.value;
-    const myIdx  = idxSV.value;
-
-    // Neighbour shift — use myIdx (shared value) not the JS-side idx
-    let neighbourShift = 0;
-    const dragging = from >= 0;
-    if (!active && dragging) {
-      if (from < to && myIdx > from && myIdx <= to)  neighbourShift = -ROW_HEIGHT;
-      if (from > to && myIdx >= to && myIdx < from)  neighbourShift =  ROW_HEIGHT;
-    }
-
-    // When dragging is active: animate neighbours smoothly into position.
-    // When drag just ended (from === -1): snap to 0 instantly (duration 0)
-    // so there's no animation conflicting with the list reorder.
-    const neighbourTranslate = dragging
-      ? withTiming(neighbourShift, { duration: 160 })
-      : 0; // instant snap — avoids bounce fighting the reorder
-
+  // Dragged card: lifts with scale + shadow, follows finger
+  const draggedStyle = useAnimatedStyle(() => {
+    const active = dragIdx.value === idx;
     return {
       transform: [
-        { translateY: active ? dragY.value : neighbourTranslate },
+        { translateY: active ? dragY.value : 0 },
         { scale: withTiming(active ? 1.04 : 1, { duration: 120 }) },
       ],
-      zIndex: active ? 100 : 1,
+      zIndex: active ? 999 : 1,
       shadowOpacity: withTiming(active ? 0.35 : 0, { duration: 120 }),
-      shadowRadius:  withTiming(active ? 14 : 0, { duration: 120 }),
-      elevation: active ? 14 : 0,
-      opacity: withTiming(active ? 0.96 : 1, { duration: 120 }),
-      borderColor: active ? accentColor : colors.border,
-      borderWidth: active ? 1.5 : 1,
+      shadowRadius:  withTiming(active ? 16 : 0, { duration: 120 }),
+      elevation: active ? 16 : 0,
     };
   });
+
+  // Neighbour cards: shift with withTiming (no spring overshoot)
+  const neighbourStyle = useAnimatedStyle(() => {
+    const from = dragIdx.value;
+    const to   = hoverIdx.value;
+    if (from < 0 || from === idx) return { transform: [{ translateY: withTiming(0, { duration: 160 }) }] };
+    let shift = 0;
+    if (from < to && idx > from && idx <= to)  shift = -CARD_HEIGHT;
+    if (from > to && idx >= to && idx < from)  shift =  CARD_HEIGHT;
+    return { transform: [{ translateY: withTiming(shift, { duration: 160 }) }] };
+  });
+
+  const borderStyle = useAnimatedStyle(() => ({
+    borderColor: dragIdx.value === idx ? accentColor : colors.border,
+  }));
 
   return (
     <Animated.View
       style={[
         styles.stepCard,
         { backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 6 } },
-        combinedStyle,
+        draggedStyle,
+        neighbourStyle,
+        borderStyle,
       ]}
     >
-      <GestureDetector gesture={gesture}>
+      <GestureDetector gesture={composed}>
         <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
           <IconSymbol name="line.3.horizontal" size={22} color={colors.muted} />
         </View>
       </GestureDetector>
 
-      {/* Number badge is rendered by DraggableStepList OUTSIDE this card */}
-      {/* so reordering never causes this component to re-render */}
-      <View style={[styles.stepNumBadgePlaceholder]} />
+      <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
+        <Text style={styles.stepNum}>{idx + 1}</Text>
+      </View>
 
       <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
         <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
@@ -280,97 +241,90 @@ function DraggableRow({
   );
 }
 
-// Memoised so it only re-renders when its own step data changes, not when
-// a sibling reorders. This eliminates the post-drop flicker.
-const DraggableRowMemo = memo(DraggableRow, (prev, next) =>
-  prev.step === next.step &&
-  prev.idx === next.idx &&
-  prev.totalSteps === next.totalSteps &&
-  prev.accentColor === next.accentColor,
-);
-
-// ── Container: owns shared values, passes them to each row ───────────────────
 function DraggableStepList({
   steps, accentColor, colors, onReorder, onEdit, onDelete,
 }: DraggableStepListProps) {
   const dragIdx  = useSharedValue(-1);
+  const dragY    = useSharedValue(0);
   const hoverIdx = useSharedValue(-1);
+  // Track previous hoverIdx to fire haptic only on slot change (not every frame)
+  const prevHoverIdx = useSharedValue(-1);
 
-  // Haptic tick when slot changes
-  const hapticTick = useCallback(() => {
+  // Haptic tick fires only when hoverIdx changes slot — safe via useAnimatedReaction
+  const hapticTick = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
+  };
   useAnimatedReaction(
     () => hoverIdx.value,
-    (cur, prev) => {
-      if (prev !== null && cur !== prev && dragIdx.value >= 0) {
+    (current, previous) => {
+      if (previous !== null && current !== previous && dragIdx.value >= 0) {
         runOnJS(hapticTick)();
       }
     },
   );
 
-  const handleDragStart = useCallback((_idx: number) => {
+  function handleDragStart(idx: number) {
+    dragIdx.value      = idx;
+    hoverIdx.value     = idx;
+    prevHoverIdx.value = idx;
+    dragY.value        = 0;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, []);
+  }
 
-  // Keep a ref to the latest steps + onReorder so the gesture closure
-  // (created once on mount) always calls the current version — not a stale one.
-  const stepsRef    = useRef(steps);
-  const reorderRef  = useRef(onReorder);
-  stepsRef.current  = steps;
-  reorderRef.current = onReorder;
-
-  // Stable forever — reads from refs at call time, never stale
-  const handleDragEnd = useCallback((fromIdx: number, toIdx: number) => {
+  function handleDragEnd(fromIdx: number, toIdx: number) {
+    dragIdx.value      = -1;
+    dragY.value        = 0;
+    hoverIdx.value     = -1;
+    prevHoverIdx.value = -1;
     if (toIdx !== fromIdx) {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const next = [...stepsRef.current];
+      const next = [...steps];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
-      reorderRef.current(next);
+      onReorder(next);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — reads from refs
+  }
 
-  const handleDragCancel = useCallback(() => {}, []);
+  function handleDragCancel() {
+    dragIdx.value      = -1;
+    dragY.value        = 0;
+    hoverIdx.value     = -1;
+    prevHoverIdx.value = -1;
+  }
+
+  // Drop-zone indicator line: always rendered, opacity driven by shared value
+  const dropLineStyle = useAnimatedStyle(() => {
+    const from = dragIdx.value;
+    const to   = hoverIdx.value;
+    if (from < 0) return { opacity: 0, top: 0 };
+    return {
+      opacity: 1,
+      top: to * CARD_HEIGHT - 2,
+    };
+  });
 
   return (
     <View style={{ position: 'relative' }}>
       {steps.map((step, idx) => (
-        <DraggableRowMemo
+        <DraggableRow
           key={step.id}
-          step={step}
-          idx={idx}
-          totalSteps={steps.length}
-          accentColor={accentColor}
-          colors={colors}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          dragIdx={dragIdx}
-          hoverIdx={hoverIdx}
+          step={step} idx={idx} totalSteps={steps.length}
+          accentColor={accentColor} colors={colors}
+          onEdit={onEdit} onDelete={onDelete}
+          dragIdx={dragIdx} dragY={dragY} hoverIdx={hoverIdx}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         />
       ))}
-      {/* Number badges rendered OUTSIDE each card so card content never
-          re-renders when idx changes after a reorder. Positioned absolutely
-          to sit exactly where the badge placeholder is inside each card. */}
-      {steps.map((step, idx) => (
-        <View
-          key={`badge-${step.id}`}
-          pointerEvents="none"
-          style={[
-            styles.stepNumBadgeOverlay,
-            {
-              backgroundColor: accentColor,
-              top: idx * ROW_HEIGHT + (CARD_HEIGHT - 28) / 2,
-            },
-          ]}
-        >
-          <Text style={styles.stepNum}>{idx + 1}</Text>
-        </View>
-      ))}
+      {/* Drop-zone accent line — always mounted, opacity toggled via shared value */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          { position: 'absolute', left: 12, right: 12, height: 3, borderRadius: 2, backgroundColor: accentColor },
+          dropLineStyle,
+        ]}
+      />
     </View>
   );
 }
@@ -992,20 +946,8 @@ const styles = StyleSheet.create({
     minWidth: 36, minHeight: 44,
   },
   stepNumBadge: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 24, height: 24, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  // Placeholder inside the card — reserves space where the badge would be
-  stepNumBadgePlaceholder: {
-    width: 28, height: 28, borderRadius: 14, flexShrink: 0,
-  },
-  // Absolute overlay badge rendered outside the card so card never re-renders
-  stepNumBadgeOverlay: {
-    position: 'absolute',
-    left: 46, // dragHandle width (22) + padding (12) + gap (12)
-    width: 28, height: 28, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-    zIndex: 200,
   },
   stepNum: { color: '#fff', fontSize: 11, fontWeight: '800' },
   stepTypeLabel: { fontSize: 11, fontWeight: '500', marginBottom: 1 },

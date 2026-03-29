@@ -1610,19 +1610,4 @@
 - [x] Fix glitching drag: use single shared hoverIdx value so gap animation and drop position always agree
 
 - [x] Fix crash when dragging in stack editor (regression from 6-improvement rewrite)
-
-- [x] Implement SwiftReorder-style drag: snapshot overlay + invisible spacer + snap-to-destination on release
-
-- [x] Fix drag-to-reorder in stack editor — not working, needs minimal reliable approach
-
-- [x] Polish drag-to-reorder: fix neighbour card flicker, smooth out release snap, ensure card lands in correct position
-
-- [x] Fix bounce/flicker on drag release — neighbours animate back to 0 while list reorders, causing a visual conflict
-
-- [x] Fix post-drop flicker/reload flash — wrap DraggableRow in React.memo, stabilise callbacks with useCallback
-
-- [x] Fix text glitch on all step cards after drop — idx prop changes cause all rows to re-render simultaneously
-
-- [x] Fix drag reorder not persisting — capture from-index at drag-start in a separate shared value, not at drag-end
-
-- [x] Fix drag reorder not persisting — trace full onDragEnd → onReorder → AsyncStorage chain
+\n- [x] Fix re-render glitch on rows above dragged item — remove idx from memo comparator (idx synced via idxSV shared value on UI thread, no JS re-render needed)
