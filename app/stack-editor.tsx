@@ -13,7 +13,7 @@ import {
   TextInput, Modal, FlatList,
 } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS,
+  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   useAnimatedReaction,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -88,14 +88,9 @@ const PRIMING_TRACKS: LibraryTrack[] = [
 ];
 
 // ─── Drag-to-Reorder Step List ────────────────────────────────────────────────
-// Architecture (SwiftReorder-style):
-//   1. All rows sit at absolute positions (top = idx * ROW_HEIGHT).
-//   2. On long-press, the dragged row becomes INVISIBLE (opacity 0) — the spacer.
-//   3. A floating SNAPSHOT clone is rendered on top, following the finger exactly.
-//   4. Neighbour rows animate to their new positions via withTiming.
-//   5. On release, the snapshot springs to the destination slot, then disappears
-//      as the real row reappears at its new position.
-//   6. hoverIdx is the single source of truth — gap and drop always agree.
+// Architecture: each row owns its own gesture (LongPress + Pan composed).
+// The parent DraggableStepList owns the shared values so all rows can read them.
+// Rules of Hooks are respected: no hooks inside regular functions or nested components.
 
 interface DraggableStepListProps {
   steps: RitualStep[];
@@ -106,24 +101,138 @@ interface DraggableStepListProps {
   onDelete: (id: string) => void;
 }
 
-/** Renders a single step card — used both for the real row and the snapshot clone. */
-function StepCardContent({
-  step, idx, accentColor, colors, onEdit, onDelete, showDelete,
-}: {
+// ── Single draggable row (top-level component — hooks are valid here) ─────────
+interface DraggableRowProps {
   step: RitualStep;
   idx: number;
+  totalSteps: number;
   accentColor: string;
   colors: ReturnType<typeof useColors>;
-  onEdit?: (s: RitualStep) => void;
-  onDelete?: (id: string) => void;
-  showDelete?: boolean;
-}) {
+  onEdit: (s: RitualStep) => void;
+  onDelete: (id: string) => void;
+  // Shared values owned by parent
+  dragIdx:  ReturnType<typeof useSharedValue<number>>;
+  hoverIdx: ReturnType<typeof useSharedValue<number>>;
+  // JS callbacks
+  onDragStart:  (idx: number) => void;
+  onDragEnd:    (fromIdx: number, toIdx: number) => void;
+  onDragCancel: () => void;
+}
+
+function DraggableRow({
+  step, idx, totalSteps, accentColor, colors,
+  onEdit, onDelete,
+  dragIdx, hoverIdx,
+  onDragStart, onDragEnd, onDragCancel,
+}: DraggableRowProps) {
+  // Each row owns its own isActive + dragY shared values
+  const isActive = useSharedValue(false);
+  const dragY    = useSharedValue(0);
+
+  const lp = Gesture.LongPress()
+    .minDuration(280)
+    .maxDistance(12)
+    .onStart(() => {
+      'worklet';
+      isActive.value  = true;
+      dragY.value     = 0;
+      dragIdx.value   = idx;
+      hoverIdx.value  = idx;
+      runOnJS(onDragStart)(idx);
+    });
+
+  const pan = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesMove((_e, state) => {
+      'worklet';
+      if (isActive.value) state.activate();
+      else state.fail();
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragY.value    = e.translationY;
+      hoverIdx.value = Math.max(0, Math.min(totalSteps - 1,
+        Math.round((idx * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
+      ));
+    })
+    .onEnd(() => {
+      'worklet';
+      if (!isActive.value) return;
+      const dest = hoverIdx.value;
+      isActive.value = false;
+      dragY.value    = withTiming(0, { duration: 1 });
+      dragIdx.value  = -1;
+      hoverIdx.value = -1;
+      runOnJS(onDragEnd)(idx, dest);
+    })
+    .onFinalize(() => {
+      'worklet';
+      if (isActive.value) {
+        isActive.value = false;
+        dragY.value    = 0;
+        dragIdx.value  = -1;
+        hoverIdx.value = -1;
+        runOnJS(onDragCancel)();
+      }
+    });
+
+  const gesture = Gesture.Simultaneous(lp, pan);
+
+  // This row's own animated style: lifts and follows finger when active
+  const selfStyle = useAnimatedStyle(() => {
+    const active = dragIdx.value === idx;
+    return {
+      transform: [
+        { translateY: active ? dragY.value : withTiming(0, { duration: 200 }) },
+        { scale: withTiming(active ? 1.03 : 1, { duration: 120 }) },
+      ],
+      zIndex: active ? 100 : 1,
+      shadowOpacity: withTiming(active ? 0.3 : 0, { duration: 120 }),
+      shadowRadius:  withTiming(active ? 12 : 0, { duration: 120 }),
+      elevation: active ? 12 : 0,
+      opacity: withTiming(active ? 0.95 : 1, { duration: 120 }),
+    };
+  });
+
+  // Neighbour shift: slide up/down to show where the card will land
+  const neighbourStyle = useAnimatedStyle(() => {
+    const from = dragIdx.value;
+    const to   = hoverIdx.value;
+    if (from < 0 || from === idx) {
+      return { transform: [{ translateY: withTiming(0, { duration: 180 }) }] };
+    }
+    let shift = 0;
+    if (from < to && idx > from && idx <= to)  shift = -ROW_HEIGHT;
+    if (from > to && idx >= to && idx < from)  shift =  ROW_HEIGHT;
+    return { transform: [{ translateY: withTiming(shift, { duration: 180 }) }] };
+  });
+
+  const borderStyle = useAnimatedStyle(() => ({
+    borderColor: dragIdx.value === idx ? accentColor : colors.border,
+    borderWidth: dragIdx.value === idx ? 1.5 : 1,
+  }));
+
   return (
-    <>
+    <Animated.View
+      style={[
+        styles.stepCard,
+        { backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 6 } },
+        selfStyle,
+        neighbourStyle,
+        borderStyle,
+      ]}
+    >
+      <GestureDetector gesture={gesture}>
+        <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <IconSymbol name="line.3.horizontal" size={22} color={colors.muted} />
+        </View>
+      </GestureDetector>
+
       <View style={[styles.stepNumBadge, { backgroundColor: accentColor }]}>
         <Text style={styles.stepNum}>{idx + 1}</Text>
       </View>
-      <Pressable onPress={() => onEdit?.(step)} style={{ flex: 1 }}>
+
+      <Pressable onPress={() => onEdit(step)} style={{ flex: 1 }}>
         <Text style={[styles.stepTypeLabel, { color: colors.muted }]}>
           {step.type === 'reminder' ? 'Habit Reminder'
             : step.type === 'melatonin' ? 'Melatonin'
@@ -138,55 +247,43 @@ function StepCardContent({
           </Text>
         )}
       </Pressable>
-      {showDelete && (
-        <>
-          <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
-          <Pressable
-            onPress={() => onDelete?.(step.id)}
-            style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
-          >
-            <IconSymbol name="trash" size={16} color={colors.error} />
-          </Pressable>
-        </>
-      )}
-    </>
+
+      <View style={[styles.actionSep, { backgroundColor: colors.border }]} />
+      <Pressable
+        onPress={() => onDelete(step.id)}
+        style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 1 }]}
+      >
+        <IconSymbol name="trash" size={16} color={colors.error} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
+// ── Container: owns shared values, passes them to each row ───────────────────
 function DraggableStepList({
   steps, accentColor, colors, onReorder, onEdit, onDelete,
 }: DraggableStepListProps) {
-  // Shared values — all on UI thread
-  const dragIdx      = useSharedValue(-1);  // which row is being dragged (-1 = idle)
-  const fingerY      = useSharedValue(0);   // raw translationY from gesture
-  const hoverIdx     = useSharedValue(-1);  // resolved drop slot
-  const snapshotTopY = useSharedValue(0);   // absolute top of snapshot (origin + translation)
-  const isLanding    = useSharedValue(false); // true during snap-back animation
+  const dragIdx  = useSharedValue(-1);
+  const hoverIdx = useSharedValue(-1);
 
-  // JS-side state: which row is the active spacer (invisible)
-  const [spacerIdx, setSpacerIdx] = useState(-1);
-
-  // Haptic on slot change
+  // Haptic tick when slot changes
   const hapticTick = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
   useAnimatedReaction(
     () => hoverIdx.value,
     (cur, prev) => {
-      if (prev !== null && cur !== prev && dragIdx.value >= 0 && !isLanding.value) {
+      if (prev !== null && cur !== prev && dragIdx.value >= 0) {
         runOnJS(hapticTick)();
       }
     },
   );
 
-  // ── JS callbacks (called via runOnJS) ──────────────────────────────────────
   const handleDragStart = (idx: number) => {
-    setSpacerIdx(idx);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  const handleDragCommit = (fromIdx: number, toIdx: number) => {
-    setSpacerIdx(-1);
+  const handleDragEnd = (fromIdx: number, toIdx: number) => {
     if (toIdx !== fromIdx) {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const next = [...steps];
@@ -196,158 +293,27 @@ function DraggableStepList({
     }
   };
 
-  const handleDragCancel = () => {
-    setSpacerIdx(-1);
-  };
-
-  // ── Gesture (attached to each drag handle) ────────────────────────────────
-  const makeGesture = (idx: number, total: number) => {
-    const isActive = useSharedValue(false);
-
-    const lp = Gesture.LongPress()
-      .minDuration(260)
-      .maxDistance(12)
-      .onStart(() => {
-        'worklet';
-        isActive.value     = true;
-        dragIdx.value      = idx;
-        hoverIdx.value     = idx;
-        fingerY.value      = 0;
-        snapshotTopY.value = idx * ROW_HEIGHT;
-        isLanding.value    = false;
-        runOnJS(handleDragStart)(idx);
-      });
-
-    const pan = Gesture.Pan()
-      .manualActivation(true)
-      .onTouchesMove((_e, state) => {
-        'worklet';
-        if (isActive.value) state.activate();
-        else state.fail();
-      })
-      .onUpdate((e) => {
-        'worklet';
-        fingerY.value      = e.translationY;
-        snapshotTopY.value = idx * ROW_HEIGHT + e.translationY;
-        hoverIdx.value     = Math.max(0, Math.min(total - 1,
-          Math.round((idx * ROW_HEIGHT + e.translationY) / ROW_HEIGHT),
-        ));
-      })
-      .onEnd(() => {
-        'worklet';
-        if (!isActive.value) return;
-        isActive.value  = false;
-        isLanding.value = true;
-        const dest = hoverIdx.value;
-        // Snap snapshot to destination slot
-        snapshotTopY.value = withSpring(dest * ROW_HEIGHT, { damping: 28, stiffness: 260, mass: 0.7 }, () => {
-          'worklet';
-          dragIdx.value   = -1;
-          fingerY.value   = 0;
-          hoverIdx.value  = -1;
-          isLanding.value = false;
-          runOnJS(handleDragCommit)(idx, dest);
-        });
-      })
-      .onFinalize(() => {
-        'worklet';
-        if (isActive.value) {
-          isActive.value  = false;
-          dragIdx.value   = -1;
-          fingerY.value   = 0;
-          hoverIdx.value  = -1;
-          isLanding.value = false;
-          runOnJS(handleDragCancel)();
-        }
-      });
-
-    return Gesture.Simultaneous(lp, pan);
-  };
-
-  // ── Row component (spacer + handle) ──────────────────────────────────────
-  function DraggableRow({ step, idx }: { step: RitualStep; idx: number }) {
-    const gesture = makeGesture(idx, steps.length);
-
-    // Spacer: invisible when this row is being dragged
-    const spacerStyle = useAnimatedStyle(() => ({
-      opacity: dragIdx.value === idx ? 0 : 1,
-    }));
-
-    // Neighbour shift: rows above/below slide to make room
-    const shiftStyle = useAnimatedStyle(() => {
-      const from = dragIdx.value;
-      const to   = hoverIdx.value;
-      if (from < 0 || from === idx) {
-        return { transform: [{ translateY: withTiming(0, { duration: 180 }) }] };
-      }
-      let shift = 0;
-      if (from < to && idx > from && idx <= to)  shift = -ROW_HEIGHT;
-      if (from > to && idx >= to && idx < from)  shift =  ROW_HEIGHT;
-      return { transform: [{ translateY: withTiming(shift, { duration: 180 }) }] };
-    });
-
-    return (
-      <Animated.View style={[styles.stepCard, { backgroundColor: colors.surface, borderColor: colors.border }, spacerStyle, shiftStyle]}>
-        <GestureDetector gesture={gesture}>
-          <View style={styles.dragHandle} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-            <IconSymbol name="line.3.horizontal" size={22} color={colors.muted} />
-          </View>
-        </GestureDetector>
-        <StepCardContent
-          step={step} idx={idx} accentColor={accentColor} colors={colors}
-          onEdit={onEdit} onDelete={onDelete} showDelete
-        />
-      </Animated.View>
-    );
-  }
-
-  // ── Floating snapshot overlay ─────────────────────────────────────────────
-  const snapshotStyle = useAnimatedStyle(() => ({
-    opacity: dragIdx.value >= 0 ? 1 : 0,
-    transform: [{ translateY: snapshotTopY.value }],
-    shadowOpacity: isLanding.value ? withTiming(0, { duration: 200 }) : 0.4,
-    shadowRadius:  isLanding.value ? withTiming(0, { duration: 200 }) : 18,
-    elevation: dragIdx.value >= 0 ? 20 : 0,
-  }));
-
-  const activeDragIdx = spacerIdx >= 0 ? spacerIdx : 0;
-  const activeStep    = steps[activeDragIdx];
+  const handleDragCancel = () => {};
 
   return (
-    <View style={{ position: 'relative', height: steps.length * ROW_HEIGHT }}>
+    <View>
       {steps.map((step, idx) => (
-        <View key={step.id} style={{ position: 'absolute', top: idx * ROW_HEIGHT, left: 0, right: 0 }}>
-          <DraggableRow step={step} idx={idx} />
-        </View>
+        <DraggableRow
+          key={step.id}
+          step={step}
+          idx={idx}
+          totalSteps={steps.length}
+          accentColor={accentColor}
+          colors={colors}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          dragIdx={dragIdx}
+          hoverIdx={hoverIdx}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        />
       ))}
-
-      {/* Floating snapshot — always mounted, invisible when idle */}
-      {activeStep && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.stepCard,
-            {
-              position: 'absolute', left: 0, right: 0, top: 0,
-              backgroundColor: colors.surface,
-              borderColor: accentColor,
-              borderWidth: 1.5,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 8 },
-              zIndex: 100,
-            },
-            snapshotStyle,
-          ]}
-        >
-          <View style={styles.dragHandle}>
-            <IconSymbol name="line.3.horizontal" size={22} color={accentColor} />
-          </View>
-          <StepCardContent
-            step={activeStep} idx={activeDragIdx}
-            accentColor={accentColor} colors={colors}
-          />
-        </Animated.View>
-      )}
     </View>
   );
 }

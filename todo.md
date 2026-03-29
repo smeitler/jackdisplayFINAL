@@ -1612,3 +1612,5 @@
 - [x] Fix crash when dragging in stack editor (regression from 6-improvement rewrite)
 
 - [x] Implement SwiftReorder-style drag: snapshot overlay + invisible spacer + snap-to-destination on release
+
+- [x] Fix drag-to-reorder in stack editor — not working, needs minimal reliable approach
