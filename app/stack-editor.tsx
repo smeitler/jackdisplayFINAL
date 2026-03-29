@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
-  TextInput, Modal, FlatList, useWindowDimensions,
+  TextInput, Modal, FlatList, useWindowDimensions, KeyboardAvoidingView,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -640,11 +640,11 @@ function StepConfigModal({
       <Pressable style={styles.overlay} onPress={onClose} />
         <Animated.View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16, height: screenHeight * 0.9 }, sheetAnimStyle]}>
         <GestureDetector gesture={swipeDismiss}>
-          <View style={styles.sheetHandleArea}>
-            <View style={styles.sheetHandle} />
-          </View>
-        </GestureDetector>
-        <View style={styles.sheetHeaderRow}>
+          <View>
+            <View style={styles.sheetHandleArea}>
+              <View style={styles.sheetHandle} />
+            </View>
+            <View style={styles.sheetHeaderRow}>
           <View style={[styles.typeIconWrap, { backgroundColor: accentColor + '20' }]}>
             <IconSymbol name={STEP_ICON[step.type] as any} size={20} color={accentColor} />
           </View>
@@ -654,9 +654,11 @@ function StepConfigModal({
           <Pressable onPress={onClose} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1, padding: 4 }]}>
             <IconSymbol name="xmark" size={20} color={colors.muted} />
           </Pressable>
-        </View>
+            </View>
+          </View>
+        </GestureDetector>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 16 }}>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 16, flex: 1 }}>
 
           {/* Timer */}
           {step.type === 'timer' && (
@@ -915,12 +917,14 @@ function StepConfigModal({
           </CRow>
         </ScrollView>
 
-        <Pressable
-          onPress={() => onSave({ ...step, config, delayAfterSeconds: parseInt(delay, 10) || 0 })}
-          style={({ pressed }) => [styles.saveBtn, { backgroundColor: accentColor, opacity: pressed ? 0.8 : 1 }]}
-        >
-          <Text style={styles.saveBtnText}>Save</Text>
-        </Pressable>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable
+            onPress={() => onSave({ ...step, config, delayAfterSeconds: parseInt(delay, 10) || 0 })}
+            style={({ pressed }) => [styles.saveBtn, { backgroundColor: accentColor, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={styles.saveBtnText}>Save</Text>
+          </Pressable>
+        </KeyboardAvoidingView>
         </Animated.View>
 
       {/* Library picker sub-sheet */}
@@ -1116,6 +1120,6 @@ const styles = StyleSheet.create({
   habitRowText: { fontSize: 14, fontWeight: '600', flex: 1 },
 
   // Save button
-  saveBtn: { paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8 },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  saveBtn: { paddingVertical: 10, paddingHorizontal: 32, borderRadius: 20, alignItems: 'center', marginTop: 8, alignSelf: 'center' },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
