@@ -1622,3 +1622,5 @@
 - [x] Fix post-drop flicker/reload flash — wrap DraggableRow in React.memo, stabilise callbacks with useCallback
 
 - [x] Fix text glitch on all step cards after drop — idx prop changes cause all rows to re-render simultaneously
+
+- [x] Fix drag reorder not persisting — capture from-index at drag-start in a separate shared value, not at drag-end

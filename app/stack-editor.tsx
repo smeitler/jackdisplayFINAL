@@ -134,6 +134,9 @@ function DraggableRow({
   // (which would cause a re-render flash on every reorder).
   const idxSV        = useSharedValue(idx);
   const totalStepsSV = useSharedValue(totalSteps);
+  // Captures the index at the moment the drag STARTS — never mutated during drag.
+  // This is the true "from" index for the reorder, immune to prop-sync updates.
+  const startIdxSV   = useSharedValue(idx);
   // Keep shared values in sync when props change (no re-render triggered)
   idxSV.value        = idx;
   totalStepsSV.value = totalSteps;
@@ -145,10 +148,11 @@ function DraggableRow({
       .maxDistance(12)
       .onStart(() => {
         'worklet';
-        isActive.value  = true;
-        dragY.value     = 0;
-        dragIdx.value   = idxSV.value;
-        hoverIdx.value  = idxSV.value;
+        startIdxSV.value = idxSV.value; // freeze the from-index at drag-start
+        isActive.value   = true;
+        dragY.value      = 0;
+        dragIdx.value    = idxSV.value;
+        hoverIdx.value   = idxSV.value;
         runOnJS(onDragStart)(idxSV.value);
       });
 
@@ -169,7 +173,7 @@ function DraggableRow({
       .onEnd(() => {
         'worklet';
         if (!isActive.value) return;
-        const from = idxSV.value;
+        const from = startIdxSV.value; // use the frozen start index, not the current idxSV
         const dest = hoverIdx.value;
         isActive.value = false;
         dragY.value    = 0;
