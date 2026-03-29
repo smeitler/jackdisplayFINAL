@@ -31,9 +31,9 @@ import {
 import { loadHabits, type Habit } from '@/lib/storage';
 
 const MAX_STEPS = 5;
-const CARD_HEIGHT = 80; // measured: paddingVertical 12×2 + content ~44 + marginBottom 8 = 76, rounded up
-const CARD_GAP    = 8;  // marginBottom on each card
-const ROW_HEIGHT  = CARD_HEIGHT + CARD_GAP; // total slot height
+const CARD_HEIGHT = 80;  // paddingVertical 12×2 + content ~44 = 76, rounded up
+const CARD_GAP    = 28;  // gap between cards — large enough for the number badge above each card
+const ROW_HEIGHT  = CARD_HEIGHT + CARD_GAP; // total slot height = 108
 
 // ─── Step type icon map ───────────────────────────────────────────────────────
 
@@ -364,8 +364,8 @@ function DraggableStepList({
         />
       ))}
       {/* Number badges rendered OUTSIDE each card — absolutely positioned
-          over the top-left of each card so they never cause a card re-render.
-          They update independently when the list reorders. */}
+          ABOVE the top-left corner of each card. They update independently
+          when the list reorders without touching any card component. */}
       {steps.map((step, idx) => (
         <View
           key={`badge-${step.id}`}
@@ -374,8 +374,10 @@ function DraggableStepList({
             styles.stepNumBadgeOverlay,
             {
               backgroundColor: accentColor,
-              // Vertically center the 22px badge within the card height
-              top: idx * ROW_HEIGHT + (CARD_HEIGHT - 22) / 2,
+              // Sit in the gap space above the card.
+              // Card top = idx * ROW_HEIGHT. Badge (22px) centered in the 28px gap
+              // means top = idx * ROW_HEIGHT - CARD_GAP + (CARD_GAP - 22) / 2 = idx * ROW_HEIGHT - 25
+              top: idx * ROW_HEIGHT - 25,
             },
           ]}
         >
@@ -994,7 +996,7 @@ const styles = StyleSheet.create({
   stepCard: {
     borderRadius: 14, borderWidth: 1,
     paddingVertical: 12, paddingHorizontal: 10,
-    marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginBottom: CARD_GAP, flexDirection: 'row', alignItems: 'center', gap: 8,
     minHeight: CARD_HEIGHT,
   },
   dragHandle: {
@@ -1006,11 +1008,11 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  // Absolute overlay badge rendered outside the card — floats over the
-  // top-left corner of each card like a notification badge.
+  // Number label that sits ABOVE each card's top-left corner.
+  // Rendered outside the card so it never triggers a card re-render.
   stepNumBadgeOverlay: {
     position: 'absolute',
-    left: 6,
+    left: 14,
     width: 22, height: 22, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center',
     zIndex: 200,
