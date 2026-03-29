@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
-  TextInput, Modal, FlatList,
+  TextInput, Modal, FlatList, KeyboardAvoidingView,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -622,7 +622,11 @@ function StepConfigModal({
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ width: '100%' }}
+      >
+        <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.sheetHandle} />
         <View style={styles.sheetHeaderRow}>
           <View style={[styles.typeIconWrap, { backgroundColor: accentColor + '20' }]}>
@@ -901,7 +905,8 @@ function StepConfigModal({
         >
           <Text style={styles.saveBtnText}>Save</Text>
         </Pressable>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
 
       {/* Library picker sub-sheet */}
       {showLibrary && (
