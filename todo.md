@@ -1624,3 +1624,5 @@
 - [x] Fix text glitch on all step cards after drop — idx prop changes cause all rows to re-render simultaneously
 
 - [x] Fix drag reorder not persisting — capture from-index at drag-start in a separate shared value, not at drag-end
+
+- [x] Fix drag reorder not persisting — trace full onDragEnd → onReorder → AsyncStorage chain

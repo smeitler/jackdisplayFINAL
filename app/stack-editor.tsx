@@ -7,7 +7,7 @@
  * OUTSIDE the ScrollView so PanResponder can claim gestures without
  * the scroll view stealing them.
  */
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, Platform,
   TextInput, Modal, FlatList,
@@ -313,16 +313,24 @@ function DraggableStepList({
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
-  // Stable reference — only recreated when steps or onReorder changes
+  // Keep a ref to the latest steps + onReorder so the gesture closure
+  // (created once on mount) always calls the current version — not a stale one.
+  const stepsRef    = useRef(steps);
+  const reorderRef  = useRef(onReorder);
+  stepsRef.current  = steps;
+  reorderRef.current = onReorder;
+
+  // Stable forever — reads from refs at call time, never stale
   const handleDragEnd = useCallback((fromIdx: number, toIdx: number) => {
     if (toIdx !== fromIdx) {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const next = [...steps];
+      const next = [...stepsRef.current];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
-      onReorder(next);
+      reorderRef.current(next);
     }
-  }, [steps, onReorder]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — reads from refs
 
   const handleDragCancel = useCallback(() => {}, []);
 
