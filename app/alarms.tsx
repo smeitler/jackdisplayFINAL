@@ -37,12 +37,22 @@ import * as Haptics from 'expo-haptics';
 const DAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_MAP   = [0, 1, 2, 3, 4, 5, 6];
 
-const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
-  { id: 'classic',  label: 'Classic',  emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
-  { id: 'buzzer',   label: 'Buzzer',   emoji: '📢', source: require('@/assets/audio/alarm_buzzer.wav') },
-  { id: 'digital',  label: 'Digital',  emoji: '📱', source: require('@/assets/audio/alarm_digital.wav') },
-  { id: 'gentle',   label: 'Gentle',   emoji: '🔔', source: require('@/assets/audio/alarm_gentle.wav') },
-  { id: 'urgent',   label: 'Urgent',   emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav') },
+const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: string | ReturnType<typeof require> }[] = [
+  { id: 'drumming',    label: 'Drumming',     emoji: '🥁', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_drumming_3dce95b9.wav' },
+  { id: 'dubstep',     label: 'Dubstep',      emoji: '⚡', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dubstep_c17cb2ab.wav' },
+  { id: 'action',      label: 'Action',       emoji: '🏃', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_action_26f02017.wav' },
+  { id: 'dynamic',     label: 'Dynamic',      emoji: '🎵', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dynamic_1843ed92.wav' },
+  { id: 'edm',         label: 'EDM House',    emoji: '🎧', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3' },
+  { id: 'fulltrack',   label: 'Full Track',   emoji: '🎶', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_fulltrack_6082bd59.mp3' },
+  { id: 'prisonbell',  label: 'Prison Bell',  emoji: '🔔', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_prisonbell_9d68b4d6.mp3' },
+  { id: 'stomp4k',     label: 'Stomp 4K',     emoji: '⏱️', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_be7c271e.mp3' },
+  { id: 'stomp5k',     label: 'Stomp 5K',     emoji: '⏱️', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_e7c316e0.mp3' },
+  { id: 'sunny_end',   label: 'Sunny End',    emoji: '☀️', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_end_ff17c7ef.wav' },
+  { id: 'sunny_loop',  label: 'Sunny Loop',   emoji: '🌅', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_loop_4c57ab59.wav' },
+  // Legacy sounds kept for users who already have them saved
+  { id: 'classic',     label: 'Classic',      emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
+  { id: 'gentle',      label: 'Gentle',       emoji: '🎵', source: require('@/assets/audio/alarm_gentle.wav') },
+  { id: 'urgent',      label: 'Urgent',       emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav') },
 ];
 
 const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> | null }[] = [
