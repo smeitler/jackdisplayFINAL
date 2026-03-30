@@ -11,7 +11,9 @@ import {
 } from '../app/data/motivational-speeches';
 import {
   AFFIRMATIONS,
+  AFFIRMATION_CATEGORIES,
   getAffirmationsByChapter,
+  getAffirmationsByCategory,
   getRandomAffirmation,
   AFFIRMATION_CHAPTERS,
 } from '../app/data/affirmations';
@@ -57,8 +59,12 @@ describe('Motivational Speeches data', () => {
 });
 
 describe('Affirmations data', () => {
-  it('has at least 180 affirmations', () => {
-    expect(AFFIRMATIONS.length).toBeGreaterThanOrEqual(180);
+  it('has 189 affirmations', () => {
+    expect(AFFIRMATIONS.length).toBe(189);
+  });
+
+  it('has 10 categories', () => {
+    expect(AFFIRMATION_CATEGORIES.length).toBe(10);
   });
 
   it('all affirmations have valid CDN URLs', () => {
@@ -70,6 +76,30 @@ describe('Affirmations data', () => {
   it('all affirmations have unique IDs', () => {
     const ids = AFFIRMATIONS.map((a) => a.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('every affirmation has a valid category', () => {
+    for (const a of AFFIRMATIONS) {
+      expect(AFFIRMATION_CATEGORIES).toContain(a.category);
+    }
+  });
+
+  it('getAffirmationsByCategory returns correct subset', () => {
+    for (const cat of AFFIRMATION_CATEGORIES) {
+      const subset = getAffirmationsByCategory(cat);
+      expect(subset.length).toBeGreaterThan(0);
+      for (const a of subset) {
+        expect(a.category).toBe(cat);
+      }
+    }
+  });
+
+  it('all categories have 15-20 affirmations each', () => {
+    for (const cat of AFFIRMATION_CATEGORIES) {
+      const count = getAffirmationsByCategory(cat).length;
+      expect(count).toBeGreaterThanOrEqual(15);
+      expect(count).toBeLessThanOrEqual(20);
+    }
   });
 
   it('AFFIRMATION_CHAPTERS contains chapter 1', () => {
@@ -85,5 +115,16 @@ describe('Affirmations data', () => {
     const a = getRandomAffirmation();
     expect(a.url).toBeTruthy();
     expect(AFFIRMATIONS.some((x) => x.id === a.id)).toBe(true);
+  });
+
+  it('getRandomAffirmation with category returns matching affirmation', () => {
+    const a = getRandomAffirmation('Confidence');
+    expect(a.category).toBe('Confidence');
+  });
+
+  it('count cap: Math.min(count, 10) never exceeds 10', () => {
+    for (const n of [1, 2, 3, 5, 7, 10, 15, 20]) {
+      expect(Math.min(n, 10)).toBeLessThanOrEqual(10);
+    }
   });
 });

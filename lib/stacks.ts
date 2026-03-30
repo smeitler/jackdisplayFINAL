@@ -69,8 +69,9 @@ export interface StepConfig {
   motivationalSpeechMode?: 'random' | 'sequential'; // how to pick next speech
   // Affirmations library
   affirmationsChapter?: number;        // chapter to pull from (default 1)
+  affirmationsCategory?: string;       // category filter (undefined = all categories)
   affirmationsMode?: 'random' | 'sequential'; // how to pick next affirmation
-  affirmationsCount?: number;          // how many to play in sequence (default 1)
+  affirmationsCount?: number;          // how many to play in sequence (1-10, default 1)
   // Custom audio upload
   customAudioFiles?: string[];         // local file URIs
   customAudioMode?: 'random' | 'sequential'; // rotation mode

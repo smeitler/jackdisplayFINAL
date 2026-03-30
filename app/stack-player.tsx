@@ -5,15 +5,18 @@
  *
  * Audio playback:
  *  - motivational: plays a speech from the CDN library (random or sequential by category)
- *  - affirmations: plays N affirmations from the CDN library (random or sequential)
+ *  - affirmations: plays N affirmations from the CDN library (random or sequential, by category)
  *  - custom: plays user-uploaded MP3 files (random or sequential rotation)
+ *
+ * Uses createAudioPlayer (not useAudioPlayer) so we can call player.replace()
+ * to swap tracks without creating/destroying the native player object.
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColors } from '@/hooks/use-colors';
@@ -26,7 +29,11 @@ import {
   getSpeechesByCategory,
   type SpeechCategory,
 } from '@/app/data/motivational-speeches';
-import { AFFIRMATIONS } from '@/app/data/affirmations';
+import {
+  AFFIRMATIONS,
+  getAffirmationsByCategory,
+  type AffirmationCategory,
+} from '@/app/data/affirmations';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 
 const STEP_ICON: Record<string, string> = {
@@ -72,12 +79,16 @@ async function resolveStepAudioUrls(step: RitualStep): Promise<string[]> {
   }
 
   if (step.type === 'affirmations') {
-    const mode = cfg.affirmationsMode ?? 'sequential';
-    const count = cfg.affirmationsCount ?? 1;
-    const pool = AFFIRMATIONS.map((a) => a.url);
+    const mode = cfg.affirmationsMode ?? 'random';
+    const count = Math.min(cfg.affirmationsCount ?? 1, 10);
+    const category = cfg.affirmationsCategory as AffirmationCategory | undefined;
+    const pool = category
+      ? getAffirmationsByCategory(category).map((a) => a.url)
+      : AFFIRMATIONS.map((a) => a.url);
+    const seqKey = `affirmations_${category ?? 'all'}`;
     const urls: string[] = [];
     for (let i = 0; i < count; i++) {
-      const url = pickFromPool(pool, mode, `affirmations_seq`);
+      const url = pickFromPool(pool, mode, seqKey);
       if (url) urls.push(url);
     }
     return urls;
@@ -95,62 +106,101 @@ async function resolveStepAudioUrls(step: RitualStep): Promise<string[]> {
   return [];
 }
 
-// ── Audio player hook ─────────────────────────────────────────────────────────
+// ── Robust audio engine using createAudioPlayer + replace() ──────────────────
+// This avoids the useAudioPlayer limitation where source changes don't
+// reliably trigger a new load. createAudioPlayer gives us a stable native
+// player instance we can replace() the source on at will.
 function useStepAudio(step: RitualStep | null, phase: Phase) {
-  const [audioUrls, setAudioUrls] = useState<string[]>([]);
-  const [audioIdx, setAudioIdx] = useState(0);
-  const player = useAudioPlayer(audioUrls[audioIdx] ? { uri: audioUrls[audioIdx] } : null);
-  const resolvedRef = useRef(false);
+  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const urlsRef = useRef<string[]>([]);
+  const idxRef = useRef(0);
+  const activeStepIdRef = useRef<string | null>(null);
 
-  // Resolve URLs when step changes
+  // Create the player once on mount, destroy on unmount
   useEffect(() => {
-    resolvedRef.current = false;
-    setAudioUrls([]);
-    setAudioIdx(0);
-    if (!step) return;
-    if (!['motivational', 'affirmations', 'custom'].includes(step.type)) return;
-    resolveStepAudioUrls(step).then((urls) => {
-      resolvedRef.current = true;
-      setAudioUrls(urls);
-      setAudioIdx(0);
-    });
-  }, [step?.id, step?.type]);
-
-  // Play when running phase starts and we have a URL
-  useEffect(() => {
-    if (phase !== 'running') {
-      try { player.pause(); } catch {}
-      return;
-    }
-    if (!audioUrls[audioIdx]) return;
-    (async () => {
-      try {
-        await setAudioModeAsync({ playsInSilentMode: true });
-        player.play();
-      } catch {}
-    })();
-  }, [phase, audioUrls, audioIdx]);
-
-  // Advance to next track when current finishes (for affirmations playlist)
-  useEffect(() => {
-    if (!player) return;
-    const sub = player.addListener('playbackStatusUpdate', (status: any) => {
-      if (status.didJustFinish && audioIdx < audioUrls.length - 1) {
-        setAudioIdx((i) => i + 1);
-      }
-    });
-    return () => sub?.remove?.();
-  }, [player, audioIdx, audioUrls.length]);
-
-  // Cleanup on unmount
-  useEffect(() => {
+    // Start with a silent placeholder so the player is ready
+    const p = createAudioPlayer({ uri: '' });
+    playerRef.current = p;
     return () => {
-      try { player.release(); } catch {}
+      try { p.remove(); } catch {}
+      playerRef.current = null;
     };
   }, []);
 
+  // When step changes, resolve URLs and load the first track
+  useEffect(() => {
+    urlsRef.current = [];
+    idxRef.current = 0;
+
+    if (!step || !['motivational', 'affirmations', 'custom'].includes(step.type)) {
+      return;
+    }
+
+    const stepId = step.id;
+    activeStepIdRef.current = stepId;
+
+    resolveStepAudioUrls(step).then((urls) => {
+      // Guard: step may have changed while we were resolving
+      if (activeStepIdRef.current !== stepId) return;
+      urlsRef.current = urls;
+      idxRef.current = 0;
+      // If already running, start playing immediately
+      if (phase === 'running' && urls.length > 0) {
+        playCurrentTrack();
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step?.id, step?.type]);
+
+  // When phase transitions to running, start playback
+  useEffect(() => {
+    if (phase === 'running') {
+      if (urlsRef.current.length > 0) {
+        playCurrentTrack();
+      }
+    } else {
+      // Pause on any non-running phase
+      try { playerRef.current?.pause(); } catch {}
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // Set up the "did just finish" listener once on mount
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    const sub = p.addListener('playbackStatusUpdate', (status: any) => {
+      if (!status.didJustFinish) return;
+      const urls = urlsRef.current;
+      const idx = idxRef.current;
+      if (idx < urls.length - 1) {
+        // Advance to next track in playlist (affirmations)
+        idxRef.current = idx + 1;
+        playCurrentTrack();
+      }
+    });
+    return () => { try { sub?.remove?.(); } catch {} };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function playCurrentTrack() {
+    const p = playerRef.current;
+    if (!p) return;
+    const url = urlsRef.current[idxRef.current];
+    if (!url) return;
+    (async () => {
+      try {
+        await setAudioModeAsync({ playsInSilentMode: true });
+        p.replace({ uri: url });
+        p.play();
+      } catch (e) {
+        console.warn('[StackPlayer] audio error:', e);
+      }
+    })();
+  }
+
   function stopAudio() {
-    try { player.pause(); } catch {}
+    try { playerRef.current?.pause(); } catch {}
   }
 
   return { stopAudio };
@@ -168,281 +218,373 @@ export default function StackPlayerScreen() {
   const [countdown, setCountdown] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Fade animation for step transitions
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const currentStep = stack?.steps[stepIdx] ?? null;
+  const totalSteps = stack?.steps.length ?? 0;
+
   const { stopAudio } = useStepAudio(currentStep, phase);
 
+  // Load stack on mount
   useEffect(() => {
-    loadStacks().then((all) => {
-      const found = all.find((s) => s.id === id);
+    if (!id) return;
+    loadStacks().then((stacks) => {
+      const found = stacks.find((s) => s.id === id);
       if (found) setStack(found);
     });
   }, [id]);
 
-  // Pulse animation for step icon
+  // Start delay countdown when stack loads or step changes
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,   duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [stepIdx, pulseAnim]);
-
-  const beginRunning = useCallback((idx: number, s: RitualStack) => {
-    const step = s.steps[idx];
-    setPhase('running');
+    if (!stack || !currentStep) return;
+    setPhase('delay');
+    setCountdown(3);
     setElapsed(0);
-    const dur = stepDefaultDuration(step);
-    if (stepIsAutoComplete(step) && dur > 0) {
-      let e = 0;
-      intervalRef.current = setInterval(() => {
-        e += 1;
-        setElapsed(e);
-        if (e >= dur) {
-          clearInterval(intervalRef.current!);
-          const next = idx + 1;
-          if (next >= s.steps.length) { setPhase('done'); } else { setStepIdx(next); }
-        }
-      }, 1000);
-    }
-  }, []);
+  }, [stack, stepIdx]);
 
-  const startStep = useCallback((idx: number, s: RitualStack) => {
-    const step = s.steps[idx];
-    if (!step) { setPhase('done'); return; }
-    clearInterval(intervalRef.current!);
-    if (step.delayAfterSeconds > 0) {
-      setPhase('delay');
-      setCountdown(step.delayAfterSeconds);
+  // Tick logic
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    if (phase === 'delay') {
       intervalRef.current = setInterval(() => {
         setCountdown((c) => {
-          if (c <= 1) { clearInterval(intervalRef.current!); beginRunning(idx, s); return 0; }
+          if (c <= 1) {
+            clearInterval(intervalRef.current!);
+            setPhase('running');
+            return 0;
+          }
           return c - 1;
         });
       }, 1000);
-    } else {
-      beginRunning(idx, s);
+    } else if (phase === 'running') {
+      const step = currentStep;
+      if (!step) return;
+      const autoComplete = stepIsAutoComplete(step);
+      const duration = stepDefaultDuration(step);
+
+      if (autoComplete) {
+        intervalRef.current = setInterval(() => {
+          setElapsed((e) => {
+            if (e + 1 >= duration) {
+              clearInterval(intervalRef.current!);
+              advanceStep();
+              return 0;
+            }
+            return e + 1;
+          });
+        }, 1000);
+      } else {
+        intervalRef.current = setInterval(() => {
+          setElapsed((e) => e + 1);
+        }, 1000);
+      }
     }
-  }, [beginRunning]);
 
-  // Start first step when stack loads
-  useEffect(() => {
-    if (stack && stack.steps.length > 0) startStep(0, stack);
-    return () => clearInterval(intervalRef.current!);
-  }, [stack, startStep]);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, stepIdx]);
 
-  // Re-trigger when stepIdx advances
-  const prevIdxRef = useRef(0);
-  useEffect(() => {
-    if (!stack || stepIdx === prevIdxRef.current) return;
-    prevIdxRef.current = stepIdx;
-    startStep(stepIdx, stack);
-  }, [stepIdx, stack, startStep]);
+  const advanceStep = useCallback(() => {
+    stopAudio();
+    if (stepIdx + 1 >= totalSteps) {
+      setPhase('done');
+      return;
+    }
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+    setStepIdx((i) => i + 1);
+  }, [stopAudio, stepIdx, totalSteps, fadeAnim]);
 
-  function skipStep() {
-    if (!stack) return;
+  const handleSkip = useCallback(() => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    advanceStep();
+  }, [advanceStep]);
+
+  const handleCancel = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (intervalRef.current) clearInterval(intervalRef.current);
     stopAudio();
-    clearInterval(intervalRef.current!);
-    const next = stepIdx + 1;
-    if (next >= stack.steps.length) { setPhase('done'); } else { setStepIdx(next); }
-  }
-
-  function markDone() {
-    if (!stack) return;
-    stopAudio();
-    clearInterval(intervalRef.current!);
-    const next = stepIdx + 1;
-    if (next >= stack.steps.length) { setPhase('done'); } else { setStepIdx(next); }
-  }
-
-  function cancelStack() {
-    stopAudio();
-    clearInterval(intervalRef.current!);
     router.back();
-  }
+  }, [stopAudio, router]);
 
-  const accentColor = stack?.id === 'wakeup' ? '#F97316' : '#8B5CF6';
+  const handleComplete = useCallback(() => {
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.back();
+  }, [router]);
 
-  // ── Loading ──
   if (!stack) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.muted, textAlign: 'center', marginTop: 80 }}>Loading…</Text>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <Text style={[styles.loadingText, { color: colors.muted }]}>Loading…</Text>
       </View>
     );
   }
 
-  // ── Empty stack ──
-  if (stack.steps.length === 0) {
-    return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
-          <Pressable onPress={cancelStack} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-            <Text style={[styles.topBarBtnText, { color: colors.muted }]}>Cancel</Text>
-          </Pressable>
-          <Text style={[styles.topBarTitle, { color: colors.foreground }]}>{stack.name}</Text>
-          <View style={{ width: 64 }} />
-        </View>
-        <View style={styles.centerContent}>
-          <IconSymbol name="list.bullet" size={48} color={colors.muted} />
-          <Text style={[styles.doneTitle, { color: colors.foreground }]}>No steps yet</Text>
-          <Text style={[styles.doneSub, { color: colors.muted }]}>Add steps in the editor first.</Text>
-          <Pressable onPress={cancelStack} style={[styles.doneBtn, { backgroundColor: accentColor }]}>
-            <Text style={styles.doneBtnText}>Go Back</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  // ── Done ──
   if (phase === 'done') {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
-          <View style={{ width: 64 }} />
-          <Text style={[styles.topBarTitle, { color: colors.foreground }]}>{stack.name}</Text>
-          <View style={{ width: 64 }} />
-        </View>
-        <View style={styles.centerContent}>
-          <IconSymbol name="checkmark.circle.fill" size={72} color={accentColor} />
-          <Text style={[styles.doneTitle, { color: colors.foreground }]}>Stack Complete!</Text>
-          <Text style={[styles.doneSub, { color: colors.muted }]}>
-            You finished all {stack.steps.length} steps of your {stack.name}.
-          </Text>
-          <Pressable onPress={() => router.back()} style={[styles.doneBtn, { backgroundColor: accentColor }]}>
-            <Text style={styles.doneBtnText}>Done</Text>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <View style={styles.doneContainer}>
+          <IconSymbol name="checkmark.circle.fill" size={72} color={colors.success ?? '#22C55E'} />
+          <Text style={[styles.doneTitle, { color: colors.foreground }]}>Stack Complete</Text>
+          <Text style={[styles.doneSubtitle, { color: colors.muted }]}>{stack.name}</Text>
+          <Pressable
+            onPress={handleComplete}
+            style={({ pressed }) => [styles.doneButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={[styles.doneButtonText, { color: '#fff' }]}>Done</Text>
           </Pressable>
         </View>
       </View>
     );
   }
 
-  const step = stack.steps[stepIdx];
-  const dur = stepDefaultDuration(step);
-  const progress = dur > 0 ? Math.min(elapsed / dur, 1) : 0;
-  const remaining = dur > 0 ? Math.max(dur - elapsed, 0) : null;
-  const isManual = !stepIsAutoComplete(step);
-
-  function formatTime(secs: number) {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }
+  const step = currentStep!;
+  const meta = STEP_TYPE_META[step.type];
+  const iconName = (STEP_ICON[step.type] ?? 'sparkles') as any;
+  const duration = stepDefaultDuration(step);
+    const autoComplete = stepIsAutoComplete(step);
+  const progress = autoComplete && duration > 0 ? Math.min(elapsed / duration, 1) : 0;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* ── Top bar: Cancel (left) · title · Skip (right) — always visible ── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
-        <Pressable onPress={cancelStack} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-          <Text style={[styles.topBarBtnText, { color: colors.muted }]}>Cancel</Text>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {/* Header row: Cancel | progress dots | Skip */}
+      <View style={styles.headerRow}>
+        <Pressable
+          onPress={handleCancel}
+          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.headerBtnText, { color: colors.muted }]}>Cancel</Text>
         </Pressable>
-        <Text style={[styles.topBarTitle, { color: colors.foreground }]}>
-          {stepIdx + 1} / {stack.steps.length}
-        </Text>
-        <Pressable onPress={skipStep} style={({ pressed }) => [styles.topBarBtn, { opacity: pressed ? 0.6 : 1 }]}>
-          <Text style={[styles.topBarBtnText, { color: accentColor }]}>Skip</Text>
+
+        <View style={styles.dotRow}>
+          {stack.steps.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: i === stepIdx ? colors.primary : colors.border,
+                  width: i === stepIdx ? 20 : 8,
+                },
+              ]}
+            />
+          ))}
+        </View>
+
+        <Pressable
+          onPress={handleSkip}
+          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.headerBtnText, { color: colors.muted }]}>Skip</Text>
         </Pressable>
       </View>
 
-      {/* ── Progress bar ── */}
-      <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-        <View style={[styles.progressFill, {
-          backgroundColor: accentColor,
-          width: `${((stepIdx + (phase === 'running' ? progress : 0)) / stack.steps.length) * 100}%`,
-        }]} />
-      </View>
-
-      {/* ── Delay phase ── */}
-      {phase === 'delay' && (
-        <View style={styles.centerContent}>
-          <Text style={[styles.delayLabel, { color: colors.muted }]}>Next step in</Text>
-          <Text style={[styles.delayCountdown, { color: accentColor }]}>{countdown}</Text>
-          <View style={styles.upcomingRow}>
-            <IconSymbol name={STEP_ICON[step.type] as any} size={20} color={accentColor} />
-            <Text style={[styles.delayStepName, { color: colors.foreground }]}>{stepLabel(step)}</Text>
+      {/* Step content */}
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        {phase === 'delay' ? (
+          <View style={styles.delayContainer}>
+            <Text style={[styles.delayLabel, { color: colors.muted }]}>Starting in</Text>
+            <Text style={[styles.delayCount, { color: colors.foreground }]}>{countdown}</Text>
+            <Text style={[styles.delayStepName, { color: colors.muted }]}>{meta.label}</Text>
           </View>
-        </View>
-      )}
-
-      {/* ── Running phase ── */}
-      {phase === 'running' && (
-        <View style={styles.centerContent}>
-          {/* Pulsing icon — no background circle */}
-          <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 24 }}>
-            <IconSymbol name={STEP_ICON[step.type] as any} size={80} color={accentColor} />
-          </Animated.View>
-
-          <Text style={[styles.stepTypeLabelBig, { color: colors.muted }]}>
-            {STEP_TYPE_META[step.type].label.toUpperCase()}
-          </Text>
-          <Text style={[styles.stepNameBig, { color: colors.foreground }]}>
-            {stepLabel(step)}
-          </Text>
-
-          {/* Countdown timer */}
-          {remaining !== null && (
-            <Text style={[styles.timerText, { color: accentColor }]}>{formatTime(remaining)}</Text>
-          )}
-
-          {/* Manual "Done" button for non-auto steps */}
-          {isManual && (
-            <Pressable onPress={markDone} style={[styles.doneStepBtn, { backgroundColor: accentColor }]}>
-              <Text style={styles.doneStepBtnText}>Done</Text>
-            </Pressable>
-          )}
-
-          {/* Up next */}
-          {stepIdx < stack.steps.length - 1 && (
-            <View style={[styles.upcomingBox, { borderColor: colors.border }]}>
-              <Text style={[styles.upcomingLabel, { color: colors.muted }]}>Up next</Text>
-              <View style={styles.upcomingRow}>
-                <IconSymbol name={STEP_ICON[stack.steps[stepIdx + 1].type] as any} size={16} color={colors.muted} />
-                <Text style={[styles.upcomingStep, { color: colors.foreground }]}>
-                  {stepLabel(stack.steps[stepIdx + 1])}
-                </Text>
-              </View>
+        ) : (
+          <View style={styles.stepContainer}>
+            <View style={[styles.iconCircle, { backgroundColor: colors.primary + '18' }]}>
+              <IconSymbol name={iconName} size={48} color={colors.primary} />
             </View>
-          )}
-        </View>
-      )}
+
+            <Text style={[styles.stepTitle, { color: colors.foreground }]}>{stepLabel(step)}</Text>
+            <Text style={[styles.stepType, { color: colors.muted }]}>{meta.label}</Text>
+
+            {/* Timer / elapsed */}
+            {autoComplete ? (
+              <View style={styles.timerArea}>
+                <Text style={[styles.timerText, { color: colors.foreground }]}>
+                  {Math.max(0, duration - elapsed)}s
+                </Text>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${progress * 100}%` as any }]} />
+                </View>
+              </View>
+            ) : (
+              <Text style={[styles.elapsedText, { color: colors.muted }]}>
+                {elapsed}s elapsed
+              </Text>
+            )}
+
+            {/* Manual complete for non-auto steps */}
+            {!autoComplete && (
+              <Pressable
+                onPress={advanceStep}
+                style={({ pressed }) => [styles.completeBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.completeBtnText, { color: '#fff' }]}>
+                  {stepIdx + 1 < totalSteps ? 'Next Step' : 'Finish'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+      </Animated.View>
+
+      {/* Step counter */}
+      <Text style={[styles.stepCounter, { color: colors.muted }]}>
+        Step {stepIdx + 1} of {totalSteps}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  // Top bar — always rendered, always in safe area
-  topBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 8, paddingBottom: 10,
-    backgroundColor: 'transparent',
+  container: {
+    flex: 1,
   },
-  topBarBtn: { paddingHorizontal: 12, paddingVertical: 6, minWidth: 64 },
-  topBarBtnText: { fontSize: 15, fontWeight: '600' },
-  topBarTitle: { flex: 1, fontSize: 15, fontWeight: '700', textAlign: 'center' },
-  progressTrack: { height: 3 },
-  progressFill: { height: 3 },
-  centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  delayLabel: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  delayCountdown: { fontSize: 88, fontWeight: '900', lineHeight: 96 },
-  delayStepName: { fontSize: 18, fontWeight: '700', marginLeft: 8 },
-  stepTypeLabelBig: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8 },
-  stepNameBig: { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 16 },
-  timerText: { fontSize: 56, fontWeight: '900', letterSpacing: -1, marginBottom: 28 },
-  doneStepBtn: { paddingHorizontal: 52, paddingVertical: 16, borderRadius: 30, marginBottom: 8 },
-  doneStepBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  upcomingBox: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 32, alignItems: 'center', minWidth: 200 },
-  upcomingLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  upcomingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  upcomingStep: { fontSize: 15, fontWeight: '700' },
-  doneTitle: { fontSize: 28, fontWeight: '900', marginTop: 16, marginBottom: 8 },
-  doneSub: { fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  doneBtn: { paddingHorizontal: 52, paddingVertical: 16, borderRadius: 30 },
-  doneBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  loadingText: {
+    textAlign: 'center',
+    marginTop: 80,
+    fontSize: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  headerBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minWidth: 60,
+  },
+  headerBtnText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    height: 8,
+    borderRadius: 4,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  delayContainer: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  delayLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  delayCount: {
+    fontSize: 72,
+    fontWeight: '700',
+    lineHeight: 80,
+  },
+  delayStepName: {
+    fontSize: 18,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  stepContainer: {
+    alignItems: 'center',
+    gap: 16,
+    width: '100%',
+  },
+  iconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  stepType: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  timerArea: {
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    marginTop: 8,
+  },
+  timerText: {
+    fontSize: 48,
+    fontWeight: '700',
+    lineHeight: 56,
+  },
+  progressBar: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  elapsedText: {
+    fontSize: 20,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  completeBtn: {
+    marginTop: 32,
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  completeBtnText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  stepCounter: {
+    textAlign: 'center',
+    fontSize: 14,
+    paddingBottom: 16,
+  },
+  doneContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingHorizontal: 32,
+  },
+  doneTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  doneSubtitle: {
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  doneButton: {
+    marginTop: 24,
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  doneButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
 });

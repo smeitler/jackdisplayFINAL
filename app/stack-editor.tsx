@@ -30,6 +30,7 @@ import {
 } from '@/lib/stacks';
 import { loadHabits, type Habit } from '@/lib/storage';
 import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
+import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -798,15 +799,53 @@ function StepConfigModal({
           {/* Affirmations */}
           {step.type === 'affirmations' && (
             <>
-              <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
-                <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
-                <Text style={[styles.infoText, { color: colors.foreground }]}>
-                  Play affirmations from the library (Chapter 1, tracks 1–189). Choose how many to play and the order.
-                </Text>
-              </View>
-              <CRow label="Number of affirmations to play" colors={colors}>
+              {/* Category picker — same pattern as motivational */}
+              <CRow label="Category" colors={colors}>
+                <View style={{ gap: 8 }}>
+                  <Pressable
+                    onPress={() => setConfig({ ...config, affirmationsCategory: undefined })}
+                    style={({ pressed }) => [{
+                      flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
+                      padding: 12, borderRadius: 10,
+                      backgroundColor: !config.affirmationsCategory ? accentColor + '20' : colors.surface,
+                      borderWidth: 1,
+                      borderColor: !config.affirmationsCategory ? accentColor : colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    }]}
+                  >
+                    <IconSymbol
+                      name={!config.affirmationsCategory ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                      size={18}
+                      color={!config.affirmationsCategory ? accentColor : colors.muted}
+                    />
+                    <Text style={{ color: colors.foreground, fontSize: 15 }}>All Categories (Mix)</Text>
+                  </Pressable>
+                  {AFFIRMATION_CATEGORIES.map((cat) => (
+                    <Pressable
+                      key={cat}
+                      onPress={() => setConfig({ ...config, affirmationsCategory: cat })}
+                      style={({ pressed }) => [{
+                        flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
+                        padding: 12, borderRadius: 10,
+                        backgroundColor: config.affirmationsCategory === cat ? accentColor + '20' : colors.surface,
+                        borderWidth: 1,
+                        borderColor: config.affirmationsCategory === cat ? accentColor : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      <IconSymbol
+                        name={config.affirmationsCategory === cat ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                        size={18}
+                        color={config.affirmationsCategory === cat ? accentColor : colors.muted}
+                      />
+                      <Text style={{ color: colors.foreground, fontSize: 15 }}>{cat}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+              <CRow label="How many to play (max 10)" colors={colors}>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  {[1, 3, 5, 10].map((n) => (
+                  {[1, 2, 3, 5, 7, 10].map((n) => (
                     <Pressable
                       key={n}
                       onPress={() => setConfig({ ...config, affirmationsCount: n })}
@@ -823,7 +862,7 @@ function StepConfigModal({
                   ))}
                 </View>
               </CRow>
-              <CRow label="Playback Mode" colors={colors}>
+              <CRow label="Playback Order" colors={colors}>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   {(['random', 'sequential'] as const).map((m) => (
                     <Pressable
@@ -831,9 +870,9 @@ function StepConfigModal({
                       onPress={() => setConfig({ ...config, affirmationsMode: m })}
                       style={({ pressed }) => [{
                         flex: 1, padding: 10, borderRadius: 10, alignItems: 'center' as const,
-                        backgroundColor: (config.affirmationsMode ?? 'sequential') === m ? accentColor + '20' : colors.surface,
+                        backgroundColor: (config.affirmationsMode ?? 'random') === m ? accentColor + '20' : colors.surface,
                         borderWidth: 1,
-                        borderColor: (config.affirmationsMode ?? 'sequential') === m ? accentColor : colors.border,
+                        borderColor: (config.affirmationsMode ?? 'random') === m ? accentColor : colors.border,
                         opacity: pressed ? 0.7 : 1,
                       }]}
                     >

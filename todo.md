@@ -1632,3 +1632,7 @@
 - [x] Stack player: play motivational speech audio from CDN when motivational step runs
 - [x] Stack player: play affirmation audio tracks from CDN when affirmations step runs (sequential playlist)
 - [x] Stack player: play user-uploaded custom audio when custom step runs
+- [x] Affirmations step: add category picker (Self-Worth, Abundance, Health, Confidence, etc.) so users can filter which affirmations play
+- [x] Affirmations step: cap count selector at 10, add 2/7 options for variety
+- [x] Stack player: fix audio playback — use player.replace() to swap tracks, use addListener playbackStatusUpdate for chain playback
+- [x] Stack player: verify motivational speech, affirmations, and custom MP3 all play correctly
