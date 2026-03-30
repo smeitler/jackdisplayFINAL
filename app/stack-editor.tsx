@@ -29,6 +29,10 @@ import {
   type RitualStack, type RitualStep, type StepType, type StepConfig,
 } from '@/lib/stacks';
 import { loadHabits, type Habit } from '@/lib/storage';
+import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
+import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const MAX_STEPS = 5;
 const CARD_HEIGHT = 80;  // paddingVertical 12×2 + content ~44 = 76, rounded up
@@ -588,10 +592,40 @@ function StepConfigModal({
   const [delay, setDelay]   = useState(String(step.delayAfterSeconds));
   const [showLibrary, setShowLibrary] = useState(false);
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [customFiles, setCustomFiles] = useState<CustomAudioFile[]>([]);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
 
   useEffect(() => {
     if (step.type === 'reminder') loadHabits().then(setHabits);
+    if (step.type === 'custom') loadCustomAudioFiles().then(setCustomFiles);
   }, [step.type]);
+
+  async function pickCustomAudio() {
+    try {
+      setUploadingAudio(true);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        let files = customFiles;
+        for (const asset of result.assets) {
+          files = await addCustomAudioFile(asset.uri, asset.name ?? 'audio.mp3');
+        }
+        setCustomFiles(files);
+      }
+    } catch (e) {
+      console.warn('Audio pick error', e);
+    } finally {
+      setUploadingAudio(false);
+    }
+  }
+
+  async function deleteCustomAudio(id: string) {
+    const updated = await removeCustomAudioFile(id);
+    setCustomFiles(updated);
+  }
 
   const libraryTracks: LibraryTrack[] =
     step.type === 'meditation' ? MEDITATION_TRACKS :
@@ -763,12 +797,52 @@ function StepConfigModal({
 
           {/* Affirmations */}
           {step.type === 'affirmations' && (
-            <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
-              <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
-              <Text style={[styles.infoText, { color: colors.foreground }]}>
-                Your saved voice affirmations will play during this step.
-              </Text>
-            </View>
+            <>
+              <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
+                <IconSymbol name="quote.bubble.fill" size={18} color={accentColor} />
+                <Text style={[styles.infoText, { color: colors.foreground }]}>
+                  Play affirmations from the library (Chapter 1, tracks 1–189). Choose how many to play and the order.
+                </Text>
+              </View>
+              <CRow label="Number of affirmations to play" colors={colors}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  {[1, 3, 5, 10].map((n) => (
+                    <Pressable
+                      key={n}
+                      onPress={() => setConfig({ ...config, affirmationsCount: n })}
+                      style={({ pressed }) => [{
+                        paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10,
+                        backgroundColor: (config.affirmationsCount ?? 1) === n ? accentColor + '20' : colors.surface,
+                        borderWidth: 1,
+                        borderColor: (config.affirmationsCount ?? 1) === n ? accentColor : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: '700' }}>{n}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+              <CRow label="Playback Mode" colors={colors}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {(['random', 'sequential'] as const).map((m) => (
+                    <Pressable
+                      key={m}
+                      onPress={() => setConfig({ ...config, affirmationsMode: m })}
+                      style={({ pressed }) => [{
+                        flex: 1, padding: 10, borderRadius: 10, alignItems: 'center' as const,
+                        backgroundColor: (config.affirmationsMode ?? 'sequential') === m ? accentColor + '20' : colors.surface,
+                        borderWidth: 1,
+                        borderColor: (config.affirmationsMode ?? 'sequential') === m ? accentColor : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: '600', textTransform: 'capitalize' }}>{m}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+            </>
           )}
 
           {/* Habit Reminder */}
@@ -847,30 +921,67 @@ function StepConfigModal({
               <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
                 <IconSymbol name="bolt.fill" size={18} color={accentColor} />
                 <Text style={[styles.infoText, { color: colors.foreground }]}>
-                  A motivational quote will be displayed (and read aloud if voice is enabled) during your ritual.
+                  A motivational speech from the library will play during your ritual. Choose a category or play any.
                 </Text>
               </View>
-              <CRow label="Genre" colors={colors}>
+              <CRow label="Category" colors={colors}>
                 <View style={{ gap: 8 }}>
-                  {['Entrepreneurial', 'Conquering the Day', 'Stoic', 'Athletic', 'Mindset', 'Spiritual', 'General'].map((g) => (
+                  <Pressable
+                    onPress={() => setConfig({ ...config, motivationalSpeechCategory: undefined })}
+                    style={({ pressed }) => [{
+                      flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
+                      padding: 12, borderRadius: 10,
+                      backgroundColor: !config.motivationalSpeechCategory ? accentColor + '20' : colors.surface,
+                      borderWidth: 1,
+                      borderColor: !config.motivationalSpeechCategory ? accentColor : colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    }]}
+                  >
+                    <IconSymbol
+                      name={!config.motivationalSpeechCategory ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                      size={18}
+                      color={!config.motivationalSpeechCategory ? accentColor : colors.muted}
+                    />
+                    <Text style={{ color: colors.foreground, fontSize: 15 }}>Any Category (Random)</Text>
+                  </Pressable>
+                  {SPEECH_CATEGORIES.map((cat) => (
                     <Pressable
-                      key={g}
-                      onPress={() => setConfig({ ...config, motivationalGenre: g })}
+                      key={cat}
+                      onPress={() => setConfig({ ...config, motivationalSpeechCategory: cat })}
                       style={({ pressed }) => [{
                         flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
                         padding: 12, borderRadius: 10,
-                        backgroundColor: config.motivationalGenre === g ? accentColor + '20' : colors.surface,
+                        backgroundColor: config.motivationalSpeechCategory === cat ? accentColor + '20' : colors.surface,
                         borderWidth: 1,
-                        borderColor: config.motivationalGenre === g ? accentColor : colors.border,
+                        borderColor: config.motivationalSpeechCategory === cat ? accentColor : colors.border,
                         opacity: pressed ? 0.7 : 1,
                       }]}
                     >
                       <IconSymbol
-                        name={config.motivationalGenre === g ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                        name={config.motivationalSpeechCategory === cat ? 'checkmark.circle.fill' : 'checkmark.circle'}
                         size={18}
-                        color={config.motivationalGenre === g ? accentColor : colors.muted}
+                        color={config.motivationalSpeechCategory === cat ? accentColor : colors.muted}
                       />
-                      <Text style={{ color: colors.foreground, fontSize: 15 }}>{g}</Text>
+                      <Text style={{ color: colors.foreground, fontSize: 15 }}>{cat}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+              <CRow label="Playback Mode" colors={colors}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {(['random', 'sequential'] as const).map((m) => (
+                    <Pressable
+                      key={m}
+                      onPress={() => setConfig({ ...config, motivationalSpeechMode: m })}
+                      style={({ pressed }) => [{
+                        flex: 1, padding: 10, borderRadius: 10, alignItems: 'center' as const,
+                        backgroundColor: (config.motivationalSpeechMode ?? 'random') === m ? accentColor + '20' : colors.surface,
+                        borderWidth: 1,
+                        borderColor: (config.motivationalSpeechMode ?? 'random') === m ? accentColor : colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      }]}
+                    >
+                      <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: '600', textTransform: 'capitalize' }}>{m}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -920,6 +1031,64 @@ function StepConfigModal({
                   value={String(config.durationSeconds ?? 0)}
                   onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 0 })}
                 />
+              </CRow>
+              {/* Custom Audio Upload */}
+              <CRow label="Custom Audio (optional)" colors={colors}>
+                <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30', marginBottom: 8 }]}>
+                  <IconSymbol name="music.note" size={16} color={accentColor} />
+                  <Text style={[styles.infoText, { color: colors.foreground, fontSize: 12 }]}>
+                    Upload your own MP3 files to play during this step. Add multiple for variety.
+                  </Text>
+                </View>
+                {customFiles.length > 0 && (
+                  <View style={{ gap: 6, marginBottom: 10 }}>
+                    {customFiles.map((f) => (
+                      <View key={f.id} style={[styles.audioFileRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                        <IconSymbol name="music.note" size={14} color={accentColor} />
+                        <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{f.name}</Text>
+                        <Pressable
+                          onPress={() => deleteCustomAudio(f.id)}
+                          style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
+                        >
+                          <IconSymbol name="xmark" size={14} color={colors.muted} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {customFiles.length > 1 && (
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                    {(['random', 'sequential'] as const).map((m) => (
+                      <Pressable
+                        key={m}
+                        onPress={() => setConfig({ ...config, customAudioMode: m })}
+                        style={({ pressed }) => [{
+                          flex: 1, padding: 8, borderRadius: 10, alignItems: 'center' as const,
+                          backgroundColor: (config.customAudioMode ?? 'sequential') === m ? accentColor + '20' : colors.surface,
+                          borderWidth: 1,
+                          borderColor: (config.customAudioMode ?? 'sequential') === m ? accentColor : colors.border,
+                          opacity: pressed ? 0.7 : 1,
+                        }]}
+                      >
+                        <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: '600', textTransform: 'capitalize' }}>{m}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                <Pressable
+                  onPress={pickCustomAudio}
+                  style={({ pressed }) => [{
+                    flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
+                    gap: 8, padding: 12, borderRadius: 10, borderWidth: 1,
+                    borderColor: accentColor, backgroundColor: accentColor + '15',
+                    opacity: pressed || uploadingAudio ? 0.7 : 1,
+                  }]}
+                >
+                  <IconSymbol name="plus" size={16} color={accentColor} />
+                  <Text style={{ color: accentColor, fontSize: 14, fontWeight: '700' }}>
+                    {uploadingAudio ? 'Importing…' : 'Add MP3 File'}
+                  </Text>
+                </Pressable>
               </CRow>
             </>
           )}
@@ -1131,6 +1300,12 @@ const styles = StyleSheet.create({
   libraryTitle: { fontSize: 14, fontWeight: '700' },
   libraryArtist: { fontSize: 12, marginTop: 1 },
   libraryDuration: { fontSize: 12 },
+
+  // Audio file row
+  audioFileRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+  },
 
   // Habit picker
   habitRow: {

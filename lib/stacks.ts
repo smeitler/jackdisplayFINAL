@@ -63,6 +63,17 @@ export interface StepConfig {
   journalPrompt?: string;
   motivationalGenre?: string;
   spiritualCategory?: string;
+  // Motivational speech library
+  motivationalSpeechId?: string;       // specific speech ID from library
+  motivationalSpeechCategory?: string; // category filter (plays random from category)
+  motivationalSpeechMode?: 'random' | 'sequential'; // how to pick next speech
+  // Affirmations library
+  affirmationsChapter?: number;        // chapter to pull from (default 1)
+  affirmationsMode?: 'random' | 'sequential'; // how to pick next affirmation
+  affirmationsCount?: number;          // how many to play in sequence (default 1)
+  // Custom audio upload
+  customAudioFiles?: string[];         // local file URIs
+  customAudioMode?: 'random' | 'sequential'; // rotation mode
 }
 
 // ─── Step ─────────────────────────────────────────────────────────────────────
@@ -96,7 +107,11 @@ export function stepLabel(step: RitualStep): string {
   switch (step.type) {
     case 'reminder':     return step.config.reminderText || STEP_TYPE_META.reminder.label;
     case 'custom':       return step.config.customLabel   || STEP_TYPE_META.custom.label;
-    case 'motivational': return step.config.motivationalGenre ? `Motivational — ${step.config.motivationalGenre}` : 'Motivational';
+    case 'motivational': {
+      if (step.config.motivationalSpeechCategory) return `Motivational — ${step.config.motivationalSpeechCategory}`;
+      if (step.config.motivationalGenre) return `Motivational — ${step.config.motivationalGenre}`;
+      return 'Motivational';
+    }
     case 'spiritual':    return 'Spiritual';
     case 'timer': {
       const secs = step.config.durationSeconds ?? 0;
@@ -120,7 +135,7 @@ export function stepDefaultDuration(step: RitualStep): number {
     case 'timer':        return step.config.durationSeconds ?? 60;
     case 'meditation':   return step.config.meditationDurationSeconds ?? 600;
     case 'breathwork':   return (step.config.breathworkRounds ?? 4) * 32;
-    case 'affirmations': return 120;
+    case 'affirmations': return (step.config.affirmationsCount ?? 1) * 90;
     case 'priming':      return 600;
     default:             return 0;
   }

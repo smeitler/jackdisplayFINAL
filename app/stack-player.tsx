@@ -2,19 +2,32 @@
  * Stack Player Screen
  * Runs a ritual stack step by step with auto-advance, countdown delay,
  * and always-visible Cancel (top-left) + Skip (top-right) controls.
+ *
+ * Audio playback:
+ *  - motivational: plays a speech from the CDN library (random or sequential by category)
+ *  - affirmations: plays N affirmations from the CDN library (random or sequential)
+ *  - custom: plays user-uploaded MP3 files (random or sequential rotation)
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColors } from '@/hooks/use-colors';
 import {
   loadStacks, stepLabel, stepDefaultDuration, stepIsAutoComplete, STEP_TYPE_META,
-  type RitualStack,
+  type RitualStack, type RitualStep,
 } from '@/lib/stacks';
+import {
+  MOTIVATIONAL_SPEECHES,
+  getSpeechesByCategory,
+  type SpeechCategory,
+} from '@/app/data/motivational-speeches';
+import { AFFIRMATIONS } from '@/app/data/affirmations';
+import { loadCustomAudioFiles } from '@/lib/custom-audio';
 
 const STEP_ICON: Record<string, string> = {
   timer:        'timer',
@@ -25,10 +38,123 @@ const STEP_ICON: Record<string, string> = {
   affirmations: 'quote.bubble.fill',
   priming:      'flame.fill',
   reminder:     'bell.fill',
+  melatonin:    'moon.fill',
+  motivational: 'bolt.fill',
+  spiritual:    'sparkles',
   custom:       'pencil',
 };
 
 type Phase = 'delay' | 'running' | 'done';
+
+// ── Sequential index storage (in-memory per session) ─────────────────────────
+const seqIndexes: Record<string, number> = {};
+
+function pickFromPool(pool: string[], mode: 'random' | 'sequential', key: string): string | null {
+  if (!pool.length) return null;
+  if (mode === 'random') return pool[Math.floor(Math.random() * pool.length)];
+  const last = seqIndexes[key] ?? -1;
+  const next = (last + 1) % pool.length;
+  seqIndexes[key] = next;
+  return pool[next];
+}
+
+// ── Resolve audio URLs for a step ────────────────────────────────────────────
+async function resolveStepAudioUrls(step: RitualStep): Promise<string[]> {
+  const cfg = step.config;
+
+  if (step.type === 'motivational') {
+    const mode = cfg.motivationalSpeechMode ?? 'random';
+    const pool = cfg.motivationalSpeechCategory
+      ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory).map((s) => s.url)
+      : MOTIVATIONAL_SPEECHES.map((s) => s.url);
+    const url = pickFromPool(pool, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
+    return url ? [url] : [];
+  }
+
+  if (step.type === 'affirmations') {
+    const mode = cfg.affirmationsMode ?? 'sequential';
+    const count = cfg.affirmationsCount ?? 1;
+    const pool = AFFIRMATIONS.map((a) => a.url);
+    const urls: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const url = pickFromPool(pool, mode, `affirmations_seq`);
+      if (url) urls.push(url);
+    }
+    return urls;
+  }
+
+  if (step.type === 'custom') {
+    const mode = cfg.customAudioMode ?? 'sequential';
+    const files = await loadCustomAudioFiles();
+    if (!files.length) return [];
+    const pool = files.map((f) => f.uri);
+    const url = pickFromPool(pool, mode, `custom_audio`);
+    return url ? [url] : [];
+  }
+
+  return [];
+}
+
+// ── Audio player hook ─────────────────────────────────────────────────────────
+function useStepAudio(step: RitualStep | null, phase: Phase) {
+  const [audioUrls, setAudioUrls] = useState<string[]>([]);
+  const [audioIdx, setAudioIdx] = useState(0);
+  const player = useAudioPlayer(audioUrls[audioIdx] ? { uri: audioUrls[audioIdx] } : null);
+  const resolvedRef = useRef(false);
+
+  // Resolve URLs when step changes
+  useEffect(() => {
+    resolvedRef.current = false;
+    setAudioUrls([]);
+    setAudioIdx(0);
+    if (!step) return;
+    if (!['motivational', 'affirmations', 'custom'].includes(step.type)) return;
+    resolveStepAudioUrls(step).then((urls) => {
+      resolvedRef.current = true;
+      setAudioUrls(urls);
+      setAudioIdx(0);
+    });
+  }, [step?.id, step?.type]);
+
+  // Play when running phase starts and we have a URL
+  useEffect(() => {
+    if (phase !== 'running') {
+      try { player.pause(); } catch {}
+      return;
+    }
+    if (!audioUrls[audioIdx]) return;
+    (async () => {
+      try {
+        await setAudioModeAsync({ playsInSilentMode: true });
+        player.play();
+      } catch {}
+    })();
+  }, [phase, audioUrls, audioIdx]);
+
+  // Advance to next track when current finishes (for affirmations playlist)
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('playbackStatusUpdate', (status: any) => {
+      if (status.didJustFinish && audioIdx < audioUrls.length - 1) {
+        setAudioIdx((i) => i + 1);
+      }
+    });
+    return () => sub?.remove?.();
+  }, [player, audioIdx, audioUrls.length]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      try { player.release(); } catch {}
+    };
+  }, []);
+
+  function stopAudio() {
+    try { player.pause(); } catch {}
+  }
+
+  return { stopAudio };
+}
 
 export default function StackPlayerScreen() {
   const router = useRouter();
@@ -43,6 +169,9 @@ export default function StackPlayerScreen() {
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const currentStep = stack?.steps[stepIdx] ?? null;
+  const { stopAudio } = useStepAudio(currentStep, phase);
 
   useEffect(() => {
     loadStacks().then((all) => {
@@ -117,6 +246,7 @@ export default function StackPlayerScreen() {
   function skipStep() {
     if (!stack) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    stopAudio();
     clearInterval(intervalRef.current!);
     const next = stepIdx + 1;
     if (next >= stack.steps.length) { setPhase('done'); } else { setStepIdx(next); }
@@ -124,12 +254,14 @@ export default function StackPlayerScreen() {
 
   function markDone() {
     if (!stack) return;
+    stopAudio();
     clearInterval(intervalRef.current!);
     const next = stepIdx + 1;
     if (next >= stack.steps.length) { setPhase('done'); } else { setStepIdx(next); }
   }
 
   function cancelStack() {
+    stopAudio();
     clearInterval(intervalRef.current!);
     router.back();
   }
@@ -191,11 +323,11 @@ export default function StackPlayerScreen() {
     );
   }
 
-  const currentStep = stack.steps[stepIdx];
-  const dur = stepDefaultDuration(currentStep);
+  const step = stack.steps[stepIdx];
+  const dur = stepDefaultDuration(step);
   const progress = dur > 0 ? Math.min(elapsed / dur, 1) : 0;
   const remaining = dur > 0 ? Math.max(dur - elapsed, 0) : null;
-  const isManual = !stepIsAutoComplete(currentStep);
+  const isManual = !stepIsAutoComplete(step);
 
   function formatTime(secs: number) {
     const m = Math.floor(secs / 60);
@@ -232,8 +364,8 @@ export default function StackPlayerScreen() {
           <Text style={[styles.delayLabel, { color: colors.muted }]}>Next step in</Text>
           <Text style={[styles.delayCountdown, { color: accentColor }]}>{countdown}</Text>
           <View style={styles.upcomingRow}>
-            <IconSymbol name={STEP_ICON[currentStep.type] as any} size={20} color={accentColor} />
-            <Text style={[styles.delayStepName, { color: colors.foreground }]}>{stepLabel(currentStep)}</Text>
+            <IconSymbol name={STEP_ICON[step.type] as any} size={20} color={accentColor} />
+            <Text style={[styles.delayStepName, { color: colors.foreground }]}>{stepLabel(step)}</Text>
           </View>
         </View>
       )}
@@ -243,14 +375,14 @@ export default function StackPlayerScreen() {
         <View style={styles.centerContent}>
           {/* Pulsing icon — no background circle */}
           <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 24 }}>
-            <IconSymbol name={STEP_ICON[currentStep.type] as any} size={80} color={accentColor} />
+            <IconSymbol name={STEP_ICON[step.type] as any} size={80} color={accentColor} />
           </Animated.View>
 
           <Text style={[styles.stepTypeLabelBig, { color: colors.muted }]}>
-            {STEP_TYPE_META[currentStep.type].label.toUpperCase()}
+            {STEP_TYPE_META[step.type].label.toUpperCase()}
           </Text>
           <Text style={[styles.stepNameBig, { color: colors.foreground }]}>
-            {stepLabel(currentStep)}
+            {stepLabel(step)}
           </Text>
 
           {/* Countdown timer */}

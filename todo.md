@@ -1626,3 +1626,9 @@
 - [x] Fix drag reorder not persisting — capture from-index at drag-start in a separate shared value, not at drag-end
 
 - [x] Fix drag reorder not persisting — trace full onDragEnd → onReorder → AsyncStorage chain
+- [x] Motivational step: replace genre picker with full CDN speech library (51 speeches, 15 categories, random/sequential mode)
+- [x] Affirmations step: replace placeholder with CDN library picker (189 affirmations, Chapter 1, count selector 1/3/5/10, random/sequential mode)
+- [x] Custom step: add MP3 file upload section — pick from device, persist to app storage, manage playlist, random/sequential rotation
+- [x] Stack player: play motivational speech audio from CDN when motivational step runs
+- [x] Stack player: play affirmation audio tracks from CDN when affirmations step runs (sequential playlist)
+- [x] Stack player: play user-uploaded custom audio when custom step runs
