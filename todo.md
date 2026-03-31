@@ -1648,3 +1648,7 @@
 - [x] Custom audio card: redesign with play/pause button, waveform bars, clean layout
 - [x] Motivational speech: fix audio cut-off bug so full track plays before advancing (audio-driven advance, no timer)
 - [x] Stack player: remove hardcoded 3-second countdown delay — steps start immediately
+- [x] Custom step: add linkedHabitName field to StepConfig
+- [x] Stack editor: add habit picker to custom step config (pick from existing habits)
+- [x] Stack player: show habit rating buttons on custom step, grayed out until audio finishes
+- [x] Stack player: custom step only advances after audio done AND rating selected (or Next tapped)

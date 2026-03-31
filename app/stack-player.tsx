@@ -158,6 +158,7 @@ interface AudioState {
   isMotivational: boolean;
   isPlaying: boolean;
   isPaused: boolean;
+  isFinished: boolean; // true when all tracks have completed
 }
 
 // ── Robust audio engine ───────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ function useStepAudio(
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const audioStateRef = useRef<AudioState>({
     tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
-    isPlaying: false, isPaused: false,
+    isPlaying: false, isPaused: false, isFinished: false,
   });
   const activeStepIdRef = useRef<string | null>(null);
   const onFinishedRef = useRef(onAllTracksFinished);
@@ -178,7 +179,7 @@ function useStepAudio(
 
   const [audioState, setAudioState] = useState<AudioState>({
     tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
-    isPlaying: false, isPaused: false,
+    isPlaying: false, isPaused: false, isFinished: false,
   });
 
   // Create player once on mount
@@ -195,7 +196,7 @@ function useStepAudio(
         setAudioState({ ...audioStateRef.current });
         playTrack(tracks[nextIdx].url);
       } else {
-        audioStateRef.current = { ...audioStateRef.current, isPlaying: false, isPaused: false };
+        audioStateRef.current = { ...audioStateRef.current, isPlaying: false, isPaused: false, isFinished: true };
         setAudioState({ ...audioStateRef.current });
         onFinishedRef.current();
       }
@@ -215,7 +216,7 @@ function useStepAudio(
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
     const empty: AudioState = {
       tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
-      isPlaying: false, isPaused: false,
+      isPlaying: false, isPaused: false, isFinished: false,
     };
     audioStateRef.current = empty;
     setAudioState(empty);
@@ -229,7 +230,7 @@ function useStepAudio(
       if (activeStepIdRef.current !== stepId) return;
       const newState: AudioState = {
         tracks, currentIdx: 0, isAffirmations, isCustom, isMotivational,
-        isPlaying: false, isPaused: false,
+        isPlaying: false, isPaused: false, isFinished: false,
       };
       audioStateRef.current = newState;
       setAudioState(newState);
@@ -626,10 +627,18 @@ export default function StackPlayerScreen() {
   const totalSteps = stack?.steps.length ?? 0;
   const advanceStepRef = useRef<() => void>(() => {});
 
+  // For custom steps with a linked habit, audio finishing should NOT auto-advance.
+  // Instead it unlocks the habit rating buttons. We track this with a ref.
+  const customHabitLinkedRef = useRef(false);
+
   const { stopAudio, toggleAudio, audioState } = useStepAudio(
     currentStep,
     phase,
-    useCallback(() => { advanceStepRef.current(); }, []),
+    useCallback(() => {
+      // If this is a custom step with a linked habit, don't advance — just unlock rating
+      if (customHabitLinkedRef.current) return;
+      advanceStepRef.current();
+    }, []),
   );
 
   useEffect(() => {
@@ -790,6 +799,14 @@ export default function StackPlayerScreen() {
   const isMotivationalStep = step.type === 'motivational';
   const isReminderStep = step.type === 'reminder' || step.type === 'melatonin';
 
+  // Linked habit on custom step
+  const linkedHabitName = isCustomStep ? (step.config.linkedHabitName ?? null) : null;
+  const hasLinkedHabit = !!linkedHabitName;
+  // Keep the ref in sync so the audio callback can read it synchronously
+  customHabitLinkedRef.current = hasLinkedHabit;
+  // Rating buttons are locked while audio is playing, unlocked when audio finishes
+  const habitRatingUnlocked = hasLinkedHabit && audioState.isFinished;
+
   const currentTrack = audioState.tracks[audioState.currentIdx] ?? null;
   const nextTrack = audioState.tracks[audioState.currentIdx + 1] ?? null;
   const trackCount = audioState.tracks.length;
@@ -893,6 +910,48 @@ export default function StackPlayerScreen() {
                 onToggle={toggleAudio}
                 colors={colors}
               />
+            )}
+
+            {/* ── Linked habit rating for custom audio step ── */}
+            {isCustomStep && hasLinkedHabit && (
+              <View style={{ width: '100%', marginTop: 16 }}>
+                {!habitRatingUnlocked && (
+                  <View style={[
+                    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      padding: 12, borderRadius: 14, marginBottom: 10,
+                      backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                  ]}>
+                    <IconSymbol name="lock.fill" size={14} color={colors.muted} />
+                    <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '600' }}>
+                      Finish listening to unlock habit rating
+                    </Text>
+                  </View>
+                )}
+                <View style={{ opacity: habitRatingUnlocked ? 1 : 0.35, pointerEvents: habitRatingUnlocked ? 'auto' : 'none' }}>
+                  <Text style={{ color: colors.muted, fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 8 }}>
+                    {linkedHabitName}
+                  </Text>
+                  <HabitRatingButtons
+                    onRate={(r) => {
+                      if (!habitRatingUnlocked) return;
+                      handleHabitRate(r);
+                    }}
+                    colors={colors}
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* ── Next Step button for custom step without linked habit (after audio finishes) ── */}
+            {isCustomStep && !hasLinkedHabit && audioState.isFinished && (
+              <Pressable
+                onPress={advanceStep}
+                style={({ pressed }) => [styles.completeBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1, marginTop: 16 }]}
+              >
+                <Text style={[styles.completeBtnText, { color: '#fff' }]}>
+                  {stepIdx + 1 < totalSteps ? 'Next Step' : 'Finish'}
+                </Text>
+              </Pressable>
             )}
 
             {/* ── Habit rating for reminder/melatonin steps ── */}

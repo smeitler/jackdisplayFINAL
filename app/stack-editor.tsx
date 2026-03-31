@@ -597,7 +597,7 @@ function StepConfigModal({
   const [uploadingAudio, setUploadingAudio] = useState(false);
 
   useEffect(() => {
-    if (step.type === 'reminder') loadHabits().then(setHabits);
+    if (step.type === 'reminder' || step.type === 'custom') loadHabits().then(setHabits);
     if (step.type === 'custom') loadCustomAudioFiles().then(setCustomFiles);
   }, [step.type]);
 
@@ -1128,6 +1128,55 @@ function StepConfigModal({
                     {uploadingAudio ? 'Importing…' : 'Add MP3 File'}
                   </Text>
                 </Pressable>
+              </CRow>
+
+              {/* Linked Habit */}
+              <CRow label="Linked Habit (optional)" colors={colors}>
+                <View style={[styles.infoBox, { backgroundColor: colors.success + '12', borderColor: colors.success + '30', marginBottom: 8 }]}>
+                  <IconSymbol name="checkmark.circle" size={16} color={colors.success ?? '#22C55E'} />
+                  <Text style={[styles.infoText, { color: colors.foreground, fontSize: 12 }]}>
+                    Link a habit to rate after the audio finishes. Rating buttons unlock when the track ends.
+                  </Text>
+                </View>
+                {/* None option */}
+                <Pressable
+                  onPress={() => setConfig({ ...config, linkedHabitId: undefined, linkedHabitName: undefined })}
+                  style={({ pressed }) => [{
+                    flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
+                    padding: 12, borderRadius: 10, marginBottom: 6,
+                    backgroundColor: !config.linkedHabitId ? (colors.success ?? '#22C55E') + '20' : colors.surface,
+                    borderWidth: 1,
+                    borderColor: !config.linkedHabitId ? (colors.success ?? '#22C55E') : colors.border,
+                    opacity: pressed ? 0.7 : 1,
+                  }]}
+                >
+                  <IconSymbol name="xmark.circle" size={18} color={!config.linkedHabitId ? (colors.success ?? '#22C55E') : colors.muted} />
+                  <Text style={{ color: !config.linkedHabitId ? (colors.success ?? '#22C55E') : colors.muted, fontSize: 14, fontWeight: '600' }}>No linked habit</Text>
+                </Pressable>
+                {/* Habit list */}
+                {habits.map((h) => (
+                  <Pressable
+                    key={h.id}
+                    onPress={() => setConfig({ ...config, linkedHabitId: h.id, linkedHabitName: h.name })}
+                    style={({ pressed }) => [{
+                      flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
+                      padding: 12, borderRadius: 10, marginBottom: 6,
+                      backgroundColor: config.linkedHabitId === h.id ? (colors.success ?? '#22C55E') + '20' : colors.surface,
+                      borderWidth: 1,
+                      borderColor: config.linkedHabitId === h.id ? (colors.success ?? '#22C55E') : colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    }]}
+                  >
+                    <IconSymbol name="checkmark.circle" size={18} color={config.linkedHabitId === h.id ? (colors.success ?? '#22C55E') : colors.muted} />
+                    <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>{h.name}</Text>
+                    {config.linkedHabitId === h.id && (
+                      <IconSymbol name="checkmark" size={16} color={colors.success ?? '#22C55E'} />
+                    )}
+                  </Pressable>
+                ))}
+                {habits.length === 0 && (
+                  <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>No habits yet — add habits in the Goals tab first.</Text>
+                )}
               </CRow>
             </>
           )}

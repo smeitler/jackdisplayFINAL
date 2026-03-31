@@ -75,6 +75,9 @@ export interface StepConfig {
   // Custom audio upload
   customAudioFiles?: string[];         // local file URIs
   customAudioMode?: 'random' | 'sequential'; // rotation mode
+  // Linked habit for custom audio step
+  linkedHabitId?: string;              // habit ID to rate after audio finishes
+  linkedHabitName?: string;            // display name of linked habit
 }
 
 // ─── Step ─────────────────────────────────────────────────────────────────────
