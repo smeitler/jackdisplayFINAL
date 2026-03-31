@@ -4,10 +4,9 @@
  * and always-visible Cancel (top-left) + Skip (top-right) controls.
  *
  * Audio playback:
- *  - motivational: plays one speech from the CDN library
- *  - affirmations: plays N affirmations in sequence, showing current + up-next,
- *                  and advances to the next STEP only after all tracks finish
- *  - custom: plays one user-uploaded MP3 per step run
+ *  - motivational: plays one speech from CDN; audio-driven advance (no timer cut-off)
+ *  - affirmations: plays N affirmations in sequence, showing current + up-next
+ *  - custom: plays user-uploaded MP3 with play/pause controls
  *
  * Uses createAudioPlayer + player.replace() for reliable track swapping.
  * Custom audio starts AFTER the step screen is visible (500ms delay).
@@ -82,6 +81,7 @@ interface ResolvedAudio {
   tracks: ResolvedTrack[];
   isAffirmations: boolean;
   isCustom: boolean;
+  isMotivational: boolean;
 }
 
 async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
@@ -93,12 +93,13 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory)
       : MOTIVATIONAL_SPEECHES;
     const idx = pickIndexFromPool(pool.length, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true };
     const s = pool[idx];
     return {
       tracks: [{ url: s.url, label: s.category, category: s.category }],
       isAffirmations: false,
       isCustom: false,
+      isMotivational: true,
     };
   }
 
@@ -126,25 +127,26 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const a = pool[idx];
       tracks.push({ url: a.url, label: `${a.category} #${a.number}`, category: a.category });
     }
-    return { tracks, isAffirmations: true, isCustom: false };
+    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false };
   }
 
   if (step.type === 'custom') {
-    const mode = cfg.customAudioMode ?? 'sequential';
     const files = await loadCustomAudioFiles();
-    if (!files.length) return { tracks: [], isAffirmations: false, isCustom: true };
-    const idx = pickIndexFromPool(files.length, mode, `custom_audio`);
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true };
+    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false };
+    const mode = step.config.customAudioMode ?? 'random';
+    const idx = pickIndexFromPool(files.length, mode, 'custom');
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false };
     const f = files[idx];
-    const name = f.name ?? f.uri.split('/').pop() ?? 'Custom Audio';
+    const name = f.name ?? f.uri.split('/').pop() ?? 'Audio';
     return {
       tracks: [{ url: f.uri, label: name }],
       isAffirmations: false,
       isCustom: true,
+      isMotivational: false,
     };
   }
 
-  return { tracks: [], isAffirmations: false, isCustom: false };
+  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false };
 }
 
 // ── Audio state exposed to UI ─────────────────────────────────────────────────
@@ -153,7 +155,9 @@ interface AudioState {
   currentIdx: number;
   isAffirmations: boolean;
   isCustom: boolean;
+  isMotivational: boolean;
   isPlaying: boolean;
+  isPaused: boolean;
 }
 
 // ── Robust audio engine ───────────────────────────────────────────────────────
@@ -164,16 +168,17 @@ function useStepAudio(
 ) {
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const audioStateRef = useRef<AudioState>({
-    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isPlaying: false,
+    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
+    isPlaying: false, isPaused: false,
   });
   const activeStepIdRef = useRef<string | null>(null);
   const onFinishedRef = useRef(onAllTracksFinished);
   onFinishedRef.current = onAllTracksFinished;
-  // Delay timer for custom audio
   const customDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [audioState, setAudioState] = useState<AudioState>({
-    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isPlaying: false,
+    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
+    isPlaying: false, isPaused: false,
   });
 
   // Create player once on mount
@@ -190,7 +195,7 @@ function useStepAudio(
         setAudioState({ ...audioStateRef.current });
         playTrack(tracks[nextIdx].url);
       } else {
-        audioStateRef.current = { ...audioStateRef.current, isPlaying: false };
+        audioStateRef.current = { ...audioStateRef.current, isPlaying: false, isPaused: false };
         setAudioState({ ...audioStateRef.current });
         onFinishedRef.current();
       }
@@ -209,7 +214,8 @@ function useStepAudio(
   useEffect(() => {
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
     const empty: AudioState = {
-      tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isPlaying: false,
+      tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
+      isPlaying: false, isPaused: false,
     };
     audioStateRef.current = empty;
     setAudioState(empty);
@@ -219,20 +225,19 @@ function useStepAudio(
     const stepId = step.id;
     activeStepIdRef.current = stepId;
 
-    resolveStepAudio(step).then(({ tracks, isAffirmations, isCustom }) => {
+    resolveStepAudio(step).then(({ tracks, isAffirmations, isCustom, isMotivational }) => {
       if (activeStepIdRef.current !== stepId) return;
       const newState: AudioState = {
-        tracks, currentIdx: 0, isAffirmations, isCustom, isPlaying: false,
+        tracks, currentIdx: 0, isAffirmations, isCustom, isMotivational,
+        isPlaying: false, isPaused: false,
       };
       audioStateRef.current = newState;
       setAudioState(newState);
-      // Don't auto-play here — wait for phase transition
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step?.id, step?.type]);
 
   // When phase becomes running, start playback
-  // Custom audio gets a 500ms delay so the screen renders first
   useEffect(() => {
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
 
@@ -251,14 +256,14 @@ function useStepAudio(
       }
     } else {
       try { playerRef.current?.pause(); } catch {}
-      audioStateRef.current = { ...audioStateRef.current, isPlaying: false };
+      audioStateRef.current = { ...audioStateRef.current, isPlaying: false, isPaused: false };
       setAudioState({ ...audioStateRef.current });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   function startPlayTrack(url: string) {
-    audioStateRef.current = { ...audioStateRef.current, isPlaying: true };
+    audioStateRef.current = { ...audioStateRef.current, isPlaying: true, isPaused: false };
     setAudioState({ ...audioStateRef.current });
     playTrack(url);
   }
@@ -280,14 +285,34 @@ function useStepAudio(
   function stopAudio() {
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
     try { playerRef.current?.pause(); } catch {}
-    audioStateRef.current = { ...audioStateRef.current, isPlaying: false };
+    audioStateRef.current = { ...audioStateRef.current, isPlaying: false, isPaused: false };
     setAudioState({ ...audioStateRef.current });
   }
 
-  return { stopAudio, audioState };
+  function pauseAudio() {
+    try { playerRef.current?.pause(); } catch {}
+    audioStateRef.current = { ...audioStateRef.current, isPlaying: false, isPaused: true };
+    setAudioState({ ...audioStateRef.current });
+  }
+
+  function resumeAudio() {
+    try { playerRef.current?.play(); } catch {}
+    audioStateRef.current = { ...audioStateRef.current, isPlaying: true, isPaused: false };
+    setAudioState({ ...audioStateRef.current });
+  }
+
+  function toggleAudio() {
+    if (audioStateRef.current.isPaused) {
+      resumeAudio();
+    } else if (audioStateRef.current.isPlaying) {
+      pauseAudio();
+    }
+  }
+
+  return { stopAudio, toggleAudio, audioState };
 }
 
-// ── Habit rating button ───────────────────────────────────────────────────────
+// ── Habit rating buttons ──────────────────────────────────────────────────────
 const RATING_CONFIG = [
   { key: 'done'    as HabitRating, label: 'Done',    color: '#22C55E', icon: 'checkmark.circle.fill' as const },
   { key: 'partial' as HabitRating, label: 'Partial', color: '#F59E0B', icon: 'minus.circle.fill'     as const },
@@ -308,80 +333,56 @@ function HabitRatingButtons({
     setSelected(r);
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(
-        r === 'done'
-          ? Haptics.NotificationFeedbackType.Success
-          : r === 'partial'
-            ? Haptics.NotificationFeedbackType.Warning
-            : Haptics.NotificationFeedbackType.Error,
+        r === 'done' ? Haptics.NotificationFeedbackType.Success
+          : r === 'partial' ? Haptics.NotificationFeedbackType.Warning
+          : Haptics.NotificationFeedbackType.Error,
       );
     }
     Animated.sequence([
-      Animated.timing(scaleAnims[idx], { toValue: 0.88, duration: 80, useNativeDriver: true }),
-      Animated.spring(scaleAnims[idx], { toValue: 1, useNativeDriver: true, friction: 4 }),
-    ]).start();
-    // Advance after a short visual pause so user sees the selection
-    setTimeout(() => onRate(r), 350);
+      Animated.timing(scaleAnims[idx], { toValue: 0.92, duration: 80, useNativeDriver: true }),
+      Animated.timing(scaleAnims[idx], { toValue: 1.04, duration: 120, useNativeDriver: true }),
+      Animated.timing(scaleAnims[idx], { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start(() => {
+      setTimeout(() => onRate(r), 200);
+    });
   }
 
   return (
     <View style={ratingStyles.container}>
-      <Text style={[ratingStyles.prompt, { color: colors.muted }]}>Did you do it?</Text>
+      <Text style={[ratingStyles.prompt, { color: colors.muted }]}>How did it go?</Text>
       <View style={ratingStyles.row}>
-        {RATING_CONFIG.map((cfg, idx) => {
-          const isSelected = selected === cfg.key;
-          return (
-            <Animated.View
-              key={cfg.key}
-              style={{ transform: [{ scale: scaleAnims[idx] }], flex: 1 }}
+        {RATING_CONFIG.map(({ key, label, color, icon }, idx) => (
+          <Animated.View key={key} style={{ flex: 1, transform: [{ scale: scaleAnims[idx] }] }}>
+            <Pressable
+              onPress={() => handlePress(key, idx)}
+              style={[
+                ratingStyles.btn,
+                {
+                  backgroundColor: selected === key ? color : color + '18',
+                  borderColor: color + (selected === key ? 'ff' : '40'),
+                  borderWidth: 1.5,
+                },
+              ]}
             >
-              <Pressable
-                onPress={() => handlePress(cfg.key, idx)}
-                style={[
-                  ratingStyles.btn,
-                  {
-                    backgroundColor: isSelected ? cfg.color : cfg.color + '18',
-                    borderColor: cfg.color,
-                    borderWidth: isSelected ? 0 : 1.5,
-                  },
-                ]}
-              >
-                <IconSymbol
-                  name={cfg.icon}
-                  size={32}
-                  color={isSelected ? '#fff' : cfg.color}
-                />
-                <Text style={[
-                  ratingStyles.btnLabel,
-                  { color: isSelected ? '#fff' : cfg.color },
-                ]}>
-                  {cfg.label}
-                </Text>
-              </Pressable>
-            </Animated.View>
-          );
-        })}
+              <IconSymbol name={icon} size={28} color={selected === key ? '#fff' : color} />
+              <Text style={[
+                ratingStyles.btnLabel,
+                { color: selected === key ? '#fff' : color },
+              ]}>
+                {label}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        ))}
       </View>
     </View>
   );
 }
 
 const ratingStyles = StyleSheet.create({
-  container: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 14,
-    marginTop: 8,
-  },
-  prompt: {
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-  },
+  container: { width: '100%', gap: 12, marginTop: 8 },
+  prompt: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  row: { flexDirection: 'row', gap: 10, width: '100%' },
   btn: {
     borderRadius: 16,
     paddingVertical: 18,
@@ -395,92 +396,213 @@ const ratingStyles = StyleSheet.create({
   },
 });
 
-// ── Custom audio "Now Playing" card ──────────────────────────────────────────
-function CustomAudioCard({
-  track,
-  isPlaying,
-  colors,
-}: {
-  track: ResolvedTrack;
-  isPlaying: boolean;
-  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
-}) {
-  // Pulsing dot animation while playing
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+// ── Waveform bars animation ───────────────────────────────────────────────────
+const BAR_HEIGHTS = [14, 22, 30, 22, 14, 26, 18, 30, 22, 14];
+
+function WaveformBars({ isPlaying, color }: { isPlaying: boolean; color: string }) {
+  const anims = useRef(BAR_HEIGHTS.map(() => new Animated.Value(0.3))).current;
+
   useEffect(() => {
     if (isPlaying) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 0.4, duration: 700, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-        ]),
+      const loops = anims.map((anim, i) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(i * 70),
+            Animated.timing(anim, { toValue: 1, duration: 280 + i * 25, useNativeDriver: true }),
+            Animated.timing(anim, { toValue: 0.2, duration: 280 + i * 25, useNativeDriver: true }),
+          ]),
+        ),
       );
-      loop.start();
-      return () => loop.stop();
+      loops.forEach((l) => l.start());
+      return () => loops.forEach((l) => l.stop());
     } else {
-      pulseAnim.setValue(0.4);
+      anims.forEach((a) => a.setValue(0.3));
     }
   }, [isPlaying]);
 
   return (
-    <View style={[
-      customAudioStyles.card,
-      { backgroundColor: colors.surface, borderColor: colors.border },
-    ]}>
-      <View style={customAudioStyles.iconRow}>
-        <View style={[customAudioStyles.iconBg, { backgroundColor: colors.primary + '20' }]}>
-          <IconSymbol name="music.note" size={28} color={colors.primary} />
-        </View>
-        <Animated.View style={[
-          customAudioStyles.playDot,
-          { backgroundColor: isPlaying ? '#22C55E' : colors.muted, opacity: pulseAnim },
-        ]} />
-      </View>
-      <Text style={[customAudioStyles.trackLabel, { color: colors.foreground }]} numberOfLines={2}>
-        {track.label}
-      </Text>
-      <Text style={[customAudioStyles.statusText, { color: colors.muted }]}>
-        {isPlaying ? 'Now Playing' : 'Loading…'}
-      </Text>
+    <View style={waveStyles.container}>
+      {anims.map((anim, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            waveStyles.bar,
+            { height: BAR_HEIGHTS[i], backgroundColor: color, transform: [{ scaleY: anim }] },
+          ]}
+        />
+      ))}
     </View>
   );
 }
 
-const customAudioStyles = StyleSheet.create({
+const waveStyles = StyleSheet.create({
+  container: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 36, marginVertical: 4 },
+  bar: { width: 4, borderRadius: 2 },
+});
+
+// ── Custom audio player card ──────────────────────────────────────────────────
+function CustomAudioCard({
+  track,
+  isPlaying,
+  isPaused,
+  elapsed,
+  onToggle,
+  colors,
+}: {
+  track: ResolvedTrack;
+  isPlaying: boolean;
+  isPaused: boolean;
+  elapsed: number;
+  onToggle: () => void;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+}) {
+  const isActive = isPlaying || isPaused;
+
+  return (
+    <View style={[audioCardStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Music note icon */}
+      <View style={[audioCardStyles.iconCircle, { backgroundColor: colors.primary + '18' }]}>
+        <IconSymbol name="music.note" size={32} color={colors.primary} />
+      </View>
+
+      {/* Track name */}
+      <Text style={[audioCardStyles.trackLabel, { color: colors.foreground }]} numberOfLines={2}>
+        {track.label}
+      </Text>
+
+      {/* Waveform */}
+      <WaveformBars isPlaying={isPlaying} color={colors.primary} />
+
+      {/* Status + elapsed */}
+      <Text style={[audioCardStyles.statusText, { color: colors.muted }]}>
+        {!isActive ? 'Loading…' : isPaused ? `Paused · ${elapsed}s` : `Now Playing · ${elapsed}s`}
+      </Text>
+
+      {/* Play / Pause button */}
+      <Pressable
+        onPress={() => {
+          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          onToggle();
+        }}
+        style={({ pressed }) => [
+          audioCardStyles.playBtn,
+          { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+        ]}
+      >
+        <IconSymbol
+          name={isPlaying ? 'pause.fill' : 'play.fill'}
+          size={28}
+          color="#fff"
+        />
+      </Pressable>
+    </View>
+  );
+}
+
+// ── Motivational speech player card ──────────────────────────────────────────
+function MotivationalCard({
+  track,
+  isPlaying,
+  isPaused,
+  elapsed,
+  onToggle,
+  colors,
+}: {
+  track: ResolvedTrack;
+  isPlaying: boolean;
+  isPaused: boolean;
+  elapsed: number;
+  onToggle: () => void;
+  colors: ReturnType<typeof import('@/hooks/use-colors').useColors>;
+}) {
+  const isActive = isPlaying || isPaused;
+  const accentColor = '#F59E0B';
+
+  return (
+    <View style={[audioCardStyles.card, { backgroundColor: accentColor + '10', borderColor: accentColor + '30' }]}>
+      {/* Category badge */}
+      {track.category && (
+        <View style={[audioCardStyles.badge, { backgroundColor: accentColor + '20' }]}>
+          <Text style={[audioCardStyles.badgeText, { color: accentColor }]}>{track.category}</Text>
+        </View>
+      )}
+
+      {/* Waveform */}
+      <WaveformBars isPlaying={isPlaying} color={accentColor} />
+
+      {/* Status + elapsed */}
+      <Text style={[audioCardStyles.statusText, { color: colors.muted }]}>
+        {!isActive ? 'Loading…' : isPaused ? `Paused · ${elapsed}s` : `Now Playing · ${elapsed}s`}
+      </Text>
+
+      {/* Play / Pause button */}
+      <Pressable
+        onPress={() => {
+          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          onToggle();
+        }}
+        style={({ pressed }) => [
+          audioCardStyles.playBtn,
+          { backgroundColor: accentColor, opacity: pressed ? 0.8 : 1 },
+        ]}
+      >
+        <IconSymbol
+          name={isPlaying ? 'pause.fill' : 'play.fill'}
+          size={28}
+          color="#fff"
+        />
+      </Pressable>
+    </View>
+  );
+}
+
+const audioCardStyles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     padding: 24,
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     marginTop: 4,
   },
-  iconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  iconBg: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  playDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    marginBottom: 4,
   },
   trackLabel: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
+    lineHeight: 24,
   },
   statusText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  playBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
 });
 
@@ -505,7 +627,7 @@ export default function StackPlayerScreen() {
   const totalSteps = stack?.steps.length ?? 0;
   const advanceStepRef = useRef<() => void>(() => {});
 
-  const { stopAudio, audioState } = useStepAudio(
+  const { stopAudio, toggleAudio, audioState } = useStepAudio(
     currentStep,
     phase,
     useCallback(() => { advanceStepRef.current(); }, []),
@@ -565,13 +687,13 @@ export default function StackPlayerScreen() {
       const step = currentStep;
       if (!step) return;
 
-      // Affirmations and custom: audio-driven advance — just count elapsed
-      if (step.type === 'affirmations' || step.type === 'custom') {
+      // Audio-driven steps: just count elapsed, advance is triggered by audio finishing
+      if (step.type === 'affirmations' || step.type === 'motivational' || step.type === 'custom') {
         intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
         return;
       }
 
-      // Reminder: manual (habit rating), melatonin: manual — no timer advance
+      // Reminder / melatonin: manual rating, no timer advance
       if (step.type === 'reminder' || step.type === 'melatonin') {
         intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
         return;
@@ -674,6 +796,7 @@ export default function StackPlayerScreen() {
 
   const isAffirmationsStep = step.type === 'affirmations';
   const isCustomStep = step.type === 'custom';
+  const isMotivationalStep = step.type === 'motivational';
   const isReminderStep = step.type === 'reminder' || step.type === 'melatonin';
 
   const currentTrack = audioState.tracks[audioState.currentIdx] ?? null;
@@ -764,11 +887,26 @@ export default function StackPlayerScreen() {
               </View>
             )}
 
-            {/* ── Custom audio "Now Playing" card ── */}
+            {/* ── Motivational speech player card ── */}
+            {isMotivationalStep && currentTrack && (
+              <MotivationalCard
+                track={currentTrack}
+                isPlaying={audioState.isPlaying}
+                isPaused={audioState.isPaused}
+                elapsed={elapsed}
+                onToggle={toggleAudio}
+                colors={colors}
+              />
+            )}
+
+            {/* ── Custom audio player card ── */}
             {isCustomStep && currentTrack && (
               <CustomAudioCard
                 track={currentTrack}
                 isPlaying={audioState.isPlaying}
+                isPaused={audioState.isPaused}
+                elapsed={elapsed}
+                onToggle={toggleAudio}
                 colors={colors}
               />
             )}
@@ -779,7 +917,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Timer for auto-complete steps ── */}
-            {!isAffirmationsStep && !isCustomStep && !isReminderStep && autoComplete && (
+            {!isAffirmationsStep && !isCustomStep && !isMotivationalStep && !isReminderStep && autoComplete && (
               <View style={styles.timerArea}>
                 <Text style={[styles.timerText, { color: colors.foreground }]}>
                   {Math.max(0, duration - elapsed)}s
@@ -791,7 +929,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Elapsed + Next button for manual non-reminder steps ── */}
-            {!isAffirmationsStep && !isCustomStep && !isReminderStep && !autoComplete && (
+            {!isAffirmationsStep && !isCustomStep && !isMotivationalStep && !isReminderStep && !autoComplete && (
               <>
                 <Text style={[styles.elapsedText, { color: colors.muted }]}>{elapsed}s elapsed</Text>
                 <Pressable
@@ -804,15 +942,11 @@ export default function StackPlayerScreen() {
                 </Pressable>
               </>
             )}
-
-            {/* ── Elapsed counter for affirmations/custom (audio-driven) ── */}
-            {(isAffirmationsStep || isCustomStep) && (
-              <Text style={[styles.elapsedText, { color: colors.muted }]}>{elapsed}s</Text>
-            )}
           </View>
         )}
       </Animated.View>
 
+      {/* Step counter */}
       <Text style={[styles.stepCounter, { color: colors.muted }]}>
         Step {stepIdx + 1} of {totalSteps}
       </Text>
@@ -820,56 +954,57 @@ export default function StackPlayerScreen() {
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingText: { textAlign: 'center', marginTop: 80, fontSize: 16 },
-  headerRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 12,
-  },
-  headerBtn: { paddingHorizontal: 8, paddingVertical: 6, minWidth: 60 },
+  loadingText: { textAlign: 'center', marginTop: 40, fontSize: 16 },
+
+  // Header
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  headerBtn: { minWidth: 64, paddingVertical: 4 },
   headerBtnText: { fontSize: 16, fontWeight: '500' },
-  dotRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dotRow: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
   dot: { height: 8, borderRadius: 4 },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 },
-  delayContainer: { alignItems: 'center', gap: 8 },
+
+  // Content
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+
+  // Delay countdown
+  delayContainer: { alignItems: 'center', gap: 12 },
   delayLabel: { fontSize: 16, fontWeight: '500' },
-  delayCount: { fontSize: 72, fontWeight: '700', lineHeight: 80 },
-  delayStepName: { fontSize: 18, fontWeight: '500', marginTop: 8 },
-  stepContainer: { alignItems: 'center', gap: 16, width: '100%' },
-  iconCircle: {
-    width: 100, height: 100, borderRadius: 50,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
-  },
-  stepTitle: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  delayCount: { fontSize: 80, fontWeight: '800', lineHeight: 88 },
+  delayStepName: { fontSize: 18, fontWeight: '600' },
+
+  // Step content
+  stepContainer: { alignItems: 'center', gap: 12 },
+  iconCircle: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  stepTitle: { fontSize: 26, fontWeight: '800', textAlign: 'center', lineHeight: 32 },
   stepType: { fontSize: 16, fontWeight: '500' },
+
   // Affirmations
-  affirmationsArea: { width: '100%', alignItems: 'center', gap: 12, marginTop: 4 },
-  trackPills: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  trackPill: { height: 6, borderRadius: 3 },
-  currentTrackCard: {
-    width: '100%', borderRadius: 16, borderWidth: 1, padding: 20,
-    alignItems: 'center', gap: 8,
-  },
-  trackCounterText: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
-  currentTrackLabel: { fontSize: 22, fontWeight: '700', textAlign: 'center' },
-  categoryBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginTop: 2 },
-  categoryBadgeText: { fontSize: 13, fontWeight: '600' },
-  upNextRow: {
-    width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingVertical: 10, paddingHorizontal: 16, borderTopWidth: 1,
-  },
-  upNextLabel: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 60 },
-  upNextTrack: { fontSize: 15, fontWeight: '500', flex: 1 },
+  affirmationsArea: { width: '100%', gap: 10, marginTop: 4 },
+  trackPills: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  trackPill: { height: 8, borderRadius: 4 },
+  currentTrackCard: { borderRadius: 16, borderWidth: 1, padding: 16, alignItems: 'center', gap: 6 },
+  trackCounterText: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  currentTrackLabel: { fontSize: 18, fontWeight: '700', textAlign: 'center', lineHeight: 24 },
+  categoryBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  categoryBadgeText: { fontSize: 12, fontWeight: '600' },
+  upNextRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth },
+  upNextLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  upNextTrack: { flex: 1, fontSize: 14, fontWeight: '600' },
+
   // Timer
-  timerArea: { alignItems: 'center', gap: 12, width: '100%', marginTop: 8 },
-  timerText: { fontSize: 48, fontWeight: '700', lineHeight: 56 },
+  timerArea: { alignItems: 'center', gap: 12, marginTop: 8, width: '100%' },
+  timerText: { fontSize: 56, fontWeight: '800', lineHeight: 64 },
   progressBar: { width: '100%', height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
-  elapsedText: { fontSize: 20, fontWeight: '500', marginTop: 8 },
-  completeBtn: { marginTop: 32, paddingHorizontal: 40, paddingVertical: 16, borderRadius: 14 },
+
+  // Manual step
+  elapsedText: { fontSize: 16, fontWeight: '500' },
+  completeBtn: { marginTop: 8, paddingHorizontal: 40, paddingVertical: 16, borderRadius: 14 },
   completeBtnText: { fontSize: 18, fontWeight: '700' },
-  stepCounter: { textAlign: 'center', fontSize: 14, paddingBottom: 16 },
+
   // Done screen
   doneContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 32 },
   doneTitle: { fontSize: 32, fontWeight: '700' },
@@ -878,4 +1013,7 @@ const styles = StyleSheet.create({
   doneButtonText: { fontSize: 18, fontWeight: '700' },
   historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingVertical: 8 },
   historyBtnText: { fontSize: 14, fontWeight: '500' },
+
+  // Footer
+  stepCounter: { textAlign: 'center', fontSize: 13, fontWeight: '500', paddingBottom: 12 },
 });

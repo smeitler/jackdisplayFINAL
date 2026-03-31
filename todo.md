@@ -1645,3 +1645,5 @@
 - [x] Stack player: save rating to history when user taps Done/Partial/Missed
 - [x] Build Habit History screen: ratings grouped by date, color-coded indicators
 - [x] Add History button to stack completion screen and route to /habit-history
+- [x] Custom audio card: redesign with play/pause button, waveform bars, clean layout
+- [x] Motivational speech: fix audio cut-off bug so full track plays before advancing (audio-driven advance, no timer)
