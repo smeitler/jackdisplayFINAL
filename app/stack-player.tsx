@@ -295,6 +295,10 @@ function useStepAudio(
   const onFinishedRef = useRef(onAllTracksFinished);
   onFinishedRef.current = onAllTracksFinished;
   const customDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track current phase so the async resolve callback can start playback immediately
+  // when phase is already 'running' (phase effect won't re-fire if phase didn't change)
+  const phaseRef = useRef<Phase>(phase);
+  phaseRef.current = phase;
 
   const [audioState, setAudioState] = useState<AudioState>({
     tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false,
@@ -355,6 +359,20 @@ function useStepAudio(
       };
       audioStateRef.current = newState;
       setAudioState(newState);
+      // If phase is already 'running' when tracks resolve, start playback immediately.
+      // This handles the common case where phase doesn't change between steps
+      // (phase stays 'running' across step advances, so the phase effect never re-fires).
+      if (phaseRef.current === 'running' && tracks.length > 0) {
+        if (isCustom) {
+          if (customDelayRef.current) clearTimeout(customDelayRef.current);
+          customDelayRef.current = setTimeout(() => {
+            const { tracks: t, currentIdx: ci } = audioStateRef.current;
+            if (t.length > 0) startPlayTrack(t[ci].url);
+          }, 500);
+        } else {
+          startPlayTrack(tracks[0].url);
+        }
+      }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step?.id, step?.type]);
