@@ -754,17 +754,25 @@ function StepConfigModal({
 
           {/* Meditation */}
           {step.type === 'meditation' && (
-            <CRow label="Select Meditation" colors={colors}>
-              <Pressable
-                onPress={() => setShowLibrary(true)}
-                style={({ pressed }) => [styles.libraryPickerBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-              >
-                <IconSymbol name="sparkles" size={16} color={accentColor} />
-                <Text style={[styles.libraryPickerText, { color: selectedTrackTitle ? colors.foreground : colors.muted }]} numberOfLines={1}>
-                  {selectedTrackTitle ?? 'Choose from library…'}
-                </Text>
-                <IconSymbol name="chevron.right" size={14} color={colors.muted} />
-              </Pressable>
+            <CRow label="Duration" colors={colors}>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                {[{ label: '2 min', seconds: 120 }, { label: '10 min', seconds: 600 }].map(({ label, seconds }) => {
+                  const isSelected = (config.meditationDurationSeconds ?? 600) === seconds;
+                  return (
+                    <Pressable
+                      key={seconds}
+                      onPress={() => setConfig({ ...config, meditationDurationSeconds: seconds })}
+                      style={[styles.categoryChip, {
+                        backgroundColor: isSelected ? '#0a7ea4' : colors.surface,
+                        borderColor: isSelected ? '#0a7ea4' : colors.border,
+                        paddingHorizontal: 20,
+                      }]}
+                    >
+                      <Text style={[styles.categoryChipText, { color: isSelected ? '#fff' : colors.foreground }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </CRow>
           )}
 

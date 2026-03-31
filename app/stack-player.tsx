@@ -224,6 +224,23 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
     return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
   }
 
+  if (step.type === 'meditation') {
+    const durationPref = step.config.meditationDurationSeconds ?? 600;
+    // 2-min = 120s, 10-min = 600s; default to 10-min
+    const url = durationPref <= 120
+      ? 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663287248938/wIJlpUFwXYxTMnzS.mp3'  // 2MinMeditation
+      : 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663287248938/mKEfpoixsRswIZRa.mp3'; // Meditation10Min
+    const label = durationPref <= 120 ? '2-Minute Meditation' : '10-Minute Meditation';
+    return {
+      tracks: [{ url, label, category: 'Meditation' }],
+      isAffirmations: false,
+      isCustom: false,
+      isMotivational: false,
+      isJokes: false,
+      isSpiritual: false,
+    };
+  }
+
   if (step.type === 'custom') {
     const files = await loadCustomAudioFiles();
     if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false };
@@ -323,7 +340,7 @@ function useStepAudio(
     audioStateRef.current = empty;
     setAudioState(empty);
 
-    if (!step || !['motivational', 'affirmations', 'jokes', 'custom', 'spiritual'].includes(step.type)) return;
+    if (!step || !['motivational', 'affirmations', 'jokes', 'custom', 'spiritual', 'meditation'].includes(step.type)) return;
 
     const stepId = step.id;
     activeStepIdRef.current = stepId;
@@ -793,7 +810,7 @@ export default function StackPlayerScreen() {
       if (!step) return;
 
       // Audio-driven steps: just count elapsed, advance is triggered by audio finishing
-      if (step.type === 'affirmations' || step.type === 'motivational' || step.type === 'custom' || step.type === 'spiritual') {
+      if (step.type === 'affirmations' || step.type === 'motivational' || step.type === 'custom' || step.type === 'spiritual' || step.type === 'meditation') {
         intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
         return;
       }
@@ -904,6 +921,7 @@ export default function StackPlayerScreen() {
   const isCustomStep = step.type === 'custom';
   const isMotivationalStep = step.type === 'motivational';
   const isSpiritualStep = step.type === 'spiritual';
+  const isMeditationStep = step.type === 'meditation';
   const isReminderStep = step.type === 'reminder' || step.type === 'melatonin';
 
   // Linked habit on custom step
@@ -1087,14 +1105,16 @@ export default function StackPlayerScreen() {
               </View>
             )}
 
-            {/* Bible coming soon placeholder */}
-            {isSpiritualStep && step.config.spiritualSource === 'bible' && (
-              <View style={[styles.currentTrackCard, { backgroundColor: '#7C3AED14', borderColor: '#7C3AED30', marginTop: 12 }]}>
-                <IconSymbol name="sparkles" size={24} color="#7C3AED" />
-                <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: '600', textAlign: 'center', marginTop: 8 }}>
-                  Bible audio coming soon
-                </Text>
-              </View>
+            {/* ── Meditation audio card ── */}
+            {isMeditationStep && currentTrack && (
+              <CustomAudioCard
+                track={currentTrack}
+                isPlaying={audioState.isPlaying}
+                isPaused={audioState.isPaused}
+                elapsed={elapsed}
+                onToggle={toggleAudio}
+                colors={colors}
+              />
             )}
 
             {/* ── Motivational speech player card ── */}
@@ -1168,8 +1188,20 @@ export default function StackPlayerScreen() {
               <HabitRatingButtons onRate={handleHabitRate} colors={colors} />
             )}
 
+            {/* ── Next Step button for meditation after audio finishes ── */}
+            {isMeditationStep && audioState.isFinished && (
+              <Pressable
+                onPress={advanceStep}
+                style={({ pressed }) => [styles.completeBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1, marginTop: 16 }]}
+              >
+                <Text style={[styles.completeBtnText, { color: '#fff' }]}>
+                  {stepIdx + 1 < totalSteps ? 'Next Step' : 'Finish'}
+                </Text>
+              </Pressable>
+            )}
+
             {/* ── Timer for auto-complete steps ── */}
-            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isSpiritualStep && !isReminderStep && autoComplete && (
+            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isSpiritualStep && !isMeditationStep && !isReminderStep && autoComplete && (
               <View style={styles.timerArea}>
                 <Text style={[styles.timerText, { color: colors.foreground }]}>
                   {Math.max(0, duration - elapsed)}s
@@ -1181,7 +1213,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Elapsed + Next button for manual non-reminder steps ── */}
-            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isSpiritualStep && !isReminderStep && !autoComplete && (
+            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isSpiritualStep && !isMeditationStep && !isReminderStep && !autoComplete && (
               <>
                 <Text style={[styles.elapsedText, { color: colors.muted }]}>{elapsed}s elapsed</Text>
                 <Pressable

@@ -1660,3 +1660,4 @@
 
 - [x] Spiritual step type: scripture picker (Book of Mormon 196 chapters, Bible placeholder), book selector, chapter count 1-5, sequential/random order, purple-accented track display in player
 - [x] Bible verses: 192 MP3s uploaded to CDN, wired into Spiritual step as random verse pool (1-5 verses per session)
+- [x] Meditation step: 2-min and 10-min audio options uploaded to CDN, duration picker in editor, plays selected track in player
