@@ -1659,3 +1659,4 @@
 - [x] Wire Jokes audio playback in stack-player with yellow-accented track display and Up Next row
 
 - [x] Spiritual step type: scripture picker (Book of Mormon 196 chapters, Bible placeholder), book selector, chapter count 1-5, sequential/random order, purple-accented track display in player
+- [x] Bible verses: 192 MP3s uploaded to CDN, wired into Spiritual step as random verse pool (1-5 verses per session)

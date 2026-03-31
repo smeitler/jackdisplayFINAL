@@ -33,6 +33,7 @@ import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
 import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
 import { JOKE_CATEGORIES, type JokeCategory } from '@/app/data/jokes';
 import { BOOK_OF_MORMON_CHAPTERS, type ScriptureBook } from '@/app/data/spiritual-scriptures';
+import { BIBLE_VERSES } from '@/app/data/bible-verses';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1081,14 +1082,36 @@ function StepConfigModal({
                 </CRow>
               )}
 
-              {/* Bible placeholder */}
+              {/* Bible verse count */}
               {(config.spiritualSource) === 'bible' && (
                 <View style={[styles.infoBox, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30', marginTop: 8 }]}>
                   <IconSymbol name="sparkles" size={18} color="#7C3AED" />
                   <Text style={[styles.infoText, { color: colors.foreground }]}>
-                    Bible audio coming soon. Upload your Bible MP3 files to enable this option.
+                    {BIBLE_VERSES.length} Bible verses available. Verses play in random order.
                   </Text>
                 </View>
+              )}
+
+              {/* Verse / Chapter count */}
+              {(config.spiritualSource === 'bible') && (
+                <CRow label="How many verses" colors={colors}>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 5].map((n) => (
+                      <Pressable
+                        key={n}
+                        onPress={() => setConfig({ ...config, spiritualChaptersCount: n })}
+                        style={[styles.categoryChip, {
+                          backgroundColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.surface,
+                          borderColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.border,
+                        }]}
+                      >
+                        <Text style={[styles.categoryChipText, {
+                          color: (config.spiritualChaptersCount ?? 1) === n ? '#fff' : colors.foreground,
+                        }]}>{n}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </CRow>
               )}
 
               {/* Chapters count */}
