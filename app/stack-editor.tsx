@@ -31,6 +31,7 @@ import {
 import { loadHabits, type Habit } from '@/lib/storage';
 import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
 import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
+import { JOKE_CATEGORIES, type JokeCategory } from '@/app/data/jokes';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -54,13 +55,14 @@ const STEP_ICON: Record<StepType, string> = {
   melatonin:    'moon.fill',
   motivational: 'bolt.fill',
   spiritual:    'sparkles',
+  jokes:         'face.smiling',
   custom:       'pencil',
 };
 
 const STEP_TYPES: StepType[] = [
   'timer', 'stopwatch', 'meditation', 'breathwork',
   'journal', 'affirmations', 'priming', 'reminder', 'melatonin',
-  'motivational', 'spiritual', 'custom',
+  'motivational', 'spiritual', 'jokes', 'custom',
 ];
 
 // ─── Audio library data ───────────────────────────────────────────────────────
@@ -1049,6 +1051,71 @@ function StepConfigModal({
             </>
           )}
 
+          {/* Jokes */}
+          {step.type === 'jokes' && (
+            <>
+              <CRow label="Category" colors={colors}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {(['Any', ...JOKE_CATEGORIES] as (JokeCategory | 'Any')[]).map((cat) => (
+                      <Pressable
+                        key={cat}
+                        onPress={() => setConfig({ ...config, jokesCategory: cat === 'Any' ? undefined : cat })}
+                        style={[styles.categoryChip, {
+                          backgroundColor: (config.jokesCategory ?? 'Any') === cat
+                            ? accentColor : colors.surface,
+                          borderColor: (config.jokesCategory ?? 'Any') === cat
+                            ? accentColor : colors.border,
+                        }]}
+                      >
+                        <Text style={[styles.categoryChipText, {
+                          color: (config.jokesCategory ?? 'Any') === cat
+                            ? '#fff' : colors.foreground,
+                        }]}>{cat}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </CRow>
+              <CRow label="How many jokes" colors={colors}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  {[1, 2, 3, 5].map((n) => (
+                    <Pressable
+                      key={n}
+                      onPress={() => setConfig({ ...config, jokesCount: n })}
+                      style={[styles.categoryChip, {
+                        backgroundColor: (config.jokesCount ?? 1) === n ? accentColor : colors.surface,
+                        borderColor: (config.jokesCount ?? 1) === n ? accentColor : colors.border,
+                      }]}
+                    >
+                      <Text style={[styles.categoryChipText, {
+                        color: (config.jokesCount ?? 1) === n ? '#fff' : colors.foreground,
+                      }]}>{n}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+              <CRow label="Order" colors={colors}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {(['random', 'sequential'] as const).map((mode) => (
+                    <Pressable
+                      key={mode}
+                      onPress={() => setConfig({ ...config, jokesMode: mode })}
+                      style={[styles.categoryChip, {
+                        backgroundColor: (config.jokesMode ?? 'random') === mode ? accentColor : colors.surface,
+                        borderColor: (config.jokesMode ?? 'random') === mode ? accentColor : colors.border,
+                      }]}
+                    >
+                      <Text style={[styles.categoryChipText, {
+                        color: (config.jokesMode ?? 'random') === mode ? '#fff' : colors.foreground,
+                      }]}>{mode === 'random' ? '🎲 Random' : '🔢 Sequential'}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </CRow>
+            </>
+          )}
+
           {/* Custom */}
           {step.type === 'custom' && (
             <>
@@ -1401,6 +1468,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6,
   },
   habitRowText: { fontSize: 14, fontWeight: '600', flex: 1 },
+
+  // Category chips (used by jokes, affirmations, motivational pickers)
+  categoryChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, marginRight: 6, marginBottom: 6 },
+  categoryChipText: { fontSize: 13, fontWeight: '500' },
 
   // Save button
   saveBtn: { paddingVertical: 10, paddingHorizontal: 32, borderRadius: 20, alignItems: 'center', marginTop: 8, alignSelf: 'center' },

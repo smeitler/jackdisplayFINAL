@@ -19,6 +19,7 @@ export type StepType =
   | 'melatonin'
   | 'motivational'
   | 'spiritual'
+  | 'jokes'
   | 'custom';
 
 export interface StepTypeMeta {
@@ -41,6 +42,7 @@ export const STEP_TYPE_META: Record<StepType, StepTypeMeta> = {
   motivational: { label: 'Motivational',   emoji: '💪',  description: 'A motivational quote read aloud to you',   autoComplete: true  },
   spiritual:    { label: 'Spiritual',      emoji: '🙏',  description: 'A spiritual reflection or message',        autoComplete: true  },
   custom:       { label: 'Custom',         emoji: '✏️',  description: 'Your own custom step',                    autoComplete: false },
+  jokes:         { label: 'Jokes & Puns',   emoji: '😂',  description: 'A funny joke or pun to start your day',     autoComplete: true  },
 };
 
 // ─── Step config ──────────────────────────────────────────────────────────────
@@ -75,6 +77,10 @@ export interface StepConfig {
   // Custom audio upload
   customAudioFiles?: string[];         // local file URIs
   customAudioMode?: 'random' | 'sequential'; // rotation mode
+  // Jokes library
+  jokesCategory?: string;              // category filter (undefined = any)
+  jokesCount?: number;                 // how many jokes to play (1-5, default 1)
+  jokesMode?: 'random' | 'sequential'; // how to pick next joke
   // Linked habit for custom audio step
   linkedHabitId?: string;              // habit ID to rate after audio finishes
   linkedHabitName?: string;            // display name of linked habit
@@ -117,6 +123,10 @@ export function stepLabel(step: RitualStep): string {
       return 'Motivational';
     }
     case 'spiritual':    return 'Spiritual';
+    case 'jokes': {
+      if (step.config.jokesCategory) return `Jokes — ${step.config.jokesCategory}`;
+      return 'Jokes & Puns';
+    }
     case 'timer': {
       const secs = step.config.durationSeconds ?? 0;
       const mins = Math.floor(secs / 60);
@@ -140,6 +150,7 @@ export function stepDefaultDuration(step: RitualStep): number {
     case 'meditation':   return step.config.meditationDurationSeconds ?? 600;
     case 'breathwork':   return (step.config.breathworkRounds ?? 4) * 32;
     case 'affirmations': return (step.config.affirmationsCount ?? 1) * 90;
+    case 'jokes':        return (step.config.jokesCount ?? 1) * 30;
     case 'priming':      return 600;
     default:             return 0;
   }

@@ -166,6 +166,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "stopwatch": "timer",
   "wind": "air",
   "quote.bubble.fill": "format-quote",
+  "face.smiling": "sentiment-satisfied",
 };
 
 export type IconSymbolName = keyof typeof MAPPING;

@@ -37,6 +37,12 @@ import {
   type AffirmationCategory,
   type Affirmation,
 } from '@/app/data/affirmations';
+import {
+  JOKES,
+  getJokesByCategory,
+  type JokeCategory,
+  type JokeTrack,
+} from '@/app/data/jokes';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 import { saveHabitRating, type HabitRating as HabitRatingType } from '@/lib/habit-history';
 
@@ -53,6 +59,7 @@ const STEP_ICON: Record<string, string> = {
   motivational: 'bolt.fill',
   spiritual:    'sparkles',
   custom:       'music.note',
+  jokes:         'face.smiling',
 };
 
 type Phase = 'delay' | 'running' | 'done';
@@ -82,6 +89,7 @@ interface ResolvedAudio {
   isAffirmations: boolean;
   isCustom: boolean;
   isMotivational: boolean;
+  isJokes: boolean;
 }
 
 async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
@@ -93,13 +101,14 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory)
       : MOTIVATIONAL_SPEECHES;
     const idx = pickIndexFromPool(pool.length, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true, isJokes: false };
     const s = pool[idx];
     return {
       tracks: [{ url: s.url, label: s.category, category: s.category }],
       isAffirmations: false,
       isCustom: false,
       isMotivational: true,
+      isJokes: false,
     };
   }
 
@@ -127,15 +136,40 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const a = pool[idx];
       tracks.push({ url: a.url, label: `${a.category} #${a.number}`, category: a.category });
     }
-    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false };
+    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false, isJokes: false };
+  }
+
+  if (step.type === 'jokes') {
+    const mode = cfg.jokesMode ?? 'random';
+    const count = Math.min(cfg.jokesCount ?? 1, 5);
+    const category = cfg.jokesCategory as JokeCategory | undefined;
+    const pool: JokeTrack[] = category ? getJokesByCategory(category) : JOKES;
+    const seqKey = `jokes_${category ?? 'all'}`;
+    const tracks: ResolvedTrack[] = [];
+    const usedIndexes = new Set<number>();
+    for (let i = 0; i < count; i++) {
+      let idx: number;
+      if (mode === 'random') {
+        const available = pool.map((_, j) => j).filter((j) => !usedIndexes.has(j));
+        if (available.length === 0) break;
+        idx = available[Math.floor(Math.random() * available.length)];
+        usedIndexes.add(idx);
+      } else {
+        idx = pickIndexFromPool(pool.length, 'sequential', seqKey);
+      }
+      if (idx < 0) break;
+      const j = pool[idx];
+      tracks.push({ url: j.url, label: j.label, category: j.category });
+    }
+    return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: true };
   }
 
   if (step.type === 'custom') {
     const files = await loadCustomAudioFiles();
-    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false };
+    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false };
     const mode = step.config.customAudioMode ?? 'random';
     const idx = pickIndexFromPool(files.length, mode, 'custom');
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false };
     const f = files[idx];
     const name = f.name ?? f.uri.split('/').pop() ?? 'Audio';
     return {
@@ -143,10 +177,11 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       isAffirmations: false,
       isCustom: true,
       isMotivational: false,
+      isJokes: false,
     };
   }
 
-  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false };
+  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false };
 }
 
 // ── Audio state exposed to UI ─────────────────────────────────────────────────
@@ -156,6 +191,7 @@ interface AudioState {
   isAffirmations: boolean;
   isCustom: boolean;
   isMotivational: boolean;
+  isJokes: boolean;
   isPlaying: boolean;
   isPaused: boolean;
   isFinished: boolean; // true when all tracks have completed
@@ -169,7 +205,10 @@ function useStepAudio(
 ) {
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const audioStateRef = useRef<AudioState>({
-    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
+    tracks: [], currentIdx: 0, isAffirmations: false,
+    isCustom: false,
+    isMotivational: false,
+    isJokes: false,
     isPlaying: false, isPaused: false, isFinished: false,
   });
   const activeStepIdRef = useRef<string | null>(null);
@@ -178,7 +217,7 @@ function useStepAudio(
   const customDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [audioState, setAudioState] = useState<AudioState>({
-    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
+    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false,
     isPlaying: false, isPaused: false, isFinished: false,
   });
 
@@ -215,21 +254,21 @@ function useStepAudio(
   useEffect(() => {
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
     const empty: AudioState = {
-      tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false,
+      tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false,
       isPlaying: false, isPaused: false, isFinished: false,
     };
     audioStateRef.current = empty;
     setAudioState(empty);
 
-    if (!step || !['motivational', 'affirmations', 'custom'].includes(step.type)) return;
+    if (!step || !['motivational', 'affirmations', 'jokes', 'custom'].includes(step.type)) return;
 
     const stepId = step.id;
     activeStepIdRef.current = stepId;
 
-    resolveStepAudio(step).then(({ tracks, isAffirmations, isCustom, isMotivational }) => {
+    resolveStepAudio(step).then(({ tracks, isAffirmations, isCustom, isMotivational, isJokes }) => {
       if (activeStepIdRef.current !== stepId) return;
       const newState: AudioState = {
-        tracks, currentIdx: 0, isAffirmations, isCustom, isMotivational,
+        tracks, currentIdx: 0, isAffirmations, isCustom, isMotivational, isJokes,
         isPlaying: false, isPaused: false, isFinished: false,
       };
       audioStateRef.current = newState;
@@ -795,6 +834,7 @@ export default function StackPlayerScreen() {
   const progress = autoComplete && duration > 0 ? Math.min(elapsed / duration, 1) : 0;
 
   const isAffirmationsStep = step.type === 'affirmations';
+  const isJokesStep = step.type === 'jokes';
   const isCustomStep = step.type === 'custom';
   const isMotivationalStep = step.type === 'motivational';
   const isReminderStep = step.type === 'reminder' || step.type === 'melatonin';
@@ -888,6 +928,52 @@ export default function StackPlayerScreen() {
               </View>
             )}
 
+            {/* ── Jokes track display ── */}
+            {isJokesStep && trackCount > 0 && (
+              <View style={styles.affirmationsArea}>
+                <View style={styles.trackPills}>
+                  {audioState.tracks.map((_, i) => (
+                    <View key={i} style={[styles.trackPill, {
+                      backgroundColor: i === audioState.currentIdx
+                        ? '#F59E0B'
+                        : i < audioState.currentIdx ? '#F59E0B40' : colors.border,
+                      width: i === audioState.currentIdx ? 24 : 8,
+                    }]} />
+                  ))}
+                </View>
+                <Animated.View style={[styles.currentTrackCard, {
+                  backgroundColor: '#F59E0B14',
+                  borderColor: '#F59E0B30',
+                  opacity: trackFadeAnim,
+                }]}>
+                  <Text style={[styles.trackCounterText, { color: '#F59E0B' }]}>
+                    {trackNum} of {trackCount}
+                  </Text>
+                  <Text style={[styles.currentTrackLabel, { color: colors.foreground }]}>
+                    {currentTrack?.label ?? '…'}
+                  </Text>
+                  {currentTrack?.category && (
+                    <View style={[styles.categoryBadge, { backgroundColor: '#F59E0B20' }]}>
+                      <Text style={[styles.categoryBadgeText, { color: '#F59E0B' }]}>
+                        {currentTrack.category}
+                      </Text>
+                    </View>
+                  )}
+                </Animated.View>
+                {nextTrack && (
+                  <View style={[styles.upNextRow, { borderColor: colors.border }]}>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Up Next</Text>
+                    <Text style={[styles.upNextTrack, { color: colors.foreground }]}>{nextTrack.label}</Text>
+                  </View>
+                )}
+                {!nextTrack && trackCount > 1 && (
+                  <View style={[styles.upNextRow, { borderColor: colors.border }]}>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Last joke</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
             {/* ── Motivational speech player card ── */}
             {isMotivationalStep && currentTrack && (
               <MotivationalCard
@@ -960,7 +1046,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Timer for auto-complete steps ── */}
-            {!isAffirmationsStep && !isCustomStep && !isMotivationalStep && !isReminderStep && autoComplete && (
+            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isReminderStep && autoComplete && (
               <View style={styles.timerArea}>
                 <Text style={[styles.timerText, { color: colors.foreground }]}>
                   {Math.max(0, duration - elapsed)}s
@@ -972,7 +1058,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Elapsed + Next button for manual non-reminder steps ── */}
-            {!isAffirmationsStep && !isCustomStep && !isMotivationalStep && !isReminderStep && !autoComplete && (
+            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isReminderStep && !autoComplete && (
               <>
                 <Text style={[styles.elapsedText, { color: colors.muted }]}>{elapsed}s elapsed</Text>
                 <Pressable

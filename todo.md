@@ -1652,3 +1652,8 @@
 - [x] Stack editor: add habit picker to custom step config (pick from existing habits)
 - [x] Stack player: show habit rating buttons on custom step, grayed out until audio finishes
 - [x] Stack player: custom step only advances after audio done AND rating selected (or Next tapped)
+- [x] Upload 100 joke/pun MP3 files to CDN
+- [x] Create jokes.ts data file with categories (Wordplay, Animal, Food, Tech, Work, Sports, Science, Classic, Dark, Random)
+- [x] Add Jokes step type to stacks.ts with jokesCategory/jokesCount/jokesMode fields
+- [x] Add Jokes step config UI to stack-editor with category picker and count selector
+- [x] Wire Jokes audio playback in stack-player with yellow-accented track display and Up Next row

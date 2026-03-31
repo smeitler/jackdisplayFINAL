@@ -37,6 +37,7 @@ const STEP_ICON_MAP: Record<StepType, string> = {
   melatonin:    'moon.fill',
   motivational: 'bolt.fill',
   spiritual:    'sparkles',
+  jokes:        'face.smiling',
   custom:       'pencil',
 };
 
