@@ -1641,3 +1641,7 @@
 - [x] Stack player: only advance to next step after all affirmations finish (not on timer)
 - [x] Stack player: reminder step shows green/yellow/red habit rating buttons (Done / Partial / Missed) instead of plain Next Step
 - [x] Stack player: custom audio should not start until the step screen is fully visible (fix premature playback)
+- [x] Create habit-history.ts: save/load/query habit ratings with AsyncStorage
+- [x] Stack player: save rating to history when user taps Done/Partial/Missed
+- [x] Build Habit History screen: ratings grouped by date, color-coded indicators
+- [x] Add History button to stack completion screen and route to /habit-history

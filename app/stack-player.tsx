@@ -39,6 +39,7 @@ import {
   type Affirmation,
 } from '@/app/data/affirmations';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
+import { saveHabitRating, type HabitRating as HabitRatingType } from '@/lib/habit-history';
 
 const STEP_ICON: Record<string, string> = {
   timer:        'timer',
@@ -613,6 +614,24 @@ export default function StackPlayerScreen() {
     router.back();
   }, [router]);
 
+  const handleViewHistory = useCallback(() => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/habit-history' as never);
+  }, [router]);
+
+  const handleHabitRate = useCallback((rating: HabitRating) => {
+    const step = currentStep;
+    if (step && stack) {
+      const habitName = stepLabel(step);
+      saveHabitRating({
+        habitName,
+        stackName: stack.name,
+        rating: rating as HabitRatingType,
+      }).catch((e) => console.warn('[StackPlayer] failed to save habit rating:', e));
+    }
+    advanceStep();
+  }, [currentStep, stack, advanceStep]);
+
   if (!stack) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -633,6 +652,13 @@ export default function StackPlayerScreen() {
             style={({ pressed }) => [styles.doneButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
           >
             <Text style={[styles.doneButtonText, { color: '#fff' }]}>Done</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleViewHistory}
+            style={({ pressed }) => [styles.historyBtn, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <IconSymbol name="calendar" size={16} color={colors.muted} />
+            <Text style={[styles.historyBtnText, { color: colors.muted }]}>View Habit History</Text>
           </Pressable>
         </View>
       </View>
@@ -749,7 +775,7 @@ export default function StackPlayerScreen() {
 
             {/* ── Habit rating for reminder/melatonin steps ── */}
             {isReminderStep && (
-              <HabitRatingButtons onRate={advanceStep} colors={colors} />
+              <HabitRatingButtons onRate={handleHabitRate} colors={colors} />
             )}
 
             {/* ── Timer for auto-complete steps ── */}
@@ -850,4 +876,6 @@ const styles = StyleSheet.create({
   doneSubtitle: { fontSize: 18, fontWeight: '500' },
   doneButton: { marginTop: 24, paddingHorizontal: 48, paddingVertical: 16, borderRadius: 14 },
   doneButtonText: { fontSize: 18, fontWeight: '700' },
+  historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingVertical: 8 },
+  historyBtnText: { fontSize: 14, fontWeight: '500' },
 });
