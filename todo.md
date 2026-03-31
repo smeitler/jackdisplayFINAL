@@ -1666,3 +1666,5 @@
 - [x] Audio completion → auto-habit: when any audio step plays all the way through, auto-create a habit named after the track/step (if none linked) and mark it as Done in habit history
 - [x] Alarm settings: replace journal check-in default with ritual/stack picker (suggest morning ritual as default, shows 2 stacks: Wake Up / Sleep)
 - [x] Alarm notification: Wake Up button launches directly into the assigned stack player (or goes home if none assigned)
+- [x] Remove Morning Ritual / After Alarm (Step 3) section from alarm editor
+- [x] Move alarm sound picker to the bottom of the alarm editor (after ritual picker, before delete)

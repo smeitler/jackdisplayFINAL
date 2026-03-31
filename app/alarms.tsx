@@ -331,73 +331,8 @@ function AlarmEditModal({
             </View>
           </View>
 
-          {/* ── Morning Ritual Sequence ── */}
-          <Text style={[em.groupLabel, { color: colors.muted }]}>MORNING RITUAL SEQUENCE</Text>
-          <Text style={[em.groupSubLabel, { color: colors.muted }]}>
-            This is what happens step-by-step when your alarm goes off.
-          </Text>
-
-          {/* Step 1 — Alarm */}
-          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
-            <View style={[em.stepHeader, { borderBottomColor: colors.border }]}>
-              <View style={[em.stepBadge, { backgroundColor: ALARM_COLOR + '20' }]}>
-                <Text style={[em.stepNum, { color: ALARM_COLOR }]}>1</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[em.stepTitle, { color: colors.foreground }]}>⏰ Alarm Rings</Text>
-                <Text style={[em.stepDesc, { color: colors.muted }]}>
-                  Your alarm fires at the set time. Hit Snooze to delay by {snoozeMinutes} min, or Wake Up to start your ritual.
-                </Text>
-              </View>
-            </View>
-            {/* Alarm Sound inline */}
-            <Pressable
-              onPress={() => {
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSoundOpen(v => !v);
-              }}
-              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, borderBottomWidth: soundOpen ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.7 : 1 }]}
-            >
-              <IconSymbol name="music.note" size={16} color={colors.muted} />
-              <View style={{ flex: 1 }}>
-                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Alarm Sound</Text>
-                <Text style={[em.dropdownValue, { color: colors.foreground }]}>
-                  {ALARM_SOUNDS.find(s => s.id === soundId)?.emoji ?? '⏰'}{' '}
-                  {ALARM_SOUNDS.find(s => s.id === soundId)?.label ?? 'Classic'}
-                </Text>
-              </View>
-              <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
-            </Pressable>
-            {soundOpen && (
-              <View style={[em.dropdownContent, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
-                {ALARM_SOUNDS.map((sound) => {
-                  const isSelected = soundId === sound.id;
-                  const isPreviewing = previewingId === sound.id;
-                  return (
-                    <Pressable
-                      key={sound.id}
-                      onPress={() => {
-                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSoundId(sound.id);
-                        playPreview(sound.id, sound.source);
-                      }}
-                      style={({ pressed }) => [
-                        em.dropdownItem,
-                        isSelected && { backgroundColor: ALARM_COLOR + '18' },
-                        { opacity: pressed ? 0.7 : 1 },
-                      ]}
-                    >
-                      <Text style={em.itemEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
-                      <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground, flex: 1 }]}>
-                        {sound.label}
-                      </Text>
-                      {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-          </View>
+          {/* ── Ritual Setup ── */}
+          <Text style={[em.groupLabel, { color: colors.muted }]}>RITUAL SETUP</Text>
 
           {/* Step 2 — Ritual Assignment */}
           <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
@@ -504,207 +439,54 @@ function AlarmEditModal({
             )}
           </View>
 
-          {/* Step 3 — Ritual */}
-          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[em.stepHeader, { borderBottomColor: colors.border }]}>
-              <View style={[em.stepBadge, { backgroundColor: '#A78BFA20' }]}>
-                <Text style={[em.stepNum, { color: '#A78BFA' }]}>3</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[em.stepTitle, { color: colors.foreground }]}>✨ Morning Ritual</Text>
-                <Text style={[em.stepDesc, { color: colors.muted }]}>
-                  After your journal, the app guides you through your chosen practice below.
-                  {"\n"}Pick what you want to do each morning.
-                </Text>
-              </View>
-            </View>
-            {/* Ritual picker */}
+          {/* ── Alarm Sound ── */}
+          <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 8 }]}>
             <Pressable
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setMeditationOpen(v => !v);
+                setSoundOpen(v => !v);
               }}
-              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, borderBottomWidth: meditationOpen ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, borderBottomWidth: soundOpen ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.7 : 1 }]}
             >
-              <IconSymbol name="moon.stars.fill" size={16} color={colors.muted} />
+              <IconSymbol name="music.note" size={16} color={colors.muted} />
               <View style={{ flex: 1 }}>
-                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Choose Practice</Text>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Alarm Sound</Text>
                 <Text style={[em.dropdownValue, { color: colors.foreground }]}>
-                  {meditationId
-                    ? `${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.emoji ?? ''} ${MEDITATION_OPTIONS.find(m => m.id === meditationId)?.label ?? ''}`
-                    : '🚫 None — skip this step'}
+                  {ALARM_SOUNDS.find(s => s.id === soundId)?.emoji ?? '⏰'}{' '}
+                  {ALARM_SOUNDS.find(s => s.id === soundId)?.label ?? 'Classic'}
                 </Text>
               </View>
-              <IconSymbol name={meditationOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+              <IconSymbol name={soundOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
             </Pressable>
-            {meditationOpen && (
+            {soundOpen && (
               <View style={[em.dropdownContent, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
-                <Pressable
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMeditationId(undefined);
-                  }}
-                  style={({ pressed }) => [
-                    em.dropdownItem,
-                    !meditationId && { backgroundColor: ALARM_COLOR + '18' },
-                    { opacity: pressed ? 0.7 : 1 },
-                  ]}
-                >
-                  <Text style={em.itemEmoji}>🚫</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[em.dropdownItemText, { color: !meditationId ? ALARM_COLOR : colors.foreground }]}>None</Text>
-                    <Text style={[em.meditationDesc, { color: colors.muted }]}>Skip this step entirely</Text>
-                  </View>
-                  {!meditationId && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
-                </Pressable>
-                {MEDITATION_OPTIONS.map((med) => {
-                  const isSelected = meditationId === med.id;
-                  const isPreviewing = previewingId === med.id;
-                  const hasDuration = med.id !== 'journaling' && med.id !== 'none';
-                  const currentDuration = practiceDurations[med.id] ?? 10;
+                {ALARM_SOUNDS.map((sound) => {
+                  const isSelected = soundId === sound.id;
+                  const isPreviewing = previewingId === sound.id;
                   return (
-                    <View key={med.id}>
-                      <Pressable
-                        onPress={() => {
-                          if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setMeditationId(med.id);
-                          playPreview(med.id, med.source ?? null);
-                        }}
-                        style={({ pressed }) => [
-                          em.dropdownItem,
-                          isSelected && { backgroundColor: ALARM_COLOR + '18' },
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text style={em.itemEmoji}>{isPreviewing ? '🔊' : med.emoji}</Text>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground }]}>
-                              {med.label}
-                            </Text>
-                            {med.id === 'priming' && (
-                              <View style={{ backgroundColor: '#F59E0B22', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                                <Text style={{ fontSize: 10, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.4 }}>RECOMMENDED</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={[em.meditationDesc, { color: colors.muted }]}>
-                            {hasDuration ? `${currentDuration} min · ${med.description.split(',').slice(1).join(',').trim() || med.description}` : med.description}
-                          </Text>
-                        </View>
-                        {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
-                      </Pressable>
-                      {/* Track picker for Guided Meditation */}
-                      {isSelected && med.id === 'meditation' && (
-                        <View style={[em.durationChipRow, { borderTopColor: colors.border }]}>
-                          <Text style={[em.durationChipLabel, { color: colors.muted }]}>Track</Text>
-                          <Pressable
-                            onPress={() => {
-                              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              setTrackPickerOpen(v => !v);
-                            }}
-                            style={({ pressed }) => [{
-                              flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
-                              paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-                              borderWidth: 1.5, borderColor: ALARM_COLOR,
-                              backgroundColor: ALARM_COLOR + '12',
-                              opacity: pressed ? 0.7 : 1,
-                            }]}
-                          >
-                            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: ALARM_COLOR }}>
-                              {MEDITATE_TRACKS.find(t => t.id === meditationTrackId)?.title ?? 'Morning Mindset'}
-                            </Text>
-                            <Text style={{ fontSize: 11, color: colors.muted }}>
-                              {MEDITATE_TRACKS.find(t => t.id === meditationTrackId)?.duration ?? '5:00'}
-                            </Text>
-                            <IconSymbol name={trackPickerOpen ? 'chevron.up' : 'chevron.down'} size={12} color={ALARM_COLOR} />
-                          </Pressable>
-                        </View>
-                      )}
-                      {/* Expanded track list */}
-                      {isSelected && med.id === 'meditation' && trackPickerOpen && (
-                        <View style={[{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
-                          {MEDITATE_TRACKS.map((track) => {
-                            const isTrackSelected = meditationTrackId === track.id;
-                            return (
-                              <Pressable
-                                key={track.id}
-                                onPress={() => {
-                                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  setMeditationTrackId(track.id);
-                                  setTrackPickerOpen(false);
-                                  playPreview(track.id, track.url);
-                                }}
-                                style={({ pressed }) => [{
-                                  flexDirection: 'row', alignItems: 'center', gap: 10,
-                                  paddingHorizontal: 16, paddingVertical: 10,
-                                  backgroundColor: isTrackSelected ? ALARM_COLOR + '12' : 'transparent',
-                                  opacity: pressed ? 0.7 : 1,
-                                }]}
-                              >
-                                <Text style={{ fontSize: 13 }}>{previewingId === track.id ? '🔊' : '🎵'}</Text>
-                                <View style={{ flex: 1 }}>
-                                  <Text style={{ fontSize: 13, fontWeight: '600', color: isTrackSelected ? ALARM_COLOR : colors.foreground }}>
-                                    {track.title}
-                                  </Text>
-                                  <Text style={{ fontSize: 11, color: colors.muted }}>{track.outcome} · {track.duration}</Text>
-                                </View>
-                                {isTrackSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      )}
-                      {isSelected && hasDuration && med.id !== 'meditation' && (
-                        <View style={[em.durationChipRow, { borderTopColor: colors.border }]}>
-                          <Text style={[em.durationChipLabel, { color: colors.muted }]}>Duration</Text>
-                          <View style={em.durationChips}>
-                            {[5, 10, 15, 20].map((mins) => (
-                              <Pressable
-                                key={mins}
-                                onPress={() => {
-                                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  setPracticeDurations(prev => ({ ...prev, [med.id]: mins }));
-                                }}
-                                style={({ pressed }) => [{
-                                  paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5,
-                                  borderColor: currentDuration === mins ? ALARM_COLOR : colors.border,
-                                  backgroundColor: currentDuration === mins ? ALARM_COLOR + '18' : 'transparent',
-                                  opacity: pressed ? 0.7 : 1,
-                                }]}
-                              >
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: currentDuration === mins ? ALARM_COLOR : colors.muted }}>
-                                  {mins} min
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        </View>
-                      )}
-                    </View>
+                    <Pressable
+                      key={sound.id}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSoundId(sound.id);
+                        playPreview(sound.id, sound.source);
+                      }}
+                      style={({ pressed }) => [
+                        em.dropdownItem,
+                        isSelected && { backgroundColor: ALARM_COLOR + '18' },
+                        { opacity: pressed ? 0.7 : 1 },
+                      ]}
+                    >
+                      <Text style={em.itemEmoji}>{isPreviewing ? '🔊' : sound.emoji}</Text>
+                      <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground, flex: 1 }]}>
+                        {sound.label}
+                      </Text>
+                      {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                    </Pressable>
                   );
                 })}
               </View>
             )}
-            {/* Require Check-in toggle inside Step 3 */}
-            <View style={[em.dropdownRow, { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: 0 }]}>
-              <IconSymbol name="lock.fill" size={16} color={colors.muted} />
-              <View style={{ flex: 1 }}>
-                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Require Check-in to Dismiss</Text>
-                <Text style={[{ fontSize: 11, color: colors.muted, marginTop: 1 }]}>
-                  Must complete journal before the alarm screen closes
-                </Text>
-              </View>
-              <Switch
-                value={requireCheckin}
-                onValueChange={(v) => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setRequireCheckin(v);
-                }}
-                trackColor={{ false: colors.border, true: ALARM_COLOR }}
-                thumbColor="#fff"
-              />
-            </View>
           </View>
 
           {/* ── Delete ── */}
