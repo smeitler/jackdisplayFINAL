@@ -540,7 +540,7 @@ const em = StyleSheet.create({
     borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 8,
   },
   groupLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 6, marginTop: 4, paddingHorizontal: 4 },
-  wheelWrap: { paddingVertical: 16, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  wheelWrap: { paddingVertical: 4, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
   daySection: { paddingHorizontal: 16, paddingVertical: 14 },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 10 },
   daysRow: { flexDirection: 'row', gap: 8 },

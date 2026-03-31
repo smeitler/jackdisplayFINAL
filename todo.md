@@ -1668,3 +1668,4 @@
 - [x] Alarm notification: Wake Up button launches directly into the assigned stack player (or goes home if none assigned)
 - [x] Remove Morning Ritual / After Alarm (Step 3) section from alarm editor
 - [x] Move alarm sound picker to the bottom of the alarm editor (after ritual picker, before delete)
+- [x] Fix excessive blank space above/below the time picker wheel in alarm editor (reduced VISIBLE rows from 5 to 3, ITEM_H 50->46, wheelWrap paddingVertical 16->4)

@@ -38,8 +38,8 @@ import { useColors } from '@/hooks/use-colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_H   = 50;   // height of each row
-const VISIBLE  = 5;    // rows visible at once for hour/minute (must be odd)
+const ITEM_H   = 46;   // height of each row
+const VISIBLE  = 3;    // rows visible at once for hour/minute (must be odd)
 const PICKER_H = ITEM_H * VISIBLE;  // shared container height for all columns
 const PAD      = ITEM_H * Math.floor(VISIBLE / 2); // padding for 5-row columns
 
@@ -340,7 +340,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           width={hourW}
           accentColor={colors.foreground}
           bgColor={bgColor}
-          visibleRows={5}
+          visibleRows={3}
         />
         <WheelColumn
           items={MINUTES}
@@ -349,7 +349,7 @@ export function WheelTimePicker({ hour, minute, onChange }: WheelTimePickerProps
           width={minuteW}
           accentColor={colors.foreground}
           bgColor={bgColor}
-          visibleRows={5}
+          visibleRows={3}
         />
         {/* AM/PM: only 2 items, use visibleRows=3 so it doesn't overflow */}
         <WheelColumn
