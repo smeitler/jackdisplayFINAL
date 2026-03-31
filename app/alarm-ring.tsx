@@ -60,12 +60,14 @@ export default function AlarmRingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alarm } = useApp();
-  const params = useLocalSearchParams<{ soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string }>();
+  const params = useLocalSearchParams<{ soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string }>();
 
   const soundId = params.soundId ?? alarm.soundId ?? 'classic';
   const snoozeMinutes = parseInt(params.snoozeMinutes ?? String(alarm.snoozeMinutes ?? 10), 10);
   const meditationId = params.meditationId ?? alarm.meditationId ?? 'none';
   const practiceDuration = parseInt(params.practiceDuration ?? String((alarm.practiceDurations?.[meditationId] ?? 10)), 10);
+  // The ritual stack to launch after dismissing the alarm (empty string = none)
+  const assignedStackId = params.assignedStackId ?? (alarm as typeof alarm & { assignedStackId?: string }).assignedStackId ?? '';
 
   const [now, setNow] = useState(new Date());
   const [snoozed, setSnoozed] = useState(false);
@@ -123,11 +125,15 @@ export default function AlarmRingScreen() {
   async function handleWakeUp() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     stopSound();
-    // Navigate to journal entry screen
-    router.replace({
-      pathname: '/alarm-journal',
-      params: { meditationId, practiceDuration: String(practiceDuration) },
-    } as never);
+    // If a ritual stack is assigned, launch it directly; otherwise go home
+    if (assignedStackId) {
+      router.replace({
+        pathname: '/stack-player',
+        params: { id: assignedStackId },
+      } as never);
+    } else {
+      router.replace('/(tabs)' as never);
+    }
   }
 
   async function handleSnooze() {
@@ -142,7 +148,7 @@ export default function AlarmRingScreen() {
           content: {
             title: `Snooze over — time to wake up! ⏰`,
             body: 'Your alarm is ringing again.',
-            data: { action: 'open_alarm_ring', soundId, snoozeMinutes: String(snoozeMinutes), meditationId, practiceDuration: String(practiceDuration) },
+            data: { action: 'open_alarm_ring', soundId, snoozeMinutes: String(snoozeMinutes), meditationId, practiceDuration: String(practiceDuration), assignedStackId },
             sound: soundId === 'gentle' ? 'alarm_gentle.wav' : 'alarm_classic.wav',
             ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
           },

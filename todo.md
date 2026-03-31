@@ -1662,3 +1662,7 @@
 - [x] Bible verses: 192 MP3s uploaded to CDN, wired into Spiritual step as random verse pool (1-5 verses per session)
 - [x] Meditation step: 2-min and 10-min audio options uploaded to CDN, duration picker in editor, plays selected track in player
 - [x] BUG FIXED: All audio broken in stack player — root cause: phase stayed 'running' across step advances so audio start trigger never fired. Fixed by adding phaseRef so resolveStepAudio callback starts playback immediately when phase is already running.
+
+- [x] Audio completion → auto-habit: when any audio step plays all the way through, auto-create a habit named after the track/step (if none linked) and mark it as Done in habit history
+- [x] Alarm settings: replace journal check-in default with ritual/stack picker (suggest morning ritual as default, shows 2 stacks: Wake Up / Sleep)
+- [x] Alarm notification: Wake Up button launches directly into the assigned stack player (or goes home if none assigned)

@@ -31,6 +31,7 @@ import { scheduleAlarm, cancelAlarm, DAY_LABELS, formatAlarmTime } from '@/lib/n
 import { WheelTimePicker } from '@/components/wheel-time-picker';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
+import { loadStacks, type RitualStack } from '@/lib/stacks';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,11 @@ function AlarmEditModal({
     alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 }
   );
 
+  // Ritual stack assignment
+  const [assignedStackId, setAssignedStackId] = useState<string | undefined>(alarm?.assignedStackId);
+  const [availableStacks, setAvailableStacks] = useState<RitualStack[]>([]);
+  const [stackPickerOpen, setStackPickerOpen] = useState(false);
+
   // UI state
   const [soundOpen, setSoundOpen]         = useState(false);
   const [meditationOpen, setMeditationOpen] = useState(false);
@@ -125,6 +131,21 @@ function AlarmEditModal({
   const previewTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Load available stacks when modal opens
+  useEffect(() => {
+    if (!visible) return;
+    loadStacks().then((stacks) => {
+      setAvailableStacks(stacks);
+      // Auto-assign morning ritual as default for new alarms
+      if (!alarm?.assignedStackId && stacks.length > 0) {
+        const morning = stacks.find((s) =>
+          s.name.toLowerCase().includes('morning') || s.id === 'wakeup'
+        );
+        setAssignedStackId(morning?.id ?? stacks[0].id);
+      }
+    });
+  }, [visible]);
 
   // Re-sync when alarm changes
   useEffect(() => {
@@ -137,6 +158,8 @@ function AlarmEditModal({
     setMeditationId(alarm?.meditationId);
     setMeditationTrackId(alarm?.meditationTrackId ?? DEFAULT_MEDITATION_TRACK_ID);
     setTrackPickerOpen(false);
+    setAssignedStackId(alarm?.assignedStackId);
+    setStackPickerOpen(false);
     setRequireCheckin(alarm?.requireCheckin ?? false);
     setSnoozeMinutes(alarm?.snoozeMinutes ?? 5);
     setPracticeDurations(alarm?.practiceDurations ?? { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 });
@@ -196,6 +219,7 @@ function AlarmEditModal({
       requireCheckin,
       snoozeMinutes,
       practiceDurations,
+      assignedStackId,
       notificationIds: alarm?.notificationIds ?? [],
     };
     onSave(entry);
@@ -375,20 +399,109 @@ function AlarmEditModal({
             )}
           </View>
 
-          {/* Step 2 — Journal */}
+          {/* Step 2 — Ritual Assignment */}
           <View style={[em.section, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
-            <View style={[em.stepHeader, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
+            <View style={[em.stepHeader, { borderBottomColor: colors.border }]}>
               <View style={[em.stepBadge, { backgroundColor: '#22C55E20' }]}>
                 <Text style={[em.stepNum, { color: '#22C55E' }]}>2</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[em.stepTitle, { color: colors.foreground }]}>📓 Journal Check-in</Text>
+                <Text style={[em.stepTitle, { color: colors.foreground }]}>✨ Ritual to Launch</Text>
                 <Text style={[em.stepDesc, { color: colors.muted }]}>
-                  If you already completed your journal the night before, this step is automatically skipped — no double entry.
-                  {"\n"}If not, you’ll be prompted to do a quick morning entry.
+                  When you dismiss the alarm, the app opens directly into this ritual stack.
+                  {"\n"}Morning Ritual is suggested by default.
                 </Text>
               </View>
             </View>
+            {/* Stack picker */}
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setStackPickerOpen(v => !v);
+              }}
+              style={({ pressed }) => [em.dropdownRow, { borderBottomColor: colors.border, borderBottomWidth: stackPickerOpen ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <IconSymbol name="sparkles" size={16} color={colors.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={[em.dropdownLabel, { color: colors.muted }]}>Assigned Ritual</Text>
+                <Text style={[em.dropdownValue, { color: colors.foreground }]}>
+                  {availableStacks.length === 0
+                    ? 'No rituals yet — create one first'
+                    : assignedStackId
+                      ? (availableStacks.find(s => s.id === assignedStackId)?.name ?? 'Select a ritual')
+                      : '🚫 None — skip ritual launch'}
+                </Text>
+              </View>
+              <IconSymbol name={stackPickerOpen ? 'chevron.up' : 'chevron.down'} size={14} color={colors.muted} />
+            </Pressable>
+            {stackPickerOpen && (
+              <View style={[em.dropdownContent, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
+                {/* None option */}
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setAssignedStackId(undefined);
+                    setStackPickerOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    em.dropdownItem,
+                    !assignedStackId && { backgroundColor: ALARM_COLOR + '18' },
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Text style={em.itemEmoji}>🚫</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[em.dropdownItemText, { color: !assignedStackId ? ALARM_COLOR : colors.foreground }]}>None</Text>
+                    <Text style={[em.meditationDesc, { color: colors.muted }]}>Skip ritual launch after alarm</Text>
+                  </View>
+                  {!assignedStackId && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                </Pressable>
+                {availableStacks.map((stack) => {
+                  const isSelected = assignedStackId === stack.id;
+                  const isMorning = stack.name.toLowerCase().includes('morning') || stack.id === 'wakeup';
+                  return (
+                    <Pressable
+                      key={stack.id}
+                      onPress={() => {
+                        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setAssignedStackId(stack.id);
+                        setStackPickerOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        em.dropdownItem,
+                        isSelected && { backgroundColor: ALARM_COLOR + '18' },
+                        { opacity: pressed ? 0.7 : 1 },
+                      ]}
+                    >
+                      <Text style={em.itemEmoji}>{stack.id === 'wakeup' ? '🌅' : '🌙'}</Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground }]}>
+                            {stack.name}
+                          </Text>
+                          {isMorning && (
+                            <View style={{ backgroundColor: '#F59E0B22', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.4 }}>DEFAULT</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[em.meditationDesc, { color: colors.muted }]}>
+                          {stack.steps.length} step{stack.steps.length !== 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                      {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
+                    </Pressable>
+                  );
+                })}
+                {availableStacks.length === 0 && (
+                  <View style={{ padding: 16 }}>
+                    <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
+                      No rituals yet. Go to the Stacks tab to create one.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Step 3 — Ritual */}

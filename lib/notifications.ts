@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { AlarmConfig, saveAlarm } from './storage';
+import { AlarmConfig, saveAlarms, loadAlarms } from './storage';
 
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -84,6 +84,8 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
           practiceDuration: String(
             config.practiceDurations?.[config.meditationId ?? 'none'] ?? 10
           ),
+          // Pass the assigned stack ID so the alarm ring screen can launch it
+          assignedStackId: (config as AlarmConfig & { assignedStackId?: string }).assignedStackId ?? '',
         },
         sound: soundFile,
         // Time-Sensitive: breaks through Focus modes and DND on iOS 15+
@@ -124,20 +126,35 @@ export async function applyAlarm(config: AlarmConfig): Promise<AlarmConfig> {
   // Web doesn't support push notifications — just persist the config as-is
   if (Platform.OS === 'web') {
     const updated = { ...config, notificationIds: [] };
-    await saveAlarm(updated);
+    const alarms = await loadAlarms();
+    const alarmId = (config as AlarmConfig & { id?: string }).id;
+    const idx = alarms.findIndex((a) => a.id === alarmId);
+    const entry = updated as unknown as typeof alarms[0];
+    if (idx >= 0) { alarms[idx] = entry; } else { alarms.push(entry); }
+    await saveAlarms(alarms);
     return updated;
   }
 
   const granted = await requestNotificationPermissions();
   if (!granted) {
     const updated = { ...config, isEnabled: false, notificationIds: [] };
-    await saveAlarm(updated);
+    const alarms = await loadAlarms();
+    const alarmId = (config as AlarmConfig & { id?: string }).id;
+    const idx = alarms.findIndex((a) => a.id === alarmId);
+    const entry = updated as unknown as typeof alarms[0];
+    if (idx >= 0) { alarms[idx] = entry; } else { alarms.push(entry); }
+    await saveAlarms(alarms);
     return updated;
   }
 
   const ids = await scheduleAlarm(config);
   const updated = { ...config, notificationIds: ids };
-  await saveAlarm(updated);
+  const alarms = await loadAlarms();
+  const alarmId = (config as AlarmConfig & { id?: string }).id;
+  const idx = alarms.findIndex((a) => a.id === alarmId);
+  const entry = updated as unknown as typeof alarms[0];
+  if (idx >= 0) { alarms[idx] = entry; } else { alarms.push(entry); }
+  await saveAlarms(alarms);
   return updated;
 }
 

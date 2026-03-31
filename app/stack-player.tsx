@@ -24,7 +24,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColors } from '@/hooks/use-colors';
 import {
   loadStacks, stepLabel, stepDefaultDuration, stepIsAutoComplete, STEP_TYPE_META,
-  type RitualStack, type RitualStep,
+  type RitualStack, type RitualStep, type StepType,
 } from '@/lib/stacks';
 import {
   MOTIVATIONAL_SPEECHES,
@@ -770,16 +770,40 @@ export default function StackPlayerScreen() {
   // For custom steps with a linked habit, audio finishing should NOT auto-advance.
   // Instead it unlocks the habit rating buttons. We track this with a ref.
   const customHabitLinkedRef = useRef(false);
+  // Keep a ref to current step & stack so the audio callback can read them synchronously
+  const currentStepRef = useRef<typeof currentStep>(null);
+  const stackRef = useRef<typeof stack>(null);
 
   const { stopAudio, toggleAudio, audioState } = useStepAudio(
     currentStep,
     phase,
     useCallback(() => {
+      // Auto-save a 'done' habit rating when any audio step finishes playing all the way through.
+      // Uses the step label as the habit name; auto-creates the habit entry if none is linked.
+      const finishedStep = currentStepRef.current;
+      const finishedStack = stackRef.current;
+      if (finishedStep && finishedStack) {
+        const audioTypes: StepType[] = ['motivational', 'affirmations', 'jokes', 'spiritual', 'meditation', 'custom'];
+        if (audioTypes.includes(finishedStep.type)) {
+          const habitName = finishedStep.type === 'custom' && finishedStep.config.linkedHabitName
+            ? finishedStep.config.linkedHabitName
+            : stepLabel(finishedStep);
+          saveHabitRating({
+            habitName,
+            stackName: finishedStack.name,
+            rating: 'done',
+          }).catch((e) => console.warn('[StackPlayer] auto-habit save failed:', e));
+        }
+      }
       // If this is a custom step with a linked habit, don't advance — just unlock rating
       if (customHabitLinkedRef.current) return;
       advanceStepRef.current();
     }, []),
   );
+
+  // Keep refs in sync so the audio callback can access current values
+  currentStepRef.current = currentStep;
+  stackRef.current = stack;
 
   useEffect(() => {
     if (!id) return;

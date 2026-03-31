@@ -78,6 +78,7 @@ export type AlarmConfig = {
   morningPracticeLength?: 5 | 10 | 20;  // minutes for meditation/visualization
   morningBreathworkStyle?: 'wim_hof' | 'box' | '4_7_8';
   morningPracticeEnabled?: boolean;  // auto-launch after habit check-in
+  assignedStackId?: string;  // ID of the ritual stack to launch when this alarm fires
 };
 
 // ─── Rating helpers ───────────────────────────────────────────────────────────
