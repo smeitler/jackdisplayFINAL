@@ -1639,3 +1639,5 @@
 - [x] Stack player: show current affirmation number + category while playing
 - [x] Stack player: show "Up Next" preview for next affirmation in playlist
 - [x] Stack player: only advance to next step after all affirmations finish (not on timer)
+- [x] Stack player: reminder step shows green/yellow/red habit rating buttons (Done / Partial / Missed) instead of plain Next Step
+- [x] Stack player: custom audio should not start until the step screen is fully visible (fix premature playback)
