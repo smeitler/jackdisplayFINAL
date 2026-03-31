@@ -4,12 +4,12 @@
  * and always-visible Cancel (top-left) + Skip (top-right) controls.
  *
  * Audio playback:
- *  - motivational: plays a speech from the CDN library (random or sequential by category)
- *  - affirmations: plays N affirmations from the CDN library (random or sequential, by category)
- *  - custom: plays user-uploaded MP3 files (random or sequential rotation)
+ *  - motivational: plays one speech from the CDN library
+ *  - affirmations: plays N affirmations in sequence, showing current + up-next,
+ *                  and advances to the next STEP only after all tracks finish
+ *  - custom: plays one user-uploaded MP3 per step run
  *
- * Uses createAudioPlayer (not useAudioPlayer) so we can call player.replace()
- * to swap tracks without creating/destroying the native player object.
+ * Uses createAudioPlayer + player.replace() for reliable track swapping.
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Animated } from 'react-native';
@@ -33,6 +33,7 @@ import {
   AFFIRMATIONS,
   getAffirmationsByCategory,
   type AffirmationCategory,
+  type Affirmation,
 } from '@/app/data/affirmations';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 
@@ -56,138 +57,186 @@ type Phase = 'delay' | 'running' | 'done';
 // ── Sequential index storage (in-memory per session) ─────────────────────────
 const seqIndexes: Record<string, number> = {};
 
-function pickFromPool(pool: string[], mode: 'random' | 'sequential', key: string): string | null {
-  if (!pool.length) return null;
-  if (mode === 'random') return pool[Math.floor(Math.random() * pool.length)];
+function pickIndexFromPool(poolLen: number, mode: 'random' | 'sequential', key: string): number {
+  if (poolLen === 0) return -1;
+  if (mode === 'random') return Math.floor(Math.random() * poolLen);
   const last = seqIndexes[key] ?? -1;
-  const next = (last + 1) % pool.length;
+  const next = (last + 1) % poolLen;
   seqIndexes[key] = next;
-  return pool[next];
+  return next;
 }
 
-// ── Resolve audio URLs for a step ────────────────────────────────────────────
-async function resolveStepAudioUrls(step: RitualStep): Promise<string[]> {
+// ── Resolved track info ───────────────────────────────────────────────────────
+interface ResolvedTrack {
+  url: string;
+  label: string;   // e.g. "Confidence #3" or "Track 1"
+  category?: string;
+}
+
+interface ResolvedAudio {
+  tracks: ResolvedTrack[];
+  isAffirmations: boolean;
+}
+
+async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
   const cfg = step.config;
 
   if (step.type === 'motivational') {
     const mode = cfg.motivationalSpeechMode ?? 'random';
     const pool = cfg.motivationalSpeechCategory
-      ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory).map((s) => s.url)
-      : MOTIVATIONAL_SPEECHES.map((s) => s.url);
-    const url = pickFromPool(pool, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
-    return url ? [url] : [];
+      ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory)
+      : MOTIVATIONAL_SPEECHES;
+    const idx = pickIndexFromPool(pool.length, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
+    if (idx < 0) return { tracks: [], isAffirmations: false };
+    const s = pool[idx];
+    return {
+      tracks: [{ url: s.url, label: s.category, category: s.category }],
+      isAffirmations: false,
+    };
   }
 
   if (step.type === 'affirmations') {
     const mode = cfg.affirmationsMode ?? 'random';
     const count = Math.min(cfg.affirmationsCount ?? 1, 10);
     const category = cfg.affirmationsCategory as AffirmationCategory | undefined;
-    const pool = category
-      ? getAffirmationsByCategory(category).map((a) => a.url)
-      : AFFIRMATIONS.map((a) => a.url);
+    const pool: Affirmation[] = category
+      ? getAffirmationsByCategory(category)
+      : AFFIRMATIONS;
     const seqKey = `affirmations_${category ?? 'all'}`;
-    const urls: string[] = [];
+    const tracks: ResolvedTrack[] = [];
+    const usedIndexes = new Set<number>();
     for (let i = 0; i < count; i++) {
-      const url = pickFromPool(pool, mode, seqKey);
-      if (url) urls.push(url);
+      // For random mode, avoid repeats within the same session batch
+      let idx: number;
+      if (mode === 'random') {
+        const available = pool
+          .map((_, j) => j)
+          .filter((j) => !usedIndexes.has(j));
+        if (available.length === 0) break;
+        idx = available[Math.floor(Math.random() * available.length)];
+        usedIndexes.add(idx);
+      } else {
+        idx = pickIndexFromPool(pool.length, 'sequential', seqKey);
+      }
+      if (idx < 0) break;
+      const a = pool[idx];
+      tracks.push({
+        url: a.url,
+        label: `${a.category} #${a.number}`,
+        category: a.category,
+      });
     }
-    return urls;
+    return { tracks, isAffirmations: true };
   }
 
   if (step.type === 'custom') {
     const mode = cfg.customAudioMode ?? 'sequential';
     const files = await loadCustomAudioFiles();
-    if (!files.length) return [];
-    const pool = files.map((f) => f.uri);
-    const url = pickFromPool(pool, mode, `custom_audio`);
-    return url ? [url] : [];
+    if (!files.length) return { tracks: [], isAffirmations: false };
+    const idx = pickIndexFromPool(files.length, mode, `custom_audio`);
+    if (idx < 0) return { tracks: [], isAffirmations: false };
+    const f = files[idx];
+    const name = f.name ?? f.uri.split('/').pop() ?? 'Custom Audio';
+    return {
+      tracks: [{ url: f.uri, label: name }],
+      isAffirmations: false,
+    };
   }
 
-  return [];
+  return { tracks: [], isAffirmations: false };
 }
 
-// ── Robust audio engine using createAudioPlayer + replace() ──────────────────
-// This avoids the useAudioPlayer limitation where source changes don't
-// reliably trigger a new load. createAudioPlayer gives us a stable native
-// player instance we can replace() the source on at will.
-function useStepAudio(step: RitualStep | null, phase: Phase) {
-  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const urlsRef = useRef<string[]>([]);
-  const idxRef = useRef(0);
-  const activeStepIdRef = useRef<string | null>(null);
+// ── Audio state exposed to UI ─────────────────────────────────────────────────
+interface AudioState {
+  tracks: ResolvedTrack[];
+  currentIdx: number;
+  isAffirmations: boolean;
+}
 
-  // Create the player once on mount, destroy on unmount
+// ── Robust audio engine ───────────────────────────────────────────────────────
+function useStepAudio(
+  step: RitualStep | null,
+  phase: Phase,
+  onAllTracksFinished: () => void,
+) {
+  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const audioStateRef = useRef<AudioState>({ tracks: [], currentIdx: 0, isAffirmations: false });
+  const activeStepIdRef = useRef<string | null>(null);
+  const onFinishedRef = useRef(onAllTracksFinished);
+  onFinishedRef.current = onAllTracksFinished;
+
+  // Expose current audio state to React via a state variable
+  const [audioState, setAudioState] = useState<AudioState>({
+    tracks: [], currentIdx: 0, isAffirmations: false,
+  });
+
+  // Create player once on mount
   useEffect(() => {
-    // Start with a silent placeholder so the player is ready
     const p = createAudioPlayer({ uri: '' });
     playerRef.current = p;
+
+    const sub = p.addListener('playbackStatusUpdate', (status: any) => {
+      if (!status.didJustFinish) return;
+      const { tracks, currentIdx, isAffirmations } = audioStateRef.current;
+      if (currentIdx < tracks.length - 1) {
+        // More tracks — advance to next
+        const nextIdx = currentIdx + 1;
+        audioStateRef.current = { ...audioStateRef.current, currentIdx: nextIdx };
+        setAudioState({ ...audioStateRef.current });
+        playTrack(tracks[nextIdx].url);
+      } else {
+        // All tracks done — notify parent to advance step
+        onFinishedRef.current();
+      }
+    });
+
     return () => {
+      try { sub?.remove?.(); } catch {}
       try { p.remove(); } catch {}
       playerRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When step changes, resolve URLs and load the first track
+  // When step changes, resolve tracks
   useEffect(() => {
-    urlsRef.current = [];
-    idxRef.current = 0;
+    const empty: AudioState = { tracks: [], currentIdx: 0, isAffirmations: false };
+    audioStateRef.current = empty;
+    setAudioState(empty);
 
-    if (!step || !['motivational', 'affirmations', 'custom'].includes(step.type)) {
-      return;
-    }
+    if (!step || !['motivational', 'affirmations', 'custom'].includes(step.type)) return;
 
     const stepId = step.id;
     activeStepIdRef.current = stepId;
 
-    resolveStepAudioUrls(step).then((urls) => {
-      // Guard: step may have changed while we were resolving
+    resolveStepAudio(step).then(({ tracks, isAffirmations }) => {
       if (activeStepIdRef.current !== stepId) return;
-      urlsRef.current = urls;
-      idxRef.current = 0;
-      // If already running, start playing immediately
-      if (phase === 'running' && urls.length > 0) {
-        playCurrentTrack();
+      const newState: AudioState = { tracks, currentIdx: 0, isAffirmations };
+      audioStateRef.current = newState;
+      setAudioState(newState);
+      if (phase === 'running' && tracks.length > 0) {
+        playTrack(tracks[0].url);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step?.id, step?.type]);
 
-  // When phase transitions to running, start playback
+  // When phase becomes running, start playback
   useEffect(() => {
     if (phase === 'running') {
-      if (urlsRef.current.length > 0) {
-        playCurrentTrack();
+      const { tracks, currentIdx } = audioStateRef.current;
+      if (tracks.length > 0) {
+        playTrack(tracks[currentIdx].url);
       }
     } else {
-      // Pause on any non-running phase
       try { playerRef.current?.pause(); } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Set up the "did just finish" listener once on mount
-  useEffect(() => {
+  function playTrack(url: string) {
     const p = playerRef.current;
-    if (!p) return;
-    const sub = p.addListener('playbackStatusUpdate', (status: any) => {
-      if (!status.didJustFinish) return;
-      const urls = urlsRef.current;
-      const idx = idxRef.current;
-      if (idx < urls.length - 1) {
-        // Advance to next track in playlist (affirmations)
-        idxRef.current = idx + 1;
-        playCurrentTrack();
-      }
-    });
-    return () => { try { sub?.remove?.(); } catch {} };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function playCurrentTrack() {
-    const p = playerRef.current;
-    if (!p) return;
-    const url = urlsRef.current[idxRef.current];
-    if (!url) return;
+    if (!p || !url) return;
     (async () => {
       try {
         await setAudioModeAsync({ playsInSilentMode: true });
@@ -203,7 +252,7 @@ function useStepAudio(step: RitualStep | null, phase: Phase) {
     try { playerRef.current?.pause(); } catch {}
   }
 
-  return { stopAudio };
+  return { stopAudio, audioState };
 }
 
 export default function StackPlayerScreen() {
@@ -221,11 +270,24 @@ export default function StackPlayerScreen() {
 
   // Fade animation for step transitions
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  // Track fade for affirmation transitions
+  const trackFadeAnim = useRef(new Animated.Value(1)).current;
 
   const currentStep = stack?.steps[stepIdx] ?? null;
   const totalSteps = stack?.steps.length ?? 0;
 
-  const { stopAudio } = useStepAudio(currentStep, phase);
+  // advanceStep is called either by the timer (non-affirmation auto steps)
+  // or by the audio engine (when all affirmation tracks finish)
+  const advanceStepRef = useRef<() => void>(() => {});
+
+  const { stopAudio, audioState } = useStepAudio(
+    currentStep,
+    phase,
+    useCallback(() => {
+      // Called when all audio tracks for this step are done
+      advanceStepRef.current();
+    }, []),
+  );
 
   // Load stack on mount
   useEffect(() => {
@@ -244,7 +306,35 @@ export default function StackPlayerScreen() {
     setElapsed(0);
   }, [stack, stepIdx]);
 
-  // Tick logic
+  // Animate track card when currentIdx changes
+  useEffect(() => {
+    if (audioState.isAffirmations && audioState.currentIdx > 0) {
+      Animated.sequence([
+        Animated.timing(trackFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(trackFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [audioState.currentIdx]);
+
+  const advanceStep = useCallback(() => {
+    stopAudio();
+    if (stepIdx + 1 >= totalSteps) {
+      setPhase('done');
+      return;
+    }
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+    setStepIdx((i) => i + 1);
+  }, [stopAudio, stepIdx, totalSteps, fadeAnim]);
+
+  // Keep advanceStepRef in sync
+  useEffect(() => {
+    advanceStepRef.current = advanceStep;
+  }, [advanceStep]);
+
+  // Tick logic — affirmations steps are audio-driven, not timer-driven
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
 
@@ -262,6 +352,15 @@ export default function StackPlayerScreen() {
     } else if (phase === 'running') {
       const step = currentStep;
       if (!step) return;
+
+      // Affirmations: audio-driven advance — just count elapsed for display
+      if (step.type === 'affirmations') {
+        intervalRef.current = setInterval(() => {
+          setElapsed((e) => e + 1);
+        }, 1000);
+        return;
+      }
+
       const autoComplete = stepIsAutoComplete(step);
       const duration = stepDefaultDuration(step);
 
@@ -286,19 +385,6 @@ export default function StackPlayerScreen() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, stepIdx]);
-
-  const advanceStep = useCallback(() => {
-    stopAudio();
-    if (stepIdx + 1 >= totalSteps) {
-      setPhase('done');
-      return;
-    }
-    Animated.sequence([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-    ]).start();
-    setStepIdx((i) => i + 1);
-  }, [stopAudio, stepIdx, totalSteps, fadeAnim]);
 
   const handleSkip = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -348,8 +434,15 @@ export default function StackPlayerScreen() {
   const meta = STEP_TYPE_META[step.type];
   const iconName = (STEP_ICON[step.type] ?? 'sparkles') as any;
   const duration = stepDefaultDuration(step);
-    const autoComplete = stepIsAutoComplete(step);
+  const autoComplete = stepIsAutoComplete(step);
   const progress = autoComplete && duration > 0 ? Math.min(elapsed / duration, 1) : 0;
+
+  // Affirmations track info
+  const isAffirmationsStep = step.type === 'affirmations';
+  const currentTrack = audioState.tracks[audioState.currentIdx] ?? null;
+  const nextTrack = audioState.tracks[audioState.currentIdx + 1] ?? null;
+  const trackCount = audioState.tracks.length;
+  const trackNum = audioState.currentIdx + 1;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -402,8 +495,72 @@ export default function StackPlayerScreen() {
             <Text style={[styles.stepTitle, { color: colors.foreground }]}>{stepLabel(step)}</Text>
             <Text style={[styles.stepType, { color: colors.muted }]}>{meta.label}</Text>
 
-            {/* Timer / elapsed */}
-            {autoComplete ? (
+            {/* ── Affirmations: track display ── */}
+            {isAffirmationsStep && trackCount > 0 && (
+              <View style={styles.affirmationsArea}>
+                {/* Track counter pills */}
+                <View style={styles.trackPills}>
+                  {audioState.tracks.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.trackPill,
+                        {
+                          backgroundColor: i === audioState.currentIdx
+                            ? colors.primary
+                            : i < audioState.currentIdx
+                              ? colors.primary + '40'
+                              : colors.border,
+                          width: i === audioState.currentIdx ? 24 : 8,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+
+                {/* Current track card */}
+                <Animated.View
+                  style={[
+                    styles.currentTrackCard,
+                    { backgroundColor: colors.primary + '14', borderColor: colors.primary + '30', opacity: trackFadeAnim },
+                  ]}
+                >
+                  <Text style={[styles.trackCounterText, { color: colors.primary }]}>
+                    {trackNum} of {trackCount}
+                  </Text>
+                  <Text style={[styles.currentTrackLabel, { color: colors.foreground }]}>
+                    {currentTrack?.label ?? '…'}
+                  </Text>
+                  {currentTrack?.category && (
+                    <View style={[styles.categoryBadge, { backgroundColor: colors.primary + '20' }]}>
+                      <Text style={[styles.categoryBadgeText, { color: colors.primary }]}>
+                        {currentTrack.category}
+                      </Text>
+                    </View>
+                  )}
+                </Animated.View>
+
+                {/* Up Next */}
+                {nextTrack && (
+                  <View style={[styles.upNextRow, { borderColor: colors.border }]}>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Up Next</Text>
+                    <Text style={[styles.upNextTrack, { color: colors.foreground }]}>
+                      {nextTrack.label}
+                    </Text>
+                  </View>
+                )}
+
+                {/* "Last one" indicator */}
+                {!nextTrack && trackCount > 1 && (
+                  <View style={[styles.upNextRow, { borderColor: colors.border }]}>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Last affirmation</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ── Timer / elapsed for non-affirmation steps ── */}
+            {!isAffirmationsStep && autoComplete && (
               <View style={styles.timerArea}>
                 <Text style={[styles.timerText, { color: colors.foreground }]}>
                   {Math.max(0, duration - elapsed)}s
@@ -412,14 +569,24 @@ export default function StackPlayerScreen() {
                   <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${progress * 100}%` as any }]} />
                 </View>
               </View>
-            ) : (
+            )}
+
+            {/* Elapsed for affirmations (audio-driven) */}
+            {isAffirmationsStep && (
+              <Text style={[styles.elapsedText, { color: colors.muted }]}>
+                {elapsed}s
+              </Text>
+            )}
+
+            {/* Elapsed for non-auto, non-affirmation steps */}
+            {!isAffirmationsStep && !autoComplete && (
               <Text style={[styles.elapsedText, { color: colors.muted }]}>
                 {elapsed}s elapsed
               </Text>
             )}
 
-            {/* Manual complete for non-auto steps */}
-            {!autoComplete && (
+            {/* Manual complete for non-auto, non-affirmation steps */}
+            {!isAffirmationsStep && !autoComplete && (
               <Pressable
                 onPress={advanceStep}
                 style={({ pressed }) => [styles.completeBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
@@ -521,6 +688,73 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  // ── Affirmations track display ──────────────────────────────────────────────
+  affirmationsArea: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  trackPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  trackPill: {
+    height: 6,
+    borderRadius: 3,
+  },
+  currentTrackCard: {
+    width: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  trackCounterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  currentTrackLabel: {
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  categoryBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginTop: 2,
+  },
+  categoryBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  upNextRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+  },
+  upNextLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    minWidth: 60,
+  },
+  upNextTrack: {
+    fontSize: 15,
+    fontWeight: '500',
+    flex: 1,
+  },
+  // ── Timer / elapsed ─────────────────────────────────────────────────────────
   timerArea: {
     alignItems: 'center',
     gap: 12,

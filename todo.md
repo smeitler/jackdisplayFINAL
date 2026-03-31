@@ -1636,3 +1636,6 @@
 - [x] Affirmations step: cap count selector at 10, add 2/7 options for variety
 - [x] Stack player: fix audio playback — use player.replace() to swap tracks, use addListener playbackStatusUpdate for chain playback
 - [x] Stack player: verify motivational speech, affirmations, and custom MP3 all play correctly
+- [x] Stack player: show current affirmation number + category while playing
+- [x] Stack player: show "Up Next" preview for next affirmation in playlist
+- [x] Stack player: only advance to next step after all affirmations finish (not on timer)
