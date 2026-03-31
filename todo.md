@@ -1669,3 +1669,4 @@
 - [x] Remove Morning Ritual / After Alarm (Step 3) section from alarm editor
 - [x] Move alarm sound picker to the bottom of the alarm editor (after ritual picker, before delete)
 - [x] Fix excessive blank space above/below the time picker wheel in alarm editor (reduced VISIBLE rows from 5 to 3, ITEM_H 50->46, wheelWrap paddingVertical 16->4)
+- [x] Bible KJV: 127 MP3s renamed, uploaded to CDN, bible-scriptures.ts generated with 66 books (Genesis–Revelation), book picker in editor, sequential/random playback in player

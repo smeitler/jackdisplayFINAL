@@ -48,7 +48,7 @@ import {
   ALL_BOM_CHAPTERS,
   type ScriptureChapter,
 } from '@/app/data/spiritual-scriptures';
-import { BIBLE_VERSES } from '@/app/data/bible-verses';
+import { BIBLE_SECTIONS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 import { saveHabitRating, type HabitRating as HabitRatingType } from '@/lib/habit-history';
 
@@ -205,19 +205,28 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       }
       return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
     }
-    // Bible: flat pool of random verses
+    // Bible: sections pool, optionally filtered by book, sequential or random
     if (source === 'bible') {
       const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
-      const pool = BIBLE_VERSES;
+      const bookId = cfg.spiritualBookId;
+      const pool = bookId ? getBibleSectionsByBook(bookId) : BIBLE_SECTIONS;
+      const mode = cfg.spiritualMode ?? 'sequential';
+      const seqKey = `bible_${bookId ?? 'all'}`;
       const tracks: ResolvedTrack[] = [];
       const usedIndexes = new Set<number>();
       for (let i = 0; i < count; i++) {
-        const available = pool.map((_, j) => j).filter((j) => !usedIndexes.has(j));
-        if (available.length === 0) break;
-        const idx = available[Math.floor(Math.random() * available.length)];
-        usedIndexes.add(idx);
-        const v = pool[idx];
-        tracks.push({ url: v.url, label: v.title, category: 'Bible' });
+        let idx: number;
+        if (mode === 'random') {
+          const available = pool.map((_, j) => j).filter((j) => !usedIndexes.has(j));
+          if (available.length === 0) break;
+          idx = available[Math.floor(Math.random() * available.length)];
+          usedIndexes.add(idx);
+        } else {
+          idx = pickIndexFromPool(pool.length, 'sequential', seqKey);
+          if (idx < 0) break;
+        }
+        const section = pool[idx];
+        tracks.push({ url: section.url, label: section.title, category: section.book });
       }
       return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
     }

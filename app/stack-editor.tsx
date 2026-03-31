@@ -33,7 +33,7 @@ import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
 import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
 import { JOKE_CATEGORIES, type JokeCategory } from '@/app/data/jokes';
 import { BOOK_OF_MORMON_CHAPTERS, type ScriptureBook } from '@/app/data/spiritual-scriptures';
-import { BIBLE_VERSES } from '@/app/data/bible-verses';
+import { BIBLE_SECTIONS, BIBLE_BOOKS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1066,7 +1066,7 @@ function StepConfigModal({
                 </View>
               </CRow>
 
-              {/* Book picker — only for Book of Mormon (Bible coming soon) */}
+              {/* Book picker — Book of Mormon */}
               {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
                 <CRow label="Book" colors={colors}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
@@ -1090,19 +1090,46 @@ function StepConfigModal({
                 </CRow>
               )}
 
-              {/* Bible verse count */}
+              {/* Bible book picker */}
+              {(config.spiritualSource) === 'bible' && (
+                <CRow label="Book" colors={colors}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {([undefined, ...BIBLE_BOOKS]).map((book) => (
+                        <Pressable
+                          key={book ?? 'any'}
+                          onPress={() => setConfig({ ...config, spiritualBookId: book })}
+                          style={[styles.categoryChip, {
+                            backgroundColor: (config.spiritualBookId ?? undefined) === book ? '#7C3AED' : colors.surface,
+                            borderColor: (config.spiritualBookId ?? undefined) === book ? '#7C3AED' : colors.border,
+                          }]}
+                        >
+                          <Text style={[styles.categoryChipText, {
+                            color: (config.spiritualBookId ?? undefined) === book ? '#fff' : colors.foreground,
+                          }]}>{book ?? 'Any'}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </CRow>
+              )}
+
+              {/* Bible section count info */}
               {(config.spiritualSource) === 'bible' && (
                 <View style={[styles.infoBox, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30', marginTop: 8 }]}>
                   <IconSymbol name="sparkles" size={18} color="#7C3AED" />
                   <Text style={[styles.infoText, { color: colors.foreground }]}>
-                    {BIBLE_VERSES.length} Bible verses available. Verses play in random order.
+                    {config.spiritualBookId
+                      ? `${getBibleSectionsByBook(config.spiritualBookId).length} sections in ${config.spiritualBookId}`
+                      : `${BIBLE_SECTIONS.length} sections across all 66 books`
+                    }. Plays in order.
                   </Text>
                 </View>
               )}
 
-              {/* Verse / Chapter count */}
+              {/* Section count — Bible */}
               {(config.spiritualSource === 'bible') && (
-                <CRow label="How many verses" colors={colors}>
+                <CRow label="How many sections" colors={colors}>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     {[1, 2, 3, 5].map((n) => (
                       <Pressable
@@ -1122,7 +1149,7 @@ function StepConfigModal({
                 </CRow>
               )}
 
-              {/* Chapters count */}
+              {/* Chapters count — BOM */}
               {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
                 <CRow label="How many chapters" colors={colors}>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
