@@ -1657,3 +1657,5 @@
 - [x] Add Jokes step type to stacks.ts with jokesCategory/jokesCount/jokesMode fields
 - [x] Add Jokes step config UI to stack-editor with category picker and count selector
 - [x] Wire Jokes audio playback in stack-player with yellow-accented track display and Up Next row
+
+- [x] Spiritual step type: scripture picker (Book of Mormon 196 chapters, Bible placeholder), book selector, chapter count 1-5, sequential/random order, purple-accented track display in player

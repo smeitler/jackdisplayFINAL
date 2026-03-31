@@ -32,6 +32,7 @@ import { loadHabits, type Habit } from '@/lib/storage';
 import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
 import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
 import { JOKE_CATEGORIES, type JokeCategory } from '@/app/data/jokes';
+import { BOOK_OF_MORMON_CHAPTERS, type ScriptureBook } from '@/app/data/spiritual-scriptures';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1033,21 +1034,106 @@ function StepConfigModal({
           {/* Spiritual */}
           {step.type === 'spiritual' && (
             <>
-              <View style={[styles.infoBox, { backgroundColor: accentColor + '12', borderColor: accentColor + '30' }]}>
-                <IconSymbol name="sparkles" size={18} color={accentColor} />
-                <Text style={[styles.infoText, { color: colors.foreground }]}>
-                  A spiritual reflection or message will be shown during your ritual — a moment of gratitude, presence, or faith.
-                </Text>
-              </View>
-              <CRow label="Duration (seconds, 0 = tap to continue)" colors={colors}>
-                <TextInput
-                  style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
-                  keyboardType="number-pad"
-                  returnKeyType="done"
-                  value={String(config.durationSeconds ?? 0)}
-                  onChangeText={(v) => setConfig({ ...config, durationSeconds: parseInt(v, 10) || 0 })}
-                />
+              {/* Scripture source picker */}
+              <CRow label="Scripture" colors={colors}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {(['book-of-mormon', 'bible'] as const).map((src) => (
+                    <Pressable
+                      key={src}
+                      onPress={() => setConfig({ ...config, spiritualSource: src, spiritualBookId: undefined, spiritualChapterStart: undefined })}
+                      style={[styles.categoryChip, {
+                        backgroundColor: (config.spiritualSource ?? 'book-of-mormon') === src ? '#7C3AED' : colors.surface,
+                        borderColor: (config.spiritualSource ?? 'book-of-mormon') === src ? '#7C3AED' : colors.border,
+                        flex: 1,
+                        justifyContent: 'center',
+                      }]}
+                    >
+                      <Text style={[styles.categoryChipText, {
+                        color: (config.spiritualSource ?? 'book-of-mormon') === src ? '#fff' : colors.foreground,
+                        textAlign: 'center',
+                      }]}>{src === 'book-of-mormon' ? '📖 Book of Mormon' : '✝️ Bible'}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               </CRow>
+
+              {/* Book picker — only for Book of Mormon (Bible coming soon) */}
+              {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
+                <CRow label="Book" colors={colors}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {([{ id: undefined, name: 'Any' }, ...BOOK_OF_MORMON_CHAPTERS] as ({ id: string | undefined; name: string })[]).map((book) => (
+                        <Pressable
+                          key={book.id ?? 'any'}
+                          onPress={() => setConfig({ ...config, spiritualBookId: book.id, spiritualChapterStart: undefined })}
+                          style={[styles.categoryChip, {
+                            backgroundColor: (config.spiritualBookId ?? undefined) === book.id ? '#7C3AED' : colors.surface,
+                            borderColor: (config.spiritualBookId ?? undefined) === book.id ? '#7C3AED' : colors.border,
+                          }]}
+                        >
+                          <Text style={[styles.categoryChipText, {
+                            color: (config.spiritualBookId ?? undefined) === book.id ? '#fff' : colors.foreground,
+                          }]}>{book.name}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </CRow>
+              )}
+
+              {/* Bible placeholder */}
+              {(config.spiritualSource) === 'bible' && (
+                <View style={[styles.infoBox, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30', marginTop: 8 }]}>
+                  <IconSymbol name="sparkles" size={18} color="#7C3AED" />
+                  <Text style={[styles.infoText, { color: colors.foreground }]}>
+                    Bible audio coming soon. Upload your Bible MP3 files to enable this option.
+                  </Text>
+                </View>
+              )}
+
+              {/* Chapters count */}
+              {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
+                <CRow label="How many chapters" colors={colors}>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 5].map((n) => (
+                      <Pressable
+                        key={n}
+                        onPress={() => setConfig({ ...config, spiritualChaptersCount: n })}
+                        style={[styles.categoryChip, {
+                          backgroundColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.surface,
+                          borderColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.border,
+                        }]}
+                      >
+                        <Text style={[styles.categoryChipText, {
+                          color: (config.spiritualChaptersCount ?? 1) === n ? '#fff' : colors.foreground,
+                        }]}>{n}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </CRow>
+              )}
+
+              {/* Playback order */}
+              {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
+                <CRow label="Order" colors={colors}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {(['sequential', 'random'] as const).map((mode) => (
+                      <Pressable
+                        key={mode}
+                        onPress={() => setConfig({ ...config, spiritualMode: mode })}
+                        style={[styles.categoryChip, {
+                          backgroundColor: (config.spiritualMode ?? 'sequential') === mode ? '#7C3AED' : colors.surface,
+                          borderColor: (config.spiritualMode ?? 'sequential') === mode ? '#7C3AED' : colors.border,
+                        }]}
+                      >
+                        <Text style={[styles.categoryChipText, {
+                          color: (config.spiritualMode ?? 'sequential') === mode ? '#fff' : colors.foreground,
+                        }]}>{mode === 'sequential' ? '📖 In Order' : '🎲 Random'}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </CRow>
+              )}
             </>
           )}
 

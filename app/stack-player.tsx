@@ -43,6 +43,11 @@ import {
   type JokeCategory,
   type JokeTrack,
 } from '@/app/data/jokes';
+import {
+  BOOK_OF_MORMON_CHAPTERS,
+  ALL_BOM_CHAPTERS,
+  type ScriptureChapter,
+} from '@/app/data/spiritual-scriptures';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 import { saveHabitRating, type HabitRating as HabitRatingType } from '@/lib/habit-history';
 
@@ -90,6 +95,7 @@ interface ResolvedAudio {
   isCustom: boolean;
   isMotivational: boolean;
   isJokes: boolean;
+  isSpiritual: boolean;
 }
 
 async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
@@ -101,7 +107,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory)
       : MOTIVATIONAL_SPEECHES;
     const idx = pickIndexFromPool(pool.length, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true, isJokes: false };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true, isJokes: false, isSpiritual: false };
     const s = pool[idx];
     return {
       tracks: [{ url: s.url, label: s.category, category: s.category }],
@@ -109,6 +115,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       isCustom: false,
       isMotivational: true,
       isJokes: false,
+      isSpiritual: false,
     };
   }
 
@@ -136,7 +143,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const a = pool[idx];
       tracks.push({ url: a.url, label: `${a.category} #${a.number}`, category: a.category });
     }
-    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false, isJokes: false };
+    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false };
   }
 
   if (step.type === 'jokes') {
@@ -161,15 +168,52 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const j = pool[idx];
       tracks.push({ url: j.url, label: j.label, category: j.category });
     }
-    return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: true };
+    return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: true, isSpiritual: false };
+  }
+
+  if (step.type === 'spiritual') {
+    const source = cfg.spiritualSource ?? 'book-of-mormon';
+    if (source === 'book-of-mormon') {
+      const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
+      const mode = cfg.spiritualMode ?? 'sequential';
+      const bookId = cfg.spiritualBookId;
+      // Get the pool of chapters
+      let pool: ScriptureChapter[];
+      if (bookId) {
+        const book = BOOK_OF_MORMON_CHAPTERS.find((b) => b.id === bookId);
+        pool = book ? book.chapters : ALL_BOM_CHAPTERS;
+      } else {
+        pool = ALL_BOM_CHAPTERS;
+      }
+      const seqKey = `spiritual_bom_${bookId ?? 'all'}`;
+      const tracks: ResolvedTrack[] = [];
+      const usedIndexes = new Set<number>();
+      for (let i = 0; i < count; i++) {
+        let idx: number;
+        if (mode === 'random') {
+          const available = pool.map((_, j) => j).filter((j) => !usedIndexes.has(j));
+          if (available.length === 0) break;
+          idx = available[Math.floor(Math.random() * available.length)];
+          usedIndexes.add(idx);
+        } else {
+          idx = pickIndexFromPool(pool.length, 'sequential', seqKey);
+        }
+        if (idx < 0) break;
+        const ch = pool[idx];
+        tracks.push({ url: ch.url, label: ch.title, category: bookId ? ch.title.split(' ').slice(0, -1).join(' ') : 'Book of Mormon' });
+      }
+      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+    }
+    // Bible: not yet available
+    return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
   }
 
   if (step.type === 'custom') {
     const files = await loadCustomAudioFiles();
-    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false };
+    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false };
     const mode = step.config.customAudioMode ?? 'random';
     const idx = pickIndexFromPool(files.length, mode, 'custom');
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false };
     const f = files[idx];
     const name = f.name ?? f.uri.split('/').pop() ?? 'Audio';
     return {
@@ -178,10 +222,11 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       isCustom: true,
       isMotivational: false,
       isJokes: false,
+      isSpiritual: false,
     };
   }
 
-  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false };
+  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false };
 }
 
 // ── Audio state exposed to UI ─────────────────────────────────────────────────
@@ -192,6 +237,7 @@ interface AudioState {
   isCustom: boolean;
   isMotivational: boolean;
   isJokes: boolean;
+  isSpiritual: boolean;
   isPlaying: boolean;
   isPaused: boolean;
   isFinished: boolean; // true when all tracks have completed
@@ -209,6 +255,7 @@ function useStepAudio(
     isCustom: false,
     isMotivational: false,
     isJokes: false,
+    isSpiritual: false,
     isPlaying: false, isPaused: false, isFinished: false,
   });
   const activeStepIdRef = useRef<string | null>(null);
@@ -217,7 +264,7 @@ function useStepAudio(
   const customDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [audioState, setAudioState] = useState<AudioState>({
-    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false,
+    tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false,
     isPlaying: false, isPaused: false, isFinished: false,
   });
 
@@ -254,21 +301,23 @@ function useStepAudio(
   useEffect(() => {
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
     const empty: AudioState = {
-      tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false,
+      tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false,
       isPlaying: false, isPaused: false, isFinished: false,
     };
     audioStateRef.current = empty;
     setAudioState(empty);
 
-    if (!step || !['motivational', 'affirmations', 'jokes', 'custom'].includes(step.type)) return;
+    if (!step || !['motivational', 'affirmations', 'jokes', 'custom', 'spiritual'].includes(step.type)) return;
 
     const stepId = step.id;
     activeStepIdRef.current = stepId;
 
-    resolveStepAudio(step).then(({ tracks, isAffirmations, isCustom, isMotivational, isJokes }) => {
+    resolveStepAudio(step).then((resolved) => {
+      const { tracks, isAffirmations, isCustom, isMotivational, isJokes, isSpiritual } = resolved;
       if (activeStepIdRef.current !== stepId) return;
       const newState: AudioState = {
         tracks, currentIdx: 0, isAffirmations, isCustom, isMotivational, isJokes,
+        isSpiritual,
         isPlaying: false, isPaused: false, isFinished: false,
       };
       audioStateRef.current = newState;
@@ -276,6 +325,7 @@ function useStepAudio(
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step?.id, step?.type]);
+
 
   // When phase becomes running, start playback
   useEffect(() => {
@@ -727,7 +777,7 @@ export default function StackPlayerScreen() {
       if (!step) return;
 
       // Audio-driven steps: just count elapsed, advance is triggered by audio finishing
-      if (step.type === 'affirmations' || step.type === 'motivational' || step.type === 'custom') {
+      if (step.type === 'affirmations' || step.type === 'motivational' || step.type === 'custom' || step.type === 'spiritual') {
         intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
         return;
       }
@@ -837,6 +887,7 @@ export default function StackPlayerScreen() {
   const isJokesStep = step.type === 'jokes';
   const isCustomStep = step.type === 'custom';
   const isMotivationalStep = step.type === 'motivational';
+  const isSpiritualStep = step.type === 'spiritual';
   const isReminderStep = step.type === 'reminder' || step.type === 'melatonin';
 
   // Linked habit on custom step
@@ -974,6 +1025,62 @@ export default function StackPlayerScreen() {
               </View>
             )}
 
+            {/* ── Spiritual scripture track display ── */}
+            {isSpiritualStep && trackCount > 0 && (
+              <View style={styles.affirmationsArea}>
+                <View style={styles.trackPills}>
+                  {audioState.tracks.map((_, i) => (
+                    <View key={i} style={[styles.trackPill, {
+                      backgroundColor: i === audioState.currentIdx
+                        ? '#7C3AED'
+                        : i < audioState.currentIdx ? '#7C3AED40' : colors.border,
+                      width: i === audioState.currentIdx ? 24 : 8,
+                    }]} />
+                  ))}
+                </View>
+                <Animated.View style={[styles.currentTrackCard, {
+                  backgroundColor: '#7C3AED14',
+                  borderColor: '#7C3AED30',
+                  opacity: trackFadeAnim,
+                }]}>
+                  <Text style={[styles.trackCounterText, { color: '#7C3AED' }]}>
+                    {trackNum} of {trackCount}
+                  </Text>
+                  <Text style={[styles.currentTrackLabel, { color: colors.foreground }]}>
+                    {currentTrack?.label ?? '…'}
+                  </Text>
+                  {currentTrack?.category && (
+                    <View style={[styles.categoryBadge, { backgroundColor: '#7C3AED20' }]}>
+                      <Text style={[styles.categoryBadgeText, { color: '#7C3AED' }]}>
+                        {currentTrack.category}
+                      </Text>
+                    </View>
+                  )}
+                </Animated.View>
+                {nextTrack && (
+                  <View style={[styles.upNextRow, { borderColor: colors.border }]}>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Up Next</Text>
+                    <Text style={[styles.upNextTrack, { color: colors.foreground }]}>{nextTrack.label}</Text>
+                  </View>
+                )}
+                {!nextTrack && trackCount > 1 && (
+                  <View style={[styles.upNextRow, { borderColor: colors.border }]}>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Last chapter</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Bible coming soon placeholder */}
+            {isSpiritualStep && step.config.spiritualSource === 'bible' && (
+              <View style={[styles.currentTrackCard, { backgroundColor: '#7C3AED14', borderColor: '#7C3AED30', marginTop: 12 }]}>
+                <IconSymbol name="sparkles" size={24} color="#7C3AED" />
+                <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: '600', textAlign: 'center', marginTop: 8 }}>
+                  Bible audio coming soon
+                </Text>
+              </View>
+            )}
+
             {/* ── Motivational speech player card ── */}
             {isMotivationalStep && currentTrack && (
               <MotivationalCard
@@ -1046,7 +1153,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Timer for auto-complete steps ── */}
-            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isReminderStep && autoComplete && (
+            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isSpiritualStep && !isReminderStep && autoComplete && (
               <View style={styles.timerArea}>
                 <Text style={[styles.timerText, { color: colors.foreground }]}>
                   {Math.max(0, duration - elapsed)}s
@@ -1058,7 +1165,7 @@ export default function StackPlayerScreen() {
             )}
 
             {/* ── Elapsed + Next button for manual non-reminder steps ── */}
-            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isReminderStep && !autoComplete && (
+            {!isAffirmationsStep && !isJokesStep && !isCustomStep && !isMotivationalStep && !isSpiritualStep && !isReminderStep && !autoComplete && (
               <>
                 <Text style={[styles.elapsedText, { color: colors.muted }]}>{elapsed}s elapsed</Text>
                 <Pressable

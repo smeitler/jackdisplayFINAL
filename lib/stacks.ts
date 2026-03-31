@@ -81,6 +81,12 @@ export interface StepConfig {
   jokesCategory?: string;              // category filter (undefined = any)
   jokesCount?: number;                 // how many jokes to play (1-5, default 1)
   jokesMode?: 'random' | 'sequential'; // how to pick next joke
+  // Spiritual / Scripture library
+  spiritualSource?: 'book-of-mormon' | 'bible'; // which scripture source
+  spiritualBookId?: string;            // specific book within the source (e.g. '1-nephi')
+  spiritualChapterStart?: number;      // starting chapter index (0-based within the selected book)
+  spiritualChaptersCount?: number;     // how many chapters to play (1-5, default 1)
+  spiritualMode?: 'sequential' | 'random'; // playback order
   // Linked habit for custom audio step
   linkedHabitId?: string;              // habit ID to rate after audio finishes
   linkedHabitName?: string;            // display name of linked habit
@@ -122,7 +128,14 @@ export function stepLabel(step: RitualStep): string {
       if (step.config.motivationalGenre) return `Motivational — ${step.config.motivationalGenre}`;
       return 'Motivational';
     }
-    case 'spiritual':    return 'Spiritual';
+    case 'spiritual': {
+      const src = step.config.spiritualSource === 'bible' ? 'Bible' : 'Book of Mormon';
+      if (step.config.spiritualBookId) {
+        const bookName = step.config.spiritualBookId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        return `Spiritual — ${bookName}`;
+      }
+      return `Spiritual — ${src}`;
+    }
     case 'jokes': {
       if (step.config.jokesCategory) return `Jokes — ${step.config.jokesCategory}`;
       return 'Jokes & Puns';
@@ -151,6 +164,7 @@ export function stepDefaultDuration(step: RitualStep): number {
     case 'breathwork':   return (step.config.breathworkRounds ?? 4) * 32;
     case 'affirmations': return (step.config.affirmationsCount ?? 1) * 90;
     case 'jokes':        return (step.config.jokesCount ?? 1) * 30;
+    case 'spiritual':    return (step.config.spiritualChaptersCount ?? 1) * 300;
     case 'priming':      return 600;
     default:             return 0;
   }
