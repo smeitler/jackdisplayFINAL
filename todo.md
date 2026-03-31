@@ -1647,3 +1647,4 @@
 - [x] Add History button to stack completion screen and route to /habit-history
 - [x] Custom audio card: redesign with play/pause button, waveform bars, clean layout
 - [x] Motivational speech: fix audio cut-off bug so full track plays before advancing (audio-driven advance, no timer)
+- [x] Stack player: remove hardcoded 3-second countdown delay — steps start immediately

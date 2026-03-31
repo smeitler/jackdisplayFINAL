@@ -615,8 +615,7 @@ export default function StackPlayerScreen() {
 
   const [stack, setStack] = useState<RitualStack | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
-  const [phase, setPhase] = useState<Phase>('delay');
-  const [countdown, setCountdown] = useState(0);
+  const [phase, setPhase] = useState<Phase>('running');
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -643,8 +642,7 @@ export default function StackPlayerScreen() {
 
   useEffect(() => {
     if (!stack || !currentStep) return;
-    setPhase('delay');
-    setCountdown(3);
+    setPhase('running');
     setElapsed(0);
   }, [stack, stepIdx]);
 
@@ -676,14 +674,7 @@ export default function StackPlayerScreen() {
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
 
-    if (phase === 'delay') {
-      intervalRef.current = setInterval(() => {
-        setCountdown((c) => {
-          if (c <= 1) { clearInterval(intervalRef.current!); setPhase('running'); return 0; }
-          return c - 1;
-        });
-      }, 1000);
-    } else if (phase === 'running') {
+    if (phase === 'running') {
       const step = currentStep;
       if (!step) return;
 
@@ -826,14 +817,7 @@ export default function StackPlayerScreen() {
 
       {/* Step content */}
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        {phase === 'delay' ? (
-          <View style={styles.delayContainer}>
-            <Text style={[styles.delayLabel, { color: colors.muted }]}>Starting in</Text>
-            <Text style={[styles.delayCount, { color: colors.foreground }]}>{countdown}</Text>
-            <Text style={[styles.delayStepName, { color: colors.muted }]}>{meta.label}</Text>
-          </View>
-        ) : (
-          <View style={styles.stepContainer}>
+        <View style={styles.stepContainer}>
             <View style={[styles.iconCircle, { backgroundColor: colors.primary + '18' }]}>
               <IconSymbol name={iconName} size={48} color={colors.primary} />
             </View>
@@ -942,8 +926,7 @@ export default function StackPlayerScreen() {
                 </Pressable>
               </>
             )}
-          </View>
-        )}
+        </View>
       </Animated.View>
 
       {/* Step counter */}
@@ -968,12 +951,6 @@ const styles = StyleSheet.create({
 
   // Content
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-
-  // Delay countdown
-  delayContainer: { alignItems: 'center', gap: 12 },
-  delayLabel: { fontSize: 16, fontWeight: '500' },
-  delayCount: { fontSize: 80, fontWeight: '800', lineHeight: 88 },
-  delayStepName: { fontSize: 18, fontWeight: '600' },
 
   // Step content
   stepContainer: { alignItems: 'center', gap: 12 },
