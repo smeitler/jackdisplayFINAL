@@ -1673,3 +1673,8 @@
 - [x] Replace BOM audio: 60 new sections (bookofmormon_01-60_smith_64kb.mp3) with proper titles, upload to CDN, update spiritual-scriptures.ts
 - [x] Redesign step picker: two-level category browser (Spiritual, Mindset, Wellness, Habits & Goals) — tap category to expand and see step types inside
 - [x] Book of Mormon and Bible as dedicated options under Spiritual step type (source picker in step config)
+
+- [x] Fix Spiritual step picker: Spiritual category now shows a sub-menu with 4 source options (Full BOM, Full Bible, BOM Verse Clips, Bible Verse Clips)
+- [x] Spiritual step: 4 source options — Full Book of Mormon (60 sections), Full Bible KJV (127 sections), BOM Verse Clips (102 clips), Bible Verse Clips (192 clips)
+- [x] Create bom-verses.ts data file with 102 individual BOM chapter clips from CDN
+- [x] Wire all 4 spiritual sources into step config UI (editor) and player audio engine

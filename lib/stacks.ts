@@ -82,7 +82,7 @@ export interface StepConfig {
   jokesCount?: number;                 // how many jokes to play (1-5, default 1)
   jokesMode?: 'random' | 'sequential'; // how to pick next joke
   // Spiritual / Scripture library
-  spiritualSource?: 'book-of-mormon' | 'bible'; // which scripture source
+  spiritualSource?: 'book-of-mormon' | 'bible' | 'bom-verses' | 'bible-verses'; // which scripture source
   spiritualBookId?: string;            // specific book within the source (e.g. '1-nephi')
   spiritualChapterStart?: number;      // starting chapter index (0-based within the selected book)
   spiritualChaptersCount?: number;     // how many chapters to play (1-5, default 1)
@@ -129,12 +129,15 @@ export function stepLabel(step: RitualStep): string {
       return 'Motivational';
     }
     case 'spiritual': {
-      const src = step.config.spiritualSource === 'bible' ? 'Bible' : 'Book of Mormon';
+      const src = step.config.spiritualSource;
+      if (src === 'bom-verses') return 'Spiritual — BOM Verses';
+      if (src === 'bible-verses') return 'Spiritual — Bible Verses';
+      const srcLabel = src === 'bible' ? 'Bible' : 'Book of Mormon';
       if (step.config.spiritualBookId) {
         const bookName = step.config.spiritualBookId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         return `Spiritual — ${bookName}`;
       }
-      return `Spiritual — ${src}`;
+      return `Spiritual — ${srcLabel}`;
     }
     case 'jokes': {
       if (step.config.jokesCategory) return `Jokes — ${step.config.jokesCategory}`;

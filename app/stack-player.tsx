@@ -49,6 +49,8 @@ import {
   type ScriptureSection,
 } from '@/app/data/spiritual-scriptures';
 import { BIBLE_SECTIONS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
+import { BOM_VERSES } from '@/app/data/bom-verses';
+import { BIBLE_VERSES } from '@/app/data/bible-verses';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 import { saveHabitRating, type HabitRating as HabitRatingType } from '@/lib/habit-history';
 
@@ -228,6 +230,52 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
         }
         const section = pool[idx];
         tracks.push({ url: section.url, label: section.title, category: section.book });
+      }
+      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+    }
+    // BOM Verse Clips
+    if (source === 'bom-verses') {
+      const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
+      const mode = cfg.spiritualMode ?? 'sequential';
+      const seqKey = 'bom_verses';
+      const tracks: ResolvedTrack[] = [];
+      const usedIndexes = new Set<number>();
+      for (let i = 0; i < count; i++) {
+        let idx: number;
+        if (mode === 'random') {
+          const available = BOM_VERSES.map((_, j) => j).filter((j) => !usedIndexes.has(j));
+          if (available.length === 0) break;
+          idx = available[Math.floor(Math.random() * available.length)];
+          usedIndexes.add(idx);
+        } else {
+          idx = pickIndexFromPool(BOM_VERSES.length, 'sequential', seqKey);
+          if (idx < 0) break;
+        }
+        const v = BOM_VERSES[idx];
+        tracks.push({ url: v.url, label: v.title, category: 'Book of Mormon' });
+      }
+      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+    }
+    // Bible Verse Clips
+    if (source === 'bible-verses') {
+      const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
+      const mode = cfg.spiritualMode ?? 'random';
+      const seqKey = 'bible_verses';
+      const tracks: ResolvedTrack[] = [];
+      const usedIndexes = new Set<number>();
+      for (let i = 0; i < count; i++) {
+        let idx: number;
+        if (mode === 'random') {
+          const available = BIBLE_VERSES.map((_, j) => j).filter((j) => !usedIndexes.has(j));
+          if (available.length === 0) break;
+          idx = available[Math.floor(Math.random() * available.length)];
+          usedIndexes.add(idx);
+        } else {
+          idx = pickIndexFromPool(BIBLE_VERSES.length, 'sequential', seqKey);
+          if (idx < 0) break;
+        }
+        const v = BIBLE_VERSES[idx];
+        tracks.push({ url: v.url, label: v.title, category: 'Bible' });
       }
       return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
     }
