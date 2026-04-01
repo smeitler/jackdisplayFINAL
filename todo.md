@@ -1670,3 +1670,6 @@
 - [x] Move alarm sound picker to the bottom of the alarm editor (after ritual picker, before delete)
 - [x] Fix excessive blank space above/below the time picker wheel in alarm editor (reduced VISIBLE rows from 5 to 3, ITEM_H 50->46, wheelWrap paddingVertical 16->4)
 - [x] Bible KJV: 127 MP3s renamed, uploaded to CDN, bible-scriptures.ts generated with 66 books (Genesis–Revelation), book picker in editor, sequential/random playback in player
+- [x] Replace BOM audio: 60 new sections (bookofmormon_01-60_smith_64kb.mp3) with proper titles, upload to CDN, update spiritual-scriptures.ts
+- [x] Redesign step picker: two-level category browser (Spiritual, Mindset, Wellness, Habits & Goals) — tap category to expand and see step types inside
+- [x] Book of Mormon and Bible as dedicated options under Spiritual step type (source picker in step config)

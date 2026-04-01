@@ -128,3 +128,60 @@ describe('Affirmations data', () => {
     }
   });
 });
+
+import {
+  BOOK_OF_MORMON_SECTIONS,
+  ALL_BOM_CHAPTERS,
+  BOOK_OF_MORMON_CHAPTERS,
+} from '../app/data/spiritual-scriptures';
+
+describe('Book of Mormon sections data', () => {
+  it('has exactly 60 sections', () => {
+    expect(BOOK_OF_MORMON_SECTIONS.length).toBe(60);
+  });
+
+  it('ALL_BOM_CHAPTERS is the same as BOOK_OF_MORMON_SECTIONS', () => {
+    expect(ALL_BOM_CHAPTERS).toBe(BOOK_OF_MORMON_SECTIONS);
+  });
+
+  it('all sections have valid CDN URLs', () => {
+    for (const s of BOOK_OF_MORMON_SECTIONS) {
+      expect(s.url).toMatch(/^https:\/\/files\.manuscdn\.com\//);
+    }
+  });
+
+  it('all sections have unique IDs', () => {
+    const ids = BOOK_OF_MORMON_SECTIONS.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('all sections have non-empty titles', () => {
+    for (const s of BOOK_OF_MORMON_SECTIONS) {
+      expect(s.title.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('first section is 1 Nephi 1-4', () => {
+    expect(BOOK_OF_MORMON_SECTIONS[0].title).toBe('1 Nephi 1-4');
+  });
+
+  it('last section is Moroni 8-10', () => {
+    expect(BOOK_OF_MORMON_SECTIONS[59].title).toBe('Moroni 8-10');
+  });
+
+  it('legacy BOOK_OF_MORMON_CHAPTERS has 60 entries', () => {
+    expect(BOOK_OF_MORMON_CHAPTERS.length).toBe(60);
+  });
+
+  it('legacy BOOK_OF_MORMON_CHAPTERS entries each have 1 chapter', () => {
+    for (const book of BOOK_OF_MORMON_CHAPTERS) {
+      expect(book.chapters.length).toBe(1);
+    }
+  });
+
+  it('section IDs are sequential 1-60', () => {
+    for (let i = 0; i < 60; i++) {
+      expect(BOOK_OF_MORMON_SECTIONS[i].id).toBe(i + 1);
+    }
+  });
+});

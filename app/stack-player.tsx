@@ -44,9 +44,9 @@ import {
   type JokeTrack,
 } from '@/app/data/jokes';
 import {
-  BOOK_OF_MORMON_CHAPTERS,
+  BOOK_OF_MORMON_SECTIONS,
   ALL_BOM_CHAPTERS,
-  type ScriptureChapter,
+  type ScriptureSection,
 } from '@/app/data/spiritual-scriptures';
 import { BIBLE_SECTIONS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
@@ -178,11 +178,12 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
       const mode = cfg.spiritualMode ?? 'sequential';
       const bookId = cfg.spiritualBookId;
-      // Get the pool of chapters
-      let pool: ScriptureChapter[];
+      // Get the pool of sections (new flat 60-section structure)
+      let pool: ScriptureSection[];
       if (bookId) {
-        const book = BOOK_OF_MORMON_CHAPTERS.find((b) => b.id === bookId);
-        pool = book ? book.chapters : ALL_BOM_CHAPTERS;
+        // bookId is now a section id string like 'section-14' — find matching section
+        const section = BOOK_OF_MORMON_SECTIONS.find((s) => `section-${s.id}` === bookId);
+        pool = section ? [section] : ALL_BOM_CHAPTERS;
       } else {
         pool = ALL_BOM_CHAPTERS;
       }
@@ -201,7 +202,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
         }
         if (idx < 0) break;
         const ch = pool[idx];
-        tracks.push({ url: ch.url, label: ch.title, category: bookId ? ch.title.split(' ').slice(0, -1).join(' ') : 'Book of Mormon' });
+        tracks.push({ url: ch.url, label: ch.title, category: 'Book of Mormon' });
       }
       return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
     }

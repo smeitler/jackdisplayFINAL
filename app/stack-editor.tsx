@@ -32,7 +32,7 @@ import { loadHabits, type Habit } from '@/lib/storage';
 import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
 import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
 import { JOKE_CATEGORIES, type JokeCategory } from '@/app/data/jokes';
-import { BOOK_OF_MORMON_CHAPTERS, type ScriptureBook } from '@/app/data/spiritual-scriptures';
+import { BOOK_OF_MORMON_SECTIONS, type ScriptureSection } from '@/app/data/spiritual-scriptures';
 import { BIBLE_SECTIONS, BIBLE_BOOKS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import * as DocumentPicker from 'expo-document-picker';
@@ -65,6 +65,51 @@ const STEP_TYPES: StepType[] = [
   'timer', 'stopwatch', 'meditation', 'breathwork',
   'journal', 'affirmations', 'priming', 'reminder', 'melatonin',
   'motivational', 'spiritual', 'jokes', 'custom',
+];
+
+// Two-level categorized step picker
+interface StepCategory {
+  id: string;
+  label: string;
+  emoji: string;
+  description: string;
+  color: string;
+  steps: StepType[];
+}
+
+const STEP_CATEGORIES: StepCategory[] = [
+  {
+    id: 'spiritual',
+    label: 'Spiritual',
+    emoji: '🙏',
+    description: 'Scripture reading and spiritual reflection',
+    color: '#7C3AED',
+    steps: ['spiritual'],
+  },
+  {
+    id: 'mindset',
+    label: 'Mindset',
+    emoji: '💪',
+    description: 'Affirmations, motivation, and mental conditioning',
+    color: '#F59E0B',
+    steps: ['affirmations', 'motivational', 'priming', 'jokes'],
+  },
+  {
+    id: 'wellness',
+    label: 'Wellness',
+    emoji: '🧘',
+    description: 'Meditation, breathwork, and timed exercises',
+    color: '#10B981',
+    steps: ['meditation', 'breathwork', 'timer', 'stopwatch'],
+  },
+  {
+    id: 'habits',
+    label: 'Habits & Goals',
+    emoji: '📋',
+    description: 'Track habits, journal, and custom reminders',
+    color: '#3B82F6',
+    steps: ['reminder', 'journal', 'custom', 'melatonin'],
+  },
 ];
 
 // ─── Audio library data ───────────────────────────────────────────────────────
@@ -407,6 +452,7 @@ export default function StackEditorScreen() {
 
   const [stack, setStack]           = useState<RitualStack | null>(null);
   const [addingStep, setAddingStep] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [editingStep, setEditingStep] = useState<RitualStep | null>(null);
 
   useEffect(() => {
@@ -428,6 +474,7 @@ export default function StackEditorScreen() {
     const step: RitualStep = { id: newStepId(), type, config: {}, delayAfterSeconds: 0 };
     persist({ ...stack, steps: [...stack.steps, step] });
     setAddingStep(false);
+    setSelectedCategory(null);
   }
 
   function removeStep(stepId: string) {
@@ -525,43 +572,86 @@ export default function StackEditorScreen() {
         )}
       </ScrollView>
 
-      {/* Step type picker bottom sheet */}
-      <Modal visible={addingStep} transparent animationType="slide" onRequestClose={() => setAddingStep(false)}>
-        <Pressable style={styles.overlay} onPress={() => setAddingStep(false)} />
+      {/* Step type picker bottom sheet — two-level categorized navigation */}
+      <Modal
+        visible={addingStep}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setAddingStep(false); setSelectedCategory(null); }}
+      >
+        <Pressable style={styles.overlay} onPress={() => { setAddingStep(false); setSelectedCategory(null); }} />
         <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.sheetHandleArea}><View style={styles.sheetHandle} /></View>
-          <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Choose Step Type</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {STEP_TYPES.map((type) => (
+
+          {/* Header with back button when inside a category */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 4 }}>
+            {selectedCategory ? (
               <Pressable
-                key={type}
-                onPress={() => addStep(type)}
-                style={({ pressed }) => [styles.typeRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                onPress={() => setSelectedCategory(null)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginRight: 8, padding: 4 })}
               >
-                <View style={[styles.typeIconWrap, { backgroundColor: accentColor + '20' }]}>
-                  <IconSymbol name={STEP_ICON[type] as any} size={20} color={accentColor} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.typeLabel, { color: colors.foreground }]}>
-                    {type === 'reminder'
-                      ? 'Habit Reminder'
-                      : type === 'melatonin'
-                      ? 'Melatonin'
-                      : STEP_TYPE_META[type]?.label ?? type}
-                  </Text>
-                  <Text style={[styles.typeDesc, { color: colors.muted }]}>
-                    {type === 'reminder'
-                      ? 'Pick a habit from your list with a countdown timer'
-                      : type === 'journal'
-                      ? 'Open a journal entry — type or record your voice'
-                      : type === 'melatonin'
-                      ? 'Reminder to take melatonin before sleep with a countdown'
-                      : STEP_TYPE_META[type]?.description ?? ''}
-                  </Text>
-                </View>
-                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+                <IconSymbol name="chevron.left" size={18} color={colors.muted} />
               </Pressable>
-            ))}
+            ) : null}
+            <Text style={[styles.sheetTitle, { color: colors.foreground, flex: 1, marginBottom: 0 }]}>
+              {selectedCategory
+                ? STEP_CATEGORIES.find((c) => c.id === selectedCategory)?.label ?? 'Choose Step'
+                : 'Add Step'}
+            </Text>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {!selectedCategory ? (
+              /* Level 1: Category list */
+              STEP_CATEGORIES.map((cat) => (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => setSelectedCategory(cat.id)}
+                  style={({ pressed }) => [styles.typeRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <View style={[styles.typeIconWrap, { backgroundColor: cat.color + '25' }]}>
+                    <Text style={{ fontSize: 20 }}>{cat.emoji}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.typeLabel, { color: colors.foreground }]}>{cat.label}</Text>
+                    <Text style={[styles.typeDesc, { color: colors.muted }]}>{cat.description}</Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+                </Pressable>
+              ))
+            ) : (
+              /* Level 2: Step types within selected category */
+              (STEP_CATEGORIES.find((c) => c.id === selectedCategory)?.steps ?? []).map((type) => (
+                <Pressable
+                  key={type}
+                  onPress={() => addStep(type)}
+                  style={({ pressed }) => [styles.typeRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <View style={[styles.typeIconWrap, { backgroundColor: (STEP_CATEGORIES.find((c) => c.id === selectedCategory)?.color ?? accentColor) + '20' }]}>
+                    <IconSymbol name={STEP_ICON[type] as any} size={20} color={STEP_CATEGORIES.find((c) => c.id === selectedCategory)?.color ?? accentColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.typeLabel, { color: colors.foreground }]}>
+                      {type === 'reminder'
+                        ? 'Habit Reminder'
+                        : type === 'melatonin'
+                        ? 'Melatonin'
+                        : STEP_TYPE_META[type]?.label ?? type}
+                    </Text>
+                    <Text style={[styles.typeDesc, { color: colors.muted }]}>
+                      {type === 'reminder'
+                        ? 'Pick a habit from your list with a countdown timer'
+                        : type === 'journal'
+                        ? 'Open a journal entry — type or record your voice'
+                        : type === 'melatonin'
+                        ? 'Reminder to take melatonin before sleep with a countdown'
+                        : STEP_TYPE_META[type]?.description ?? ''}
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+                </Pressable>
+              ))
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -1066,25 +1156,28 @@ function StepConfigModal({
                 </View>
               </CRow>
 
-              {/* Book picker — Book of Mormon */}
+              {/* Section picker — Book of Mormon (60 sections) */}
               {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
-                <CRow label="Book" colors={colors}>
+                <CRow label="Section" colors={colors}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
-                      {([{ id: undefined, name: 'Any' }, ...BOOK_OF_MORMON_CHAPTERS] as ({ id: string | undefined; name: string })[]).map((book) => (
-                        <Pressable
-                          key={book.id ?? 'any'}
-                          onPress={() => setConfig({ ...config, spiritualBookId: book.id, spiritualChapterStart: undefined })}
-                          style={[styles.categoryChip, {
-                            backgroundColor: (config.spiritualBookId ?? undefined) === book.id ? '#7C3AED' : colors.surface,
-                            borderColor: (config.spiritualBookId ?? undefined) === book.id ? '#7C3AED' : colors.border,
-                          }]}
-                        >
-                          <Text style={[styles.categoryChipText, {
-                            color: (config.spiritualBookId ?? undefined) === book.id ? '#fff' : colors.foreground,
-                          }]}>{book.name}</Text>
-                        </Pressable>
-                      ))}
+                      {([{ id: undefined, title: 'Any' }, ...BOOK_OF_MORMON_SECTIONS] as ({ id: number | undefined; title: string })[]).map((section) => {
+                        const sectionId = section.id !== undefined ? `section-${section.id}` : undefined;
+                        return (
+                          <Pressable
+                            key={sectionId ?? 'any'}
+                            onPress={() => setConfig({ ...config, spiritualBookId: sectionId, spiritualChapterStart: undefined })}
+                            style={[styles.categoryChip, {
+                              backgroundColor: (config.spiritualBookId ?? undefined) === sectionId ? '#7C3AED' : colors.surface,
+                              borderColor: (config.spiritualBookId ?? undefined) === sectionId ? '#7C3AED' : colors.border,
+                            }]}
+                          >
+                            <Text style={[styles.categoryChipText, {
+                              color: (config.spiritualBookId ?? undefined) === sectionId ? '#fff' : colors.foreground,
+                            }]}>{section.title}</Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </ScrollView>
                 </CRow>
@@ -1149,9 +1242,22 @@ function StepConfigModal({
                 </CRow>
               )}
 
-              {/* Chapters count — BOM */}
+              {/* BOM info box */}
               {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
-                <CRow label="How many chapters" colors={colors}>
+                <View style={[styles.infoBox, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30', marginTop: 8 }]}>
+                  <IconSymbol name="sparkles" size={18} color="#7C3AED" />
+                  <Text style={[styles.infoText, { color: colors.foreground }]}>
+                    {config.spiritualBookId
+                      ? `1 section selected`
+                      : `60 sections across the full Book of Mormon`
+                    }. Plays in order.
+                  </Text>
+                </View>
+              )}
+
+              {/* Section count — BOM */}
+              {(config.spiritualSource ?? 'book-of-mormon') === 'book-of-mormon' && (
+                <CRow label="How many sections" colors={colors}>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     {[1, 2, 3, 5].map((n) => (
                       <Pressable
