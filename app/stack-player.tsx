@@ -52,6 +52,8 @@ import { BIBLE_SECTIONS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { BOM_VERSES } from '@/app/data/bom-verses';
 import { BIBLE_VERSES } from '@/app/data/bible-verses';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
+import { ScriptureReadingPlayer } from '@/components/scripture-reading-player';
+import { getScripturePosition } from '@/lib/scripture-position';
 import { saveHabitRating, type HabitRating as HabitRatingType } from '@/lib/habit-history';
 
 const STEP_ICON: Record<string, string> = {
@@ -99,6 +101,10 @@ interface ResolvedAudio {
   isMotivational: boolean;
   isJokes: boolean;
   isSpiritual: boolean;
+  isScriptureReading: boolean; // Full BOM or Bible — uses ScriptureReadingPlayer, not standard engine
+  scriptureReadingSource?: 'book-of-mormon' | 'bible'; // which source for ScriptureReadingPlayer
+  scriptureReadingTracks?: { url: string; label: string }[]; // full ordered track list
+  scriptureGoalSeconds?: number; // goal time in seconds (undefined = continuous)
 }
 
 async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
@@ -110,7 +116,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       ? getSpeechesByCategory(cfg.motivationalSpeechCategory as SpeechCategory)
       : MOTIVATIONAL_SPEECHES;
     const idx = pickIndexFromPool(pool.length, mode, `motivational_${cfg.motivationalSpeechCategory ?? 'any'}`);
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true, isJokes: false, isSpiritual: false };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: true, isJokes: false, isSpiritual: false, isScriptureReading: false };
     const s = pool[idx];
     return {
       tracks: [{ url: s.url, label: s.category, category: s.category }],
@@ -119,6 +125,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       isMotivational: true,
       isJokes: false,
       isSpiritual: false,
+      isScriptureReading: false,
     };
   }
 
@@ -146,7 +153,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const a = pool[idx];
       tracks.push({ url: a.url, label: `${a.category} #${a.number}`, category: a.category });
     }
-    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false };
+    return { tracks, isAffirmations: true, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false, isScriptureReading: false };
   }
 
   if (step.type === 'jokes') {
@@ -171,67 +178,46 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       const j = pool[idx];
       tracks.push({ url: j.url, label: j.label, category: j.category });
     }
-    return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: true, isSpiritual: false };
+    return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: true, isSpiritual: false, isScriptureReading: false };
   }
 
   if (step.type === 'spiritual') {
     const source = cfg.spiritualSource ?? 'book-of-mormon';
+    // Full BOM reading — uses ScriptureReadingPlayer with persistent position
     if (source === 'book-of-mormon') {
-      const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
-      const mode = cfg.spiritualMode ?? 'sequential';
       const bookId = cfg.spiritualBookId;
-      // Get the pool of sections (new flat 60-section structure)
       let pool: ScriptureSection[];
       if (bookId) {
-        // bookId is now a section id string like 'section-14' — find matching section
         const section = BOOK_OF_MORMON_SECTIONS.find((s) => `section-${s.id}` === bookId);
         pool = section ? [section] : ALL_BOM_CHAPTERS;
       } else {
         pool = ALL_BOM_CHAPTERS;
       }
-      const seqKey = `spiritual_bom_${bookId ?? 'all'}`;
-      const tracks: ResolvedTrack[] = [];
-      const usedIndexes = new Set<number>();
-      for (let i = 0; i < count; i++) {
-        let idx: number;
-        if (mode === 'random') {
-          const available = pool.map((_, j) => j).filter((j) => !usedIndexes.has(j));
-          if (available.length === 0) break;
-          idx = available[Math.floor(Math.random() * available.length)];
-          usedIndexes.add(idx);
-        } else {
-          idx = pickIndexFromPool(pool.length, 'sequential', seqKey);
-        }
-        if (idx < 0) break;
-        const ch = pool[idx];
-        tracks.push({ url: ch.url, label: ch.title, category: 'Book of Mormon' });
-      }
-      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+      const allTracks = pool.map((s) => ({ url: s.url, label: s.title }));
+      const goalSecs = cfg.spiritualGoalMode === 'goal' ? (cfg.spiritualGoalSeconds ?? 1200) : undefined;
+      return {
+        tracks: [], // ScriptureReadingPlayer manages its own audio
+        isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true,
+        isScriptureReading: true,
+        scriptureReadingSource: 'book-of-mormon',
+        scriptureReadingTracks: allTracks,
+        scriptureGoalSeconds: goalSecs,
+      };
     }
-    // Bible: sections pool, optionally filtered by book, sequential or random
+    // Full Bible reading — uses ScriptureReadingPlayer with persistent position
     if (source === 'bible') {
-      const count = Math.min(cfg.spiritualChaptersCount ?? 1, 5);
       const bookId = cfg.spiritualBookId;
       const pool = bookId ? getBibleSectionsByBook(bookId) : BIBLE_SECTIONS;
-      const mode = cfg.spiritualMode ?? 'sequential';
-      const seqKey = `bible_${bookId ?? 'all'}`;
-      const tracks: ResolvedTrack[] = [];
-      const usedIndexes = new Set<number>();
-      for (let i = 0; i < count; i++) {
-        let idx: number;
-        if (mode === 'random') {
-          const available = pool.map((_, j) => j).filter((j) => !usedIndexes.has(j));
-          if (available.length === 0) break;
-          idx = available[Math.floor(Math.random() * available.length)];
-          usedIndexes.add(idx);
-        } else {
-          idx = pickIndexFromPool(pool.length, 'sequential', seqKey);
-          if (idx < 0) break;
-        }
-        const section = pool[idx];
-        tracks.push({ url: section.url, label: section.title, category: section.book });
-      }
-      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+      const allTracks = pool.map((s) => ({ url: s.url, label: s.title }));
+      const goalSecs = cfg.spiritualGoalMode === 'goal' ? (cfg.spiritualGoalSeconds ?? 1200) : undefined;
+      return {
+        tracks: [], // ScriptureReadingPlayer manages its own audio
+        isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true,
+        isScriptureReading: true,
+        scriptureReadingSource: 'bible',
+        scriptureReadingTracks: allTracks,
+        scriptureGoalSeconds: goalSecs,
+      };
     }
     // BOM Verse Clips
     if (source === 'bom-verses') {
@@ -254,7 +240,7 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
         const v = BOM_VERSES[idx];
         tracks.push({ url: v.url, label: v.title, category: 'Book of Mormon' });
       }
-      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true, isScriptureReading: false };
     }
     // Bible Verse Clips
     if (source === 'bible-verses') {
@@ -277,9 +263,9 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
         const v = BIBLE_VERSES[idx];
         tracks.push({ url: v.url, label: v.title, category: 'Bible' });
       }
-      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+      return { tracks, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true, isScriptureReading: false };
     }
-    return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true };
+    return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: true, isScriptureReading: false };
   }
 
   if (step.type === 'meditation') {
@@ -296,15 +282,16 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       isMotivational: false,
       isJokes: false,
       isSpiritual: false,
+      isScriptureReading: false,
     };
   }
 
   if (step.type === 'custom') {
     const files = await loadCustomAudioFiles();
-    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false };
+    if (files.length === 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false, isScriptureReading: false };
     const mode = step.config.customAudioMode ?? 'random';
     const idx = pickIndexFromPool(files.length, mode, 'custom');
-    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false };
+    if (idx < 0) return { tracks: [], isAffirmations: false, isCustom: true, isMotivational: false, isJokes: false, isSpiritual: false, isScriptureReading: false };
     const f = files[idx];
     const name = f.name ?? f.uri.split('/').pop() ?? 'Audio';
     return {
@@ -314,10 +301,11 @@ async function resolveStepAudio(step: RitualStep): Promise<ResolvedAudio> {
       isMotivational: false,
       isJokes: false,
       isSpiritual: false,
+      isScriptureReading: false,
     };
   }
 
-  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false };
+  return { tracks: [], isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false, isScriptureReading: false };
 }
 
 // ── Audio state exposed to UI ─────────────────────────────────────────────────
@@ -329,6 +317,10 @@ interface AudioState {
   isMotivational: boolean;
   isJokes: boolean;
   isSpiritual: boolean;
+  isScriptureReading: boolean;
+  scriptureReadingSource?: 'book-of-mormon' | 'bible';
+  scriptureReadingTracks?: { url: string; label: string }[];
+  scriptureGoalSeconds?: number;
   isPlaying: boolean;
   isPaused: boolean;
   isFinished: boolean; // true when all tracks have completed
@@ -347,6 +339,7 @@ function useStepAudio(
     isMotivational: false,
     isJokes: false,
     isSpiritual: false,
+    isScriptureReading: false,
     isPlaying: false, isPaused: false, isFinished: false,
   });
   const activeStepIdRef = useRef<string | null>(null);
@@ -360,6 +353,7 @@ function useStepAudio(
 
   const [audioState, setAudioState] = useState<AudioState>({
     tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false,
+    isScriptureReading: false,
     isPlaying: false, isPaused: false, isFinished: false,
   });
 
@@ -397,6 +391,7 @@ function useStepAudio(
     if (customDelayRef.current) clearTimeout(customDelayRef.current);
     const empty: AudioState = {
       tracks: [], currentIdx: 0, isAffirmations: false, isCustom: false, isMotivational: false, isJokes: false, isSpiritual: false,
+      isScriptureReading: false,
       isPlaying: false, isPaused: false, isFinished: false,
     };
     audioStateRef.current = empty;
@@ -408,11 +403,12 @@ function useStepAudio(
     activeStepIdRef.current = stepId;
 
     resolveStepAudio(step).then((resolved) => {
-      const { tracks, isAffirmations, isCustom, isMotivational, isJokes, isSpiritual } = resolved;
+      const { tracks, isAffirmations, isCustom, isMotivational, isJokes, isSpiritual,
+        isScriptureReading, scriptureReadingSource, scriptureReadingTracks, scriptureGoalSeconds } = resolved;
       if (activeStepIdRef.current !== stepId) return;
       const newState: AudioState = {
         tracks, currentIdx: 0, isAffirmations, isCustom, isMotivational, isJokes,
-        isSpiritual,
+        isSpiritual, isScriptureReading, scriptureReadingSource, scriptureReadingTracks, scriptureGoalSeconds,
         isPlaying: false, isPaused: false, isFinished: false,
       };
       audioStateRef.current = newState;
@@ -818,6 +814,9 @@ export default function StackPlayerScreen() {
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Saved scripture position for persistent BOM/Bible reading
+  const [savedScripturePos, setSavedScripturePos] = useState<{ sectionIdx: number; seekSeconds: number } | null>(null);
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const trackFadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -876,6 +875,23 @@ export default function StackPlayerScreen() {
     setPhase('running');
     setElapsed(0);
   }, [stack, stepIdx]);
+
+  // Load saved scripture position when step is a scripture reading step
+  useEffect(() => {
+    if (!currentStep || currentStep.type !== 'spiritual') {
+      setSavedScripturePos(null);
+      return;
+    }
+    const source = currentStep.config.spiritualSource ?? 'book-of-mormon';
+    if (source !== 'book-of-mormon' && source !== 'bible') {
+      setSavedScripturePos(null);
+      return;
+    }
+    setSavedScripturePos(null); // reset while loading
+    getScripturePosition(source).then((pos) => {
+      setSavedScripturePos(pos ? { sectionIdx: pos.sectionIndex, seekSeconds: pos.seekSeconds } : { sectionIdx: 0, seekSeconds: 0 });
+    }).catch(() => setSavedScripturePos({ sectionIdx: 0, seekSeconds: 0 }));
+  }, [currentStep?.id, currentStep?.type]);
 
   useEffect(() => {
     if (audioState.isAffirmations && audioState.currentIdx > 0) {
@@ -1159,8 +1175,26 @@ export default function StackPlayerScreen() {
               </View>
             )}
 
-            {/* ── Spiritual scripture track display ── */}
-            {isSpiritualStep && trackCount > 0 && (
+            {/* ── Scripture reading player (Full BOM / Full Bible) ── */}
+            {isSpiritualStep && audioState.isScriptureReading && savedScripturePos !== null && audioState.scriptureReadingTracks && (
+              <ScriptureReadingPlayer
+                source={audioState.scriptureReadingSource!}
+                tracks={audioState.scriptureReadingTracks}
+                initialSectionIndex={savedScripturePos.sectionIdx}
+                initialSeekSeconds={savedScripturePos.seekSeconds}
+                goalSeconds={audioState.scriptureGoalSeconds}
+                onDone={advanceStep}
+              />
+            )}
+            {/* Loading state while scripture position is being fetched */}
+            {isSpiritualStep && audioState.isScriptureReading && savedScripturePos === null && (
+              <View style={{ alignItems: 'center', marginTop: 24 }}>
+                <Text style={{ color: colors.muted, fontSize: 15 }}>Loading your reading position…</Text>
+              </View>
+            )}
+
+            {/* ── Spiritual verse clips track display (BOM Verses / Bible Verses) ── */}
+            {isSpiritualStep && !audioState.isScriptureReading && trackCount > 0 && (
               <View style={styles.affirmationsArea}>
                 <View style={styles.trackPills}>
                   {audioState.tracks.map((_, i) => (
@@ -1199,7 +1233,7 @@ export default function StackPlayerScreen() {
                 )}
                 {!nextTrack && trackCount > 1 && (
                   <View style={[styles.upNextRow, { borderColor: colors.border }]}>
-                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Last chapter</Text>
+                    <Text style={[styles.upNextLabel, { color: colors.muted }]}>Last verse</Text>
                   </View>
                 )}
               </View>

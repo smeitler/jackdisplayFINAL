@@ -1678,3 +1678,9 @@
 - [x] Spiritual step: 4 source options — Full Book of Mormon (60 sections), Full Bible KJV (127 sections), BOM Verse Clips (102 clips), Bible Verse Clips (192 clips)
 - [x] Create bom-verses.ts data file with 102 individual BOM chapter clips from CDN
 - [x] Wire all 4 spiritual sources into step config UI (editor) and player audio engine
+
+- [x] Scripture reading: persistent position — save section index + seek position to AsyncStorage, resume on next session
+- [x] Scripture reading: playback controls — ±15s skip, pause/play, Done button in ScriptureReadingPlayer card
+- [x] Scripture reading: step config — Continuous vs Goal Time mode picker + goal duration selector (5/10/15/20/30/45/60 min)
+- [x] Scripture reading: goal timer — animated circular progress ring counting up to goal time
+- [x] Scripture reading: goal celebration — full-screen animated overlay with confetti burst, time achieved, Keep Going / Finish Step buttons, haptic success feedback

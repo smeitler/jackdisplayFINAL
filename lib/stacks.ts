@@ -87,6 +87,8 @@ export interface StepConfig {
   spiritualChapterStart?: number;      // starting chapter index (0-based within the selected book)
   spiritualChaptersCount?: number;     // how many chapters to play (1-5, default 1)
   spiritualMode?: 'sequential' | 'random'; // playback order
+  spiritualGoalMode?: 'continuous' | 'goal'; // continuous = play until done; goal = stop at target time
+  spiritualGoalSeconds?: number; // target listening time in seconds (goal mode only)
   // Linked habit for custom audio step
   linkedHabitId?: string;              // habit ID to rate after audio finishes
   linkedHabitName?: string;            // display name of linked habit

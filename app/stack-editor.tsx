@@ -1201,22 +1201,57 @@ function StepConfigModal({
                   <View style={[styles.infoBox, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30', marginTop: 4 }]}>
                     <IconSymbol name="sparkles" size={16} color="#7C3AED" />
                     <Text style={[styles.infoText, { color: colors.muted }]}>
-                      {config.spiritualBookId ? '1 section selected' : '60 sections across the full Book of Mormon'}. Plays in order.
+                      {config.spiritualBookId ? '1 section selected' : '60 sections across the full Book of Mormon'}. Plays in order, resuming where you left off.
                     </Text>
                   </View>
-                  <CRow label="How many sections" colors={colors}>
-                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                      {[1, 2, 3, 5].map((n) => (
-                        <Pressable key={n} onPress={() => setConfig({ ...config, spiritualChaptersCount: n })}
+                  <CRow label="Session Mode" colors={colors}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['continuous', 'goal'] as const).map((mode) => (
+                        <Pressable key={mode} onPress={() => setConfig({ ...config, spiritualGoalMode: mode })}
                           style={[styles.categoryChip, {
-                            backgroundColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.surface,
-                            borderColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.border,
+                            flex: 1, justifyContent: 'center',
+                            backgroundColor: (config.spiritualGoalMode ?? 'continuous') === mode ? '#7C3AED' : colors.surface,
+                            borderColor: (config.spiritualGoalMode ?? 'continuous') === mode ? '#7C3AED' : colors.border,
                           }]}>
-                          <Text style={[styles.categoryChipText, { color: (config.spiritualChaptersCount ?? 1) === n ? '#fff' : colors.foreground }]}>{n}</Text>
+                          <Text style={[styles.categoryChipText, { color: (config.spiritualGoalMode ?? 'continuous') === mode ? '#fff' : colors.foreground, textAlign: 'center' }]}>
+                            {mode === 'continuous' ? '▶ Continuous' : '🎯 Goal Time'}
+                          </Text>
                         </Pressable>
                       ))}
                     </View>
                   </CRow>
+                  {(config.spiritualGoalMode ?? 'continuous') === 'goal' && (
+                    <CRow label="Daily Goal" colors={colors}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          {[5, 10, 15, 20, 30, 45, 60].map((mins) => (
+                            <Pressable key={mins} onPress={() => setConfig({ ...config, spiritualGoalSeconds: mins * 60 })}
+                              style={[styles.categoryChip, {
+                                backgroundColor: (config.spiritualGoalSeconds ?? 1200) === mins * 60 ? '#7C3AED' : colors.surface,
+                                borderColor: (config.spiritualGoalSeconds ?? 1200) === mins * 60 ? '#7C3AED' : colors.border,
+                              }]}>
+                              <Text style={[styles.categoryChipText, { color: (config.spiritualGoalSeconds ?? 1200) === mins * 60 ? '#fff' : colors.foreground }]}>{mins} min</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </CRow>
+                  )}
+                  {(config.spiritualGoalMode ?? 'continuous') === 'continuous' && (
+                    <CRow label="How many sections" colors={colors}>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {[1, 2, 3, 5].map((n) => (
+                          <Pressable key={n} onPress={() => setConfig({ ...config, spiritualChaptersCount: n })}
+                            style={[styles.categoryChip, {
+                              backgroundColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.surface,
+                              borderColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.border,
+                            }]}>
+                            <Text style={[styles.categoryChipText, { color: (config.spiritualChaptersCount ?? 1) === n ? '#fff' : colors.foreground }]}>{n}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </CRow>
+                  )}
                 </>
               )}
 
@@ -1248,22 +1283,57 @@ function StepConfigModal({
                     <Text style={[styles.infoText, { color: colors.muted }]}>
                       {config.spiritualBookId
                         ? `${getBibleSectionsByBook(config.spiritualBookId).length} sections in ${config.spiritualBookId}`
-                        : `${BIBLE_SECTIONS.length} sections across all 66 books`}. Plays in order.
+                        : `${BIBLE_SECTIONS.length} sections across all 66 books`}. Plays in order, resuming where you left off.
                     </Text>
                   </View>
-                  <CRow label="How many sections" colors={colors}>
-                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                      {[1, 2, 3, 5].map((n) => (
-                        <Pressable key={n} onPress={() => setConfig({ ...config, spiritualChaptersCount: n })}
+                  <CRow label="Session Mode" colors={colors}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['continuous', 'goal'] as const).map((mode) => (
+                        <Pressable key={mode} onPress={() => setConfig({ ...config, spiritualGoalMode: mode })}
                           style={[styles.categoryChip, {
-                            backgroundColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.surface,
-                            borderColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.border,
+                            flex: 1, justifyContent: 'center',
+                            backgroundColor: (config.spiritualGoalMode ?? 'continuous') === mode ? '#7C3AED' : colors.surface,
+                            borderColor: (config.spiritualGoalMode ?? 'continuous') === mode ? '#7C3AED' : colors.border,
                           }]}>
-                          <Text style={[styles.categoryChipText, { color: (config.spiritualChaptersCount ?? 1) === n ? '#fff' : colors.foreground }]}>{n}</Text>
+                          <Text style={[styles.categoryChipText, { color: (config.spiritualGoalMode ?? 'continuous') === mode ? '#fff' : colors.foreground, textAlign: 'center' }]}>
+                            {mode === 'continuous' ? '▶ Continuous' : '🎯 Goal Time'}
+                          </Text>
                         </Pressable>
                       ))}
                     </View>
                   </CRow>
+                  {(config.spiritualGoalMode ?? 'continuous') === 'goal' && (
+                    <CRow label="Daily Goal" colors={colors}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          {[5, 10, 15, 20, 30, 45, 60].map((mins) => (
+                            <Pressable key={mins} onPress={() => setConfig({ ...config, spiritualGoalSeconds: mins * 60 })}
+                              style={[styles.categoryChip, {
+                                backgroundColor: (config.spiritualGoalSeconds ?? 1200) === mins * 60 ? '#7C3AED' : colors.surface,
+                                borderColor: (config.spiritualGoalSeconds ?? 1200) === mins * 60 ? '#7C3AED' : colors.border,
+                              }]}>
+                              <Text style={[styles.categoryChipText, { color: (config.spiritualGoalSeconds ?? 1200) === mins * 60 ? '#fff' : colors.foreground }]}>{mins} min</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </CRow>
+                  )}
+                  {(config.spiritualGoalMode ?? 'continuous') === 'continuous' && (
+                    <CRow label="How many sections" colors={colors}>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {[1, 2, 3, 5].map((n) => (
+                          <Pressable key={n} onPress={() => setConfig({ ...config, spiritualChaptersCount: n })}
+                            style={[styles.categoryChip, {
+                              backgroundColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.surface,
+                              borderColor: (config.spiritualChaptersCount ?? 1) === n ? '#7C3AED' : colors.border,
+                            }]}>
+                            <Text style={[styles.categoryChipText, { color: (config.spiritualChaptersCount ?? 1) === n ? '#fff' : colors.foreground }]}>{n}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </CRow>
+                  )}
                 </>
               )}
 
