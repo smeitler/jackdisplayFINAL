@@ -16,6 +16,7 @@
 
 import { Router, Request, Response } from "express";
 import * as db from "./db";
+import { buildAudioManifest } from "./audioManifest";
 
 const router = Router();
 
@@ -230,6 +231,23 @@ router.post("/checkin", requireDeviceKey, async (req: Request, res: Response) =>
   } catch (err: any) {
     console.error("[device/checkin]", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/device/audio-manifest ──────────────────────────────────────────
+// Returns the full list of audio files available for download to the SD card.
+// No device auth required — the manifest is public (all URLs are already CDN-public).
+// The firmware calls this once on boot and re-checks on each heartbeat's needsSync flag.
+
+router.get("/audio-manifest", async (_req: Request, res: Response) => {
+  try {
+    const manifest = buildAudioManifest();
+    // Cache for 1 hour — files don't change often
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json(manifest);
+  } catch (err: any) {
+    console.error("[device/audio-manifest]", err);
+    res.status(500).json({ error: "Failed to build audio manifest" });
   }
 });
 

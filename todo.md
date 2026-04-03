@@ -1684,3 +1684,7 @@
 - [x] Scripture reading: step config — Continuous vs Goal Time mode picker + goal duration selector (5/10/15/20/30/45/60 min)
 - [x] Scripture reading: goal timer — animated circular progress ring counting up to goal time
 - [x] Scripture reading: goal celebration — full-screen animated overlay with confetti burst, time achieved, Keep Going / Finish Step buttons, haptic success feedback
+
+- [x] Audit /api/device/audio-manifest endpoint and all CDN audio data files
+- [x] Build comprehensive audio manifest with all categories (BOM 60 sections, Bible 127 sections, meditation, alarm sounds, BOM verse clips, Bible verse clips, motivational 51, affirmations 189) — 748 total files
+- [x] /api/device/audio-manifest endpoint live and tested (GET, no auth required, 1hr cache)
