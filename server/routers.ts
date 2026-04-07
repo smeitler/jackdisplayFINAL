@@ -235,6 +235,7 @@ export const appRouter = router({
         minute: z.number().int().min(0).max(59),
         days: z.string().max(20), // comma-separated
         enabled: z.boolean(),
+        soundId: z.string().max(64).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         await db.upsertAlarm({
@@ -243,6 +244,7 @@ export const appRouter = router({
           minute: input.minute,
           days: input.days,
           enabled: input.enabled,
+          soundId: input.soundId,
         });
         await db.bumpScheduleVersionForUser(ctx.user.id).catch(() => {});
       }),
