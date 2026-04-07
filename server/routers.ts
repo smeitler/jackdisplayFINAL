@@ -508,6 +508,14 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.updateDeviceSettings(ctx.user.id, input)
       ),
+    /** Sync ritual stacks from the app to the paired device so the panel can display them. */
+    syncStacks: protectedProcedure
+      .input(z.object({
+        stacks: z.array(z.any()),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.syncDeviceStacks(ctx.user.id, JSON.stringify(input.stacks))
+      ),
   }),
 
   // ─── Moderation (Apple Guideline 1.2) ─────────────────────────────────────────

@@ -36,6 +36,7 @@ import { BOOK_OF_MORMON_SECTIONS, type ScriptureSection } from '@/app/data/spiri
 import { BOM_VERSES } from '@/app/data/bom-verses';
 import { BIBLE_SECTIONS, BIBLE_BOOKS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
+import { trpc } from '@/lib/trpc';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -463,10 +464,15 @@ export default function StackEditorScreen() {
     });
   }, [id]);
 
+  const syncStacksMutation = trpc.devices.syncStacks.useMutation();
+
   async function persist(updated: RitualStack) {
     setStack(updated);
     const all = await loadStacks();
-    await saveStacks(all.map((s) => (s.id === updated.id ? updated : s)));
+    const next = all.map((s) => (s.id === updated.id ? updated : s));
+    await saveStacks(next);
+    // Sync to panel in background — don't block the UI
+    syncStacksMutation.mutate({ stacks: next });
   }
 
   function addStep(type: StepType, initialConfig: StepConfig = {}) {

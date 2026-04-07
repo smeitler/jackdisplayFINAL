@@ -307,6 +307,8 @@ export const devices = mysqlTable("devices", {
   lowEmfMode: tinyint("lowEmfMode").notNull().default(0),
   wifiOffHour: int("wifiOffHour").notNull().default(22),
   wifiOnHour: int("wifiOnHour").notNull().default(6),
+  // Ritual stacks synced from the app — JSON array of RitualStack objects
+  stacksJson: text("stacksJson"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
