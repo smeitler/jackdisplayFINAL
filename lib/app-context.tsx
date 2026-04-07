@@ -707,6 +707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           minute: applied.minute,
           days: applied.days.join(','),
           enabled: applied.isEnabled,
+          soundId: applied.soundId ?? 'classic',
         });
       } catch (err) {
         console.warn('[AppContext] Failed to sync alarm:', err);

@@ -8,15 +8,18 @@
  * Authentication: X-Device-Key header (long-lived per-device API key)
  *
  * Endpoints:
- *   POST /api/device/register    — First-time registration using pairing token
- *   GET  /api/device/schedule    — Get current alarm schedule
- *   POST /api/device/event       — Report an alarm event (fired, dismissed, snooze)
- *   POST /api/device/heartbeat   — Periodic liveness ping
+ *   POST /api/device/register       — First-time registration using pairing token
+ *   GET  /api/device/schedule       — Get current alarm schedule
+ *   GET  /api/device/audio-manifest — Get list of habit audio files to cache on SD card
+ *   POST /api/device/event          — Report an alarm event (fired, dismissed, snooze)
+ *   POST /api/device/heartbeat      — Periodic liveness ping
+ *   POST /api/device/checkin        — Submit habit check-in ratings
  */
 
 import { Router, Request, Response } from "express";
 import * as db from "./db";
-import { buildAudioManifest } from "./audioManifest";
+import { generateAndStoreAudio, habitPromptText, VOICES } from "./audioService";
+import { storageGet } from "./storage";
 
 const router = Router();
 
@@ -97,6 +100,8 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       minute: a.minute,
       daysOfWeek: a.days.split(",").map(Number).filter((d) => !isNaN(d)),
       enabled: a.enabled,
+      soundId: a.soundId ?? "drumming",
+      alarmSoundUrl: getAlarmSoundProxyUrl(a.soundId),
     }));
 
     // Include active habits so the firmware can show the check-in screen
@@ -234,20 +239,92 @@ router.post("/checkin", requireDeviceKey, async (req: Request, res: Response) =>
   }
 });
 
-// ─── GET /api/device/audio-manifest ──────────────────────────────────────────
-// Returns the full list of audio files available for download to the SD card.
-// No device auth required — the manifest is public (all URLs are already CDN-public).
-// The firmware calls this once on boot and re-checks on each heartbeat's needsSync flag.
+// ─── GET /api/device/audio-manifest ─────────────────────────────────────────
+// Returns a list of habit audio files for the ESP32 to cache on its SD card.
+// Each entry has: filename (SD path), url (HTTP proxy URL for download), text (habit name).
+// The url goes through the Cloudflare Worker /proxy-download endpoint so the
+// ESP32 can fetch HTTPS-hosted files over plain HTTP.
 
-router.get("/audio-manifest", async (_req: Request, res: Response) => {
+const WORKER_BASE_URL = process.env.NODE_ENV === "production"
+  ? "http://jack-device-proxy.steve-137.workers.dev"
+  : "http://jack-device-proxy-dev.steve-137.workers.dev";
+
+// Map of soundId → CloudFront HTTPS URL (mirrors ALARM_SOUNDS in the app)
+const ALARM_SOUND_URLS: Record<string, string> = {
+  drumming:   "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_drumming_3dce95b9.wav",
+  dubstep:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dubstep_c17cb2ab.wav",
+  action:     "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_action_26f02017.wav",
+  dynamic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dynamic_1843ed92.wav",
+  edm:        "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3",
+  fulltrack:  "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_fulltrack_6082bd59.mp3",
+  prisonbell: "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_prisonbell_9d68b4d6.mp3",
+  stomp4k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_be7c271e.mp3",
+  stomp5k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_e7c316e0.mp3",
+  sunny_end:  "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_end_ff17c7ef.wav",
+  sunny_loop: "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_loop_4c57ab59.wav",
+  // Legacy bundled sounds — no CloudFront URL, fall back to drumming
+  classic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_drumming_3dce95b9.wav",
+  gentle:     "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_end_ff17c7ef.wav",
+  urgent:     "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dubstep_c17cb2ab.wav",
+};
+
+function getAlarmSoundProxyUrl(soundId: string | null | undefined): string {
+  const httpsUrl = ALARM_SOUND_URLS[soundId ?? "drumming"] ?? ALARM_SOUND_URLS.drumming;
+  return `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(httpsUrl)}`;
+}
+
+function sanitizeForFilename(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+router.get("/audio-manifest", requireDeviceKey, async (req: Request, res: Response) => {
   try {
-    const manifest = buildAudioManifest();
-    // Cache for 1 hour — files don't change often
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    res.json(manifest);
+    const device = (req as any).device as Awaited<ReturnType<typeof db.getDeviceByApiKey>>;
+    if (!device) { res.status(401).json({ error: "Device not found" }); return; }
+
+    const schedule = await db.getDeviceSchedule(device.id);
+    if (!schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+
+    const voiceId = device.voiceId && (VOICES as Record<string, string>)[device.voiceId]
+      ? (VOICES as Record<string, string>)[device.voiceId]
+      : VOICES.rachel;
+
+    const files: { filename: string; url: string; text: string }[] = [];
+
+    for (const habit of schedule.habits ?? []) {
+      const text = habitPromptText(habit.name);
+      const sanitized = sanitizeForFilename(habit.name);
+      const storageKey = `audio/habits/${sanitized}.mp3`;
+      const filename = `habits/${sanitized}.mp3`;
+
+      // Generate audio if not already stored, then get a fresh signed URL
+      let httpsUrl: string;
+      try {
+        httpsUrl = await generateAndStoreAudio(text, "habit", voiceId);
+      } catch {
+        // Fall back to storageGet if generation fails (e.g. no ElevenLabs key)
+        try {
+          const result = await storageGet(storageKey);
+          httpsUrl = result.url;
+        } catch {
+          continue; // skip this habit if we can't get a URL
+        }
+      }
+
+      // Wrap the HTTPS URL through the Worker proxy so the ESP32 can fetch it over HTTP
+      const proxyUrl = `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(httpsUrl)}`;
+
+      files.push({ filename, url: proxyUrl, text: habit.name });
+    }
+
+    res.json({ files });
   } catch (err: any) {
     console.error("[device/audio-manifest]", err);
-    res.status(500).json({ error: "Failed to build audio manifest" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

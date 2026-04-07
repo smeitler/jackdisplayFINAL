@@ -1,0 +1,1 @@
+ALTER TABLE `alarmConfigs` ADD `soundId` varchar(64) DEFAULT 'drumming';
