@@ -988,7 +988,20 @@ export async function getDeviceSchedule(deviceId: number) {
     .from(habits)
     .where(and(eq(habits.userId, device.userId), eq(habits.isActive, true)))
     .orderBy(habits.order);
-  return { alarms, habits: userHabits, userId: device.userId };
+  return { alarms, habits: userHabits, userId: device.userId, stacksJson: device.stacksJson ?? null };
+}
+/** Sync ritual stacks from the app to the device record */
+export async function syncDeviceStacks(userId: number, stacksJson: string): Promise<{ ok: boolean }> {
+  const db = await getDb();
+  if (!db) return { ok: false };
+  const userDevices = await db.select({ id: devices.id }).from(devices).where(eq(devices.userId, userId));
+  if (!userDevices.length) return { ok: true }; // no device paired yet, silently succeed
+  for (const dev of userDevices) {
+    await db.update(devices).set({ stacksJson }).where(eq(devices.id, dev.id));
+  }
+  // Bump scheduleVersion so panel knows to re-fetch
+  await db.update(devices).set({ scheduleVersion: sql`scheduleVersion + 1` }).where(eq(devices.userId, userId));
+  return { ok: true };
 }
 
 /** Save check-in ratings submitted from the CrowPanel display */
@@ -1269,4 +1282,33 @@ export async function updateDeviceSettings(
     await db.update(devices).set(updateData).where(eq(devices.id, dev.id));
   }
   return { ok: true };
+}
+
+// ─── Save device recording ────────────────────────────────────────────────────
+// Accepts a raw WAV buffer from the ESP32 and stores metadata in the DB.
+// Falls back gracefully if the deviceRecordings table doesn't exist yet.
+export async function saveDeviceRecording(
+  deviceId: number,
+  recording: {
+    filename: string;
+    category: string;
+    sizeBytes: number;
+    contentType: string;
+    data: Buffer;
+  }
+): Promise<{ ok: boolean }> {
+  const db = await getDb();
+  if (!db) return { ok: false };
+  try {
+    await (db as any).execute(
+      `INSERT INTO deviceRecordings (deviceId, filename, category, sizeBytes, contentType, data, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [deviceId, recording.filename, recording.category, recording.sizeBytes, recording.contentType, recording.data]
+    );
+    return { ok: true };
+  } catch (err: any) {
+    // Table may not exist yet — log and continue so upload still returns 200
+    console.warn("[db/saveDeviceRecording] skipped:", err?.message);
+    return { ok: false };
+  }
 }
