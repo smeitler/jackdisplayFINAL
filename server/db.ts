@@ -1293,16 +1293,15 @@ export async function getDeviceRecordings(
   const db = await getDb();
   if (!db) return [];
   try {
-    const [rows] = await (db as any).execute(
-      `SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType, r.data, r.transcription, r.createdAt
-       FROM deviceRecordings r
-       INNER JOIN devices d ON d.id = r.deviceId
-       WHERE d.userId = ?
-       ORDER BY r.createdAt DESC
-       LIMIT ?`,
-      [userId, limit]
+    const rows = await db.execute(
+      sql`SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType, r.transcription, r.createdAt
+          FROM deviceRecordings r
+          INNER JOIN devices d ON d.id = r.deviceId
+          WHERE d.userId = ${userId}
+          ORDER BY r.createdAt DESC
+          LIMIT ${limit}`
     );
-    return rows as any[];
+    return (rows as any[]).map((r: any) => ({ ...r, data: undefined }));
   } catch (err: any) {
     console.warn("[db/getDeviceRecordings] skipped:", err?.message);
     return [];
@@ -1317,16 +1316,40 @@ export async function deleteDeviceRecording(
   const db = await getDb();
   if (!db) return { ok: false };
   try {
-    await (db as any).execute(
-      `DELETE r FROM deviceRecordings r
-       INNER JOIN devices d ON d.id = r.deviceId
-       WHERE d.userId = ? AND r.id = ?`,
-      [userId, recordingId]
+    await db.execute(
+      sql`DELETE r FROM deviceRecordings r
+          INNER JOIN devices d ON d.id = r.deviceId
+          WHERE d.userId = ${userId} AND r.id = ${recordingId}`
     );
     return { ok: true };
   } catch (err: any) {
     console.warn("[db/deleteDeviceRecording] skipped:", err?.message);
     return { ok: false };
+  }
+}
+
+// ─── Get single device recording with binary data ───────────────────────────
+export async function getDeviceRecordingData(
+  userId: number,
+  recordingId: number
+): Promise<{ data: Buffer; contentType: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    const rows = await db.execute(
+      sql`SELECT r.data, r.contentType
+          FROM deviceRecordings r
+          INNER JOIN devices d ON d.id = r.deviceId
+          WHERE d.userId = ${userId} AND r.id = ${recordingId}
+          LIMIT 1`
+    );
+    const row = (rows as any[])[0];
+    if (!row) return null;
+    const buf: Buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data ?? "");
+    return { data: buf, contentType: row.contentType || "audio/wav" };
+  } catch (err: any) {
+    console.warn("[db/getDeviceRecordingData] skipped:", err?.message);
+    return null;
   }
 }
 
@@ -1346,14 +1369,12 @@ export async function saveDeviceRecording(
   const db = await getDb();
   if (!db) return { ok: false };
   try {
-    await (db as any).execute(
-      `INSERT INTO deviceRecordings (deviceId, filename, category, sizeBytes, contentType, data, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [deviceId, recording.filename, recording.category, recording.sizeBytes, recording.contentType, recording.data]
+    await db.execute(
+      sql`INSERT INTO deviceRecordings (deviceId, filename, category, sizeBytes, contentType, data, createdAt)
+          VALUES (${deviceId}, ${recording.filename}, ${recording.category}, ${recording.sizeBytes}, ${recording.contentType}, ${recording.data}, NOW())`
     );
     return { ok: true };
   } catch (err: any) {
-    // Table may not exist yet — log and continue so upload still returns 200
     console.warn("[db/saveDeviceRecording] skipped:", err?.message);
     return { ok: false };
   }

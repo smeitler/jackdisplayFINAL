@@ -382,21 +382,14 @@ router.get("/recording/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch the recording, verifying it belongs to this user
-    const rows = await db.getDeviceRecordings(user.id, 200);
-    const rec = rows.find((r: any) => r.id === recordingId);
+     // Fetch the recording data, verifying it belongs to this user
+    const rec = await db.getDeviceRecordingData(user.id, recordingId);
     if (!rec) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-
-    if (!rec.data) {
-      res.status(404).json({ error: "No audio data stored" });
-      return;
-    }
-
-    const buf: Buffer = Buffer.isBuffer(rec.data) ? rec.data : Buffer.from(rec.data as any);
-    const ct = rec.contentType || "audio/wav";
+    const buf = rec.data;
+    const ct = rec.contentType;
     res.setHeader("Content-Type", ct);
     res.setHeader("Content-Length", buf.length);
     res.setHeader("Accept-Ranges", "bytes");
