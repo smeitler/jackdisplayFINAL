@@ -8,14 +8,18 @@
  * Authentication: X-Device-Key header (long-lived per-device API key)
  *
  * Endpoints:
- *   POST /api/device/register    — First-time registration using pairing token
- *   GET  /api/device/schedule    — Get current alarm schedule
- *   POST /api/device/event       — Report an alarm event (fired, dismissed, snooze)
- *   POST /api/device/heartbeat   — Periodic liveness ping
+ *   POST /api/device/register       — First-time registration using pairing token
+ *   GET  /api/device/schedule       — Get current alarm schedule
+ *   GET  /api/device/audio-manifest — Get list of habit audio files to cache on SD card
+ *   POST /api/device/event          — Report an alarm event (fired, dismissed, snooze)
+ *   POST /api/device/heartbeat      — Periodic liveness ping
+ *   POST /api/device/checkin        — Submit habit check-in ratings
  */
 
 import { Router, Request, Response } from "express";
 import * as db from "./db";
+import { generateAndStoreAudio, habitPromptText, VOICES } from "./audioService";
+import { storageGet } from "./storage";
 
 const router = Router();
 
@@ -229,6 +233,71 @@ router.post("/checkin", requireDeviceKey, async (req: Request, res: Response) =>
     res.json({ ok: true, saved: result.saved });
   } catch (err: any) {
     console.error("[device/checkin]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/device/audio-manifest ─────────────────────────────────────────
+// Returns a list of habit audio files for the ESP32 to cache on its SD card.
+// Each entry has: filename (SD path), url (HTTP proxy URL for download), text (habit name).
+// The url goes through the Cloudflare Worker /proxy-download endpoint so the
+// ESP32 can fetch HTTPS-hosted files over plain HTTP.
+
+const WORKER_BASE_URL = process.env.NODE_ENV === "production"
+  ? "http://jack-device-proxy.steve-137.workers.dev"
+  : "http://jack-device-proxy-dev.steve-137.workers.dev";
+
+function sanitizeForFilename(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+router.get("/audio-manifest", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device as Awaited<ReturnType<typeof db.getDeviceByApiKey>>;
+    if (!device) { res.status(401).json({ error: "Device not found" }); return; }
+
+    const schedule = await db.getDeviceSchedule(device.id);
+    if (!schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+
+    const voiceId = device.voiceId && (VOICES as Record<string, string>)[device.voiceId]
+      ? (VOICES as Record<string, string>)[device.voiceId]
+      : VOICES.rachel;
+
+    const files: { filename: string; url: string; text: string }[] = [];
+
+    for (const habit of schedule.habits ?? []) {
+      const text = habitPromptText(habit.name);
+      const sanitized = sanitizeForFilename(habit.name);
+      const storageKey = `audio/habits/${sanitized}.mp3`;
+      const filename = `habits/${sanitized}.mp3`;
+
+      // Generate audio if not already stored, then get a fresh signed URL
+      let httpsUrl: string;
+      try {
+        httpsUrl = await generateAndStoreAudio(text, "habit", voiceId);
+      } catch {
+        // Fall back to storageGet if generation fails (e.g. no ElevenLabs key)
+        try {
+          const result = await storageGet(storageKey);
+          httpsUrl = result.url;
+        } catch {
+          continue; // skip this habit if we can't get a URL
+        }
+      }
+
+      // Wrap the HTTPS URL through the Worker proxy so the ESP32 can fetch it over HTTP
+      const proxyUrl = `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(httpsUrl)}`;
+
+      files.push({ filename, url: proxyUrl, text: habit.name });
+    }
+
+    res.json({ files });
+  } catch (err: any) {
+    console.error("[device/audio-manifest]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
