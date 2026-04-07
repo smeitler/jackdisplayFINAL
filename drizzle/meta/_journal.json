@@ -99,20 +99,6 @@
       "when": 1773418516687,
       "tag": "0013_condemned_the_hood",
       "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "5",
-      "when": 1775533889337,
-      "tag": "0014_right_puck",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "5",
-      "when": 1775540134464,
-      "tag": "0015_empty_fantastic_four",
-      "breakpoints": true
     }
   ]
 }

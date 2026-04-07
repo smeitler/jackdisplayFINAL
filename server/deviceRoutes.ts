@@ -302,8 +302,11 @@ router.get("/audio-manifest", requireDeviceKey, async (req: Request, res: Respon
     for (const [soundId, httpsUrl] of Object.entries(ALARM_SOUND_URLS)) {
       const ext = httpsUrl.endsWith(".wav") ? ".wav" : ".mp3";
       const filename = `alarms/${soundId}${ext}`;
-      const proxyUrl = `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(httpsUrl)}`;
-      files.push({ filename, url: proxyUrl, text: soundId });
+      // Return the raw HTTPS CloudFront URL.
+      // The firmware's downloadToSD() will wrap it through the Cloudflare Worker
+      // proxy itself (one hop only). Returning a pre-wrapped proxy URL here would
+      // cause double-proxying and a 404 on the device.
+      files.push({ filename, url: httpsUrl, text: soundId });
     }
 
     res.json({ files, totalFiles: files.length });
