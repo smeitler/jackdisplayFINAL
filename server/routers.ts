@@ -516,6 +516,20 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.syncDeviceStacks(ctx.user.id, JSON.stringify(input.stacks))
       ),
+
+    /** List audio recordings uploaded from the CrowPanel, newest first. */
+    getRecordings: protectedProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(200).optional() }))
+      .query(({ ctx, input }) =>
+        db.getDeviceRecordings(ctx.user.id, input.limit ?? 50)
+      ),
+
+    /** Delete a single panel recording by id (must belong to the current user). */
+    deleteRecording: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        db.deleteDeviceRecording(ctx.user.id, input.id)
+      ),
   }),
 
   // ─── Moderation (Apple Guideline 1.2) ─────────────────────────────────────────

@@ -1284,6 +1284,52 @@ export async function updateDeviceSettings(
   return { ok: true };
 }
 
+// ─── Get device recordings ──────────────────────────────────────────────────
+// Returns recordings for all devices belonging to a user, newest first.
+export async function getDeviceRecordings(
+  userId: number,
+  limit = 50
+): Promise<{ id: number; deviceId: number; filename: string; category: string; sizeBytes: number; contentType: string; data: string | null; transcription: string | null; createdAt: Date }[]> {
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    const [rows] = await (db as any).execute(
+      `SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType, r.data, r.transcription, r.createdAt
+       FROM deviceRecordings r
+       INNER JOIN devices d ON d.id = r.deviceId
+       WHERE d.userId = ?
+       ORDER BY r.createdAt DESC
+       LIMIT ?`,
+      [userId, limit]
+    );
+    return rows as any[];
+  } catch (err: any) {
+    console.warn("[db/getDeviceRecordings] skipped:", err?.message);
+    return [];
+  }
+}
+
+// ─── Delete device recording ──────────────────────────────────────────────────
+export async function deleteDeviceRecording(
+  userId: number,
+  recordingId: number
+): Promise<{ ok: boolean }> {
+  const db = await getDb();
+  if (!db) return { ok: false };
+  try {
+    await (db as any).execute(
+      `DELETE r FROM deviceRecordings r
+       INNER JOIN devices d ON d.id = r.deviceId
+       WHERE d.userId = ? AND r.id = ?`,
+      [userId, recordingId]
+    );
+    return { ok: true };
+  } catch (err: any) {
+    console.warn("[db/deleteDeviceRecording] skipped:", err?.message);
+    return { ok: false };
+  }
+}
+
 // ─── Save device recording ────────────────────────────────────────────────────
 // Accepts a raw WAV buffer from the ESP32 and stores metadata in the DB.
 // Falls back gracefully if the deviceRecordings table doesn't exist yet.

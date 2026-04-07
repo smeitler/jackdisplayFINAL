@@ -361,4 +361,51 @@ router.post("/upload", requireDeviceKey, async (req: Request, res: Response) => 
   }
 });
 
+// ─── GET /api/device/recording/:id ──────────────────────────────────────────────────────────────
+// Streams a single recording back to an authenticated app user.
+// Auth: Bearer token (same as tRPC) or session cookie.
+router.get("/recording/:id", async (req: Request, res: Response) => {
+  try {
+    // Authenticate the request using the same SDK used by tRPC
+    let user: any = null;
+    try {
+      const { sdk } = await import("./_core/sdk.js");
+      user = await sdk.authenticateRequest(req);
+    } catch {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const recordingId = parseInt(req.params.id, 10);
+    if (isNaN(recordingId)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+
+    // Fetch the recording, verifying it belongs to this user
+    const rows = await db.getDeviceRecordings(user.id, 200);
+    const rec = rows.find((r: any) => r.id === recordingId);
+    if (!rec) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    if (!rec.data) {
+      res.status(404).json({ error: "No audio data stored" });
+      return;
+    }
+
+    const buf: Buffer = Buffer.isBuffer(rec.data) ? rec.data : Buffer.from(rec.data as any);
+    const ct = rec.contentType || "audio/wav";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Content-Length", buf.length);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(buf);
+  } catch (err: any) {
+    console.error("[device/recording]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

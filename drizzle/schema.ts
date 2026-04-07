@@ -367,3 +367,22 @@ export const blockedUsers = mysqlTable("blockedUsers", {
 }));
 
 export type BlockedUser = typeof blockedUsers.$inferSelect;
+
+/**
+ * Device recordings — audio files uploaded from the CrowPanel.
+ * category: 'journal' | 'gratitude' | 'minddump' | 'recording'
+ * data: base64-encoded audio bytes for playback in the app
+ */
+export const deviceRecordings = mysqlTable("deviceRecordings", {
+  id: int("id").autoincrement().primaryKey(),
+  deviceId: int("deviceId").notNull(),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  category: varchar("category", { length: 32 }).notNull().default("recording"),
+  sizeBytes: int("sizeBytes").notNull().default(0),
+  contentType: varchar("contentType", { length: 64 }).notNull().default("audio/wav"),
+  data: text("data"),  // base64-encoded audio for playback in app
+  transcription: text("transcription"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DeviceRecording = typeof deviceRecordings.$inferSelect;
+export type InsertDeviceRecording = typeof deviceRecordings.$inferInsert;

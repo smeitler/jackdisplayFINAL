@@ -29,6 +29,7 @@ import {
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
+import { PanelRecordingsSection } from "@/components/panel-recordings-section";
 import { WheelColumn } from "@/components/wheel-time-picker";
 import Svg, { Path as SvgPath } from "react-native-svg";
 import { Image as ExpoImage } from "expo-image";
@@ -3918,6 +3919,8 @@ export default function JournalScreen() {
           </Pressable>
 
           {/* Save Entry button removed — auto-saves on keystroke */}
+          {/* ── PANEL RECORDINGS ── */}
+          <PanelRecordingsSection colors={colors} />
         </ScrollView>
       )}
 
