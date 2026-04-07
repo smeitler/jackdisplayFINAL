@@ -1,4 +1,4 @@
-import { and, eq, desc, gte, inArray, isNull, like, sql } from "drizzle-orm";
+import { and, eq, ne, desc, gte, inArray, isNull, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import crypto from "crypto";
 import {
@@ -928,9 +928,9 @@ export async function registerDevice(data: {
   // Check token hasn't expired
   if (pending.pairingTokenExpiresAt && pending.pairingTokenExpiresAt < new Date()) return null;
 
-  // If a device with this MAC already exists (e.g. re-pairing), delete it first to avoid unique constraint violation
+  // If a device with this MAC already exists (any user), delete it first to avoid unique constraint violation
   await db.delete(devices)
-    .where(and(eq(devices.macAddress, data.macAddress), eq(devices.userId, pending.userId)));
+    .where(and(eq(devices.macAddress, data.macAddress), ne(devices.id, pending.id)));
 
   const apiKey = generateApiKey();
   await db.update(devices).set({
