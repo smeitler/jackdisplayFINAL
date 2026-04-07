@@ -99,7 +99,7 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       minute: a.minute,
       daysOfWeek: a.days.split(",").map(Number).filter((d) => !isNaN(d)),
       enabled: a.enabled,
-      soundId: a.soundId ?? "drumming",
+      soundId: a.soundId ?? "edm",
       alarmSoundUrl: getAlarmSoundProxyUrl(a.soundId),
     }));
 
@@ -255,27 +255,20 @@ const WORKER_BASE_URL = process.env.NODE_ENV === "production"
   ? "http://jack-device-proxy.steve-137.workers.dev"
   : "http://jack-device-proxy-dev.steve-137.workers.dev";
 
-// Map of soundId → CloudFront HTTPS URL (mirrors ALARM_SOUNDS in the app)
+// MP3-only alarm sounds — WAV removed (CrowPanel firmware uses minimp3 decoder, WAV unsupported)
+// Mirrors ALARM_SOUNDS in app/alarms.tsx
 const ALARM_SOUND_URLS: Record<string, string> = {
-  drumming:   "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_drumming_3dce95b9.wav",
-  dubstep:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dubstep_c17cb2ab.wav",
-  action:     "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_action_26f02017.wav",
-  dynamic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dynamic_1843ed92.wav",
   edm:        "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3",
   fulltrack:  "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_fulltrack_6082bd59.mp3",
   prisonbell: "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_prisonbell_9d68b4d6.mp3",
   stomp4k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_be7c271e.mp3",
   stomp5k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_e7c316e0.mp3",
-  sunny_end:  "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_end_ff17c7ef.wav",
-  sunny_loop: "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_loop_4c57ab59.wav",
-  // Legacy bundled sounds — no CloudFront URL, fall back to drumming
-  classic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_drumming_3dce95b9.wav",
-  gentle:     "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_sunny_end_ff17c7ef.wav",
-  urgent:     "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_dubstep_c17cb2ab.wav",
+  // Legacy — 'classic' maps to edm
+  classic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3",
 };
 
 function getAlarmSoundProxyUrl(soundId: string | null | undefined): string {
-  const httpsUrl = ALARM_SOUND_URLS[soundId ?? "drumming"] ?? ALARM_SOUND_URLS.drumming;
+  const httpsUrl = ALARM_SOUND_URLS[soundId ?? "edm"] ?? ALARM_SOUND_URLS.edm;
   return `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(httpsUrl)}`;
 }
 

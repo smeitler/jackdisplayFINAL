@@ -32,16 +32,18 @@ import { useApp } from '@/lib/app-context';
 
 const { width: W, height: H } = Dimensions.get('window');
 
-// Alarm sound sources keyed by soundId
-const SOUND_SOURCES: Record<string, ReturnType<typeof require>> = {
-  classic: require('@/assets/audio/alarm_classic.mp3'),
-  buzzer:  require('@/assets/audio/alarm_buzzer.wav'),
-  gentle:  require('@/assets/audio/alarm_gentle.wav'),
-  urgent:  require('@/assets/audio/alarm_urgent.wav'),
+// Alarm sound sources keyed by soundId — MP3 only (WAV removed)
+const SOUND_SOURCES: Record<string, ReturnType<typeof require> | { uri: string }> = {
+  classic:    require('@/assets/audio/alarm_classic.mp3'),
+  edm:        { uri: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3' },
+  fulltrack:  { uri: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_fulltrack_6082bd59.mp3' },
+  prisonbell: { uri: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_prisonbell_9d68b4d6.mp3' },
+  stomp4k:    { uri: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_be7c271e.mp3' },
+  stomp5k:    { uri: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_e7c316e0.mp3' },
 };
 
 function getSource(soundId?: string) {
-  return SOUND_SOURCES[soundId ?? 'classic'] ?? SOUND_SOURCES.classic;
+  return SOUND_SOURCES[soundId ?? 'edm'] ?? SOUND_SOURCES.edm;
 }
 
 function formatTime(date: Date): string {
@@ -62,7 +64,7 @@ export default function AlarmRingScreen() {
   const { alarm } = useApp();
   const params = useLocalSearchParams<{ soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string }>();
 
-  const soundId = params.soundId ?? alarm.soundId ?? 'classic';
+  const soundId = params.soundId ?? alarm.soundId ?? 'edm';
   const snoozeMinutes = parseInt(params.snoozeMinutes ?? String(alarm.snoozeMinutes ?? 10), 10);
   const meditationId = params.meditationId ?? alarm.meditationId ?? 'none';
   const practiceDuration = parseInt(params.practiceDuration ?? String((alarm.practiceDurations?.[meditationId] ?? 10)), 10);
@@ -149,7 +151,7 @@ export default function AlarmRingScreen() {
             title: `Snooze over — time to wake up! ⏰`,
             body: 'Your alarm is ringing again.',
             data: { action: 'open_alarm_ring', soundId, snoozeMinutes: String(snoozeMinutes), meditationId, practiceDuration: String(practiceDuration), assignedStackId },
-            sound: soundId === 'gentle' ? 'alarm_gentle.wav' : 'alarm_classic.wav',
+            sound: 'alarm_classic.wav',
             ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
           },
           trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: snoozeMinutes * 60, repeats: false },
