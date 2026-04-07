@@ -8,12 +8,17 @@
  * Authentication: X-Device-Key header (long-lived per-device API key)
  *
  * Endpoints:
- *   POST /api/device/register       — First-time registration using pairing token
- *   GET  /api/device/schedule       — Get current alarm schedule
- *   GET  /api/device/audio-manifest — Get list of habit audio files to cache on SD card
- *   POST /api/device/event          — Report an alarm event (fired, dismissed, snooze)
- *   POST /api/device/heartbeat      — Periodic liveness ping
- *   POST /api/device/checkin        — Submit habit check-in ratings
+ *   POST /api/device/register              — First-time registration using pairing token
+ *   GET  /api/device/schedule              — Get current alarm schedule
+ *   GET  /api/device/audio-manifest        — Get list of habit audio files to cache on SD card
+ *   POST /api/device/event                 — Report an alarm event (fired, dismissed, snooze)
+ *   POST /api/device/heartbeat             — Periodic liveness ping
+ *   POST /api/device/checkin               — Submit habit check-in ratings
+ *   POST /api/device/upload                — Upload a voice recording from the panel
+ *   GET  /api/device/recording/:id         — Stream a recording to the app
+ *   POST /api/device/recording/:id/ack     — App confirms it saved the recording to journal
+ *   GET  /api/device/recording/:id/acked   — Panel polls to check if app has ACKed (device key auth)
+ *   GET  /api/device/prompts               — Get journal prompts for the panel recording screen
  */
 
 import { Router, Request, Response } from "express";
@@ -261,67 +266,49 @@ const ALARM_SOUND_URLS: Record<string, string> = {
   edm:        "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3",
   fulltrack:  "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_fulltrack_6082bd59.mp3",
   prisonbell: "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_prisonbell_9d68b4d6.mp3",
-  stomp4k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_be7c271e.mp3",
-  stomp5k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_e7c316e0.mp3",
-  // Legacy — 'classic' maps to edm
-  classic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3",
+  stomp4k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_d0a6e2e5.mp3",
+  stomp5k:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_2c8b4f12.mp3",
+  classic:    "https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_classic_bundled.mp3",
 };
 
-function getAlarmSoundProxyUrl(soundId: string | null | undefined): string {
-  const httpsUrl = ALARM_SOUND_URLS[soundId ?? "edm"] ?? ALARM_SOUND_URLS.edm;
-  return `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(httpsUrl)}`;
-}
-
-function sanitizeForFilename(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+function getAlarmSoundProxyUrl(soundId?: string | null): string {
+  const id = soundId ?? "edm";
+  const rawUrl = ALARM_SOUND_URLS[id] ?? ALARM_SOUND_URLS["edm"];
+  return `${WORKER_BASE_URL}/proxy-download?url=${encodeURIComponent(rawUrl)}`;
 }
 
 router.get("/audio-manifest", requireDeviceKey, async (req: Request, res: Response) => {
   try {
-    const device = (req as any).device as Awaited<ReturnType<typeof db.getDeviceByApiKey>>;
-    if (!device) { res.status(401).json({ error: "Device not found" }); return; }
+    const alarmFiles = Object.entries(ALARM_SOUND_URLS).map(([soundId, rawUrl]) => ({
+      filename: `alarms/${soundId}.mp3`,
+      url: rawUrl,
+      text: soundId,
+      category: "alarm_sounds",
+    }));
 
-    const schedule = await db.getDeviceSchedule(device.id);
-    if (!schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
-
-    const files: { filename: string; url: string; text: string }[] = [];
-
-    // Alarm sounds only — ESP32 pre-downloads these to SD card.
-    // All other audio (habits, wellness) is streamed on demand via proxy.
-    for (const [soundId, httpsUrl] of Object.entries(ALARM_SOUND_URLS)) {
-      const ext = httpsUrl.endsWith(".wav") ? ".wav" : ".mp3";
-      const filename = `alarms/${soundId}${ext}`;
-      // Return the raw HTTPS CloudFront URL.
-      // The firmware's downloadToSD() will wrap it through the Cloudflare Worker
-      // proxy itself (one hop only). Returning a pre-wrapped proxy URL here would
-      // cause double-proxying and a 404 on the device.
-      files.push({ filename, url: httpsUrl, text: soundId });
-    }
-
-    res.json({ files, totalFiles: files.length });
+    res.json({
+      files: alarmFiles,
+      totalFiles: alarmFiles.length,
+      generatedAt: new Date().toISOString(),
+    });
   } catch (err: any) {
     console.error("[device/audio-manifest]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// ─── POST /api/device/upload ───────────────────────────────────────────────────────────────────
-// Receives a raw WAV file from the ESP32 (journal/gratitude/minddump recordings).
-// The X-Filename header carries the original SD path (e.g. /journal/2026-04-07_08-30.wav).
-// Files are stored in the DB as blobs or forwarded to storage; for now we accept and
-// acknowledge so the device removes the local copy and stops retrying.
+// ─── POST /api/device/upload ─────────────────────────────────────────────────
+// Called by the CrowPanel to upload a voice recording.
+// The body is the raw audio bytes (WAV or MP3).
+// Returns immediately with { ok, recordingId } then transcribes async.
 
 router.post("/upload", requireDeviceKey, async (req: Request, res: Response) => {
   try {
     const device = (req as any).device;
-    const filename = (req.headers["x-filename"] as string) || "unknown.wav";
+    const filename = (req.headers["x-filename"] as string) || `recording-${Date.now()}.wav`;
     const contentType = (req.headers["content-type"] as string) || "audio/wav";
 
-    // Read the raw body into a buffer
+    // Read raw body
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
       req.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -329,7 +316,6 @@ router.post("/upload", requireDeviceKey, async (req: Request, res: Response) => 
       req.on("error", reject);
     });
     const body = Buffer.concat(chunks);
-
     if (body.length === 0) {
       res.status(400).json({ error: "Empty file" });
       return;
@@ -341,32 +327,166 @@ router.post("/upload", requireDeviceKey, async (req: Request, res: Response) => 
       : filename.startsWith("/minddump") ? "minddump"
       : "recording";
 
-    // Store in DB as a device recording entry
-    await db.saveDeviceRecording(device.id, {
-      filename,
-      category,
-      sizeBytes: body.length,
-      contentType,
-      data: body,
+    // Save to DB with status=pending
+    const saveResult = await db.saveDeviceRecording(device.id, {
+      filename, category, sizeBytes: body.length, contentType, data: body,
     }).catch((err: any) => {
-      // If saveDeviceRecording isn't implemented yet, log and continue
-      console.warn("[device/upload] saveDeviceRecording not available:", err?.message);
+      console.warn("[device/upload] saveDeviceRecording failed:", err?.message);
+      return { ok: false };
     });
 
-    console.log(`[device/upload] device=${device.id} file=${filename} size=${body.length}`);
-    res.json({ ok: true, filename, sizeBytes: body.length });
+    // Get the inserted ID so we can update it after transcription
+    let recordingId: number | null = null;
+    if (saveResult.ok) {
+      try {
+        const mysql = await import('mysql2/promise');
+        const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+        const [rows] = await conn.execute(
+          'SELECT id FROM deviceRecordings WHERE deviceId = ? ORDER BY id DESC LIMIT 1',
+          [device.id]
+        ) as any;
+        await conn.end();
+        recordingId = rows[0]?.id ?? null;
+      } catch {}
+    }
+
+    console.log(`[device/upload] device=${device.id} file=${filename} size=${body.length} id=${recordingId}`);
+
+    // Respond immediately — don't make the panel wait for transcription
+    res.json({ ok: true, filename, sizeBytes: body.length, recordingId });
+
+    // ─── Async transcription pipeline (fire-and-forget) ────────────────────────────────────────
+    if (recordingId !== null) {
+      processRecordingAsync(recordingId, device.id, device.userId, body, contentType, category).catch((err) => {
+        console.error('[device/upload] async processing failed:', err?.message);
+      });
+    }
   } catch (err: any) {
     console.error("[device/upload]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
+/**
+ * Async pipeline: transcribe WAV → LLM extract → update DB row.
+ * Mirrors the voiceJournal.transcribeAndAnalyze tRPC procedure exactly,
+ * using the full habit analysis with ratings (green/yellow/red) and extractedTasks.
+ */
+async function processRecordingAsync(
+  recordingId: number,
+  deviceId: number,
+  userId: number,
+  audioBuffer: Buffer,
+  contentType: string,
+  _category: string,
+): Promise<void> {
+  try {
+    await db.updateDeviceRecording(recordingId, { status: 'processing' });
+
+    // 1. Upload audio to S3 for playback URL
+    let audioUrl = '';
+    try {
+      const { storagePut } = await import('./storage.js');
+      const ext = contentType.includes('mp3') ? 'mp3' : 'wav';
+      const fileKey = `device-recordings/${deviceId}/${recordingId}.${ext}`;
+      const result = await storagePut(fileKey, audioBuffer, contentType);
+      audioUrl = result.url;
+    } catch (err: any) {
+      console.warn('[device/upload] S3 upload failed (non-fatal):', err?.message);
+    }
+
+    // 2. Transcribe with Whisper
+    const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+    const transcription = await transcribeAudioBuffer(audioBuffer, contentType, {
+      language: 'en',
+      prompt: 'Daily habit check-in, gratitude, journal entry, reflections',
+    });
+    if ('error' in transcription) {
+      console.error('[device/upload] transcription error:', transcription.error);
+      await db.updateDeviceRecording(recordingId, { status: 'failed', audioUrl: audioUrl || undefined });
+      return;
+    }
+    const transcript = transcription.text?.trim() ?? '';
+    if (!transcript) {
+      await db.updateDeviceRecording(recordingId, { status: 'processed', transcription: '', audioUrl: audioUrl || undefined });
+      return;
+    }
+
+    // 3. Get user habits for context
+    const userHabits = await db.getUserHabits(userId).catch(() => [] as any[]);
+    const activeHabits = (userHabits as any[]).filter((h: any) => h.isActive !== false);
+    const habitList = activeHabits
+      .map((h: any) => `- ${h.clientId}: ${h.emoji ?? ''} ${h.name}`).join('\n');
+    const habitSection = habitList
+      ? `\n4. "habitResults": object mapping habit IDs to {"rating": "green"|"yellow"|"red"|null, "note": "rich 2-3 sentence description using user's exact words"}. Habits:\n${habitList}`
+      : '';
+    const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Hit the gym for about 45 minutes."}}` : '';
+
+    // 4. LLM extraction — full analysis matching voiceJournal.transcribeAndAnalyze
+    const { invokeLLM } = await import('./_core/llm.js');
+    const llmResp = await invokeLLM({
+      messages: [
+        {
+          role: 'system',
+          content: `You are a personal journal + habit coach assistant. Given a voice check-in transcript, extract:\n1. "journalEntries": array of reflective thoughts/observations (concise, preserve user voice)\n2. "gratitudeItems": array of specific things user is grateful for (3-10 words each)\n3. "extractedTasks": array of task objects for anything the user wants to remember or do. Look for phrases like "remind me to", "don't forget", "I need to", "I should", "I have to". Each task: {"title": "short action phrase", "notes": "optional context", "priority": "medium"}.${habitSection}\n\nHABIT EXTRACTION RULES (critical):\n- Be AGGRESSIVE and THOROUGH — scan every sentence for evidence of each habit\n- Match by meaning, not just keywords\n- HABIT NOTE RULES: use the user's EXACT words, do NOT paraphrase\n- Include ALL habits that have ANY evidence in the transcript\n- Gratitude expressions → gratitudeItems; everything else → journalEntries\nReturn ONLY valid JSON: {"journalEntries": [...], "gratitudeItems": [...], "extractedTasks": [...]${habitJsonExample}}`,
+        },
+        { role: 'user', content: `Transcript:\n${transcript}` },
+      ],
+      response_format: { type: 'json_object' },
+    });
+
+    let journalEntries: string[] = [];
+    let gratitudeItems: string[] = [];
+    let habitResults: Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }> = {};
+    let extractedTasks: Array<{ title: string; notes: string; priority: string }> = [];
+    try {
+      const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+      journalEntries = Array.isArray(parsed.journalEntries)
+        ? parsed.journalEntries.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+        : [];
+      gratitudeItems = Array.isArray(parsed.gratitudeItems)
+        ? parsed.gratitudeItems.filter((s: unknown) => typeof s === 'string' && (s as string).trim())
+        : [];
+      extractedTasks = Array.isArray(parsed.extractedTasks)
+        ? parsed.extractedTasks.filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+        : [];
+      if (parsed.habitResults && typeof parsed.habitResults === 'object') {
+        habitResults = Object.fromEntries(
+          Object.entries(parsed.habitResults)
+            .filter(([, v]: [string, any]) => v && typeof v === 'object' && v.rating)
+            .map(([id, v]: [string, any]) => [id, { rating: v.rating, note: (v.note ?? '') }])
+        ) as Record<string, { rating: 'green' | 'yellow' | 'red' | null; note: string }>;
+      }
+    } catch {
+      journalEntries = [transcript];
+    }
+
+    // 5. Save results to DB
+    await db.updateDeviceRecording(recordingId, {
+      status: 'processed',
+      transcription: transcript,
+      journalEntries: JSON.stringify(journalEntries),
+      gratitudeItems: JSON.stringify(gratitudeItems),
+      habitResults: JSON.stringify(habitResults),
+      extractedTasks: JSON.stringify(extractedTasks),
+      audioUrl: audioUrl || undefined,
+    });
+    console.log(`[device/upload] processed recording ${recordingId}: ${journalEntries.length} entries, ${gratitudeItems.length} gratitudes, ${Object.keys(habitResults).length} habits, ${extractedTasks.length} tasks`);
+  } catch (err: any) {
+    console.error('[device/upload] processRecordingAsync error:', err?.message);
+    await db.updateDeviceRecording(recordingId, { status: 'failed' }).catch(() => {});
+  }
+}
+
 // ─── GET /api/device/recording/:id ──────────────────────────────────────────────────────────────
 // Streams a single recording back to an authenticated app user.
 // Auth: Bearer token (same as tRPC) or session cookie.
 router.get("/recording/:id", async (req: Request, res: Response) => {
+  // Skip if this is the /acked sub-path (handled below)
+  if (req.params.id?.endsWith('/acked')) {
+    return;
+  }
   try {
-    // Authenticate the request using the same SDK used by tRPC
     let user: any = null;
     try {
       const { sdk } = await import("./_core/sdk.js");
@@ -382,7 +502,6 @@ router.get("/recording/:id", async (req: Request, res: Response) => {
       return;
     }
 
-     // Fetch the recording data, verifying it belongs to this user
     const rec = await db.getDeviceRecordingData(user.id, recordingId);
     if (!rec) {
       res.status(404).json({ error: "Not found" });
@@ -398,6 +517,75 @@ router.get("/recording/:id", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("[device/recording]", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/device/recording/:id/ack ─────────────────────────────────────────────────────────
+// Called by the app after it saves the recording to the local journal.
+// Sets acked=1 so the recording is hidden from the app's list.
+router.post("/recording/:id/ack", async (req: Request, res: Response) => {
+  try {
+    let user: any = null;
+    try {
+      const { sdk } = await import("./_core/sdk.js");
+      user = await sdk.authenticateRequest(req);
+    } catch {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const recordingId = parseInt(req.params.id, 10);
+    if (isNaN(recordingId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    // Verify ownership via join
+    const recs = await db.getDeviceRecordings(user.id, 200);
+    const rec = recs.find((r) => r.id === recordingId);
+    if (!rec) { res.status(404).json({ error: "Not found" }); return; }
+    await db.updateDeviceRecording(recordingId, { acked: 1, ackedAt: new Date() });
+    console.log(`[device/recording/ack] recording ${recordingId} acked by user ${user.id}`);
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[device/recording/ack]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/device/recording/:id/acked ────────────────────────────────────────────────────────
+// Called by the panel (using device key) to poll whether the app has ACKed a recording.
+// The panel keeps the SD file until this returns { acked: true }.
+router.get("/recording/:id/acked", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const recordingId = parseInt(req.params.id, 10);
+    if (isNaN(recordingId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const row = await db.getDeviceRecordingById(recordingId, device.userId);
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ acked: row.acked === 1 || row.acked === true });
+  } catch (err: any) {
+    console.error("[device/recording/acked]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/device/prompts ─────────────────────────────────────────────────────────────────────
+// Returns the user's active habits formatted as recording prompts.
+// The panel fetches this before recording to show the same prompts as the app.
+router.get("/prompts", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const habits = await db.getUserHabits(device.userId).catch(() => [] as any[]);
+    const activeHabits = (habits as any[]).filter((h: any) => h.isActive !== false);
+    const prompts = [
+      { id: 'gratitude', text: '🙏 What are you grateful for today?', type: 'gratitude' },
+      ...activeHabits.map((h: any) => ({
+        id: h.clientId,
+        text: `${h.emoji ?? '⭐'} ${h.name}`,
+        type: 'habit',
+      })),
+      { id: 'journal', text: '📝 Anything else on your mind?', type: 'journal' },
+    ];
+    res.json({ prompts });
+  } catch (err: any) {
+    console.error('[device/prompts]', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

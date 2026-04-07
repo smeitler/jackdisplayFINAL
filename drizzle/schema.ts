@@ -382,6 +382,16 @@ export const deviceRecordings = mysqlTable("deviceRecordings", {
   contentType: varchar("contentType", { length: 64 }).notNull().default("audio/wav"),
   data: text("data"),  // base64-encoded audio for playback in app
   transcription: text("transcription"),
+  /** Processing pipeline results */
+  status: varchar("status", { length: 32 }).notNull().default("pending"), // pending | processing | processed | failed
+  journalEntries: text("journalEntries"),   // JSON array of strings
+  gratitudeItems: text("gratitudeItems"),   // JSON array of strings
+  habitResults: text("habitResults"),       // JSON object: habitId -> {rating, note}
+  extractedTasks: text("extractedTasks"),   // JSON array of task objects
+  audioUrl: varchar("audioUrl", { length: 512 }), // S3 URL of uploaded audio
+  /** ACK: set to true when app confirms it has saved the entry to journal */
+  acked: tinyint("acked").notNull().default(0),
+  ackedAt: timestamp("ackedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type DeviceRecording = typeof deviceRecordings.$inferSelect;

@@ -1684,3 +1684,10 @@
 - [x] Scripture reading: step config — Continuous vs Goal Time mode picker + goal duration selector (5/10/15/20/30/45/60 min)
 - [x] Scripture reading: goal timer — animated circular progress ring counting up to goal time
 - [x] Scripture reading: goal celebration — full-screen animated overlay with confetti burst, time achieved, Keep Going / Finish Step buttons, haptic success feedback
+
+- [ ] Panel recording: auto-transcribe WAV upload via server LLM and save as journal entry (same as app voice log)
+- [ ] Panel recording: keep file on SD card until app confirms it has been received and is visible
+- [ ] Panel recording: add acknowledgment API endpoint (panel polls, server confirms receipt)
+- [ ] Panel recording screen: fetch and display journal prompts/topics from server (same as app voice log screen)
+- [ ] Firmware: display journal prompts on the panel recording screen before/during recording
+- [ ] Firmware: retain recording on SD card until server ACK received, then delete

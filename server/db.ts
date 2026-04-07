@@ -1289,22 +1289,75 @@ export async function updateDeviceSettings(
 export async function getDeviceRecordings(
   userId: number,
   limit = 50
-): Promise<{ id: number; deviceId: number; filename: string; category: string; sizeBytes: number; contentType: string; data: string | null; transcription: string | null; createdAt: Date }[]> {
+): Promise<{
+  id: number; deviceId: number; filename: string; category: string;
+  sizeBytes: number; contentType: string; transcription: string | null;
+  status: string; journalEntries: string | null; gratitudeItems: string | null;
+  habitResults: string | null; extractedTasks: string | null; audioUrl: string | null;
+  acked: number; createdAt: Date;
+}[]> {
   const db = await getDb();
   if (!db) return [];
   try {
     const rows = await db.execute(
-      sql`SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType, r.transcription, r.createdAt
+      sql`SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType,
+              r.transcription, r.status, r.journalEntries, r.gratitudeItems,
+              r.habitResults, r.extractedTasks, r.audioUrl, r.acked, r.createdAt
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
-          WHERE d.userId = ${userId}
+          WHERE d.userId = ${userId} AND r.acked = 0
           ORDER BY r.createdAt DESC
           LIMIT ${limit}`
     );
-    return (rows as any[]).map((r: any) => ({ ...r, data: undefined }));
+    return (rows as any[]);
   } catch (err: any) {
     console.warn("[db/getDeviceRecordings] skipped:", err?.message);
     return [];
+  }
+}
+
+// ─── Update device recording (transcription pipeline results) ─────────────────
+export async function updateDeviceRecording(
+  recordingId: number,
+  fields: {
+    status?: string;
+    transcription?: string;
+    journalEntries?: string;
+    gratitudeItems?: string;
+    habitResults?: string;
+    extractedTasks?: string;
+    audioUrl?: string;
+    acked?: number;
+    ackedAt?: Date | null;
+  }
+): Promise<void> {
+  // Build the update using individual sql fragments so Drizzle handles escaping
+  const db = await getDb();
+  if (!db) return;
+  try {
+    // We use raw mysql2 execute via the Drizzle connection for dynamic SET clause
+    const mysql = await import('mysql2/promise');
+    const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+    try {
+      const sets: string[] = [];
+      const vals: any[] = [];
+      if (fields.status !== undefined)        { sets.push('status = ?');        vals.push(fields.status); }
+      if (fields.transcription !== undefined) { sets.push('transcription = ?'); vals.push(fields.transcription); }
+      if (fields.journalEntries !== undefined){ sets.push('journalEntries = ?');vals.push(fields.journalEntries); }
+      if (fields.gratitudeItems !== undefined){ sets.push('gratitudeItems = ?');vals.push(fields.gratitudeItems); }
+      if (fields.habitResults !== undefined)  { sets.push('habitResults = ?');  vals.push(fields.habitResults); }
+      if (fields.extractedTasks !== undefined){ sets.push('extractedTasks = ?');vals.push(fields.extractedTasks); }
+      if (fields.audioUrl !== undefined)      { sets.push('audioUrl = ?');      vals.push(fields.audioUrl); }
+      if (fields.acked !== undefined)         { sets.push('acked = ?');         vals.push(fields.acked); }
+      if (fields.ackedAt !== undefined)       { sets.push('ackedAt = ?');       vals.push(fields.ackedAt); }
+      if (sets.length === 0) return;
+      vals.push(recordingId);
+      await conn.execute(`UPDATE deviceRecordings SET ${sets.join(', ')} WHERE id = ?`, vals);
+    } finally {
+      await conn.end();
+    }
+  } catch (err: any) {
+    console.warn('[db/updateDeviceRecording] skipped:', err?.message);
   }
 }
 
@@ -1377,5 +1430,30 @@ export async function saveDeviceRecording(
   } catch (err: any) {
     console.warn("[db/saveDeviceRecording] skipped:", err?.message);
     return { ok: false };
+  }
+}
+
+// ─── Get single device recording by ID (for panel ACK polling) ───────────────
+// Used by GET /api/device/recording/:id/acked — returns only metadata, no blob.
+export async function getDeviceRecordingById(
+  recordingId: number,
+  userId: number
+): Promise<{ id: number; acked: number | boolean; status: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    const rows = await db.execute(
+      sql`SELECT r.id, r.acked, r.status
+          FROM deviceRecordings r
+          INNER JOIN devices d ON d.id = r.deviceId
+          WHERE r.id = ${recordingId} AND d.userId = ${userId}
+          LIMIT 1`
+    );
+    const row = (rows as any[])[0];
+    if (!row) return null;
+    return { id: row.id, acked: row.acked, status: row.status };
+  } catch (err: any) {
+    console.warn('[db/getDeviceRecordingById] skipped:', err?.message);
+    return null;
   }
 }
