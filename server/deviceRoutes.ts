@@ -507,6 +507,15 @@ router.get("/recording/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Not found" });
       return;
     }
+    // Prefer DB blob; fall back to S3 redirect if blob is null (e.g. large files stored externally)
+    if (!rec.data) {
+      if (rec.audioUrl) {
+        res.redirect(302, rec.audioUrl);
+      } else {
+        res.status(404).json({ error: "Audio data not available" });
+      }
+      return;
+    }
     const buf = rec.data;
     const ct = rec.contentType;
     res.setHeader("Content-Type", ct);

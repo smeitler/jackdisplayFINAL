@@ -1385,12 +1385,12 @@ export async function deleteDeviceRecording(
 export async function getDeviceRecordingData(
   userId: number,
   recordingId: number
-): Promise<{ data: Buffer; contentType: string } | null> {
+): Promise<{ data: Buffer | null; contentType: string; audioUrl: string | null } | null> {
   const db = await getDb();
   if (!db) return null;
   try {
     const rows = await db.execute(
-      sql`SELECT r.data, r.contentType
+      sql`SELECT r.data, r.contentType, r.audioUrl
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE d.userId = ${userId} AND r.id = ${recordingId}
@@ -1398,8 +1398,11 @@ export async function getDeviceRecordingData(
     );
     const row = (rows as any[])[0];
     if (!row) return null;
-    const buf: Buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data ?? "");
-    return { data: buf, contentType: row.contentType || "audio/wav" };
+    // data may be null if only audioUrl is available (S3-only path)
+    const buf: Buffer | null = row.data
+      ? (Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data))
+      : null;
+    return { data: buf, contentType: row.contentType || "audio/wav", audioUrl: row.audioUrl || null };
   } catch (err: any) {
     console.warn("[db/getDeviceRecordingData] skipped:", err?.message);
     return null;

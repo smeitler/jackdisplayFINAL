@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, Pressable, StyleSheet, Alert, ActivityIndicator,
   Platform,
 } from "react-native";
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from "expo-audio";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
 import { trpc } from "@/lib/trpc";
 import { getApiBaseUrl } from "@/constants/oauth";
@@ -115,34 +115,55 @@ function buildJournalBody(
 }
 
 // ─── Audio player button ───────────────────────────────────────────────────
+// Uses createAudioPlayer (not useAudioPlayer) so we can call player.replace()
+// when the URI becomes available after download, and release() on unmount.
 function AudioPlayButton({
   recId,
   contentType,
   accent,
+  disabled: disabledProp,
 }: {
   recId: number;
   contentType: string;
   accent: string;
+  disabled?: boolean;
 }) {
-  const [localUri, setLocalUri] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
-  const player = useAudioPlayer(localUri ?? "");
-  const status = useAudioPlayerStatus(player);
-  const isPlaying = status.playing;
+  const [ready, setReady] = useState(false);
+  // Stable player ref — created once, source replaced when URI is known
+  const playerRef = useRef<AudioPlayer | null>(null);
 
-  React.useEffect(() => {
-    if (localUri) {
-      player.play();
-    }
-  }, [localUri]);
+  // Create player once on mount, release on unmount
+  useEffect(() => {
+    const p = createAudioPlayer(null);
+    playerRef.current = p;
+    // Track playing state via event listener
+    const sub = p.addListener("playbackStatusUpdate", (status: any) => {
+      setIsPlaying(status.playing ?? false);
+    });
+    return () => {
+      sub.remove();
+      p.remove();
+      playerRef.current = null;
+    };
+  }, []);
 
   const handlePress = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player || disabledProp) return;
     try {
+      // Fix: correct key is playsInSilentMode (not playsInSilentModeIOS)
       if (Platform.OS !== "web") {
-        await setAudioModeAsync({ playsInSilentModeIOS: true });
+        await setAudioModeAsync({ playsInSilentMode: true });
       }
-      if (localUri) {
-        isPlaying ? player.pause() : player.play();
+      // If already loaded, toggle play/pause
+      if (ready) {
+        if (isPlaying) {
+          player.pause();
+        } else {
+          player.play();
+        }
         return;
       }
       setLoading(true);
@@ -150,32 +171,47 @@ function AudioPlayButton({
       const url = `${getApiBaseUrl()}/api/device/recording/${recId}`;
 
       if (Platform.OS === "web") {
-        setLocalUri(url);
+        // On web: fetch with auth header, create blob URL so the Audio element
+        // doesn't need to send cookies cross-origin
+        const resp = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include",
+        });
+        if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        player.replace({ uri: blobUrl });
+        player.play();
+        setReady(true);
         setLoading(false);
         return;
       }
 
-      const dest = `${FileSystem.cacheDirectory}panel_rec_${recId}.wav`;
+      // Native: download to cache with auth header
+      const ext = contentType.includes("mp3") ? "mp3" : "wav";
+      const dest = `${FileSystem.cacheDirectory}panel_rec_${recId}.${ext}`;
       const existing = await FileSystem.getInfoAsync(dest);
       if (!existing.exists) {
         await FileSystem.downloadAsync(url, dest, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
       }
-      setLocalUri(dest);
+      player.replace({ uri: dest });
+      player.play();
+      setReady(true);
       setLoading(false);
     } catch (err: any) {
       setLoading(false);
       Alert.alert("Playback error", err?.message ?? "Could not load recording");
     }
-  }, [localUri, isPlaying, player, recId]);
+  }, [ready, isPlaying, recId, contentType, disabledProp]);
 
   return (
     <Pressable
       onPress={handlePress}
       style={({ pressed }) => [
         styles.playBtn,
-        { backgroundColor: accent, opacity: pressed ? 0.7 : 1 },
+        { backgroundColor: accent, opacity: (pressed || disabledProp) ? 0.4 : 1 },
       ]}
     >
       {loading ? (
@@ -408,6 +444,7 @@ function RecordingCard({
           recId={rec.id}
           contentType={rec.contentType}
           accent={accent}
+          disabled={rec.status === "failed"}
         />
 
         {isProcessed && (
