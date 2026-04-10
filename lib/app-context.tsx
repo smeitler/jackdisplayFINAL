@@ -329,30 +329,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const serverCheckInsList = serverCheckIns.map(serverCheckInToLocal);
           const alarm = serverAlarm ? serverAlarmToLocal(serverAlarm, localAlarm) : localAlarm;
 
-          // ── Always push ALL local habits to server on every sync ─────────────
-          // This ensures the panel always has the latest habits regardless of
-          // whether they were previously synced. Runs on every app open/resume.
+          // ── Push ALL local habits to server in the background (non-blocking) ───
+          // Fire-and-forget: never awaited so it never delays app startup.
+          // Ensures the panel always has the latest habits on next fetch.
           const safeLocalHabitsForSync = accountSwitched ? [] : localHabits;
           if (safeLocalHabitsForSync.length > 0) {
-            console.log(`[AppContext] Syncing all ${safeLocalHabitsForSync.length} habits to server`);
-            try {
-              await utils.client.habits.bulkSync.mutate(
-                safeLocalHabitsForSync.map((h) => ({
-                  clientId: h.id,
-                  categoryClientId: h.category,
-                  name: h.name,
-                  emoji: h.emoji,
-                  description: h.description ?? null,
-                  isActive: h.isActive,
-                  order: h.order,
-                  weeklyGoal: h.weeklyGoal ?? null,
-                  frequencyType: (h.frequencyType as string | null) ?? null,
-                  monthlyGoal: h.monthlyGoal ?? null,
-                }))
-              );
-            } catch (err) {
-              console.warn('[AppContext] Failed to sync habits to server:', err);
-            }
+            utils.client.habits.bulkSync.mutate(
+              safeLocalHabitsForSync.map((h) => ({
+                clientId: h.id,
+                categoryClientId: h.category,
+                name: h.name,
+                emoji: h.emoji,
+                description: h.description ?? null,
+                isActive: h.isActive,
+                order: h.order,
+                weeklyGoal: h.weeklyGoal ?? null,
+                frequencyType: (h.frequencyType as string | null) ?? null,
+                monthlyGoal: h.monthlyGoal ?? null,
+              }))
+            ).catch((err) => console.warn('[AppContext] Background habits sync failed:', err));
           }
 
           // ── Push local-only check-ins to server ─────────────────────────────
