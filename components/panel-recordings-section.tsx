@@ -63,14 +63,16 @@ function formatDate(d: Date | string): string {
   );
 }
 
-function categoryLabel(cat: string): string {
+function categoryLabel(cat: string | null | undefined): string {
+  if (!cat) return "Recording";
   if (cat === "journal") return "Journal";
   if (cat === "gratitude") return "Gratitude";
   if (cat === "minddump") return "Mind Dump";
   return cat.charAt(0).toUpperCase() + cat.slice(1);
 }
 
-function categoryColor(cat: string, colors: ThemeColorPalette): string {
+function categoryColor(cat: string | null | undefined, colors: ThemeColorPalette): string {
+  if (!cat) return colors.muted;
   if (cat === "journal") return colors.primary;
   if (cat === "gratitude") return colors.success;
   if (cat === "minddump") return colors.warning;
@@ -522,7 +524,7 @@ export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }
 
       {recordings.map((rec) => (
         <RecordingCard
-          key={rec.id}
+          key={String(rec.id)}
           rec={rec as Recording}
           colors={colors}
           onSaved={handleSaved}

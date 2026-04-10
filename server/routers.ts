@@ -151,8 +151,8 @@ export const appRouter = router({
         frequencyType: z.string().max(16).optional().nullable(),
         monthlyGoal: z.number().int().min(1).max(31).optional().nullable(),
       })))
-      .mutation(({ ctx, input }) =>
-        db.bulkUpsertHabits(ctx.user.id, input.map((h) => ({
+      .mutation(async ({ ctx, input }) => {
+        await db.bulkUpsertHabits(ctx.user.id, input.map((h) => ({
           userId: ctx.user.id,
           clientId: h.clientId,
           categoryClientId: h.categoryClientId,
@@ -164,8 +164,10 @@ export const appRouter = router({
           weeklyGoal: h.weeklyGoal ?? null,
           frequencyType: h.frequencyType ?? null,
           monthlyGoal: h.monthlyGoal ?? null,
-        })))
-      ),
+        })));
+        // Bump schedule version so the panel re-fetches habits on next poll
+        await db.bumpScheduleVersionForUser(ctx.user.id).catch(() => {});
+      }),
 
     reorder: protectedProcedure
       .input(z.array(z.object({ clientId: z.string(), order: z.number().int().min(0) })))
