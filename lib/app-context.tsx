@@ -329,25 +329,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const serverCheckInsList = serverCheckIns.map(serverCheckInToLocal);
           const alarm = serverAlarm ? serverAlarmToLocal(serverAlarm, localAlarm) : localAlarm;
 
-          // ── Push ALL local habits to server in the background (non-blocking) ───
-          // Fire-and-forget: never awaited so it never delays app startup.
-          // Ensures the panel always has the latest habits on next fetch.
+          // ── Push local-only habits to server ────────────────────────────────
+          // If habits exist locally but not on the server (e.g. first-login sync
+          // failed, or habits were created before login), push the missing ones now.
+          const serverHabitIds = new Set(serverHabits.map((h) => h.clientId));
           const safeLocalHabitsForSync = accountSwitched ? [] : localHabits;
-          if (safeLocalHabitsForSync.length > 0) {
-            utils.client.habits.bulkSync.mutate(
-              safeLocalHabitsForSync.map((h) => ({
-                clientId: h.id,
-                categoryClientId: h.category,
-                name: h.name,
-                emoji: h.emoji,
-                description: h.description ?? null,
-                isActive: h.isActive,
-                order: h.order,
-                weeklyGoal: h.weeklyGoal ?? null,
-                frequencyType: (h.frequencyType as string | null) ?? null,
-                monthlyGoal: h.monthlyGoal ?? null,
-              }))
-            ).catch((err) => console.warn('[AppContext] Background habits sync failed:', err));
+          const localOnlyHabits = safeLocalHabitsForSync.filter((h) => !serverHabitIds.has(h.id));
+          if (localOnlyHabits.length > 0) {
+            console.log(`[AppContext] Pushing ${localOnlyHabits.length} local-only habits to server`);
+            try {
+              await utils.client.habits.bulkSync.mutate(
+                localOnlyHabits.map((h) => ({
+                  clientId: h.id,
+                  categoryClientId: h.category,
+                  name: h.name,
+                  emoji: h.emoji,
+                  description: h.description ?? null,
+                  isActive: h.isActive,
+                  order: h.order,
+                  weeklyGoal: h.weeklyGoal ?? null,
+                  frequencyType: (h.frequencyType as string | null) ?? null,
+                  monthlyGoal: h.monthlyGoal ?? null,
+                }))
+              );
+            } catch (err) {
+              console.warn('[AppContext] Failed to push local-only habits:', err);
+            }
           }
 
           // ── Push local-only check-ins to server ─────────────────────────────
