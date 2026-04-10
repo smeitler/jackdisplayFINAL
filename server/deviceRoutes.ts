@@ -580,18 +580,27 @@ router.get("/recording/:id/acked", requireDeviceKey, async (req: Request, res: R
 router.get("/prompts", requireDeviceKey, async (req: Request, res: Response) => {
   try {
     const device = (req as any).device;
-    const habits = await db.getUserHabits(device.userId).catch(() => [] as any[]);
-    const activeHabits = (habits as any[]).filter((h: any) => h.isActive !== false);
+    const allHabits = await db.getUserHabits(device.userId).catch(() => [] as any[]);
+    const activeHabits = (allHabits as any[]).filter((h: any) => h.isActive !== false);
+    // Return structured data so the panel can render habits separately from fixed prompts
+    const habits = activeHabits.map((h: any) => ({
+      id: h.clientId,
+      name: h.name,
+      emoji: h.emoji ?? '⭐',
+      description: h.description ?? null,
+    }));
+    // Legacy flat prompts list (kept for backward compat with older firmware)
     const prompts = [
-      { id: 'gratitude', text: '🙏 What are you grateful for today?', type: 'gratitude' },
+      { id: 'gratitude', text: '\xF0\x9F\x99\x8F What are you grateful for today?', type: 'gratitude' },
       ...activeHabits.map((h: any) => ({
         id: h.clientId,
-        text: `${h.emoji ?? '⭐'} ${h.name}`,
+        text: `${h.emoji ?? '\u2B50'} ${h.name}`,
         type: 'habit',
+        description: h.description ?? null,
       })),
-      { id: 'journal', text: '📝 Anything else on your mind?', type: 'journal' },
+      { id: 'journal', text: '\xF0\x9F\x93\x9D Anything else on your mind?', type: 'journal' },
     ];
-    res.json({ prompts });
+    res.json({ habits, prompts });
   } catch (err: any) {
     console.error('[device/prompts]', err);
     res.status(500).json({ error: 'Internal server error' });
