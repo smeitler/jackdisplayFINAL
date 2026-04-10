@@ -329,17 +329,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const serverCheckInsList = serverCheckIns.map(serverCheckInToLocal);
           const alarm = serverAlarm ? serverAlarmToLocal(serverAlarm, localAlarm) : localAlarm;
 
-          // ── Push local-only habits to server ────────────────────────────────
-          // If habits exist locally but not on the server (e.g. first-login sync
-          // failed, or habits were created before login), push the missing ones now.
-          const serverHabitIds = new Set(serverHabits.map((h) => h.clientId));
+          // ── Always push ALL local habits to server on every sync ─────────────
+          // This ensures the panel always has the latest habits regardless of
+          // whether they were previously synced. Runs on every app open/resume.
           const safeLocalHabitsForSync = accountSwitched ? [] : localHabits;
-          const localOnlyHabits = safeLocalHabitsForSync.filter((h) => !serverHabitIds.has(h.id));
-          if (localOnlyHabits.length > 0) {
-            console.log(`[AppContext] Pushing ${localOnlyHabits.length} local-only habits to server`);
+          if (safeLocalHabitsForSync.length > 0) {
+            console.log(`[AppContext] Syncing all ${safeLocalHabitsForSync.length} habits to server`);
             try {
               await utils.client.habits.bulkSync.mutate(
-                localOnlyHabits.map((h) => ({
+                safeLocalHabitsForSync.map((h) => ({
                   clientId: h.id,
                   categoryClientId: h.category,
                   name: h.name,
@@ -353,7 +351,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 }))
               );
             } catch (err) {
-              console.warn('[AppContext] Failed to push local-only habits:', err);
+              console.warn('[AppContext] Failed to sync habits to server:', err);
             }
           }
 
