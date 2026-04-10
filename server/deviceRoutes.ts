@@ -581,7 +581,8 @@ router.get("/prompts", requireDeviceKey, async (req: Request, res: Response) => 
   try {
     const device = (req as any).device;
     const allHabits = await db.getUserHabits(device.userId).catch(() => [] as any[]);
-    const activeHabits = (allHabits as any[]).filter((h: any) => h.isActive !== false);
+    // MySQL stores boolean as tinyint(1) — compare loosely so both true/1 and false/0 work
+    const activeHabits = (allHabits as any[]).filter((h: any) => h.isActive !== false && h.isActive !== 0);
     // Return structured data so the panel can render habits separately from fixed prompts
     const habits = activeHabits.map((h: any) => ({
       id: h.clientId,

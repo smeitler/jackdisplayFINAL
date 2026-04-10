@@ -23,6 +23,7 @@ import { trpc } from "@/lib/trpc";
 import { useColors } from "@/hooks/use-colors";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useApp } from "@/lib/app-context";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -177,13 +178,16 @@ function ToggleRow({
 export default function PanelSettingsScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { habits: appHabits } = useApp();
 
   const settingsQuery = trpc.devices.getSettings.useQuery();
   const devicesQuery = trpc.devices.list.useQuery();
   const updateMutation = trpc.devices.updateSettings.useMutation();
+  const habitsBulkSync = trpc.habits.bulkSync.useMutation();
 
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  const [syncingHabits, setSyncingHabits] = useState(false);
 
   // Local state mirrors server state
   const [audioEnabled, setAudioEnabled] = useState(true);
@@ -213,6 +217,38 @@ export default function PanelSettingsScreen() {
       await updateMutation.mutateAsync(patch);
     } catch (e) {
       Alert.alert("Error", "Failed to save setting. Please try again.");
+    }
+  }
+
+  async function handleSyncHabits() {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSyncingHabits(true);
+    try {
+      const habits = appHabits;
+      if (habits.length === 0) {
+        toast("No habits to sync");
+        setSyncingHabits(false);
+        return;
+      }
+      await habitsBulkSync.mutateAsync(
+        habits.map((h) => ({
+          clientId: h.id,
+          categoryClientId: h.category,
+          name: h.name,
+          emoji: h.emoji,
+          description: h.description ?? null,
+          isActive: h.isActive,
+          order: h.order,
+          weeklyGoal: h.weeklyGoal ?? null,
+          frequencyType: (h.frequencyType as string | null) ?? null,
+          monthlyGoal: h.monthlyGoal ?? null,
+        }))
+      );
+      toast(`✓ ${habits.length} habit${habits.length !== 1 ? 's' : ''} synced to panel`);
+    } catch (e: any) {
+      Alert.alert("Sync Failed", e?.message ?? "Could not sync habits. Make sure you're logged in.");
+    } finally {
+      setSyncingHabits(false);
     }
   }
 
@@ -324,6 +360,36 @@ export default function PanelSettingsScreen() {
               />
             </View>
           )}
+        </SectionCard>
+
+        {/* Section 3: Habits Sync */}
+        <SectionCard
+          title="Habits"
+          icon="checkmark.circle.fill"
+          iconColor={colors.success}
+          colors={colors}
+        >
+          <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 10 }]}>
+                Panel fetches your habits from the server when you start a recording. If the panel shows generic habits instead of yours, tap below to push your {appHabits.length} habit{appHabits.length !== 1 ? 's' : ''} to the server.
+          </Text>
+          <Pressable
+            onPress={handleSyncHabits}
+            style={({ pressed }) => [{
+              backgroundColor: colors.success,
+              borderRadius: 12,
+              paddingVertical: 12,
+              alignItems: "center" as const,
+              opacity: pressed || syncingHabits ? 0.7 : 1,
+            }]}
+          >
+            {syncingHabits ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+                Sync Habits to Panel
+              </Text>
+            )}
+          </Pressable>
         </SectionCard>
 
         {/* Section 4: About */}

@@ -393,7 +393,7 @@ function RecordingCard({
         <View style={[styles.extractedBox, { borderColor: colors.success + "44", backgroundColor: colors.success + "11" }]}>
           <Text style={[styles.extractedLabel, { color: colors.success }]}>🙏 Gratitude</Text>
           {gratitudeItems.slice(0, 3).map((g, i) => (
-            <Text key={i} style={[styles.extractedItem, { color: colors.foreground }]}>• {g}</Text>
+            <Text key={`g-${i}-${g.slice(0,10)}`} style={[styles.extractedItem, { color: colors.foreground }]}>• {g}</Text>
           ))}
           {gratitudeItems.length > 3 && (
             <Text style={[styles.extractedMore, { color: colors.muted }]}>+{gratitudeItems.length - 3} more</Text>
@@ -428,7 +428,7 @@ function RecordingCard({
         <View style={[styles.extractedBox, { borderColor: colors.warning + "44", backgroundColor: colors.warning + "11" }]}>
           <Text style={[styles.extractedLabel, { color: colors.warning }]}>✅ Tasks</Text>
           {extractedTasks.slice(0, 3).map((task, i) => (
-            <Text key={i} style={[styles.extractedItem, { color: colors.foreground }]}>
+            <Text key={`t-${i}-${task.title.slice(0,10)}`} style={[styles.extractedItem, { color: colors.foreground }]}>
               • {task.title}
             </Text>
           ))}
