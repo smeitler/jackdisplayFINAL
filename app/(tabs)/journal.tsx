@@ -29,6 +29,8 @@ import {
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
 import { entryToServerInput } from "@/lib/journal-server-sync";
+import { uploadPhotoToServer, isRemoteUrl } from "@/lib/photo-upload";
+import { getSessionToken } from "@/lib/_core/auth";
 import { useIsCalm } from "@/components/calm-effects";
 import { PanelRecordingsSection } from "@/components/panel-recordings-section";
 import { WheelColumn } from "@/components/wheel-time-picker";
@@ -2890,10 +2892,50 @@ export default function JournalScreen() {
       updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setEntries(updated);
     }
-    // Sync to server in background (fire-and-forget)
-    upsertJournalMutation.mutate(entryToServerInput(entry), {
-      onError: (err) => console.warn('[Journal] Server sync failed:', err),
-    });
+    // Upload local photo attachments to S3 in background, then sync to server
+    (async () => {
+      try {
+        const hasLocalPhotos = entry.attachments.some(
+          (a) => a.type === 'photo' && !isRemoteUrl(a.uri)
+        );
+        let entryToSync = entry;
+        if (hasLocalPhotos) {
+          const token = await getSessionToken();
+          if (token) {
+            const uploadedAttachments = await Promise.all(
+              entry.attachments.map(async (a) => {
+                if (a.type === 'photo' && !isRemoteUrl(a.uri)) {
+                  try {
+                    const s3Url = await uploadPhotoToServer(a.uri, token);
+                    return { ...a, uri: s3Url };
+                  } catch (uploadErr) {
+                    console.warn('[Journal] Photo upload failed, keeping local URI:', uploadErr);
+                    return a; // keep local URI as fallback
+                  }
+                }
+                return a;
+              })
+            );
+            entryToSync = { ...entry, attachments: uploadedAttachments };
+            // Update local storage with S3 URLs so they persist across reinstalls
+            await updateEntryInStore(userId, entry.id, entryToSync);
+            setEntries((prev) => {
+              const updated = prev.map((e) => e.id === entryToSync.id ? entryToSync : e);
+              return updated;
+            });
+          }
+        }
+        upsertJournalMutation.mutate(entryToServerInput(entryToSync), {
+          onError: (err) => console.warn('[Journal] Server sync failed:', err),
+        });
+      } catch (err) {
+        console.warn('[Journal] Background sync error:', err);
+        // Fallback: sync without S3 upload
+        upsertJournalMutation.mutate(entryToServerInput(entry), {
+          onError: (syncErr) => console.warn('[Journal] Server sync failed:', syncErr),
+        });
+      }
+    })();
   }
 
   async function handleDeleteEntry(id: string) {

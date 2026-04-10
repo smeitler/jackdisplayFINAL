@@ -1174,6 +1174,36 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
       }),
   }),
 
+  // ─── Rewards ─────────────────────────────────────────────────────────────
+  rewards: router({
+    /** Get all rewards for the authenticated user. */
+    list: protectedProcedure.query(({ ctx }) =>
+      db.getUserRewards(ctx.user.id)
+    ),
+    /** Upsert a reward. */
+    upsert: protectedProcedure
+      .input(z.object({
+        clientId: z.string().max(64),
+        name: z.string().max(255),
+        description: z.string().optional(),
+        emoji: z.string().max(16).default(""),
+        habitId: z.string().max(64).default("any"),
+        milestoneCount: z.number().int().default(1),
+        claimedAt: z.string().optional(),
+        color: z.string().max(32).optional(),
+        createdAt: z.string(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.upsertReward(ctx.user.id, input)
+      ),
+    /** Soft-delete a reward. */
+    delete: protectedProcedure
+      .input(z.object({ clientId: z.string().max(64) }))
+      .mutation(({ ctx, input }) =>
+        db.deleteRewardByClientId(ctx.user.id, input.clientId)
+      ),
+  }),
+
   // ─── Community: Referrals
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>

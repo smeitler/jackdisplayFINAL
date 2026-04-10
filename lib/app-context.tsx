@@ -232,7 +232,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Fetch all user data from server in parallel.
         // staleTime: 0 forces a fresh network request, bypassing any cached results.
         // If the user is not authenticated, this will throw a 401/403 error.
-        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations] = await Promise.all([
+        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations, serverRewards] = await Promise.all([
           utils.auth.me.fetch(),
           utils.categories.list.fetch(),
           utils.habits.list.fetch(),
@@ -241,6 +241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           utils.journalEntries.list.fetch().catch(() => []),
           utils.visionBoard.getImages.fetch().catch(() => []),
           utils.visionBoard.getMotivations.fetch().catch(() => []),
+          utils.rewards.list.fetch().catch(() => []),
         ]);
 
         // If we reach here, the user is authenticated
@@ -460,6 +461,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (vbErr) {
             console.warn('[AppContext] Failed to sync vision board:', vbErr);
+          }
+
+          // ── Sync rewards from server ────────────────────────────────────────────────
+          try {
+            if (serverRewards && serverRewards.length > 0) {
+              const { saveRewards } = await import('./storage');
+              const rewardsToSave = serverRewards.map((r: any) => ({
+                id: r.clientId,
+                name: r.name,
+                description: r.description ?? '',
+                emoji: r.emoji ?? '',
+                habitId: r.habitId ?? 'any',
+                milestoneCount: r.milestoneCount ?? 1,
+                claimedAt: r.claimedAt ?? null,
+                color: r.color ?? null,
+                createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+              }));
+              await saveRewards(rewardsToSave);
+              console.log(`[AppContext] Synced ${serverRewards.length} rewards from server`);
+            }
+          } catch (rewardsErr) {
+            console.warn('[AppContext] Failed to sync rewards:', rewardsErr);
           }
         }
       } catch (err: any) {

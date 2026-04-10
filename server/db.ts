@@ -33,6 +33,8 @@ import {
   InsertVisionBoardImage,
   visionMotivations,
   InsertVisionMotivation,
+  rewards,
+  InsertReward,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1602,4 +1604,54 @@ export async function replaceUserVisionMotivations(userId: number, motivations: 
     }));
     await db.insert(visionMotivations).values(rows);
   }
+}
+
+// ─── Rewards ──────────────────────────────────────────────────────────────────
+/** Get all active rewards for a user. */
+export async function getUserRewards(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(rewards)
+    .where(and(eq(rewards.userId, userId), isNull(rewards.deletedAt)))
+    .orderBy(rewards.createdAt);
+}
+
+/** Upsert a reward (insert or update by clientId). */
+export async function upsertReward(userId: number, reward: {
+  clientId: string;
+  name: string;
+  description?: string;
+  emoji: string;
+  habitId: string;
+  milestoneCount: number;
+  claimedAt?: string;
+  color?: string;
+  createdAt: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const row: InsertReward = {
+    userId,
+    clientId: reward.clientId,
+    name: reward.name,
+    description: reward.description ?? null,
+    emoji: reward.emoji,
+    habitId: reward.habitId,
+    milestoneCount: reward.milestoneCount,
+    claimedAt: reward.claimedAt ?? null,
+    color: reward.color ?? null,
+    createdAt: reward.createdAt,
+    deletedAt: null,
+  };
+  await db.insert(rewards).values(row)
+    .onDuplicateKeyUpdate({ set: { name: row.name, description: row.description, emoji: row.emoji, habitId: row.habitId, milestoneCount: row.milestoneCount, claimedAt: row.claimedAt, color: row.color, deletedAt: null } });
+}
+
+/** Soft-delete a reward by clientId. */
+export async function deleteRewardByClientId(userId: number, clientId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(rewards)
+    .set({ deletedAt: new Date().toISOString() })
+    .where(and(eq(rewards.userId, userId), eq(rewards.clientId, clientId)));
 }

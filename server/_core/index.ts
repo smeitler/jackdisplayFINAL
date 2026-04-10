@@ -16,6 +16,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { sdk } from "./sdk";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -88,6 +89,60 @@ async function startServer() {
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
+  });
+
+  // Authenticated user photo upload endpoint (vision board, journal attachments, etc.)
+  app.post("/api/upload-user-photo", async (req, res) => {
+    try {
+      // Authenticate
+      let user: any = null;
+      try { user = await sdk.authenticateRequest(req as any); } catch {}
+      if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      await new Promise<void>((resolve, reject) => {
+        req.on("end", resolve);
+        req.on("error", reject);
+      });
+      const body = Buffer.concat(chunks);
+      const contentType = req.headers["content-type"] ?? "";
+      const boundary = contentType.split("boundary=")[1];
+      if (!boundary) { res.status(400).json({ error: "No boundary" }); return; }
+      // Parse multipart
+      const boundaryBuf = Buffer.from("--" + boundary);
+      const parts: { name: string; filename: string; contentType: string; data: Buffer }[] = [];
+      let pos = 0;
+      while (pos < body.length) {
+        const start = body.indexOf(boundaryBuf, pos);
+        if (start === -1) break;
+        pos = start + boundaryBuf.length;
+        if (body[pos] === 45 && body[pos + 1] === 45) break;
+        if (body[pos] === 13) pos += 2;
+        const headerEnd = body.indexOf(Buffer.from("\r\n\r\n"), pos);
+        if (headerEnd === -1) break;
+        const headers = body.slice(pos, headerEnd).toString();
+        pos = headerEnd + 4;
+        const nextBoundary = body.indexOf(boundaryBuf, pos);
+        const dataEnd = nextBoundary === -1 ? body.length : nextBoundary - 2;
+        const data = body.slice(pos, dataEnd);
+        const nameMatch = headers.match(/name="([^"]+)"/);
+        const filenameMatch = headers.match(/filename="([^"]+)"/);
+        const ctMatch = headers.match(/Content-Type: ([^\r\n]+)/);
+        parts.push({ name: nameMatch?.[1] ?? "", filename: filenameMatch?.[1] ?? "file", contentType: ctMatch?.[1] ?? "application/octet-stream", data });
+        pos = nextBoundary === -1 ? body.length : nextBoundary;
+      }
+      const filePart = parts.find((p) => p.name === "file");
+      if (!filePart) { res.status(400).json({ error: "No file part" }); return; }
+      const { storagePut } = await import("../storage.js");
+      const ext = filePart.filename.split(".").pop() ?? "jpg";
+      const key = `user-photos/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { url } = await storagePut(key, filePart.data, filePart.contentType);
+      res.json({ url });
+    } catch (err: any) {
+      console.error("[upload-user-photo]", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Image upload endpoint for team posts

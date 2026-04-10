@@ -463,3 +463,24 @@ export const visionMotivations = mysqlTable("visionMotivations", {
 
 export type VisionMotivation = typeof visionMotivations.$inferSelect;
 export type InsertVisionMotivation = typeof visionMotivations.$inferInsert;
+
+// ─── Rewards ─────────────────────────────────────────────────────────────────
+export const rewards = mysqlTable("rewards", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  clientId: varchar("clientId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  emoji: varchar("emoji", { length: 16 }).notNull().default(""),
+  habitId: varchar("habitId", { length: 64 }).notNull().default("any"),
+  milestoneCount: int("milestoneCount").notNull().default(1),
+  claimedAt: varchar("claimedAt", { length: 32 }),
+  color: varchar("color", { length: 32 }),
+  createdAt: varchar("createdAt", { length: 32 }).notNull(),
+  deletedAt: varchar("deletedAt", { length: 32 }),
+}, (t) => ({
+  userClientIdx: uniqueIndex("rewards_userId_clientId_idx").on(t.userId, t.clientId),
+}));
+
+export type RewardRow = typeof rewards.$inferSelect;
+export type InsertReward = typeof rewards.$inferInsert;

@@ -1704,3 +1704,8 @@
 - [x] Move journal entries to server-side storage - journal entries now sync to server on every save/update/delete, and are restored from server on login. New journalEntries DB table added.
 - [ ] Move vision board photos to server-side S3 storage (images are local file URIs; need S3 upload pipeline)
 - [x] Vision board motivations synced to server (visionMotivations DB table added, synced on login)
+- [ ] Upload vision board photos to S3 on add - store S3 URL server-side so photos survive reinstall
+- [ ] Upload journal entry photos to S3 on attach - store S3 URL server-side
+- [ ] Sync rewards data to server on every save
+- [ ] Restore all data (journal, vision board, rewards) from server on every login
+- [ ] Ensure clearLocalData never wipes any user-created content

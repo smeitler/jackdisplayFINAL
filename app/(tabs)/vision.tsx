@@ -11,6 +11,9 @@ import * as MediaLibrary from "expo-media-library";
 import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
+import { trpc } from "@/lib/trpc";
+import { getSessionToken } from "@/lib/_core/auth";
+import { uploadPhotoToServer, isRemoteUrl } from "@/lib/photo-upload";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { CategoryIcon } from "@/components/category-icon";
 import {
@@ -399,6 +402,10 @@ export default function VisionBoardScreen() {
   const maxWidth = useContentMaxWidth();
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
+  // Server sync mutations
+  const setImagesMutation = trpc.visionBoard.setImages.useMutation();
+  const setMotivationsMutation = trpc.visionBoard.setMotivations.useMutation();
+
   const [visionTab, setVisionTab] = useState<'board' | 'journal' | 'gratitude'>('board');
   const [board, setBoard] = useState<VisionBoard>({});
   const [motivations, setMotivations] = useState<VisionMotivations>({});
@@ -426,8 +433,11 @@ export default function VisionBoardScreen() {
         for (const [catId, uris] of Object.entries(loaded)) {
           const valid: string[] = [];
           for (const uri of uris) {
-            // Keep only URIs already in permanent documentDirectory
-            if (uri.startsWith(docDir)) {
+            // Always keep remote S3 URLs — they are permanent server-backed
+            if (uri.startsWith("https://") || uri.startsWith("http://")) {
+              valid.push(uri);
+            } else if (uri.startsWith(docDir)) {
+              // Local file in documentDirectory — verify it still exists
               try {
                 const info = await FileSystem.getInfoAsync(uri);
                 if (info.exists) valid.push(uri);
@@ -453,14 +463,36 @@ export default function VisionBoardScreen() {
     loadGratitudeEntries().then(setGratitudeEntries);
   }, [isDemoMode]);
 
+  /** Save board locally and sync all S3-backed images to server in background. */
   async function updateBoard(newBoard: VisionBoard) {
     setBoard(newBoard);
     await saveVisionBoard(newBoard);
+    // Sync to server (fire-and-forget)
+    const serverImages: { categoryClientId: string; imageUrl: string; order: number }[] = [];
+    let order = 0;
+    for (const [catId, uris] of Object.entries(newBoard)) {
+      for (const uri of uris) {
+        if (isRemoteUrl(uri)) {
+          serverImages.push({ categoryClientId: catId, imageUrl: uri, order: order++ });
+        }
+      }
+    }
+    setImagesMutation.mutate(serverImages);
   }
 
   async function updateMotivations(newMot: VisionMotivations) {
     setMotivations(newMot);
     await saveVisionMotivations(newMot);
+    // Sync motivations to server (fire-and-forget)
+    const serverMots: { categoryClientId: string; text: string; order: number }[] = [];
+    let order = 0;
+    for (const [catId, texts] of Object.entries(newMot)) {
+      const list = Array.isArray(texts) ? texts : [texts];
+      for (const text of list) {
+        if (text) serverMots.push({ categoryClientId: catId, text, order: order++ });
+      }
+    }
+    setMotivationsMutation.mutate(serverMots);
   }
 
   async function handleSaveJournal() {
@@ -523,21 +555,60 @@ export default function VisionBoardScreen() {
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      // Copy each photo to permanent storage; filter out any that failed (null)
-      const results = await Promise.all(result.assets.map((a) => persistUri(a.uri)));
-      const persistedUris = results.filter((u): u is string => u !== null);
+      // Step 1: Copy each photo to permanent local storage first
+      const persistResults = await Promise.all(result.assets.map((a) => persistUri(a.uri)));
+      const persistedUris = persistResults.filter((u): u is string => u !== null);
       if (persistedUris.length === 0) {
         Alert.alert("Could not save photos", "Unable to copy photos to app storage. Please try again.");
         return;
       }
+      // Step 2: Save locally immediately so user sees photos right away
       const existing = board[catId] ?? [];
-      const updated = { ...board, [catId]: [...existing, ...persistedUris] };
-      await updateBoard(updated);
+      const updatedLocal = { ...board, [catId]: [...existing, ...persistedUris] };
+      setBoard(updatedLocal);
+      await saveVisionBoard(updatedLocal);
+      // Step 3: Upload to S3 in background and replace local URIs with S3 URLs
+      getSessionToken().then(async (token) => {
+        if (!token) return;
+        const s3Uris: string[] = [];
+        for (const uri of persistedUris) {
+          try {
+            const s3Url = await uploadPhotoToServer(uri, token);
+            s3Uris.push(s3Url);
+          } catch (err) {
+            console.warn("[vision] S3 upload failed, keeping local URI", err);
+            s3Uris.push(uri); // fallback to local
+          }
+        }
+        // Replace local URIs with S3 URLs in the board
+        const currentBoard = await (async () => {
+          const { loadVisionBoard: lv } = await import("@/lib/storage");
+          return lv();
+        })();
+        const existingS3 = currentBoard[catId] ?? [];
+        // Replace the just-added local URIs with their S3 counterparts
+        const replaced = existingS3.map((u) => {
+          const idx = persistedUris.indexOf(u);
+          return idx >= 0 ? s3Uris[idx] : u;
+        });
+        const updatedS3 = { ...currentBoard, [catId]: replaced };
+        setBoard(updatedS3);
+        await saveVisionBoard(updatedS3);
+        // Sync to server
+        const serverImages: { categoryClientId: string; imageUrl: string; order: number }[] = [];
+        let order = 0;
+        for (const [cid, uris] of Object.entries(updatedS3)) {
+          for (const uri of uris) {
+            if (isRemoteUrl(uri)) serverImages.push({ categoryClientId: cid, imageUrl: uri, order: order++ });
+          }
+        }
+        setImagesMutation.mutate(serverImages);
+      });
       if (persistedUris.length < result.assets.length) {
         Alert.alert("Some photos skipped", `${result.assets.length - persistedUris.length} photo(s) could not be saved and were skipped.`);
       }
     }
-  }, [board]);
+  }, [board, setImagesMutation]);
 
   const removeImage = useCallback(async (catId: string, uri: string) => {
     const existing = board[catId] ?? [];
