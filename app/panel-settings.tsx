@@ -244,7 +244,7 @@ export default function PanelSettingsScreen() {
           monthlyGoal: h.monthlyGoal ?? null,
         }))
       );
-      toast(`✓ ${habits.length} habit${habits.length !== 1 ? 's' : ''} synced to panel`);
+      toast(`${habits.length} habit${habits.length !== 1 ? 's' : ''} synced to panel`);
     } catch (e: any) {
       Alert.alert("Sync Failed", e?.message ?? "Could not sync habits. Make sure you're logged in.");
     } finally {

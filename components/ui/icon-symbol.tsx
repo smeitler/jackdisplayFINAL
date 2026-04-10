@@ -44,6 +44,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "calendar": "calendar-today",
   "clock.fill": "access-time",
   "clock.arrow.circlepath": "snooze",
+  "arrow.triangle.2.circlepath": "sync",
   "list.bullet": "list",
   "person.fill": "person",
   "person.2.fill": "group",

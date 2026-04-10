@@ -32,10 +32,44 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
   const removeDeviceMutation = trpc.devices.remove.useMutation({
     onSuccess: () => devicesQuery.refetch(),
   });
+  const habitsBulkSync = trpc.habits.bulkSync.useMutation();
+  const { habits: appHabits } = useApp();
   const [pairingToken, setPairingToken] = useState<string | null>(null);
   const [tokenExpiry, setTokenExpiry] = useState<Date | null>(null);
   const [showPairingFlow, setShowPairingFlow] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [syncingHabits, setSyncingHabits] = useState(false);
+  const [habitsSynced, setHabitsSynced] = useState(false);
+
+  async function handleSyncHabits() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSyncingHabits(true);
+    try {
+      if (appHabits.length === 0) {
+        Alert.alert('No Habits', 'Add habits in the Habits section first.');
+        return;
+      }
+      await habitsBulkSync.mutateAsync(
+        appHabits.map((h) => ({
+          clientId: h.id,
+          categoryClientId: h.category,
+          name: h.name,
+          emoji: h.emoji ?? '',
+          description: h.description ?? '',
+          isActive: h.isActive ?? true,
+          order: h.order ?? 0,
+          frequencyType: (h.frequencyType as string | null) ?? null,
+          monthlyGoal: h.monthlyGoal ?? null,
+        }))
+      );
+      setHabitsSynced(true);
+      setTimeout(() => setHabitsSynced(false), 3000);
+    } catch (e: any) {
+      Alert.alert('Sync Failed', e?.message ?? 'Could not sync habits. Make sure you are logged in.');
+    } finally {
+      setSyncingHabits(false);
+    }
+  }
 
   async function handleGenerateToken() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -189,6 +223,34 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
           <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Pair Jack Alarm</Text>
         </Pressable>
       ) : null}
+      {/* Sync Habits to Panel button — only shown when a device is paired */}
+      {devices.length > 0 && (
+        <Pressable
+          onPress={handleSyncHabits}
+          disabled={syncingHabits}
+          style={({ pressed }) => [{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            borderTopWidth: 1, borderTopColor: colors.border,
+            paddingHorizontal: 16, paddingVertical: 13,
+            opacity: pressed || syncingHabits ? 0.7 : 1,
+          }]}
+        >
+          <View style={{ width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: (colors.success ?? '#22C55E') + '18' }}>
+            {syncingHabits
+              ? <ActivityIndicator size="small" color={colors.success ?? '#22C55E'} />
+              : <IconSymbol name="arrow.triangle.2.circlepath" size={16} color={habitsSynced ? '#22C55E' : (colors.success ?? '#22C55E')} />
+            }
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>
+              {habitsSynced ? 'Habits Synced' : 'Sync Habits to Panel'}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.muted, marginTop: 1 }}>
+              {appHabits.length} habit{appHabits.length !== 1 ? 's' : ''} — push to panel now
+            </Text>
+          </View>
+        </Pressable>
+      )}
       {/* Preview Jack Alarm display button */}
       <Pressable
         onPress={() => router.push('/crowpanel-preview' as never)}
