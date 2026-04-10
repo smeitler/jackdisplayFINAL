@@ -1700,3 +1700,7 @@
 - [x] Remove emojis from panel recordings component (replaced with text symbols)
 - [ ] Add pull-to-refresh on journal to manually refresh panel recordings
 - [ ] Auto-save panel recordings to journal entries without manual "Save to Journal" step
+- [x] Fix Apple Sign-In - server returning HTML instead of JSON - fixed by changing fallback API URL from ephemeral sandbox URL to stable api.jackalarm.com
+- [x] Move journal entries to server-side storage - journal entries now sync to server on every save/update/delete, and are restored from server on login. New journalEntries DB table added.
+- [ ] Move vision board photos to server-side S3 storage (images are local file URIs; need S3 upload pipeline)
+- [x] Vision board motivations synced to server (visionMotivations DB table added, synced on login)

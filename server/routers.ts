@@ -1050,6 +1050,99 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
 
 
 
+  // ─── Journal Entries (server-backed) ──────────────────────────────────────────────────────────────────────────────────────
+  journalEntries: router({
+    /** Fetch all journal entries for the authenticated user. */
+    list: protectedProcedure.query(({ ctx }) =>
+      db.getUserJournalEntries(ctx.user.id)
+    ),
+
+    /** Upsert a single journal entry (create or update by clientId). */
+    upsert: protectedProcedure
+      .input(z.object({
+        clientId: z.string().min(1).max(64),
+        date: z.string().max(10),
+        title: z.string().max(255).default(''),
+        body: z.string().default(''),
+        template: z.string().max(32).default('blank'),
+        mood: z.string().max(32).optional().nullable(),
+        tagsJson: z.string().optional().nullable(),
+        gratitudesJson: z.string().optional().nullable(),
+        transcriptionStatus: z.string().max(16).optional().nullable(),
+        transcriptionText: z.string().optional().nullable(),
+        attachmentsJson: z.string().optional().nullable(),
+        locationJson: z.string().optional().nullable(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.upsertJournalEntry(ctx.user.id, input)
+      ),
+
+    /** Batch upsert multiple journal entries (used on initial sync). */
+    batchUpsert: protectedProcedure
+      .input(z.array(z.object({
+        clientId: z.string().min(1).max(64),
+        date: z.string().max(10),
+        title: z.string().max(255).default(''),
+        body: z.string().default(''),
+        template: z.string().max(32).default('blank'),
+        mood: z.string().max(32).optional().nullable(),
+        tagsJson: z.string().optional().nullable(),
+        gratitudesJson: z.string().optional().nullable(),
+        transcriptionStatus: z.string().max(16).optional().nullable(),
+        transcriptionText: z.string().optional().nullable(),
+        attachmentsJson: z.string().optional().nullable(),
+        locationJson: z.string().optional().nullable(),
+      })))
+      .mutation(async ({ ctx, input }) => {
+        for (const entry of input) {
+          await db.upsertJournalEntry(ctx.user.id, entry);
+        }
+        return { count: input.length };
+      }),
+
+    /** Soft-delete a journal entry by clientId. */
+    delete: protectedProcedure
+      .input(z.object({ clientId: z.string().min(1).max(64) }))
+      .mutation(({ ctx, input }) =>
+        db.softDeleteJournalEntry(ctx.user.id, input.clientId)
+      ),
+  }),
+
+  // ─── Vision Board (server-backed) ────────────────────────────────────────────────────────────────────────────────────────
+  visionBoard: router({
+    /** Fetch all vision board images for the authenticated user. */
+    getImages: protectedProcedure.query(({ ctx }) =>
+      db.getUserVisionBoardImages(ctx.user.id)
+    ),
+
+    /** Replace all vision board images (full sync from client). */
+    setImages: protectedProcedure
+      .input(z.array(z.object({
+        categoryClientId: z.string().max(64),
+        imageUrl: z.string(),
+        order: z.number().int().default(0),
+      })))
+      .mutation(({ ctx, input }) =>
+        db.replaceUserVisionBoard(ctx.user.id, input)
+      ),
+
+    /** Fetch all vision motivations for the authenticated user. */
+    getMotivations: protectedProcedure.query(({ ctx }) =>
+      db.getUserVisionMotivations(ctx.user.id)
+    ),
+
+    /** Replace all vision motivations (full sync from client). */
+    setMotivations: protectedProcedure
+      .input(z.array(z.object({
+        categoryClientId: z.string().max(64),
+        text: z.string(),
+        order: z.number().int().default(0),
+      })))
+      .mutation(({ ctx, input }) =>
+        db.replaceUserVisionMotivations(ctx.user.id, input)
+      ),
+  }),
+
   // ─── Journal: Scan Text (OCR via LLM) ────────────────────────────────────────────────────────────────────────────────────
   journal: router({
     scanText: publicProcedure

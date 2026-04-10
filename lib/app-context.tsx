@@ -30,6 +30,8 @@ import {
 import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns, buildDemoVisionBoard, DEMO_MOTIVATIONS, DEMO_REWARDS } from './demo-data';
 import { applyAlarm } from './notifications';
 import { trpc } from './trpc';
+import * as JournalStore from './journal-store';
+import { serverEntryToLocal, mergeEntries } from './journal-server-sync';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -230,12 +232,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Fetch all user data from server in parallel.
         // staleTime: 0 forces a fresh network request, bypassing any cached results.
         // If the user is not authenticated, this will throw a 401/403 error.
-        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm] = await Promise.all([
+        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations] = await Promise.all([
           utils.auth.me.fetch(),
           utils.categories.list.fetch(),
           utils.habits.list.fetch(),
           utils.checkIns.list.fetch(),
           utils.alarm.get.fetch(),
+          utils.journalEntries.list.fetch().catch(() => []),
+          utils.visionBoard.getImages.fetch().catch(() => []),
+          utils.visionBoard.getMotivations.fetch().catch(() => []),
         ]);
 
         // If we reach here, the user is authenticated
@@ -306,6 +311,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             days: safeLocalAlarm.days.join(','),
             enabled: safeLocalAlarm.isEnabled,
           });
+          // Push local journal entries to server
+          try {
+            const userId = String(serverUser?.id ?? '');
+            if (userId) {
+              const localJournalEntries = await JournalStore.loadEntries(userId);
+              if (localJournalEntries.length > 0) {
+                const { entryToServerInput } = await import('./journal-server-sync');
+                await utils.client.journalEntries.batchUpsert.mutate(
+                  localJournalEntries.map(entryToServerInput)
+                );
+                console.log(`[AppContext] First-login: pushed ${localJournalEntries.length} journal entries to server`);
+              }
+            }
+          } catch (journalSyncErr) {
+            console.warn('[AppContext] First-login journal push failed:', journalSyncErr);
+          }
           // After pushing local data to server, dispatch LOADED so the UI
           // reflects the current data and isAuthenticated.current stays true
           // (it was set above at line 231 before reaching this branch).
@@ -400,6 +421,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             saveCheckIns(mergedCheckIns),
             saveAlarm(alarm),
           ]);
+
+          // ── Sync journal entries from server ────────────────────────────────
+          // Server is source of truth. Merge with local entries (which may have
+          // local file attachments not yet uploaded to S3).
+          try {
+            if (serverJournalEntries && serverJournalEntries.length > 0) {
+              const userId = String(serverUser?.id ?? await getLastUserId() ?? 'default');
+              const localJournalEntries = await JournalStore.loadEntries(userId);
+              const serverAsLocal = serverJournalEntries.map((row: any) => serverEntryToLocal(row, userId));
+              const merged = mergeEntries(serverAsLocal, localJournalEntries);
+              await JournalStore.saveEntries(userId, merged);
+              console.log(`[AppContext] Synced ${serverJournalEntries.length} journal entries from server`);
+            }
+          } catch (journalErr) {
+            console.warn('[AppContext] Failed to sync journal entries:', journalErr);
+          }
+
+          // ── Sync vision board from server ───────────────────────────────────
+          try {
+            if (serverVisionImages && serverVisionImages.length > 0) {
+              const vbData = serverVisionImages.reduce((acc: Record<string, string[]>, img: any) => {
+                if (!acc[img.categoryClientId]) acc[img.categoryClientId] = [];
+                acc[img.categoryClientId].push(img.imageUrl);
+                return acc;
+              }, {} as Record<string, string[]>);
+              await saveVisionBoard(vbData);
+              console.log(`[AppContext] Synced ${serverVisionImages.length} vision board images from server`);
+            }
+            if (serverVisionMotivations && serverVisionMotivations.length > 0) {
+              const motivData = serverVisionMotivations.reduce((acc: Record<string, string[]>, m: any) => {
+                if (!acc[m.categoryClientId]) acc[m.categoryClientId] = [];
+                acc[m.categoryClientId].push(m.text);
+                return acc;
+              }, {} as Record<string, string[]>);
+              await saveVisionMotivations(motivData);
+              console.log(`[AppContext] Synced ${serverVisionMotivations.length} vision motivations from server`);
+            }
+          } catch (vbErr) {
+            console.warn('[AppContext] Failed to sync vision board:', vbErr);
+          }
         }
       } catch (err: any) {
         // If the error is a 401/403 (not authenticated), silently fall back to local data

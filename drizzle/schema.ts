@@ -396,3 +396,70 @@ export const deviceRecordings = mysqlTable("deviceRecordings", {
 });
 export type DeviceRecording = typeof deviceRecordings.$inferSelect;
 export type InsertDeviceRecording = typeof deviceRecordings.$inferInsert;
+
+/**
+ * Journal entries — one row per journal entry per user.
+ * clientId: client-generated UUID, unique per user.
+ * attachmentsJson: JSON array of { id, type, url, mimeType, name, durationMs } objects.
+ * tagsJson: JSON array of strings.
+ * gratitudesJson: JSON array of strings.
+ */
+export const journalEntries = mysqlTable("journalEntries", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  clientId: varchar("clientId", { length: 64 }).notNull(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  title: varchar("title", { length: 255 }).notNull().default(""),
+  body: text("body").notNull().default(""),
+  template: varchar("template", { length: 32 }).notNull().default("blank"),
+  mood: varchar("mood", { length: 32 }),
+  tagsJson: text("tagsJson"), // JSON array of strings
+  gratitudesJson: text("gratitudesJson"), // JSON array of strings
+  transcriptionStatus: varchar("transcriptionStatus", { length: 16 }), // pending | done | failed
+  transcriptionText: text("transcriptionText"),
+  attachmentsJson: text("attachmentsJson"), // JSON array of attachment objects (with S3 URLs)
+  locationJson: text("locationJson"), // JSON { latitude, longitude, address }
+  deletedAt: timestamp("deletedAt"), // soft delete
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  userClientIdx: uniqueIndex("journalEntries_userId_clientId_idx").on(t.userId, t.clientId),
+  userDateIdx: uniqueIndex("journalEntries_userId_date_clientId_idx").on(t.userId, t.date, t.clientId),
+}));
+
+export type JournalEntryRow = typeof journalEntries.$inferSelect;
+export type InsertJournalEntry = typeof journalEntries.$inferInsert;
+
+/**
+ * Vision board images — one row per image per category per user.
+ * imageUrl: S3 URL of the uploaded image.
+ * order: display order within the category.
+ */
+export const visionBoardImages = mysqlTable("visionBoardImages", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  categoryClientId: varchar("categoryClientId", { length: 64 }).notNull(),
+  imageUrl: text("imageUrl").notNull(),
+  order: int("order").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VisionBoardImage = typeof visionBoardImages.$inferSelect;
+export type InsertVisionBoardImage = typeof visionBoardImages.$inferInsert;
+
+/**
+ * Vision motivations — one row per motivation string per category per user.
+ * text: the motivation text.
+ * order: display order within the category.
+ */
+export const visionMotivations = mysqlTable("visionMotivations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  categoryClientId: varchar("categoryClientId", { length: 64 }).notNull(),
+  text: text("text").notNull(),
+  order: int("order").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VisionMotivation = typeof visionMotivations.$inferSelect;
+export type InsertVisionMotivation = typeof visionMotivations.$inferInsert;

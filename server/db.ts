@@ -27,6 +27,12 @@ import {
   InsertTeamPost,
   contentReports,
   blockedUsers,
+  journalEntries,
+  InsertJournalEntry,
+  visionBoardImages,
+  InsertVisionBoardImage,
+  visionMotivations,
+  InsertVisionMotivation,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1464,5 +1470,136 @@ export async function getDeviceRecordingById(
   } catch (err: any) {
     console.warn('[db/getDeviceRecordingById] skipped:', err?.message);
     return null;
+  }
+}
+
+// ─── Journal Entries ──────────────────────────────────────────────────────────
+
+/** Upsert a journal entry. Uses clientId as the unique key per user. */
+export async function upsertJournalEntry(userId: number, entry: {
+  clientId: string;
+  date: string;
+  title: string;
+  body: string;
+  template: string;
+  mood?: string | null;
+  tagsJson?: string | null;
+  gratitudesJson?: string | null;
+  transcriptionStatus?: string | null;
+  transcriptionText?: string | null;
+  attachmentsJson?: string | null;
+  locationJson?: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const row: InsertJournalEntry = {
+    userId,
+    clientId: entry.clientId,
+    date: entry.date,
+    title: entry.title,
+    body: entry.body,
+    template: entry.template,
+    mood: entry.mood ?? null,
+    tagsJson: entry.tagsJson ?? null,
+    gratitudesJson: entry.gratitudesJson ?? null,
+    transcriptionStatus: entry.transcriptionStatus ?? null,
+    transcriptionText: entry.transcriptionText ?? null,
+    attachmentsJson: entry.attachmentsJson ?? null,
+    locationJson: entry.locationJson ?? null,
+  };
+  await db.insert(journalEntries).values(row).onDuplicateKeyUpdate({
+    set: {
+      date: row.date,
+      title: row.title,
+      body: row.body,
+      template: row.template,
+      mood: row.mood,
+      tagsJson: row.tagsJson,
+      gratitudesJson: row.gratitudesJson,
+      transcriptionStatus: row.transcriptionStatus,
+      transcriptionText: row.transcriptionText,
+      attachmentsJson: row.attachmentsJson,
+      locationJson: row.locationJson,
+    }
+  });
+}
+
+/** Soft-delete a journal entry by clientId. */
+export async function softDeleteJournalEntry(userId: number, clientId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(journalEntries)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(journalEntries.userId, userId), eq(journalEntries.clientId, clientId)));
+}
+
+/** Get all non-deleted journal entries for a user, newest first. */
+export async function getUserJournalEntries(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(journalEntries)
+    .where(and(eq(journalEntries.userId, userId), isNull(journalEntries.deletedAt)))
+    .orderBy(desc(journalEntries.createdAt));
+}
+
+// ─── Vision Board ─────────────────────────────────────────────────────────────
+
+/** Get all vision board images for a user. */
+export async function getUserVisionBoardImages(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(visionBoardImages)
+    .where(eq(visionBoardImages.userId, userId))
+    .orderBy(visionBoardImages.categoryClientId, visionBoardImages.order);
+}
+
+/** Replace all vision board images for a user (full sync). */
+export async function replaceUserVisionBoard(userId: number, images: Array<{
+  categoryClientId: string;
+  imageUrl: string;
+  order: number;
+}>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Delete all existing images for this user
+  await db.delete(visionBoardImages).where(eq(visionBoardImages.userId, userId));
+  // Insert new images
+  if (images.length > 0) {
+    const rows: InsertVisionBoardImage[] = images.map(img => ({
+      userId,
+      categoryClientId: img.categoryClientId,
+      imageUrl: img.imageUrl,
+      order: img.order,
+    }));
+    await db.insert(visionBoardImages).values(rows);
+  }
+}
+
+/** Get all vision motivations for a user. */
+export async function getUserVisionMotivations(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(visionMotivations)
+    .where(eq(visionMotivations.userId, userId))
+    .orderBy(visionMotivations.categoryClientId, visionMotivations.order);
+}
+
+/** Replace all vision motivations for a user (full sync). */
+export async function replaceUserVisionMotivations(userId: number, motivations: Array<{
+  categoryClientId: string;
+  text: string;
+  order: number;
+}>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(visionMotivations).where(eq(visionMotivations.userId, userId));
+  if (motivations.length > 0) {
+    const rows: InsertVisionMotivation[] = motivations.map(m => ({
+      userId,
+      categoryClientId: m.categoryClientId,
+      text: m.text,
+      order: m.order,
+    }));
+    await db.insert(visionMotivations).values(rows);
   }
 }

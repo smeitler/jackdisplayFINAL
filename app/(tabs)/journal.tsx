@@ -28,6 +28,7 @@ import {
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
 import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
+import { entryToServerInput } from "@/lib/journal-server-sync";
 import { useIsCalm } from "@/components/calm-effects";
 import { PanelRecordingsSection } from "@/components/panel-recordings-section";
 import { WheelColumn } from "@/components/wheel-time-picker";
@@ -2810,6 +2811,10 @@ export default function JournalScreen() {
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [editorDate, setEditorDate] = useState(todayDateStr());
 
+  // ── Server sync mutations ─────────────────────────────────────────────────
+  const upsertJournalMutation = trpc.journalEntries.upsert.useMutation();
+  const deleteJournalMutation = trpc.journalEntries.delete.useMutation();
+
   // ── Sticky stats bar ──────────────────────────────────────────────────────
   const statsBarAnim = useRef(new Animated.Value(1)).current;
   const lastScrollY = useRef(0);
@@ -2885,12 +2890,20 @@ export default function JournalScreen() {
       updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setEntries(updated);
     }
+    // Sync to server in background (fire-and-forget)
+    upsertJournalMutation.mutate(entryToServerInput(entry), {
+      onError: (err) => console.warn('[Journal] Server sync failed:', err),
+    });
   }
 
   async function handleDeleteEntry(id: string) {
     const updated = await deleteEntryFromStore(userId, id);
     updated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setEntries(updated);
+    // Sync delete to server in background
+    deleteJournalMutation.mutate({ clientId: id }, {
+      onError: (err) => console.warn('[Journal] Server delete failed:', err),
+    });
   }
 
   function openNewEntry(date?: string) {
