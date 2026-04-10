@@ -54,8 +54,10 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(d: Date | string): string {
+function formatDate(d: Date | string | null | undefined): string {
+  if (!d) return "Unknown date";
   const dt = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(dt.getTime())) return "Unknown date";
   return (
     dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
     " " +
@@ -522,9 +524,9 @@ export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }
         </Text>
       </View>
 
-      {recordings.map((rec) => (
+      {recordings.map((rec, idx) => (
         <RecordingCard
-          key={String(rec.id)}
+          key={rec.id != null ? String(rec.id) : `rec-${idx}`}
           rec={rec as Recording}
           colors={colors}
           onSaved={handleSaved}
