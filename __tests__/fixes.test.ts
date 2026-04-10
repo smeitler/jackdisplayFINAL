@@ -11,7 +11,7 @@ describe('Drizzle db.execute() format fix', () => {
     const result = [mockRows, mockFields];
 
     // This is the fix logic from db.ts
-    const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+    const rows = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result) as typeof mockRows;
     
     expect(rows).toEqual(mockRows);
     expect(rows).toHaveLength(2);

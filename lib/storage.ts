@@ -460,13 +460,20 @@ export async function clearLocalData(): Promise<void> {
   // Only clear server-synced data that will be re-fetched on next login.
   // Preserve user-created local content (vision board, journal, gratitude, stacks, etc.)
   // so it survives sign-out / sign-in cycles.
+  //
+  // IMPORTANT: Do NOT remove KEYS.lastUserId here.
+  // Journal entries, vision board, and other data are keyed by userId
+  // (e.g. @journal_entries_v2_5850070). If we clear lastUserId on sign-out,
+  // those screens fall back to userId="default" and show empty data until
+  // the app-context re-fetches the user from the server — which may happen
+  // after the screen has already rendered. Keeping lastUserId means the
+  // correct user's data is always loaded immediately on next open.
   await AsyncStorage.multiRemove([
     KEYS.habits,
     KEYS.categories,
     KEYS.checkIns,
     KEYS.alarm,
     KEYS.lastCheckIn,
-    KEYS.lastUserId,
     KEYS.rewards,
   ]);
 }
