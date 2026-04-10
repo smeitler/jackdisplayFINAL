@@ -26,16 +26,21 @@ export const API_BASE_URL = env.apiBaseUrl;
  * Metro runs on 8081, API server runs on 3000.
  * URL pattern: https://PORT-sandboxid.region.domain
  */
-// CURRENT SANDBOX URL — update this whenever the sandbox session changes.
-// This is the single source of truth for native (Expo Go) API calls.
-// The EXPO_PUBLIC_API_BASE_URL env var is intentionally ignored on native
-// because it can get stale across sandbox sessions and cause auth failures.
+// SANDBOX URL — used as fallback for Expo Go / local dev when EXPO_PUBLIC_API_BASE_URL is not set.
+// Production builds (EAS preview/production) set EXPO_PUBLIC_API_BASE_URL=https://api.jackalarm.com
+// which takes priority over this hardcoded sandbox URL.
 const NATIVE_API_BASE_URL = "https://3000-ihjhc990utnuq9kvi22b8-accece55.us2.manus.computer";
 
 export function getApiBaseUrl(): string {
-  // On native (iOS/Android), always use the hardcoded sandbox URL.
-  // This prevents stale EXPO_PUBLIC_API_BASE_URL env vars from breaking auth.
+  // On native (iOS/Android):
+  // 1. If EXPO_PUBLIC_API_BASE_URL is set (production/preview EAS build), use it.
+  //    This is the production URL (e.g. https://api.jackalarm.com).
+  // 2. Otherwise fall back to the hardcoded sandbox URL for Expo Go / local dev.
   if (ReactNative.Platform.OS !== "web") {
+    if (API_BASE_URL) {
+      console.log('[getApiBaseUrl] Native: using EXPO_PUBLIC_API_BASE_URL:', API_BASE_URL);
+      return API_BASE_URL.replace(/\/$/, "");
+    }
     console.log('[getApiBaseUrl] Native: using hardcoded sandbox URL:', NATIVE_API_BASE_URL);
     return NATIVE_API_BASE_URL;
   }
