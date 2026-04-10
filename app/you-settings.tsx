@@ -47,6 +47,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
     try {
       if (appHabits.length === 0) {
         Alert.alert('No Habits', 'Add habits in the Habits section first.');
+        setSyncingHabits(false);
         return;
       }
       await habitsBulkSync.mutateAsync(

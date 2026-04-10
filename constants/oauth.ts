@@ -30,7 +30,7 @@ export const API_BASE_URL = env.apiBaseUrl;
 // This is the single source of truth for native (Expo Go) API calls.
 // The EXPO_PUBLIC_API_BASE_URL env var is intentionally ignored on native
 // because it can get stale across sandbox sessions and cause auth failures.
-const NATIVE_API_BASE_URL = "https://3000-ipdzewvi1uvuqb695kcjx-7ec38a38.us1.manus.computer";
+const NATIVE_API_BASE_URL = "https://3000-ihjhc990utnuq9kvi22b8-accece55.us2.manus.computer";
 
 export function getApiBaseUrl(): string {
   // On native (iOS/Android), always use the hardcoded sandbox URL.
