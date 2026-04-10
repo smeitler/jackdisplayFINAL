@@ -278,6 +278,7 @@ export default function CheckInScreen() {
   const vcPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const transcribeChunkMutation = trpc.voiceCheckin.transcribeChunk.useMutation();
   const analyzeTranscriptMutation = trpc.voiceCheckin.analyzeTranscript.useMutation();
+  const upsertDayNoteMutation = trpc.dayNotes.upsert.useMutation();
 
   // Load existing day notes for the current date into vcNotes on mount
   useEffect(() => {
@@ -673,6 +674,10 @@ export default function CheckInScreen() {
           updated[key] = existing[key] ? `${existing[key]} | ${note}` : note;
         }
         await saveDayNotes(updated);
+        // Sync each note to server in background
+        for (const [habitId, note] of noteEntries) {
+          upsertDayNoteMutation.mutate({ habitId, date: currentDate, note });
+        }
       } catch (e) {
         console.warn('[CheckIn] Failed to save voice notes:', e);
       }

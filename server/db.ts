@@ -35,6 +35,9 @@ import {
   InsertVisionMotivation,
   rewards,
   InsertReward,
+  dayNotes,
+  gratitudeEntries,
+  tasks,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -164,6 +167,15 @@ export async function deleteUser(userId: number): Promise<void> {
     await db.delete(habits).where(eq(habits.userId, userId));
     await db.delete(categories).where(eq(categories.userId, userId));
     await db.delete(alarmConfigs).where(eq(alarmConfigs.userId, userId)).catch(() => {});
+
+    // 7b. Extended user-owned tables
+    await db.delete(journalEntries).where(eq(journalEntries.userId, userId)).catch(() => {});
+    await db.delete(visionBoardImages).where(eq(visionBoardImages.userId, userId)).catch(() => {});
+    await db.delete(visionMotivations).where(eq(visionMotivations.userId, userId)).catch(() => {});
+    await db.delete(rewards).where(eq(rewards.userId, userId)).catch(() => {});
+    await db.delete(dayNotes).where(eq(dayNotes.userId, userId)).catch(() => {});
+    await db.delete(gratitudeEntries).where(eq(gratitudeEntries.userId, userId)).catch(() => {});
+    await db.delete(tasks).where(eq(tasks.userId, userId)).catch(() => {});
 
     // 8. Finally delete the user record itself — must succeed
     await db.delete(users).where(eq(users.id, userId));
@@ -1654,4 +1666,120 @@ export async function deleteRewardByClientId(userId: number, clientId: string): 
   await db.update(rewards)
     .set({ deletedAt: new Date().toISOString() })
     .where(and(eq(rewards.userId, userId), eq(rewards.clientId, clientId)));
+}
+
+// ─── Day Notes ────────────────────────────────────────────────────────────────
+
+/** Get all day notes for a user as a flat array. */
+export async function getUserDayNotes(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(dayNotes).where(eq(dayNotes.userId, userId));
+}
+
+/** Upsert a single day note (insert or update by userId+habitId+date). */
+export async function upsertDayNote(userId: number, habitId: string, date: string, note: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(dayNotes)
+    .values({ userId, habitId, date, note })
+    .onDuplicateKeyUpdate({ set: { note } });
+}
+
+/** Bulk-replace all day notes for a user (full sync from client). */
+export async function replaceUserDayNotes(userId: number, entries: Array<{ habitId: string; date: string; note: string }>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(dayNotes).where(eq(dayNotes.userId, userId));
+  if (entries.length > 0) {
+    await db.insert(dayNotes).values(entries.map(e => ({ userId, habitId: e.habitId, date: e.date, note: e.note })));
+  }
+}
+
+// ─── Gratitude Entries ────────────────────────────────────────────────────────
+
+/** Get all non-deleted gratitude entries for a user. */
+export async function getUserGratitudeEntries(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(gratitudeEntries)
+    .where(and(eq(gratitudeEntries.userId, userId), isNull(gratitudeEntries.deletedAt)))
+    .orderBy(desc(gratitudeEntries.createdAt));
+}
+
+/** Upsert a gratitude entry (insert or update by clientId). */
+export async function upsertGratitudeEntry(userId: number, entry: {
+  clientId: string;
+  date: string;
+  itemsJson: string;
+  createdAt: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(gratitudeEntries)
+    .values({ userId, clientId: entry.clientId, date: entry.date, itemsJson: entry.itemsJson, createdAt: entry.createdAt })
+    .onDuplicateKeyUpdate({ set: { date: entry.date, itemsJson: entry.itemsJson } });
+}
+
+/** Soft-delete a gratitude entry by clientId. */
+export async function deleteGratitudeEntry(userId: number, clientId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(gratitudeEntries)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(gratitudeEntries.userId, userId), eq(gratitudeEntries.clientId, clientId)));
+}
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+/** Get all non-deleted tasks for a user. */
+export async function getUserTasks(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tasks)
+    .where(and(eq(tasks.userId, userId), isNull(tasks.deletedAt)))
+    .orderBy(desc(tasks.createdAt));
+}
+
+/** Upsert a task (insert or update by clientId). */
+export async function upsertTask(userId: number, task: {
+  clientId: string;
+  title: string;
+  notes: string;
+  priority: 'high' | 'medium' | 'low';
+  dueDate?: string | null;
+  completed: boolean;
+  createdAt: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(tasks)
+    .values({
+      userId,
+      clientId: task.clientId,
+      title: task.title,
+      notes: task.notes,
+      priority: task.priority,
+      dueDate: task.dueDate ?? null,
+      completed: task.completed ? 1 : 0,
+      createdAt: task.createdAt,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        title: task.title,
+        notes: task.notes,
+        priority: task.priority,
+        dueDate: task.dueDate ?? null,
+        completed: task.completed ? 1 : 0,
+      },
+    });
+}
+
+/** Soft-delete a task by clientId. */
+export async function deleteTask(userId: number, clientId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(tasks)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(tasks.userId, userId), eq(tasks.clientId, clientId)));
 }

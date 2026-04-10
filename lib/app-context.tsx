@@ -26,6 +26,11 @@ import {
   saveVisionBoard,
   saveVisionMotivations,
   saveRewards,
+  loadDayNotes,
+  saveDayNotes,
+  loadGratitudeEntries,
+  saveGratitudeEntries,
+  type GratitudeEntry,
 } from './storage';
 import { DEMO_CATEGORIES, DEMO_HABITS, DEMO_ALARM, buildDemoCheckIns, buildDemoVisionBoard, DEMO_MOTIVATIONS, DEMO_REWARDS } from './demo-data';
 import { applyAlarm } from './notifications';
@@ -232,7 +237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Fetch all user data from server in parallel.
         // staleTime: 0 forces a fresh network request, bypassing any cached results.
         // If the user is not authenticated, this will throw a 401/403 error.
-        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations, serverRewards] = await Promise.all([
+        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations, serverRewards, serverDayNotes, serverGratitudeEntries, serverTasks] = await Promise.all([
           utils.auth.me.fetch(),
           utils.categories.list.fetch(),
           utils.habits.list.fetch(),
@@ -242,6 +247,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           utils.visionBoard.getImages.fetch().catch(() => []),
           utils.visionBoard.getMotivations.fetch().catch(() => []),
           utils.rewards.list.fetch().catch(() => []),
+          utils.dayNotes.list.fetch().catch(() => []),
+          utils.gratitudeEntries.list.fetch().catch(() => []),
+          utils.tasks.list.fetch().catch(() => []),
         ]);
 
         // If we reach here, the user is authenticated
@@ -483,6 +491,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (rewardsErr) {
             console.warn('[AppContext] Failed to sync rewards:', rewardsErr);
+          }
+
+          // ── Sync day notes from server ──────────────────────────────────────────────────────────────
+          try {
+            if (serverDayNotes && serverDayNotes.length > 0) {
+              // Server rows: { habitId, date, note }. Merge with local (server wins).
+              const localNotes = await loadDayNotes();
+              const merged = { ...localNotes };
+              for (const row of serverDayNotes) {
+                merged[`${row.habitId}:${row.date}`] = row.note;
+              }
+              await saveDayNotes(merged);
+              console.log(`[AppContext] Synced ${serverDayNotes.length} day notes from server`);
+            }
+          } catch (dnErr) {
+            console.warn('[AppContext] Failed to sync day notes:', dnErr);
+          }
+
+          // ── Sync gratitude entries from server ───────────────────────────────────────────────────────
+          try {
+            if (serverGratitudeEntries && serverGratitudeEntries.length > 0) {
+              const localGratitude = await loadGratitudeEntries();
+              const localById = new Map(localGratitude.map((e: GratitudeEntry) => [e.id, e]));
+              for (const row of serverGratitudeEntries) {
+                let items: string[] = [];
+                try { items = JSON.parse(row.itemsJson); } catch {}
+                localById.set(row.clientId, {
+                  id: row.clientId,
+                  date: row.date,
+                  items,
+                  createdAt: row.createdAt,
+                });
+              }
+              await saveGratitudeEntries(Array.from(localById.values()));
+              console.log(`[AppContext] Synced ${serverGratitudeEntries.length} gratitude entries from server`);
+            }
+          } catch (geErr) {
+            console.warn('[AppContext] Failed to sync gratitude entries:', geErr);
+          }
+
+          // ── Sync tasks from server ───────────────────────────────────────────────────────────────────────────
+          try {
+            if (serverTasks && serverTasks.length > 0) {
+              const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+              const TASKS_KEY = '@you_tasks_v1';
+              const raw = await AsyncStorage.getItem(TASKS_KEY);
+              const localTasks: any[] = raw ? JSON.parse(raw) : [];
+              const localById = new Map(localTasks.map((t: any) => [t.id, t]));
+              for (const row of serverTasks) {
+                localById.set(row.clientId, {
+                  id: row.clientId,
+                  title: row.title,
+                  notes: row.notes ?? '',
+                  priority: row.priority ?? 'medium',
+                  dueDate: row.dueDate ?? null,
+                  completed: Number(row.completed) === 1,
+                  createdAt: row.createdAt,
+                });
+              }
+              await AsyncStorage.setItem(TASKS_KEY, JSON.stringify(Array.from(localById.values())));
+              console.log(`[AppContext] Synced ${serverTasks.length} tasks from server`);
+            }
+          } catch (tasksErr) {
+            console.warn('[AppContext] Failed to sync tasks:', tasksErr);
           }
         }
       } catch (err: any) {

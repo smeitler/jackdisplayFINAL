@@ -24,12 +24,13 @@ import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-nativ
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const TASKS_STORAGE_KEY = '@you_tasks_v1';
 
-// ─── Quick-Add Task Bar ───────────────────────────────────────────────────────
+// ─── Quick-Add Task Bar ───────────────────────────────────────────────────────────────────────────────────
 function QuickAddTaskBar() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [text, setText] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const upsertTaskMutation = trpc.tasks.upsert.useMutation();
 
   async function handleAdd() {
     const title = text.trim();
@@ -48,6 +49,8 @@ function QuickAddTaskBar() {
         createdAt: new Date().toISOString(),
       };
       await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify([newTask, ...existing]));
+      // Sync to server in background
+      upsertTaskMutation.mutate({ clientId: newTask.id, title: newTask.title, notes: newTask.notes, priority: newTask.priority, dueDate: newTask.dueDate, completed: newTask.completed, createdAt: newTask.createdAt });
       setText('');
     } catch (e) {
       console.warn('[QuickAddTask] save error:', e);

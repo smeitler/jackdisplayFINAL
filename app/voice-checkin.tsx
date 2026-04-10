@@ -886,6 +886,8 @@ export default function VoiceCheckinScreen() {
   const transcribeChunk = trpc.voiceCheckin.transcribeChunk.useMutation();
   const analyzeTranscript = trpc.voiceCheckin.analyzeTranscript.useMutation();
   const analyzeTranscriptFull = trpc.voiceCheckin.analyzeTranscriptFull.useMutation();
+  const upsertTaskMutation = trpc.tasks.upsert.useMutation();
+  const upsertDayNoteMutationVC = trpc.dayNotes.upsert.useMutation();
 
   // ── Auto-start recording on mount (no delay, no idle flash) ─────────────
   const hasAutoStarted = useRef(false);
@@ -1140,6 +1142,10 @@ export default function VoiceCheckinScreen() {
           allNotes[`${habitId}:${today}`] = note;
         }
         await saveDayNotes(allNotes);
+        // Sync each note to server in background
+        for (const { habitId, note } of habitNotesToSave) {
+          upsertDayNoteMutationVC.mutate({ habitId, date: today, note });
+        }
       }
 
       // 3. Save journal entry — append to existing today entry with timestamp separator,
@@ -1198,6 +1204,15 @@ export default function VoiceCheckinScreen() {
       // 4. Save extracted tasks to the Tasks list
       if (results.extractedTasks && results.extractedTasks.length > 0) {
         await appendExtractedTasksToStorage(results.extractedTasks);
+        // Sync extracted tasks to server in background
+        const raw = await AsyncStorage.getItem(VC_TASKS_KEY).catch(() => null);
+        const allTasks: any[] = raw ? JSON.parse(raw) : [];
+        // Sync only the newly-added tasks (first N items)
+        const newCount = results.extractedTasks.length;
+        const newTasks = allTasks.slice(0, newCount);
+        for (const t of newTasks) {
+          upsertTaskMutation.mutate({ clientId: t.id, title: t.title, notes: t.notes, priority: t.priority, dueDate: t.dueDate, completed: t.completed, createdAt: t.createdAt });
+        }
       }
 
       if (Platform.OS !== "web")

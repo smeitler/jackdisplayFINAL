@@ -484,3 +484,66 @@ export const rewards = mysqlTable("rewards", {
 
 export type RewardRow = typeof rewards.$inferSelect;
 export type InsertReward = typeof rewards.$inferInsert;
+
+// ─── Day Notes ────────────────────────────────────────────────────────────────
+/**
+ * Per-habit day notes — one row per (userId, habitId, date).
+ * note: free-text note the user wrote for that habit on that day.
+ */
+export const dayNotes = mysqlTable("dayNotes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  habitId: varchar("habitId", { length: 64 }).notNull(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  note: text("note").notNull().default(""),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  userHabitDateIdx: uniqueIndex("dayNotes_userId_habitId_date_idx").on(t.userId, t.habitId, t.date),
+}));
+
+export type DayNoteRow = typeof dayNotes.$inferSelect;
+export type InsertDayNote = typeof dayNotes.$inferInsert;
+
+// ─── Gratitude Entries ────────────────────────────────────────────────────────
+/**
+ * Daily gratitude entries — one row per entry per user.
+ * clientId: client-generated UUID, unique per user.
+ * itemsJson: JSON array of gratitude strings.
+ */
+export const gratitudeEntries = mysqlTable("gratitudeEntries", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  clientId: varchar("clientId", { length: 64 }).notNull(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  itemsJson: text("itemsJson").notNull().default("[]"),
+  createdAt: varchar("createdAt", { length: 32 }).notNull(),
+  deletedAt: timestamp("deletedAt"),
+}, (t) => ({
+  userClientIdx: uniqueIndex("gratitudeEntries_userId_clientId_idx").on(t.userId, t.clientId),
+}));
+
+export type GratitudeEntryRow = typeof gratitudeEntries.$inferSelect;
+export type InsertGratitudeEntry = typeof gratitudeEntries.$inferInsert;
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+/**
+ * User to-do tasks — one row per task per user.
+ * clientId: client-generated UUID, unique per user.
+ */
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  clientId: varchar("clientId", { length: 64 }).notNull(),
+  title: varchar("title", { length: 512 }).notNull(),
+  notes: text("notes").notNull().default(""),
+  priority: mysqlEnum("priority", ["high", "medium", "low"]).notNull().default("medium"),
+  dueDate: varchar("dueDate", { length: 10 }), // YYYY-MM-DD or null
+  completed: tinyint("completed").notNull().default(0),
+  createdAt: varchar("createdAt", { length: 32 }).notNull(),
+  deletedAt: timestamp("deletedAt"),
+}, (t) => ({
+  userClientIdx: uniqueIndex("tasks_userId_clientId_idx").on(t.userId, t.clientId),
+}));
+
+export type TaskRow = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;

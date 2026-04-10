@@ -1204,6 +1204,39 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
       ),
   }),
 
+  // ─── Day Notes ──────────────────────────────────────────────────────────────
+  dayNotes: router({
+    list: protectedProcedure.query(({ ctx }) => db.getUserDayNotes(ctx.user.id)),
+    upsert: protectedProcedure
+      .input(z.object({ habitId: z.string().max(64), date: z.string().max(10), note: z.string() }))
+      .mutation(({ ctx, input }) => db.upsertDayNote(ctx.user.id, input.habitId, input.date, input.note)),
+    bulkSync: protectedProcedure
+      .input(z.array(z.object({ habitId: z.string().max(64), date: z.string().max(10), note: z.string() })))
+      .mutation(({ ctx, input }) => db.replaceUserDayNotes(ctx.user.id, input)),
+  }),
+
+  // ─── Gratitude Entries ────────────────────────────────────────────────────────
+  gratitudeEntries: router({
+    list: protectedProcedure.query(({ ctx }) => db.getUserGratitudeEntries(ctx.user.id)),
+    upsert: protectedProcedure
+      .input(z.object({ clientId: z.string().max(64), date: z.string().max(10), items: z.array(z.string()), createdAt: z.string() }))
+      .mutation(({ ctx, input }) => db.upsertGratitudeEntry(ctx.user.id, { clientId: input.clientId, date: input.date, itemsJson: JSON.stringify(input.items), createdAt: input.createdAt })),
+    delete: protectedProcedure
+      .input(z.object({ clientId: z.string().max(64) }))
+      .mutation(({ ctx, input }) => db.deleteGratitudeEntry(ctx.user.id, input.clientId)),
+  }),
+
+  // ─── Tasks ────────────────────────────────────────────────────────────────────
+  tasks: router({
+    list: protectedProcedure.query(({ ctx }) => db.getUserTasks(ctx.user.id)),
+    upsert: protectedProcedure
+      .input(z.object({ clientId: z.string().max(64), title: z.string().max(512), notes: z.string().default(''), priority: z.enum(['high', 'medium', 'low']).default('medium'), dueDate: z.string().max(10).optional().nullable(), completed: z.boolean().default(false), createdAt: z.string() }))
+      .mutation(({ ctx, input }) => db.upsertTask(ctx.user.id, input)),
+    delete: protectedProcedure
+      .input(z.object({ clientId: z.string().max(64) }))
+      .mutation(({ ctx, input }) => db.deleteTask(ctx.user.id, input.clientId)),
+  }),
+
   // ─── Community: Referrals
   referrals: router({
     stats: protectedProcedure.query(({ ctx }) =>

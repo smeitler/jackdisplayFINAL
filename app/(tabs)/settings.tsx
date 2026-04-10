@@ -18,6 +18,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { CategoryIcon } from "@/components/category-icon";
 import { useIsCalm } from "@/components/calm-effects";
 import { useIsNova } from "@/components/nova-effects";
+import { trpc } from "@/lib/trpc";
 import { Habit, LIFE_AREAS, loadVisionBoard, saveVisionBoard, VisionBoard, loadVisionMotivations, saveVisionMotivations, VisionMotivations } from "@/lib/storage";
 import Svg, { Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
@@ -902,6 +903,8 @@ function TasksTab() {
   const [showAdd, setShowAdd] = React.useState(false);
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
   const [filter, setFilter] = React.useState<'all' | 'active' | 'done'>('active');
+  const upsertTaskMutation = trpc.tasks.upsert.useMutation();
+  const deleteTaskMutation = trpc.tasks.delete.useMutation();
 
   // Form state
   const [formTitle, setFormTitle] = React.useState('');
@@ -947,6 +950,9 @@ function TasksTab() {
           : t
       );
       await saveTasks(updated);
+      // Sync update to server
+      const t = updated.find((x) => x.id === editingTask.id);
+      if (t) upsertTaskMutation.mutate({ clientId: t.id, title: t.title, notes: t.notes, priority: t.priority, dueDate: t.dueDate, completed: t.completed, createdAt: t.createdAt });
     } else {
       const newTask: Task = {
         id: generateTaskId(),
@@ -958,19 +964,28 @@ function TasksTab() {
         createdAt: new Date().toISOString(),
       };
       await saveTasks([newTask, ...tasks]);
+      // Sync new task to server
+      upsertTaskMutation.mutate({ clientId: newTask.id, title: newTask.title, notes: newTask.notes, priority: newTask.priority, dueDate: newTask.dueDate, completed: newTask.completed, createdAt: newTask.createdAt });
     }
     setShowAdd(false);
   }
 
   async function handleToggle(task: Task) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await saveTasks(tasks.map((t) => t.id === task.id ? { ...t, completed: !t.completed } : t));
+    const toggled = { ...task, completed: !task.completed };
+    await saveTasks(tasks.map((t) => t.id === task.id ? toggled : t));
+    // Sync toggle to server
+    upsertTaskMutation.mutate({ clientId: toggled.id, title: toggled.title, notes: toggled.notes, priority: toggled.priority, dueDate: toggled.dueDate, completed: toggled.completed, createdAt: toggled.createdAt });
   }
 
   async function handleDelete(task: Task) {
     Alert.alert('Delete Task', `Delete "${task.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await saveTasks(tasks.filter((t) => t.id !== task.id)); } },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        await saveTasks(tasks.filter((t) => t.id !== task.id));
+        // Soft-delete on server
+        deleteTaskMutation.mutate({ clientId: task.id });
+      }},
     ]);
   }
 

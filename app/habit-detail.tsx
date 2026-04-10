@@ -19,6 +19,7 @@ import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { toDateString, loadDayNotes, saveDayNotes, type DayNotes } from "@/lib/storage";
+import { trpc } from "@/lib/trpc";
 
 const MONTH_NAMES = [
   "January","February","March","April","May","June",
@@ -120,6 +121,7 @@ export default function HabitDetailScreen() {
   const [dayNotes, setDayNotes] = useState<DayNotes>({});
   const [noteModalDate, setNoteModalDate] = useState<string | null>(null);
   const [noteModalLabel, setNoteModalLabel] = useState("");
+  const upsertDayNoteMutation = trpc.dayNotes.upsert.useMutation();
 
   useEffect(() => {
     loadDayNotes().then(setDayNotes);
@@ -135,7 +137,11 @@ export default function HabitDetailScreen() {
     }
     setDayNotes(updated);
     await saveDayNotes(updated);
-  }, [dayNotes, habitId]);
+    // Sync to server in background
+    if (habitId) {
+      upsertDayNoteMutation.mutate({ habitId: String(habitId), date, note: text });
+    }
+  }, [dayNotes, habitId, upsertDayNoteMutation]);
 
   function onCardLayout(e: LayoutChangeEvent) {
     const w = e.nativeEvent.layout.width - 28;

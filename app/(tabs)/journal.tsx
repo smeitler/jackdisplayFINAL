@@ -2813,11 +2813,14 @@ export default function JournalScreen() {
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [editorDate, setEditorDate] = useState(todayDateStr());
 
-  // ── Server sync mutations ─────────────────────────────────────────────────
+  // ── Server sync mutations ─────────────────────────────────────────────────────
   const upsertJournalMutation = trpc.journalEntries.upsert.useMutation();
   const deleteJournalMutation = trpc.journalEntries.delete.useMutation();
+  const upsertDayNoteMutation = trpc.dayNotes.upsert.useMutation();
+  const upsertGratitudeMutation = trpc.gratitudeEntries.upsert.useMutation();
+  const deleteGratitudeMutation = trpc.gratitudeEntries.delete.useMutation();
 
-  // ── Sticky stats bar ──────────────────────────────────────────────────────
+  // ── Sticky stats bar ──────────────────────────────────────────────────────────────
   const statsBarAnim = useRef(new Animated.Value(1)).current;
   const lastScrollY = useRef(0);
   const statsBarVisible = useRef(true);
@@ -3042,14 +3045,16 @@ export default function JournalScreen() {
     const updated = { ...dvHabitNotesRef.current, [habitId]: note };
     dvHabitNotesRef.current = updated;
     setDvHabitNotes(updated);
-    // Debounce the AsyncStorage write
+    // Debounce the AsyncStorage write + server sync
     if (habitNoteTimers.current[habitId]) clearTimeout(habitNoteTimers.current[habitId]);
     habitNoteTimers.current[habitId] = setTimeout(async () => {
       const allNotes = await loadDayNotes();
       allNotes[`${habitId}:${selectedDate}`] = note;
       await saveDayNotes(allNotes);
+      // Sync to server in background
+      upsertDayNoteMutation.mutate({ habitId, date: selectedDate, note });
     }, 600);
-  }, [selectedDate]);
+  }, [selectedDate, upsertDayNoteMutation]);
   // Sync dvBodies when dayEntries changes
   useEffect(() => {
     const map: Record<string, string> = {};
@@ -4251,6 +4256,7 @@ function JournalQuickAddTaskBar() {
   const insets = useSafeAreaInsets();
   const [text, setText] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const upsertTaskMutation = trpc.tasks.upsert.useMutation();
 
   async function handleAdd() {
     const title = text.trim();
@@ -4269,6 +4275,8 @@ function JournalQuickAddTaskBar() {
         createdAt: new Date().toISOString(),
       };
       await AsyncStorage.setItem(JOURNAL_TASKS_KEY, JSON.stringify([newTask, ...existing]));
+      // Sync to server in background
+      upsertTaskMutation.mutate({ clientId: newTask.id, title: newTask.title, notes: newTask.notes, priority: newTask.priority, dueDate: newTask.dueDate, completed: newTask.completed, createdAt: newTask.createdAt });
       setText('');
     } catch (e) {
       console.warn('[JournalQuickAddTask] save error:', e);

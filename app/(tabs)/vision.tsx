@@ -405,6 +405,8 @@ export default function VisionBoardScreen() {
   // Server sync mutations
   const setImagesMutation = trpc.visionBoard.setImages.useMutation();
   const setMotivationsMutation = trpc.visionBoard.setMotivations.useMutation();
+  const upsertGratitudeMutation = trpc.gratitudeEntries.upsert.useMutation();
+  const deleteGratitudeMutation = trpc.gratitudeEntries.delete.useMutation();
 
   const [visionTab, setVisionTab] = useState<'board' | 'journal' | 'gratitude'>('board');
   const [board, setBoard] = useState<VisionBoard>({});
@@ -531,11 +533,15 @@ export default function VisionBoardScreen() {
     setGratitudeEntries(prev => [entry, ...prev]);
     setGratitudeItems(['', '', '']);
     setGratitudeSaving(false);
+    // Sync to server in background
+    upsertGratitudeMutation.mutate({ clientId: entry.id, date: entry.date, items: entry.items, createdAt: entry.createdAt });
   }
 
   async function handleDeleteGratitude(id: string) {
     await deleteGratitudeEntry(id);
     setGratitudeEntries(prev => prev.filter(e => e.id !== id));
+    // Sync deletion to server in background
+    deleteGratitudeMutation.mutate({ clientId: id });
   }
 
   const pickImage = useCallback(async (catId: string) => {
