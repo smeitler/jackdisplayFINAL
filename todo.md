@@ -1691,3 +1691,10 @@
 - [ ] Panel recording screen: fetch and display journal prompts/topics from server (same as app voice log screen)
 - [ ] Firmware: display journal prompts on the panel recording screen before/during recording
 - [ ] Firmware: retain recording on SD card until server ACK received, then delete
+
+- [x] Recordings from panel not showing in journal - fixed Drizzle db.execute() return format bug (was returning [rows, fields] tuple instead of just rows)
+- [x] Photos/vision board images lost on sign-out - fixed clearLocalData() to preserve vision board, motivations, journal entries, gratitude, day notes, and other user-created local content
+- [x] Habits lost on sign-out if server sync failed - habits are synced to server; clearLocalData now only clears server-synced data that will be re-fetched on next login
+- [x] Remove emojis from panel recordings component (replaced with text symbols)
+- [ ] Add pull-to-refresh on journal to manually refresh panel recordings
+- [ ] Auto-save panel recordings to journal entries without manual "Save to Journal" step

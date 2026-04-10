@@ -96,10 +96,10 @@ function ratingColor(rating: string | null, colors: ThemeColorPalette): string {
 }
 
 function ratingEmoji(rating: string | null): string {
-  if (rating === "green") return "🟢";
-  if (rating === "yellow") return "🟡";
-  if (rating === "red") return "🔴";
-  return "⚪";
+  if (rating === "green") return "G";
+  if (rating === "yellow") return "Y";
+  if (rating === "red") return "R";
+  return "-";
 }
 
 function buildJournalBody(
@@ -221,7 +221,7 @@ function AudioPlayButton({
       {loading ? (
         <ActivityIndicator size="small" color="#fff" />
       ) : (
-        <Text style={styles.playIcon}>{isPlaying ? "⏸" : "▶"}</Text>
+        <Text style={styles.playIcon}>{isPlaying ? "||" : ">"}</Text>
       )}
     </Pressable>
   );
@@ -395,7 +395,7 @@ function RecordingCard({
       {/* Gratitude items */}
       {isProcessed && gratitudeItems.length > 0 && (
         <View style={[styles.extractedBox, { borderColor: colors.success + "44", backgroundColor: colors.success + "11" }]}>
-          <Text style={[styles.extractedLabel, { color: colors.success }]}>🙏 Gratitude</Text>
+          <Text style={[styles.extractedLabel, { color: colors.success }]}>Gratitude</Text>
           {gratitudeItems.slice(0, 3).map((g, i) => (
             <Text key={`g-${i}-${g.slice(0,10)}`} style={[styles.extractedItem, { color: colors.foreground }]}>• {g}</Text>
           ))}
@@ -408,7 +408,7 @@ function RecordingCard({
       {/* Habit ratings */}
       {isProcessed && habitEntries.length > 0 && (
         <View style={[styles.extractedBox, { borderColor: colors.primary + "44", backgroundColor: colors.primary + "0D" }]}>
-          <Text style={[styles.extractedLabel, { color: colors.primary }]}>📊 Habit Ratings</Text>
+          <Text style={[styles.extractedLabel, { color: colors.primary }]}>Habit Ratings</Text>
           {habitEntries.map(([habitId, result]) => (
             <View key={habitId} style={styles.habitRow}>
               <Text style={styles.ratingEmoji}>{ratingEmoji(result.rating)}</Text>
@@ -430,7 +430,7 @@ function RecordingCard({
       {/* Extracted tasks */}
       {isProcessed && extractedTasks.length > 0 && (
         <View style={[styles.extractedBox, { borderColor: colors.warning + "44", backgroundColor: colors.warning + "11" }]}>
-          <Text style={[styles.extractedLabel, { color: colors.warning }]}>✅ Tasks</Text>
+          <Text style={[styles.extractedLabel, { color: colors.warning }]}>Tasks</Text>
           {extractedTasks.slice(0, 3).map((task, i) => (
             <Text key={`t-${i}-${task.title.slice(0,10)}`} style={[styles.extractedItem, { color: colors.foreground }]}>
               • {task.title}
@@ -477,7 +477,7 @@ function RecordingCard({
           onPress={confirmDelete}
           style={({ pressed }) => [styles.delBtn, { opacity: pressed ? 0.5 : 1 }]}
         >
-          <Text style={[styles.delIcon, { color: colors.error }]}>🗑</Text>
+          <Text style={[styles.delIcon, { color: colors.error }]}>X</Text>
         </Pressable>
       </View>
     </View>
@@ -517,7 +517,7 @@ export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-          📱 Panel Recordings
+          Panel Recordings
         </Text>
         <Text style={[styles.sectionCount, { color: colors.muted }]}>
           {recordings.length} {recordings.length === 1 ? "recording" : "recordings"}

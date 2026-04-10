@@ -1299,7 +1299,7 @@ export async function getDeviceRecordings(
   const db = await getDb();
   if (!db) return [];
   try {
-    const rows = await db.execute(
+    const result = await db.execute(
       sql`SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType,
               r.transcription, r.status, r.journalEntries, r.gratitudeItems,
               r.habitResults, r.extractedTasks, r.audioUrl, r.acked, r.createdAt
@@ -1309,6 +1309,8 @@ export async function getDeviceRecordings(
           ORDER BY r.createdAt DESC
           LIMIT ${limit}`
     );
+    // Drizzle mysql2 db.execute() returns [rows, fields] — extract just the rows
+    const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
     return (rows as any[]);
   } catch (err: any) {
     console.warn("[db/getDeviceRecordings] skipped:", err?.message);
@@ -1389,13 +1391,15 @@ export async function getDeviceRecordingData(
   const db = await getDb();
   if (!db) return null;
   try {
-    const rows = await db.execute(
+    const result = await db.execute(
       sql`SELECT r.data, r.contentType, r.audioUrl
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE d.userId = ${userId} AND r.id = ${recordingId}
           LIMIT 1`
     );
+    // Drizzle mysql2 db.execute() returns [rows, fields] — extract just the rows
+    const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
     const row = (rows as any[])[0];
     if (!row) return null;
     // data may be null if only audioUrl is available (S3-only path)
@@ -1445,13 +1449,15 @@ export async function getDeviceRecordingById(
   const db = await getDb();
   if (!db) return null;
   try {
-    const rows = await db.execute(
+    const result = await db.execute(
       sql`SELECT r.id, r.acked, r.status
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE r.id = ${recordingId} AND d.userId = ${userId}
           LIMIT 1`
     );
+    // Drizzle mysql2 db.execute() returns [rows, fields] — extract just the rows
+    const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
     const row = (rows as any[])[0];
     if (!row) return null;
     return { id: row.id, acked: row.acked, status: row.status };

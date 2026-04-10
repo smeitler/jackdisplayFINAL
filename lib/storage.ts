@@ -457,6 +457,9 @@ export async function setLastUserId(userId: string): Promise<void> {
  * Call this on logout or when a different user logs in to prevent data leakage.
  */
 export async function clearLocalData(): Promise<void> {
+  // Only clear server-synced data that will be re-fetched on next login.
+  // Preserve user-created local content (vision board, journal, gratitude, stacks, etc.)
+  // so it survives sign-out / sign-in cycles.
   await AsyncStorage.multiRemove([
     KEYS.habits,
     KEYS.categories,
@@ -464,9 +467,6 @@ export async function clearLocalData(): Promise<void> {
     KEYS.alarm,
     KEYS.lastCheckIn,
     KEYS.lastUserId,
-    VISION_BOARD_KEY,
-    VISION_MOTIVATIONS_KEY,
-    DAY_NOTES_KEY,
     KEYS.rewards,
   ]);
 }
