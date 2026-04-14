@@ -1318,7 +1318,7 @@ export async function getDeviceRecordings(
   sizeBytes: number; contentType: string; transcription: string | null;
   status: string; journalEntries: string | null; gratitudeItems: string | null;
   habitResults: string | null; extractedTasks: string | null; audioUrl: string | null;
-  acked: number; createdAt: Date;
+  audioKey: string | null; acked: number; createdAt: Date;
 }[]> {
   const db = await getDb();
   if (!db) return [];
@@ -1326,7 +1326,7 @@ export async function getDeviceRecordings(
     const result = await db.execute(
       sql`SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType,
               r.transcription, r.status, r.journalEntries, r.gratitudeItems,
-              r.habitResults, r.extractedTasks, r.audioUrl, r.acked, r.createdAt
+              r.habitResults, r.extractedTasks, r.audioUrl, r.audioKey, r.acked, r.createdAt
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE d.userId = ${userId} AND r.acked = 0
@@ -1335,6 +1335,15 @@ export async function getDeviceRecordings(
     );
     // Drizzle mysql2 db.execute() returns [rows, fields] — extract just the rows
     const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+    // Regenerate fresh presigned URLs from stored R2 keys (presigned URLs expire after 1h)
+    const { storageGet } = await import('./storage.js').catch(() => ({ storageGet: null }));
+    if (storageGet) {
+      for (const row of rows as any[]) {
+        if (row.audioKey) {
+          try { row.audioUrl = await storageGet(row.audioKey); } catch {}
+        }
+      }
+    }
     return (rows as any[]);
   } catch (err: any) {
     console.warn("[db/getDeviceRecordings] skipped:", err?.message);
@@ -1353,6 +1362,7 @@ export async function updateDeviceRecording(
     habitResults?: string;
     extractedTasks?: string;
     audioUrl?: string;
+    audioKey?: string;
     acked?: number;
     ackedAt?: Date | null;
   }
@@ -1374,6 +1384,7 @@ export async function updateDeviceRecording(
       if (fields.habitResults !== undefined)  { sets.push('habitResults = ?');  vals.push(fields.habitResults); }
       if (fields.extractedTasks !== undefined){ sets.push('extractedTasks = ?');vals.push(fields.extractedTasks); }
       if (fields.audioUrl !== undefined)      { sets.push('audioUrl = ?');      vals.push(fields.audioUrl); }
+      if (fields.audioKey !== undefined)      { sets.push('audioKey = ?');      vals.push(fields.audioKey); }
       if (fields.acked !== undefined)         { sets.push('acked = ?');         vals.push(fields.acked); }
       if (fields.ackedAt !== undefined)       { sets.push('ackedAt = ?');       vals.push(fields.ackedAt); }
       if (sets.length === 0) return;
@@ -1562,19 +1573,30 @@ export async function getUserJournalEntries(userId: number) {
 
 // ─── Vision Board ─────────────────────────────────────────────────────────────
 
-/** Get all vision board images for a user. */
+/** Get all vision board images for a user. Regenerates presigned URLs from R2 keys. */
 export async function getUserVisionBoardImages(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(visionBoardImages)
+  const rows = await db.select().from(visionBoardImages)
     .where(eq(visionBoardImages.userId, userId))
     .orderBy(visionBoardImages.categoryClientId, visionBoardImages.order);
+  // Regenerate fresh presigned URLs from stored R2 keys (presigned URLs expire after 1h)
+  const { storageGet } = await import('./storage.js').catch(() => ({ storageGet: null }));
+  if (storageGet) {
+    for (const row of rows) {
+      if ((row as any).imageKey) {
+        try { (row as any).imageUrl = await storageGet((row as any).imageKey); } catch {}
+      }
+    }
+  }
+  return rows;
 }
 
 /** Replace all vision board images for a user (full sync). */
 export async function replaceUserVisionBoard(userId: number, images: Array<{
   categoryClientId: string;
   imageUrl: string;
+  imageKey?: string;
   order: number;
 }>): Promise<void> {
   const db = await getDb();
@@ -1587,6 +1609,7 @@ export async function replaceUserVisionBoard(userId: number, images: Array<{
       userId,
       categoryClientId: img.categoryClientId,
       imageUrl: img.imageUrl,
+      imageKey: img.imageKey ?? null,
       order: img.order,
     }));
     await db.insert(visionBoardImages).values(rows);

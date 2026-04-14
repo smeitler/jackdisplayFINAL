@@ -1,95 +1,110 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
+/**
+ * File storage backed by Cloudflare R2 (S3-compatible).
+ *
+ * storagePut  — upload a file, returns a presigned GET URL (1-hour expiry)
+ * storageGet  — generate a fresh presigned GET URL for an existing key
+ *
+ * Credentials are read from environment variables:
+ *   CF_R2_ACCOUNT_ID        — Cloudflare account ID
+ *   CF_R2_ACCESS_KEY_ID     — R2 API token access key
+ *   CF_R2_SECRET_ACCESS_KEY — R2 API token secret key
+ *   CF_R2_BUCKET_NAME       — bucket name (e.g. "jack-journal-audio")
+ */
 
-import { ENV } from "./_core/env";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-type StorageConfig = { baseUrl: string; apiKey: string };
+// ─── Config ───────────────────────────────────────────────────────────────────
 
-function getStorageConfig(): StorageConfig {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
+function getR2Config() {
+  const accountId = process.env.CF_R2_ACCOUNT_ID;
+  const accessKeyId = process.env.CF_R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.CF_R2_SECRET_ACCESS_KEY;
+  const bucket = process.env.CF_R2_BUCKET_NAME;
 
-  if (!baseUrl || !apiKey) {
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
     throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY",
+      "Cloudflare R2 credentials missing. Set CF_R2_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID, CF_R2_SECRET_ACCESS_KEY, CF_R2_BUCKET_NAME.",
     );
   }
 
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+  return {
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucket,
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+  };
 }
 
-function buildUploadUrl(baseUrl: string, relKey: string): URL {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-
-async function buildDownloadUrl(baseUrl: string, relKey: string, apiKey: string): Promise<string> {
-  const downloadApiUrl = new URL("v1/storage/downloadUrl", ensureTrailingSlash(baseUrl));
-  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
-  const response = await fetch(downloadApiUrl, {
-    method: "GET",
-    headers: buildAuthHeaders(apiKey),
+function getClient() {
+  const { endpoint, accessKeyId, secretAccessKey } = getR2Config();
+  return new S3Client({
+    region: "auto",
+    endpoint,
+    credentials: { accessKeyId, secretAccessKey },
   });
-  return (await response.json()).url;
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
 }
 
 function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
 }
 
-function toFormData(
-  data: Buffer | Uint8Array | string,
-  contentType: string,
-  fileName: string,
-): FormData {
-  const blob =
-    typeof data === "string"
-      ? new Blob([data], { type: contentType })
-      : new Blob([data as any], { type: contentType });
-  const form = new FormData();
-  form.append("file", blob, fileName || "file");
-  return form;
-}
+// Presigned URL expiry: 1 hour (3600 seconds)
+const PRESIGNED_EXPIRY = 3600;
 
-function buildAuthHeaders(apiKey: string): HeadersInit {
-  return { Authorization: `Bearer ${apiKey}` };
-}
+// ─── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Upload a file to R2 and return a presigned GET URL valid for 1 hour.
+ */
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
+  const { bucket } = getR2Config();
   const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: buildAuthHeaders(apiKey),
-    body: formData,
-  });
+  const client = getClient();
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`,
-    );
-  }
-  const url = (await response.json()).url;
+  const body = typeof data === "string" ? Buffer.from(data) : data;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+
+  const url = await getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: PRESIGNED_EXPIRY },
+  );
+
   return { key, url };
 }
 
+/**
+ * Generate a fresh presigned GET URL for an existing R2 object.
+ * Valid for 1 hour.
+ */
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
+  const { bucket } = getR2Config();
   const key = normalizeKey(relKey);
-  return {
-    key,
-    url: await buildDownloadUrl(baseUrl, key, apiKey),
-  };
+  const client = getClient();
+
+  const url = await getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: PRESIGNED_EXPIRY },
+  );
+
+  return { key, url };
 }

@@ -2914,7 +2914,7 @@ export default function JournalScreen() {
               entry.attachments.map(async (a) => {
                 if (a.type === 'photo' && !isRemoteUrl(a.uri)) {
                   try {
-                    const s3Url = await uploadPhotoToServer(a.uri, token);
+                    const { url: s3Url } = await uploadPhotoToServer(a.uri, token);
                     return { ...a, uri: s3Url };
                   } catch (uploadErr) {
                     console.warn('[Journal] Photo upload failed, keeping local URI:', uploadErr);

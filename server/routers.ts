@@ -1129,6 +1129,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
       .input(z.array(z.object({
         categoryClientId: z.string().max(64),
         imageUrl: z.string(),
+        imageKey: z.string().optional(),
         order: z.number().int().default(0),
       })))
       .mutation(({ ctx, input }) =>

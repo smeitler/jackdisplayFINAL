@@ -134,6 +134,13 @@
       "when": 1776185194198,
       "tag": "0018_easy_mariko_yashida",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1776188818999,
+      "tag": "0019_fresh_starfox",
+      "breakpoints": true
     }
   ]
 }

@@ -385,16 +385,18 @@ async function processRecordingAsync(
   try {
     await db.updateDeviceRecording(recordingId, { status: 'processing' });
 
-    // 1. Upload audio to S3 for playback URL
+    // 1. Upload audio to R2 for playback
     let audioUrl = '';
+    let audioKey = '';
     try {
       const { storagePut } = await import('./storage.js');
       const ext = contentType.includes('mp3') ? 'mp3' : 'wav';
       const fileKey = `device-recordings/${deviceId}/${recordingId}.${ext}`;
       const result = await storagePut(fileKey, audioBuffer, contentType);
       audioUrl = result.url;
+      audioKey = result.key;
     } catch (err: any) {
-      console.warn('[device/upload] S3 upload failed (non-fatal):', err?.message);
+      console.warn('[device/upload] R2 upload failed (non-fatal):', err?.message);
     }
 
     // 2. Transcribe with Whisper
@@ -405,12 +407,12 @@ async function processRecordingAsync(
     });
     if ('error' in transcription) {
       console.error('[device/upload] transcription error:', transcription.error);
-      await db.updateDeviceRecording(recordingId, { status: 'failed', audioUrl: audioUrl || undefined });
+      await db.updateDeviceRecording(recordingId, { status: 'failed', audioUrl: audioUrl || undefined, audioKey: audioKey || undefined });
       return;
     }
     const transcript = transcription.text?.trim() ?? '';
     if (!transcript) {
-      await db.updateDeviceRecording(recordingId, { status: 'processed', transcription: '', audioUrl: audioUrl || undefined });
+      await db.updateDeviceRecording(recordingId, { status: 'processed', transcription: '', audioUrl: audioUrl || undefined, audioKey: audioKey || undefined });
       return;
     }
 
@@ -419,6 +421,7 @@ async function processRecordingAsync(
       status: 'transcribed',
       transcription: transcript,
       audioUrl: audioUrl || undefined,
+      audioKey: audioKey || undefined,
     });
     console.log(`[device/upload] transcribed recording ${recordingId} (${transcript.length} chars) — starting LLM extraction`);
 
@@ -480,6 +483,7 @@ async function processRecordingAsync(
       habitResults: JSON.stringify(habitResults),
       extractedTasks: JSON.stringify(extractedTasks),
       audioUrl: audioUrl || undefined,
+      audioKey: audioKey || undefined,
     });
     console.log(`[device/upload] processed recording ${recordingId}: ${journalEntries.length} entries, ${gratitudeItems.length} gratitudes, ${Object.keys(habitResults).length} habits, ${extractedTasks.length} tasks`);
   } catch (err: any) {

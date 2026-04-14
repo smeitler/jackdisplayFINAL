@@ -1716,3 +1716,6 @@
 - [x] Firmware: retry-with-backoff (3 attempts, 1s/2s/4s) added to httpGet and httpPost
 - [x] Firmware: independent 30s ACK poll timer added to loop() so SD space is reclaimed faster
 - [x] App + server: rotate API key feature — POST /api/device/rotate-key endpoint + Rotate Key button in Panel Settings
+- [x] Migrate file storage from Manus proxy to Cloudflare R2 (recordings, vision board photos, generated audio, journal attachments)
+- [x] Rewrite storage.ts to use @aws-sdk/client-s3 with R2 endpoint and presigned URLs
+- [x] Wire R2 credentials as environment variables (CF_R2_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID, CF_R2_SECRET_ACCESS_KEY, CF_R2_BUCKET_NAME, CF_R2_PUBLIC_URL)

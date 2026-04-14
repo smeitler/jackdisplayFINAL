@@ -388,7 +388,8 @@ export const deviceRecordings = mysqlTable("deviceRecordings", {
   gratitudeItems: text("gratitudeItems"),   // JSON array of strings
   habitResults: text("habitResults"),       // JSON object: habitId -> {rating, note}
   extractedTasks: text("extractedTasks"),   // JSON array of task objects
-  audioUrl: varchar("audioUrl", { length: 512 }), // S3 URL of uploaded audio
+  audioUrl: varchar("audioUrl", { length: 512 }), // presigned URL (short-lived, regenerated on fetch)
+  audioKey: varchar("audioKey", { length: 512 }), // R2 object key (permanent)
   /** ACK: set to true when app confirms it has saved the entry to journal */
   acked: tinyint("acked").notNull().default(0),
   ackedAt: timestamp("ackedAt"),
@@ -439,7 +440,8 @@ export const visionBoardImages = mysqlTable("visionBoardImages", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   categoryClientId: varchar("categoryClientId", { length: 64 }).notNull(),
-  imageUrl: text("imageUrl").notNull(),
+  imageUrl: text("imageUrl").notNull(), // presigned URL (short-lived, regenerated on fetch)
+  imageKey: text("imageKey"), // R2 object key (permanent)
   order: int("order").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

@@ -410,6 +410,8 @@ export default function VisionBoardScreen() {
 
   const [visionTab, setVisionTab] = useState<'board' | 'journal' | 'gratitude'>('board');
   const [board, setBoard] = useState<VisionBoard>({});
+  // Maps R2 URL → R2 storage key for presigned URL regeneration on server
+  const [boardKeys, setBoardKeys] = useState<Record<string, string>>({});
   const [motivations, setMotivations] = useState<VisionMotivations>({});
   const [detailCatId, setDetailCatId] = useState<string | null>(null);
 
@@ -500,17 +502,19 @@ export default function VisionBoardScreen() {
     loadGratitudeEntries().then(setGratitudeEntries);
   }, [isDemoMode]);
 
-  /** Save board locally and sync all S3-backed images to server in background. */
-  async function updateBoard(newBoard: VisionBoard) {
+  /** Save board locally and sync all R2-backed images to server in background. */
+  async function updateBoard(newBoard: VisionBoard, newKeys?: Record<string, string>) {
     setBoard(newBoard);
     await saveVisionBoard(newBoard);
+    const keys = newKeys ?? boardKeys;
+    if (newKeys) setBoardKeys(prev => ({ ...prev, ...newKeys }));
     // Sync to server (fire-and-forget)
-    const serverImages: { categoryClientId: string; imageUrl: string; order: number }[] = [];
+    const serverImages: { categoryClientId: string; imageUrl: string; imageKey?: string; order: number }[] = [];
     let order = 0;
     for (const [catId, uris] of Object.entries(newBoard)) {
       for (const uri of uris) {
         if (isRemoteUrl(uri)) {
-          serverImages.push({ categoryClientId: catId, imageUrl: uri, order: order++ });
+          serverImages.push({ categoryClientId: catId, imageUrl: uri, imageKey: keys[uri] || undefined, order: order++ });
         }
       }
     }
@@ -612,12 +616,14 @@ export default function VisionBoardScreen() {
       getSessionToken().then(async (token) => {
         if (!token) return;
         const s3Uris: string[] = [];
+        const newKeys: Record<string, string> = {};
         for (const uri of persistedUris) {
           try {
-            const s3Url = await uploadPhotoToServer(uri, token);
+            const { url: s3Url, key: s3Key } = await uploadPhotoToServer(uri, token);
             s3Uris.push(s3Url);
+            if (s3Key) newKeys[s3Url] = s3Key;
           } catch (err) {
-            console.warn("[vision] S3 upload failed, keeping local URI", err);
+            console.warn("[vision] R2 upload failed, keeping local URI", err);
             s3Uris.push(uri); // fallback to local
           }
         }
@@ -633,14 +639,16 @@ export default function VisionBoardScreen() {
           return idx >= 0 ? s3Uris[idx] : u;
         });
         const updatedS3 = { ...currentBoard, [catId]: replaced };
+        setBoardKeys(prev => ({ ...prev, ...newKeys }));
         setBoard(updatedS3);
         await saveVisionBoard(updatedS3);
-        // Sync to server
-        const serverImages: { categoryClientId: string; imageUrl: string; order: number }[] = [];
+        // Sync to server with R2 keys
+        const allKeys = { ...boardKeys, ...newKeys };
+        const serverImages: { categoryClientId: string; imageUrl: string; imageKey?: string; order: number }[] = [];
         let order = 0;
         for (const [cid, uris] of Object.entries(updatedS3)) {
           for (const uri of uris) {
-            if (isRemoteUrl(uri)) serverImages.push({ categoryClientId: cid, imageUrl: uri, order: order++ });
+            if (isRemoteUrl(uri)) serverImages.push({ categoryClientId: cid, imageUrl: uri, imageKey: allKeys[uri] || undefined, order: order++ });
           }
         }
         setImagesMutation.mutate(serverImages);
