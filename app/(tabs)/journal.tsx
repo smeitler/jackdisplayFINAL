@@ -4,6 +4,7 @@ import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
   Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard, PanResponder,
+  RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
@@ -2981,6 +2982,8 @@ export default function JournalScreen() {
   const [selectedDate, setSelectedDate] = useState(todayDateStr());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const pickerTempDate = useRef(selectedDate);
+  const [dvRefreshing, setDvRefreshing] = useState(false);
+  const panelRefreshRef = useRef<(() => void) | null>(null);
   const { habits, checkIns, categories, submitCheckIn, streak } = useApp();
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [listModalVisible, setListModalVisible] = useState(false);
@@ -3611,6 +3614,17 @@ export default function JournalScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={dvRefreshing}
+              onRefresh={() => {
+                setDvRefreshing(true);
+                panelRefreshRef.current?.();
+                // Give the query a moment to fire, then clear spinner
+                setTimeout(() => setDvRefreshing(false), 1500);
+              }}
+            />
+          }
         >
           {/* ── JOURNAL ENTRY — simplified tap-to-open card ── */}
           <Pressable
@@ -3989,6 +4003,7 @@ export default function JournalScreen() {
             onUnreadCountChange={(count) => {
               AsyncStorage.setItem(PANEL_UNREAD_KEY, String(count)).catch(() => {});
             }}
+            onRefreshRef={panelRefreshRef}
           />
         </ScrollView>
       )}

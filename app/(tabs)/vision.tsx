@@ -396,7 +396,7 @@ function GoalDetailModal({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function VisionBoardScreen() {
-  const { categories, isDemoMode } = useApp();
+  const { categories, isDemoMode, isSyncing } = useApp();
   const colors = useColors();
   const isCalm = useIsCalm();
   const maxWidth = useContentMaxWidth();
@@ -422,6 +422,41 @@ export default function VisionBoardScreen() {
   const [gratitudeEntries, setGratitudeEntries] = useState<GratitudeEntry[]>([]);
   const [gratitudeItems, setGratitudeItems] = useState(['', '', '']);
   const [gratitudeSaving, setGratitudeSaving] = useState(false);
+
+  // Track previous isSyncing value so we can detect the transition from true → false
+  const prevIsSyncingRef = useRef(false);
+  useEffect(() => {
+    if (prevIsSyncingRef.current && !isSyncing) {
+      // syncFromServer just finished — reload board from local storage which now has S3 URLs
+      loadVisionBoard().then((loaded) => {
+        // Only update if server added images we don't already have
+        setBoard((prev) => {
+          const hasLocal = Object.values(prev).some((uris) => uris.length > 0);
+          const hasServer = Object.values(loaded).some((uris) => uris.length > 0);
+          if (!hasLocal && hasServer) return loaded;
+          if (hasServer) {
+            // Merge: keep local URIs, add any S3 URLs not already present
+            const merged: VisionBoard = { ...prev };
+            for (const [catId, uris] of Object.entries(loaded)) {
+              const existing = merged[catId] ?? [];
+              const newRemote = uris.filter((u) => u.startsWith('https://') && !existing.includes(u));
+              if (newRemote.length > 0) merged[catId] = [...existing, ...newRemote];
+            }
+            return merged;
+          }
+          return prev;
+        });
+      });
+      loadVisionMotivations().then((serverMot) => {
+        setMotivations((prev) => {
+          const hasLocal = Object.values(prev).some((v) => (Array.isArray(v) ? v : [v]).some(Boolean));
+          if (!hasLocal) return serverMot;
+          return prev;
+        });
+      });
+    }
+    prevIsSyncingRef.current = isSyncing;
+  }, [isSyncing]);
 
   useEffect(() => {
     // Load board and strip any stale ph:// or non-file:// URIs saved by older app versions.

@@ -547,3 +547,22 @@ export const tasks = mysqlTable("tasks", {
 
 export type TaskRow = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+
+// ─── Reward Claims ────────────────────────────────────────────────────────────
+/**
+ * Period-based reward claims — one row per (userId, habitId, periodKey).
+ * periodKey: ISO week (YYYY-Www) or month (YYYY-MM) depending on frequency type.
+ * claimedAt: ISO timestamp when the user claimed the reward for that period.
+ */
+export const rewardClaims = mysqlTable("rewardClaims", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  habitId: varchar("habitId", { length: 64 }).notNull(),
+  periodKey: varchar("periodKey", { length: 16 }).notNull(), // e.g. "2025-W03" or "2025-01"
+  claimedAt: varchar("claimedAt", { length: 32 }).notNull(),
+}, (t) => ({
+  userHabitPeriodIdx: uniqueIndex("rewardClaims_userId_habitId_periodKey_idx").on(t.userId, t.habitId, t.periodKey),
+}));
+
+export type RewardClaimRow = typeof rewardClaims.$inferSelect;
+export type InsertRewardClaim = typeof rewardClaims.$inferInsert;

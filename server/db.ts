@@ -38,6 +38,8 @@ import {
   dayNotes,
   gratitudeEntries,
   tasks,
+  rewardClaims,
+  InsertRewardClaim,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1784,4 +1786,55 @@ export async function deleteTask(userId: number, clientId: string): Promise<void
   await db.update(tasks)
     .set({ deletedAt: new Date() })
     .where(and(eq(tasks.userId, userId), eq(tasks.clientId, clientId)));
+}
+
+// ─── Reward Claims ────────────────────────────────────────────────────────────
+/** Get all reward claims for a user. */
+export async function getUserRewardClaims(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(rewardClaims).where(eq(rewardClaims.userId, userId));
+}
+/** Upsert a reward claim (insert or update by userId+habitId+periodKey). */
+export async function upsertRewardClaim(userId: number, claim: {
+  habitId: string;
+  periodKey: string;
+  claimedAt: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const row: InsertRewardClaim = {
+    userId,
+    habitId: claim.habitId,
+    periodKey: claim.periodKey,
+    claimedAt: claim.claimedAt,
+  };
+  await db.insert(rewardClaims).values(row)
+    .onDuplicateKeyUpdate({ set: { claimedAt: row.claimedAt } });
+}
+/** Delete a reward claim by userId+habitId+periodKey. */
+export async function deleteRewardClaim(userId: number, habitId: string, periodKey: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(rewardClaims)
+    .where(and(eq(rewardClaims.userId, userId), eq(rewardClaims.habitId, habitId), eq(rewardClaims.periodKey, periodKey)));
+}
+/** Bulk sync reward claims — replace all claims for a user. */
+export async function replaceUserRewardClaims(userId: number, claims: Array<{
+  habitId: string;
+  periodKey: string;
+  claimedAt: string;
+}>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(rewardClaims).where(eq(rewardClaims.userId, userId));
+  if (claims.length > 0) {
+    const rows: InsertRewardClaim[] = claims.map(c => ({
+      userId,
+      habitId: c.habitId,
+      periodKey: c.periodKey,
+      claimedAt: c.claimedAt,
+    }));
+    await db.insert(rewardClaims).values(rows);
+  }
 }

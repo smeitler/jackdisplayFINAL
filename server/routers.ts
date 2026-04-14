@@ -1204,6 +1204,36 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
       ),
   }),
 
+  // ─── Reward Claims ──────────────────────────────────────────────────────────
+  rewardClaims: router({
+    /** Get all period-based reward claims for the authenticated user. */
+    list: protectedProcedure.query(({ ctx }) =>
+      db.getUserRewardClaims(ctx.user.id)
+    ),
+    /** Upsert a reward claim (claim or update a period reward). */
+    upsert: protectedProcedure
+      .input(z.object({
+        habitId: z.string().max(64),
+        periodKey: z.string().max(16),
+        claimedAt: z.string(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.upsertRewardClaim(ctx.user.id, input)
+      ),
+    /** Delete a reward claim (unclaim). */
+    delete: protectedProcedure
+      .input(z.object({ habitId: z.string().max(64), periodKey: z.string().max(16) }))
+      .mutation(({ ctx, input }) =>
+        db.deleteRewardClaim(ctx.user.id, input.habitId, input.periodKey)
+      ),
+    /** Bulk sync — replace all claims for this user (used on first login push). */
+    bulkSync: protectedProcedure
+      .input(z.array(z.object({ habitId: z.string().max(64), periodKey: z.string().max(16), claimedAt: z.string() })))
+      .mutation(({ ctx, input }) =>
+        db.replaceUserRewardClaims(ctx.user.id, input)
+      ),
+  }),
+
   // ─── Day Notes ──────────────────────────────────────────────────────────────
   dayNotes: router({
     list: protectedProcedure.query(({ ctx }) => db.getUserDayNotes(ctx.user.id)),

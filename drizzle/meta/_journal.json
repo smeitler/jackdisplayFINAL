@@ -127,6 +127,13 @@
       "when": 1775862874021,
       "tag": "0017_lively_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1776185194198,
+      "tag": "0018_easy_mariko_yashida",
+      "breakpoints": true
     }
   ]
 }

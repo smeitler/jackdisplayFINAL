@@ -237,7 +237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Fetch all user data from server in parallel.
         // staleTime: 0 forces a fresh network request, bypassing any cached results.
         // If the user is not authenticated, this will throw a 401/403 error.
-        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations, serverRewards, serverDayNotes, serverGratitudeEntries, serverTasks] = await Promise.all([
+        const [serverUser, serverCats, serverHabits, serverCheckIns, serverAlarm, serverJournalEntries, serverVisionImages, serverVisionMotivations, serverRewards, serverDayNotes, serverGratitudeEntries, serverTasks, serverRewardClaims] = await Promise.all([
           utils.auth.me.fetch(),
           utils.categories.list.fetch(),
           utils.habits.list.fetch(),
@@ -250,6 +250,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           utils.dayNotes.list.fetch().catch(() => []),
           utils.gratitudeEntries.list.fetch().catch(() => []),
           utils.tasks.list.fetch().catch(() => []),
+          utils.rewardClaims.list.fetch().catch(() => []),
         ]);
 
         // If we reach here, the user is authenticated
@@ -491,6 +492,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (rewardsErr) {
             console.warn('[AppContext] Failed to sync rewards:', rewardsErr);
+          }
+
+          // ── Sync reward claims from server ──────────────────────────────────────
+          try {
+            if (serverRewardClaims && serverRewardClaims.length > 0) {
+              const existingRaw = await AsyncStorage.getItem('habit_reward_claims_v1');
+              let existing: Array<{habitId:string;periodKey:string;claimedAt:string}> = [];
+              try { if (existingRaw) existing = JSON.parse(existingRaw); } catch { /* ignore */ }
+              const merged = [...existing];
+              for (const sc of serverRewardClaims) {
+                const idx = merged.findIndex((c: any) => c.habitId === sc.habitId && c.periodKey === sc.periodKey);
+                if (idx >= 0) merged[idx] = { habitId: sc.habitId, periodKey: sc.periodKey, claimedAt: sc.claimedAt };
+                else merged.push({ habitId: sc.habitId, periodKey: sc.periodKey, claimedAt: sc.claimedAt });
+              }
+              await AsyncStorage.setItem('habit_reward_claims_v1', JSON.stringify(merged));
+              console.log(`[AppContext] Synced ${serverRewardClaims.length} reward claims from server`);
+            }
+          } catch (rcErr) {
+            console.warn('[AppContext] Failed to sync reward claims:', rcErr);
           }
 
           // ── Sync day notes from server ──────────────────────────────────────────────────────────────

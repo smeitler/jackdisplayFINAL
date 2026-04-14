@@ -20,6 +20,7 @@ import {
   formatDisplayDate,
 } from "@/lib/storage";
 import { useIsCalm } from "@/components/calm-effects";
+import { trpc } from "@/lib/trpc";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PADDING = 20;
@@ -463,17 +464,66 @@ const CONFETTI_COLORS = ["#22C55E", "#F59E0B", "#3B82F6", "#EC4899", "#A855F7", 
 
 function RewardsTab() {
   const colors = useColors();
-  const { habits, checkIns } = useApp();
+  const { habits, checkIns, isSyncing } = useApp();
   const [claims, setClaims] = React.useState<ClaimRecord[]>([]);
   const [filter, setFilter] = React.useState<"all" | "unlocked" | "claimed">("all");
   const [particles, setParticles] = React.useState<Particle[]>([]);
   const particleIdRef = React.useRef(0);
 
+  // Server sync mutations
+  const upsertClaimMutation = trpc.rewardClaims.upsert.useMutation();
+  const deleteClaimMutation = trpc.rewardClaims.delete.useMutation();
+  const bulkSyncClaimsMutation = trpc.rewardClaims.bulkSync.useMutation();
+  const { data: serverClaims } = trpc.rewardClaims.list.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  // Load claims from local storage on mount
   React.useEffect(() => {
     AsyncStorage.getItem(CLAIMED_KEY).then((raw) => {
       if (raw) { try { setClaims(JSON.parse(raw)); } catch { /* ignore */ } }
     });
   }, []);
+
+  // Merge server claims when they arrive (server is source of truth for claims)
+  React.useEffect(() => {
+    if (!serverClaims || serverClaims.length === 0) return;
+    const serverAsLocal: ClaimRecord[] = serverClaims.map((r: any) => ({
+      habitId: r.habitId,
+      periodKey: r.periodKey,
+      claimedAt: r.claimedAt,
+    }));
+    setClaims((prev) => {
+      // Merge: server wins for any habitId+periodKey that exists on server
+      const merged = [...prev];
+      for (const sc of serverAsLocal) {
+        const idx = merged.findIndex((c) => c.habitId === sc.habitId && c.periodKey === sc.periodKey);
+        if (idx >= 0) merged[idx] = sc;
+        else merged.push(sc);
+      }
+      AsyncStorage.setItem(CLAIMED_KEY, JSON.stringify(merged)).catch(() => {});
+      return merged;
+    });
+  }, [serverClaims]);
+
+  // After syncFromServer completes, push any local-only claims to server (first-login push)
+  const prevIsSyncingRef = React.useRef(false);
+  React.useEffect(() => {
+    if (prevIsSyncingRef.current && !isSyncing) {
+      // Sync completed — push local claims to server so they survive reinstall
+      AsyncStorage.getItem(CLAIMED_KEY).then((raw) => {
+        if (!raw) return;
+        try {
+          const local: ClaimRecord[] = JSON.parse(raw);
+          if (local.length > 0) {
+            bulkSyncClaimsMutation.mutate(local);
+          }
+        } catch { /* ignore */ }
+      });
+    }
+    prevIsSyncingRef.current = isSyncing;
+  }, [isSyncing]);
 
   async function saveClaims(updated: ClaimRecord[]) {
     setClaims(updated);
@@ -540,14 +590,22 @@ function RewardsTab() {
   async function handleClaim(item: HabitReward) {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     launchConfetti();
-    const updated = [...claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey)), { habitId: item.habitId, periodKey: item.periodKey, claimedAt: new Date().toISOString() }];
+    const claimedAt = new Date().toISOString();
+    const updated = [...claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey)), { habitId: item.habitId, periodKey: item.periodKey, claimedAt }];
     await saveClaims(updated);
+    // Sync to server (fire-and-forget)
+    upsertClaimMutation.mutate({ habitId: item.habitId, periodKey: item.periodKey, claimedAt });
   }
 
   async function handleUnclaim(item: HabitReward) {
     Alert.alert("Unclaim Reward", "Are you sure you want to unclaim this reward?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Unclaim", style: "destructive", onPress: async () => { const updated = claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey)); await saveClaims(updated); } },
+      { text: "Unclaim", style: "destructive", onPress: async () => {
+        const updated = claims.filter((c) => !(c.habitId === item.habitId && c.periodKey === item.periodKey));
+        await saveClaims(updated);
+        // Sync to server (fire-and-forget)
+        deleteClaimMutation.mutate({ habitId: item.habitId, periodKey: item.periodKey });
+      }},
     ]);
   }
 

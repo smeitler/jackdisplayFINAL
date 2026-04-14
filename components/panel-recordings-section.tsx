@@ -548,9 +548,12 @@ function RecordingCard({
 export function PanelRecordingsSection({
   colors,
   onUnreadCountChange,
+  onRefreshRef,
 }: {
   colors: ThemeColorPalette;
   onUnreadCountChange?: (count: number) => void;
+  /** Pass a React.MutableRefObject — the component will write a refetch fn into it so the parent can trigger pull-to-refresh */
+  onRefreshRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const { habits } = useApp();
   const [toastMsg, setToastMsg] = React.useState<string | null>(null);
@@ -576,6 +579,12 @@ export function PanelRecordingsSection({
       refetchInterval: hasPending ? 2_000 : 10_000, // 2s when pending, 10s otherwise
     }
   );
+
+  // Expose refetch to parent for pull-to-refresh
+  React.useEffect(() => {
+    if (onRefreshRef) onRefreshRef.current = () => { refetch(); };
+    return () => { if (onRefreshRef) onRefreshRef.current = null; };
+  }, [refetch, onRefreshRef]);
 
   // Update pending state and detect newly processed recordings for toast
   React.useEffect(() => {

@@ -1709,3 +1709,6 @@
 - [ ] Sync rewards data to server on every save
 - [ ] Restore all data (journal, vision board, rewards) from server on every login
 - [ ] Ensure clearLocalData never wipes any user-created content
+- [x] Pull-to-refresh on journal tab to manually re-fetch panel recordings (already implemented via RefreshControl + panelRefreshRef)
+- [x] Vision board photos: reload from server (S3 URLs) after syncFromServer completes — vision.tsx now watches isSyncing and reloads board when sync finishes
+- [x] Rewards period claims synced to server — new rewardClaims DB table, tRPC router, upsert/delete on claim/unclaim, bulk restore on login via syncFromServer and useQuery merge
