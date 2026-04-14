@@ -1723,3 +1723,4 @@
 - [x] Journal header week strip: remove date numbers, keep only day abbreviations with selected day highlighted
 - [x] Journal header: replace week strip with single day label + left/right arrows, tap label opens calendar
 - [x] Journal header: show actual date (e.g. "April 14") instead of "Today"/"Yesterday"/weekday
+- [ ] Calendar modal: make date numbers brighter and centered in cells, add today indicator (circle outline)
