@@ -1445,8 +1445,6 @@ function CalendarTab({ entries, onDayPress, colors }: {
                           borderRadius: 4,
                           backgroundColor: bgColor,
                           opacity: pressed ? 0.6 : cellOpacity,
-                          justifyContent: 'center',
-                          alignItems: 'center',
                         })}
                       >
                         {/* Wrap in clipping View — overflow:hidden on Pressable causes black images on iOS */}
@@ -1460,23 +1458,26 @@ function CalendarTab({ entries, onDayPress, colors }: {
                             />
                           </View>
                         ) : null}
-                        {/* Today indicator — bright border overlay, not affected by cell opacity */}
+                        {/* Today indicator — white border ring visible on any background */}
                         {isToday ? (
                           <View style={[StyleSheet.absoluteFill, {
                             borderRadius: 4,
                             borderWidth: 2.5,
-                            borderColor: colors.primary,
+                            borderColor: '#ffffff',
                           }]} pointerEvents="none" />
                         ) : null}
-                        {/* Date number — centered */}
+                        {/* Date number — top-left */}
                         <Text style={{
-                          fontSize: 13,
+                          position: 'absolute',
+                          top: 3,
+                          left: 4,
+                          fontSize: 11,
                           fontWeight: isToday ? "800" : "600",
-                          color: photoUri ? "#fff" : isToday ? colors.primary : colors.foreground,
-                          opacity: isFuture ? 0.5 : 1,
-                          textShadowColor: photoUri ? "rgba(0,0,0,0.9)" : "transparent",
+                          color: '#ffffff',
+                          opacity: isFuture ? 0.35 : 1,
+                          textShadowColor: 'rgba(0,0,0,0.8)',
                           textShadowOffset: { width: 0, height: 1 },
-                          textShadowRadius: photoUri ? 3 : 0,
+                          textShadowRadius: 2,
                         }}>{day}</Text>
                       </Pressable>
                     );
@@ -2074,7 +2075,6 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
                       style={({ pressed }) => ({
                         width: cellWidth, height: cellHeight, borderRadius: 4,
                         backgroundColor: bgColor, opacity: isFuture ? 0.25 : pressed ? 0.6 : cellOpacity,
-                        justifyContent: 'center', alignItems: 'center',
                       })}
                     >
                       {/* Wrap ExpoImage in its own clipping View — putting overflow:hidden on Pressable causes black images on iOS */}
@@ -2083,13 +2083,14 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
                           <ExpoImage source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                         </View>
                       ) : null}
-                      {/* Today indicator */}
+                      {/* Today indicator — white border ring visible on any background */}
                       {isToday ? (
                         <View style={[StyleSheet.absoluteFill, {
-                          borderRadius: 4, borderWidth: 2.5, borderColor: colors.primary,
+                          borderRadius: 4, borderWidth: 2.5, borderColor: '#ffffff',
                         }]} pointerEvents="none" />
                       ) : null}
-                      <Text style={{ fontSize: 13, fontWeight: isToday ? '800' : '600', color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: isFuture ? 0.5 : 1, textShadowColor: photoUri ? 'rgba(0,0,0,0.9)' : 'transparent', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: photoUri ? 3 : 0 }}>{day}</Text>
+                      {/* Date number — top-left */}
+                      <Text style={{ position: 'absolute', top: 3, left: 4, fontSize: 11, fontWeight: isToday ? '800' : '600', color: '#ffffff', opacity: isFuture ? 0.35 : 1, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{day}</Text>
                     </Pressable>
                   );
                 })}
