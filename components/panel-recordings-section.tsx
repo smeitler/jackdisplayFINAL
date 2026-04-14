@@ -16,7 +16,10 @@ import {
   type JournalEntry,
 } from "@/lib/journal-store";
 import { useApp } from "@/lib/app-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ThemeColorPalette } from "@/constants/theme";
+
+const TASKS_STORAGE_KEY = '@you_tasks_v1';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type Recording = {
@@ -96,10 +99,10 @@ function ratingColor(rating: string | null, colors: ThemeColorPalette): string {
 }
 
 function ratingEmoji(rating: string | null): string {
-  if (rating === "green") return "G";
-  if (rating === "yellow") return "Y";
-  if (rating === "red") return "R";
-  return "-";
+  if (rating === "green") return "✅";
+  if (rating === "yellow") return "🟡";
+  if (rating === "red") return "❌";
+  return "—";
 }
 
 function buildJournalBody(
@@ -231,17 +234,21 @@ function AudioPlayButton({
 function RecordingCard({
   rec,
   colors,
+  habitMap,
   onSaved,
   onDelete,
 }: {
   rec: Recording;
   colors: ThemeColorPalette;
+  habitMap: Record<string, string>;
   onSaved: () => void;
   onDelete: (id: number) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const { submitCheckIn } = useApp();
+  const upsertDayNoteMutation = trpc.dayNotes.upsert.useMutation();
+  const upsertTaskMutation = trpc.tasks.upsert.useMutation();
   const accent = categoryColor(rec.category, colors);
   const isProcessed = rec.status === "processed";
   const isPending = rec.status === "pending" || rec.status === "processing";
@@ -316,6 +323,42 @@ function RecordingCard({
           }
         }
         await saveDayNotes(allNotes);
+        // Sync day notes to server
+        for (const [habitId, result] of habitEntries) {
+          if (result.note?.trim()) {
+            upsertDayNoteMutation.mutate({ habitId, date: dateStr, note: result.note.trim() });
+          }
+        }
+      }
+
+      // 4b. Save extracted tasks to local storage
+      if (extractedTasks.length > 0) {
+        try {
+          const raw = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+          const existing: any[] = raw ? JSON.parse(raw) : [];
+          const newTasks = extractedTasks.map((t) => ({
+            id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            title: t.title,
+            notes: t.notes ?? '',
+            dueDate: null,
+            priority: (t.priority === 'high' || t.priority === 'low') ? t.priority : 'medium',
+            completed: false,
+            createdAt: new Date().toISOString(),
+          }));
+          await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify([...newTasks, ...existing]));
+          // Sync tasks to server
+          for (const task of newTasks) {
+            upsertTaskMutation.mutate({
+              clientId: task.id,
+              title: task.title,
+              notes: task.notes,
+              priority: task.priority as 'high' | 'medium' | 'low',
+              dueDate: null,
+              completed: false,
+              createdAt: task.createdAt,
+            });
+          }
+        } catch {}
       }
 
       // 4. ACK the recording so the panel can delete the SD file
@@ -414,7 +457,7 @@ function RecordingCard({
               <Text style={styles.ratingEmoji}>{ratingEmoji(result.rating)}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.habitId, { color: ratingColor(result.rating, colors) }]}>
-                  {habitId}
+                  {habitMap[habitId] ?? habitId}
                 </Text>
                 {result.note ? (
                   <Text style={[styles.habitNote, { color: colors.muted }]} numberOfLines={2}>
@@ -486,6 +529,16 @@ function RecordingCard({
 
 // ─── Main section component ─────────────────────────────────────────────────
 export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }) {
+  const { habits } = useApp();
+  // Build a habit id → name map so habit ratings show names instead of IDs
+  const habitMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const h of habits) {
+      map[h.id] = h.name;
+    }
+    return map;
+  }, [habits]);
+
   const { data: recordings, isLoading, refetch } = trpc.devices.getRecordings.useQuery(
     {},
     { staleTime: 15_000, refetchInterval: 10_000 } // Poll every 10s so pending → processed updates appear
@@ -529,6 +582,7 @@ export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }
           key={rec.id != null ? String(rec.id) : `rec-${idx}`}
           rec={rec as Recording}
           colors={colors}
+          habitMap={habitMap}
           onSaved={handleSaved}
           onDelete={handleDelete}
         />
