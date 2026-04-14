@@ -26,6 +26,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { TasksPanel } from "@/components/tasks-panel";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { formatDisplayDate } from "@/lib/storage";
 
@@ -1254,7 +1255,7 @@ export default function YouScreen() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "vision" && <VisionBoardTab />}
         {activeTab === "rewards" && <RewardsTab />}
-        {activeTab === "tasks" && <TasksTab />}
+        {activeTab === "tasks" && <TasksPanel />}
       </View>
     </ScreenContainer>
   );

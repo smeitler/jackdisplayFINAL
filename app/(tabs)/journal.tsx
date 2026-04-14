@@ -34,6 +34,7 @@ import { uploadPhotoToServer, isRemoteUrl } from "@/lib/photo-upload";
 import { getSessionToken } from "@/lib/_core/auth";
 import { useIsCalm } from "@/components/calm-effects";
 import { PanelRecordingsSection } from "@/components/panel-recordings-section";
+import { TasksPanel } from "@/components/tasks-panel";
 import { WheelColumn } from "@/components/wheel-time-picker";
 import Svg, { Path as SvgPath } from "react-native-svg";
 import { Image as ExpoImage } from "expo-image";
@@ -2987,6 +2988,7 @@ export default function JournalScreen() {
   const { habits, checkIns, categories, submitCheckIn, streak } = useApp();
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [listModalVisible, setListModalVisible] = useState(false);
+  const [tasksModalVisible, setTasksModalVisible] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goDay = useCallback((delta: number) => {
@@ -3551,56 +3553,91 @@ export default function JournalScreen() {
   return (
     <ScreenContainer edges={['left', 'right']} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
-      <View style={[dvStyles.header, { paddingTop: insets.top + 4 }]}>
-        {/* List button — left */}
-        <Pressable
-          onPress={() => setListModalVisible(true)}
-          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>List</Text>
-        </Pressable>
-
-        {/* Day nav: left arrow + label + right arrow */}
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={[dvStyles.header, { paddingTop: insets.top + 4, flexDirection: 'column', alignItems: 'stretch', paddingHorizontal: 0 }]}>
+        {/* Top row: List | Month Year ↓ | Tasks */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 }}>
+          {/* List button — left */}
+          <Pressable
+            onPress={() => setListModalVisible(true)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4 })}
+          >
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>List</Text>
+          </Pressable>
+          {/* Month/Year label — tappable to open full calendar */}
+          <Pressable
+            onPress={() => setCalendarModalVisible(true)}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.7 : 1 })}
+          >
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>
+              {(() => { const d = new Date(selectedDate + 'T12:00:00'); return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); })()}
+            </Text>
+            <IconSymbol name="chevron.down" size={13} color={colors.muted} />
+          </Pressable>
+          {/* Tasks button — right */}
+          <Pressable
+            onPress={() => setTasksModalVisible(true)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4 })}
+          >
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Tasks</Text>
+          </Pressable>
+        </View>
+        {/* Week strip: ← [7 day cells] → */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 6 }}>
           <Pressable
             onPress={() => goDay(-1)}
-            style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.5 : 1 }]}
+            style={({ pressed }) => ({ padding: 6, opacity: pressed ? 0.5 : 1 })}
           >
-            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+            <IconSymbol name="chevron.left" size={18} color={colors.foreground} />
           </Pressable>
-
-          <Pressable
-            onPress={() => {
-              initPickerRefs(selectedDate);
-              const d = new Date(selectedDate + 'T12:00:00');
-              setPickerMonth(d.getMonth());
-              setPickerDayCount(getDaysInMonth(d.getMonth()));
-              setDatePickerVisible(true);
-            }}
-            style={({ pressed }) => [dvStyles.dayLabelBtn, { opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Text style={[dvStyles.dayLabel, { color: colors.foreground }]}>{dayLabel}</Text>
-            <IconSymbol name="chevron.down" size={14} color={colors.muted} style={{ marginLeft: 4, marginTop: 2 }} />
-          </Pressable>
-
+          {/* 7-day strip centered on selectedDate */}
+          <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around' }}>
+            {(() => {
+              const days: React.ReactElement[] = [];
+              const selD = new Date(selectedDate + 'T12:00:00');
+              const todayD = new Date(todayDateStr() + 'T12:00:00');
+              for (let offset = -3; offset <= 3; offset++) {
+                const d = new Date(selD);
+                d.setDate(d.getDate() + offset);
+                const dateStr = d.toISOString().slice(0, 10);
+                const isSelected = dateStr === selectedDate;
+                const isToday = dateStr === todayDateStr();
+                const isFuture = d > todayD;
+                const dayName = d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2);
+                const dayNum = d.getDate();
+                days.push(
+                  <Pressable
+                    key={dateStr}
+                    onPress={() => { if (!isFuture) setSelectedDate(dateStr); }}
+                    style={({ pressed }) => ({
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 38,
+                      paddingVertical: 4,
+                      borderRadius: 10,
+                      backgroundColor: isSelected ? colors.primary : 'transparent',
+                      opacity: isFuture ? 0.3 : pressed ? 0.6 : 1,
+                    })}
+                  >
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: isSelected ? '#fff' : isToday ? colors.primary : colors.muted, marginBottom: 2 }}>
+                      {dayName}
+                    </Text>
+                    <Text style={{ fontSize: 16, fontWeight: isSelected ? '700' : isToday ? '700' : '400', color: isSelected ? '#fff' : isToday ? colors.primary : colors.foreground, lineHeight: 20 }}>
+                      {dayNum}
+                    </Text>
+                  </Pressable>
+                );
+              }
+              return days;
+            })()}
+          </View>
           <Pressable
             onPress={() => goDay(1)}
             disabled={selectedDate >= todayDateStr()}
-            style={({ pressed }) => [dvStyles.navBtn, {
-              opacity: selectedDate >= todayDateStr() ? 0.25 : pressed ? 0.5 : 1,
-            }]}
+            style={({ pressed }) => ({ padding: 6, opacity: selectedDate >= todayDateStr() ? 0.2 : pressed ? 0.5 : 1 })}
           >
-            <IconSymbol name="chevron.right" size={22} color={colors.foreground} />
+            <IconSymbol name="chevron.right" size={18} color={colors.foreground} />
           </Pressable>
         </View>
-
-        {/* Calendar button — right */}
-        <Pressable
-          onPress={() => setCalendarModalVisible(true)}
-          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Calendar</Text>
-        </Pressable>
       </View>
 
       {/* ── Day content ── */}
@@ -4200,6 +4237,24 @@ export default function JournalScreen() {
         />
       </Modal>
 
+      {/* ── Tasks Modal ── */}
+      <Modal
+        visible={tasksModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setTasksModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ width: 60 }} />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>Tasks</Text>
+            <Pressable onPress={() => setTasksModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+              <Text style={{ fontSize: 16, color: colors.primary, fontWeight: '600' }}>Done</Text>
+            </Pressable>
+          </View>
+          <TasksPanel />
+        </View>
+      </Modal>
       {/* ── Date Picker Bottom Sheet ── */}
       <Modal
         visible={datePickerVisible}
