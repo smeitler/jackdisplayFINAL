@@ -1003,6 +1003,8 @@ export async function getDeviceSchedule(deviceId: number) {
       clientId: habits.clientId,
       name: habits.name,
       categoryClientId: habits.categoryClientId,
+      emoji: habits.emoji,
+      description: habits.description,
       order: habits.order,
     })
     .from(habits)

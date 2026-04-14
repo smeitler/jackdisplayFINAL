@@ -113,6 +113,8 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       id: h.clientId,
       name: h.name,
       category: h.categoryClientId,
+      emoji: (h as any).emoji ?? '⭐',
+      description: (h as any).description ?? null,
     }));
 
     // Mark device as having seen this version so needsSync clears
