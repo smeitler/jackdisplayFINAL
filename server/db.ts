@@ -1838,3 +1838,19 @@ export async function replaceUserRewardClaims(userId: number, claims: Array<{
     await db.insert(rewardClaims).values(rows);
   }
 }
+
+// ─── Rotate device API key ─────────────────────────────────────────────────────
+/** Generate a new API key for a device owned by the given user. Returns the new key, or null if not found. */
+export async function rotateDeviceApiKey(deviceId: number, userId: number): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  // Verify ownership
+  const rows = await db.select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+    .limit(1);
+  if (rows.length === 0) return null;
+  const newKey = crypto.randomBytes(32).toString("hex");
+  await db.update(devices).set({ apiKey: newKey }).where(eq(devices.id, deviceId));
+  return newKey;
+}

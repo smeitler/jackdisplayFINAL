@@ -86,6 +86,7 @@ function categoryColor(cat: string | null | undefined, colors: ThemeColorPalette
 
 function statusLabel(status: string): string {
   if (status === "pending" || status === "processing") return "⏳ Transcribing…";
+  if (status === "transcribed") return "⏳ Analysing…";
   if (status === "processed") return "✓ Ready";
   if (status === "failed") return "⚠ Failed";
   return status;
@@ -251,6 +252,8 @@ function RecordingCard({
   const upsertTaskMutation = trpc.tasks.upsert.useMutation();
   const accent = categoryColor(rec.category, colors);
   const isProcessed = rec.status === "processed";
+  // 'transcribed' = Whisper done, LLM extraction still running — show transcript but keep spinner
+  const isTranscribed = rec.status === "transcribed";
   const isPending = rec.status === "pending" || rec.status === "processing";
 
   // Parse extracted data
@@ -273,7 +276,7 @@ function RecordingCard({
   const habitEntries = Object.entries(habitResults).filter(([, v]) => v && v.rating);
 
   const handleSaveToJournal = useCallback(async () => {
-    if (!isProcessed) return;
+    if (!isProcessed && !isTranscribed) return;
     setSaving(true);
     try {
       const userId = await getLastUserId();
@@ -412,7 +415,7 @@ function RecordingCard({
         </View>
         <Text style={[
           styles.statusText,
-          { color: isPending ? colors.warning : isProcessed ? colors.success : colors.error },
+          { color: isPending ? colors.warning : isTranscribed ? colors.primary : isProcessed ? colors.success : colors.error },
         ]}>
           {statusLabel(rec.status)}
         </Text>
@@ -423,24 +426,41 @@ function RecordingCard({
 
       {/* Transcription preview / pending state */}
       {rec.transcription ? (
-        <Pressable onPress={() => setExpanded((e) => !e)}>
-          <Text
-            style={[styles.transcript, { color: colors.foreground }]}
-            numberOfLines={expanded ? undefined : 3}
-          >
-            {rec.transcription}
-          </Text>
-          {rec.transcription.length > 120 && (
-            <Text style={[styles.expandToggle, { color: colors.primary }]}>
-              {expanded ? "Show less" : "Show more"}
+        <>
+          <Pressable onPress={() => setExpanded((e) => !e)}>
+            <Text
+              style={[styles.transcript, { color: colors.foreground }]}
+              numberOfLines={expanded ? undefined : 3}
+            >
+              {rec.transcription}
             </Text>
+            {rec.transcription.length > 120 && (
+              <Text style={[styles.expandToggle, { color: colors.primary }]}>
+                {expanded ? "Show less" : "Show more"}
+              </Text>
+            )}
+          </Pressable>
+          {isTranscribed && (
+            <View style={styles.pendingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.pendingText, { color: colors.muted }]}>
+                Analysing habits and extracting insights…
+              </Text>
+            </View>
           )}
-        </Pressable>
+        </>
       ) : isPending ? (
         <View style={styles.pendingRow}>
           <ActivityIndicator size="small" color={colors.warning} />
           <Text style={[styles.pendingText, { color: colors.muted }]}>
             Processing your recording…
+          </Text>
+        </View>
+      ) : isTranscribed ? (
+        <View style={styles.pendingRow}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.pendingText, { color: colors.muted }]}>
+            Analysing habits and extracting insights…
           </Text>
         </View>
       ) : null}
@@ -504,7 +524,7 @@ function RecordingCard({
           disabled={rec.status === "failed"}
         />
 
-        {isProcessed && rec.acked === 0 && (
+        {(isProcessed || isTranscribed) && rec.acked === 0 && (
           saving ? (
             <View style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: 0.7 }]}>
               <ActivityIndicator size="small" color="#fff" />
@@ -521,7 +541,7 @@ function RecordingCard({
             </Pressable>
           )
         )}
-        {isProcessed && rec.acked === 1 && (
+        {(isProcessed || isTranscribed) && rec.acked === 1 && (
           <View style={[styles.saveBtn, { backgroundColor: colors.success }]}>
             <Text style={styles.saveBtnText}>Saved</Text>
           </View>
@@ -589,12 +609,12 @@ export function PanelRecordingsSection({
   // Update pending state and detect newly processed recordings for toast
   React.useEffect(() => {
     if (!recordings) return;
-    const pending = recordings.some((r: any) => r.status === "pending" || r.status === "processing");
+    const pending = recordings.some((r: any) => r.status === "pending" || r.status === "processing" || r.status === "transcribed");
     setHasPending(pending);
 
     // Detect newly processed recordings (were pending before, now processed)
     const newlyProcessed = recordings.filter(
-      (r: any) => r.status === "processed" && !prevProcessedIds.current.has(r.id)
+      (r: any) => (r.status === "processed" || r.status === "transcribed") && !prevProcessedIds.current.has(r.id)
     );
     if (newlyProcessed.length > 0 && prevProcessedIds.current.size > 0) {
       // Show toast for the first newly processed recording
@@ -608,11 +628,11 @@ export function PanelRecordingsSection({
     }
     // Update known processed IDs
     recordings.forEach((r: any) => {
-      if (r.status === "processed") prevProcessedIds.current.add(r.id);
+      if (r.status === "processed" || r.status === "transcribed") prevProcessedIds.current.add(r.id);
     });
 
     // Report unread count to parent (unacked processed recordings)
-    const unread = recordings.filter((r: any) => r.status === "processed" && !r.acked).length;
+    const unread = recordings.filter((r: any) => (r.status === "processed" || r.status === "transcribed") && !r.acked).length;
     onUnreadCountChange?.(unread);
   }, [recordings]);
 

@@ -532,6 +532,15 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.deleteDeviceRecording(ctx.user.id, input.id)
       ),
+
+    /** Rotate the API key for a paired device. The device must be re-paired or updated via NVS to use the new key. */
+    rotateKey: protectedProcedure
+      .input(z.object({ deviceId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const newKey = await db.rotateDeviceApiKey(input.deviceId, ctx.user.id);
+        if (!newKey) throw new Error("Device not found or not owned by this account");
+        return { newKey };
+      }),
   }),
 
   // ─── Moderation (Apple Guideline 1.2) ─────────────────────────────────────────

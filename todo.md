@@ -1712,3 +1712,7 @@
 - [x] Pull-to-refresh on journal tab to manually re-fetch panel recordings (already implemented via RefreshControl + panelRefreshRef)
 - [x] Vision board photos: reload from server (S3 URLs) after syncFromServer completes — vision.tsx now watches isSyncing and reloads board when sync finishes
 - [x] Rewards period claims synced to server — new rewardClaims DB table, tRPC router, upsert/delete on claim/unclaim, bulk restore on login via syncFromServer and useQuery merge
+- [x] Fix transcription not showing in panel recordings: 'transcribed' status not handled in PanelRecordingsSection (only 'processed' was checked)
+- [x] Firmware: retry-with-backoff (3 attempts, 1s/2s/4s) added to httpGet and httpPost
+- [x] Firmware: independent 30s ACK poll timer added to loop() so SD space is reclaimed faster
+- [x] App + server: rotate API key feature — POST /api/device/rotate-key endpoint + Rotate Key button in Panel Settings
