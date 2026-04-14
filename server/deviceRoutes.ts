@@ -610,4 +610,56 @@ router.get("/prompts", requireDeviceKey, async (req: Request, res: Response) => 
   }
 });
 
+// ─── GET /api/device/today-summary ─────────────────────────────────────────────────────────────────
+// Returns today's check-in ratings, gratitude items, and last journal entry for the panel preview.
+router.get("/today-summary", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const userId = device.userId;
+
+    // Today's date string YYYY-MM-DD in UTC
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 1. Today's check-in ratings (habitClientId -> rating)
+    const allCheckIns = await db.getUserCheckIns(userId).catch(() => [] as any[]);
+    const todayCheckIns = (allCheckIns as any[]).filter((c: any) => c.date === today);
+    const ratings: Record<string, string> = {};
+    for (const c of todayCheckIns) {
+      ratings[c.habitClientId] = c.rating;
+    }
+
+    // 2. Today's gratitude items (flatten all itemsJson arrays from today)
+    const allGratitudes = await db.getUserGratitudeEntries(userId).catch(() => [] as any[]);
+    const todayGratitudes: string[] = [];
+    for (const g of allGratitudes as any[]) {
+      if (g.date !== today) continue;
+      try {
+        const items = JSON.parse(g.itemsJson || '[]');
+        if (Array.isArray(items)) todayGratitudes.push(...items.filter((s: unknown) => typeof s === 'string'));
+      } catch { /* ignore */ }
+    }
+
+    // 3. Most recent journal entry today (title + first 200 chars of body/transcription)
+    const allJournal = await db.getUserJournalEntries(userId).catch(() => [] as any[]);
+    const todayJournal = (allJournal as any[]).filter((j: any) => j.date === today && !j.deletedAt);
+    const lastEntry = todayJournal[0] ?? null;
+    const lastEntryPreview = lastEntry ? {
+      title: lastEntry.title || '',
+      body: (lastEntry.body || '').slice(0, 200),
+      transcription: (lastEntry.transcriptionText || '').slice(0, 200),
+    } : null;
+
+    res.json({
+      date: today,
+      ratings,
+      gratitudes: todayGratitudes.slice(0, 10),
+      lastEntry: lastEntryPreview,
+      entryCount: todayJournal.length,
+    });
+  } catch (err: any) {
+    console.error('[device/today-summary]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
