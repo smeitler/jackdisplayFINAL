@@ -40,6 +40,8 @@ import { Image as ExpoImage } from "expo-image";
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
 
+const PANEL_UNREAD_KEY = "@panel_recordings_unread";
+
 // ─── Sub-tab type ────────────────────────────────────────────────────────────
 type SubTab = "habits" | "journal";
 
@@ -2881,6 +2883,8 @@ export default function JournalScreen() {
         loaded.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setEntries(loaded);
       }).catch(() => {/* silent */});
+      // Clear panel recordings badge when journal tab is opened
+      AsyncStorage.setItem(PANEL_UNREAD_KEY, "0").catch(() => {});
     }, [userId])
   );
 
@@ -3980,7 +3984,12 @@ export default function JournalScreen() {
 
           {/* Save Entry button removed — auto-saves on keystroke */}
           {/* ── PANEL RECORDINGS ── */}
-          <PanelRecordingsSection colors={colors} />
+          <PanelRecordingsSection
+            colors={colors}
+            onUnreadCountChange={(count) => {
+              AsyncStorage.setItem(PANEL_UNREAD_KEY, String(count)).catch(() => {});
+            }}
+          />
         </ScrollView>
       )}
 

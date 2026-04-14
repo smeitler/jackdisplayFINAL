@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, Pressable, StyleSheet, Alert, ActivityIndicator,
-  Platform,
+  Platform, Animated,
 } from "react-native";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
@@ -528,8 +528,18 @@ function RecordingCard({
 }
 
 // ─── Main section component ─────────────────────────────────────────────────
-export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }) {
+export function PanelRecordingsSection({
+  colors,
+  onUnreadCountChange,
+}: {
+  colors: ThemeColorPalette;
+  onUnreadCountChange?: (count: number) => void;
+}) {
   const { habits } = useApp();
+  const [toastMsg, setToastMsg] = React.useState<string | null>(null);
+  const toastOpacity = React.useRef(new Animated.Value(0)).current;
+  const prevProcessedIds = React.useRef<Set<number>>(new Set());
+
   // Build a habit id → name map so habit ratings show names instead of IDs
   const habitMap = React.useMemo(() => {
     const map: Record<string, string> = {};
@@ -539,10 +549,46 @@ export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }
     return map;
   }, [habits]);
 
+  // Determine if any recordings are still pending — use faster polling if so
+  const [hasPending, setHasPending] = React.useState(false);
+
   const { data: recordings, isLoading, refetch } = trpc.devices.getRecordings.useQuery(
     {},
-    { staleTime: 15_000, refetchInterval: 10_000 } // Poll every 10s so pending → processed updates appear
+    {
+      staleTime: hasPending ? 1_000 : 15_000,
+      refetchInterval: hasPending ? 2_000 : 10_000, // 2s when pending, 10s otherwise
+    }
   );
+
+  // Update pending state and detect newly processed recordings for toast
+  React.useEffect(() => {
+    if (!recordings) return;
+    const pending = recordings.some((r: any) => r.status === "pending" || r.status === "processing");
+    setHasPending(pending);
+
+    // Detect newly processed recordings (were pending before, now processed)
+    const newlyProcessed = recordings.filter(
+      (r: any) => r.status === "processed" && !prevProcessedIds.current.has(r.id)
+    );
+    if (newlyProcessed.length > 0 && prevProcessedIds.current.size > 0) {
+      // Show toast for the first newly processed recording
+      const cat = categoryLabel(newlyProcessed[0].category);
+      setToastMsg(`${cat} recording ready — tap to review`);
+      Animated.sequence([
+        Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.delay(3500),
+        Animated.timing(toastOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start(() => setToastMsg(null));
+    }
+    // Update known processed IDs
+    recordings.forEach((r: any) => {
+      if (r.status === "processed") prevProcessedIds.current.add(r.id);
+    });
+
+    // Report unread count to parent (unacked processed recordings)
+    const unread = recordings.filter((r: any) => r.status === "processed" && !r.acked).length;
+    onUnreadCountChange?.(unread);
+  }, [recordings]);
 
   const deleteMutation = trpc.devices.deleteRecording.useMutation({
     onSuccess: () => refetch(),
@@ -568,6 +614,18 @@ export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }
 
   return (
     <View style={styles.section}>
+      {/* Toast notification for newly processed recordings */}
+      {toastMsg && (
+        <Animated.View style={[
+          styles.toast,
+          { backgroundColor: colors.primary, opacity: toastOpacity },
+        ]}>
+          <Text style={[styles.toastText, { color: colors.background }]}>
+            🎤 {toastMsg}
+          </Text>
+        </Animated.View>
+      )}
+
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
           Panel Recordings
@@ -742,7 +800,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   emptyBox: {
-    paddingVertical: 16,
-    alignItems: "center",
+    paddingVertical: 20,
+    alignItems: "center" as const,
+  },
+  toast: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 10,
+    alignItems: "center" as const,
+  },
+  toastText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    textAlign: "center" as const,
   },
 });
