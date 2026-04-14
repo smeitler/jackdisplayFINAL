@@ -373,12 +373,22 @@ function RecordingCard({
 
       setSaving(false);
       onSaved();
-      Alert.alert("Saved!", "Recording saved to your journal.");
     } catch (err: any) {
       setSaving(false);
-      Alert.alert("Error", err?.message ?? "Could not save to journal");
+      // Silent fail on auto-save — user can still tap manually if needed
+      console.warn("[PanelRecording] Auto-save failed:", err?.message);
     }
   }, [rec, isProcessed, journalEntries, gratitudeItems, habitEntries, submitCheckIn, onSaved]);
+
+  // Auto-save: fire once when recording transitions to processed and hasn't been acked
+  const autoSaveFired = React.useRef(false);
+  React.useEffect(() => {
+    if (isProcessed && rec.acked === 0 && !autoSaveFired.current && !saving) {
+      autoSaveFired.current = true;
+      handleSaveToJournal();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProcessed, rec.acked]);
 
   const confirmDelete = () => {
     Alert.alert(
@@ -494,20 +504,27 @@ function RecordingCard({
           disabled={rec.status === "failed"}
         />
 
-        {isProcessed && (
-          <Pressable
-            onPress={handleSaveToJournal}
-            style={({ pressed }) => [
-              styles.saveBtn,
-              { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 },
-            ]}
-          >
-            {saving ? (
+        {isProcessed && rec.acked === 0 && (
+          saving ? (
+            <View style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: 0.7 }]}>
               <ActivityIndicator size="small" color="#fff" />
-            ) : (
+            </View>
+          ) : (
+            <Pressable
+              onPress={handleSaveToJournal}
+              style={({ pressed }) => [
+                styles.saveBtn,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
               <Text style={styles.saveBtnText}>Save to Journal</Text>
-            )}
-          </Pressable>
+            </Pressable>
+          )
+        )}
+        {isProcessed && rec.acked === 1 && (
+          <View style={[styles.saveBtn, { backgroundColor: colors.success }]}>
+            <Text style={styles.saveBtnText}>Saved</Text>
+          </View>
         )}
 
         <View style={{ flex: 1 }} />
