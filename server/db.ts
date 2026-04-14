@@ -1467,12 +1467,12 @@ export async function saveDeviceRecording(
 export async function getDeviceRecordingById(
   recordingId: number,
   userId: number
-): Promise<{ id: number; acked: number | boolean; status: string } | null> {
+): Promise<{ id: number; acked: number | boolean; status: string; transcription: string | null } | null> {
   const db = await getDb();
   if (!db) return null;
   try {
     const result = await db.execute(
-      sql`SELECT r.id, r.acked, r.status
+      sql`SELECT r.id, r.acked, r.status, r.transcription
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE r.id = ${recordingId} AND d.userId = ${userId}
@@ -1482,7 +1482,7 @@ export async function getDeviceRecordingById(
     const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
     const row = (rows as any[])[0];
     if (!row) return null;
-    return { id: row.id, acked: row.acked, status: row.status };
+    return { id: row.id, acked: row.acked, status: row.status, transcription: row.transcription ?? null };
   } catch (err: any) {
     console.warn('[db/getDeviceRecordingById] skipped:', err?.message);
     return null;

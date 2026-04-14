@@ -414,6 +414,14 @@ async function processRecordingAsync(
       return;
     }
 
+    // 2b. Mark as 'transcribed' immediately — panel can show the text now without waiting for LLM
+    await db.updateDeviceRecording(recordingId, {
+      status: 'transcribed',
+      transcription: transcript,
+      audioUrl: audioUrl || undefined,
+    });
+    console.log(`[device/upload] transcribed recording ${recordingId} (${transcript.length} chars) — starting LLM extraction`);
+
     // 3. Get user habits for context
     const userHabits = await db.getUserHabits(userId).catch(() => [] as any[]);
     const activeHabits = (userHabits as any[]).filter((h: any) => h.isActive !== false);
@@ -572,6 +580,26 @@ router.get("/recording/:id/acked", requireDeviceKey, async (req: Request, res: R
     res.json({ acked: row.acked === 1 || row.acked === true });
   } catch (err: any) {
     console.error("[device/recording/acked]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/device/recording/:id/status ──────────────────────────────────────────────────────
+// Called by the panel to poll transcription status. Returns { status, transcription } so the
+// panel can show a loading screen until status === 'processed' then display the transcription.
+router.get("/recording/:id/status", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const recordingId = parseInt(req.params.id, 10);
+    if (isNaN(recordingId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const row = await db.getDeviceRecordingById(recordingId, device.userId);
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({
+      status: row.status,
+      transcription: row.transcription ?? null,
+    });
+  } catch (err: any) {
+    console.error("[device/recording/status]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
