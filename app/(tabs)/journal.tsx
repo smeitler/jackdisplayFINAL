@@ -3603,7 +3603,6 @@ export default function JournalScreen() {
                 const isToday = dateStr === todayDateStr();
                 const isFuture = d > todayD;
                 const dayName = d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2);
-                const dayNum = d.getDate();
                 days.push(
                   <Pressable
                     key={dateStr}
@@ -3612,17 +3611,14 @@ export default function JournalScreen() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       width: 38,
-                      paddingVertical: 4,
+                      paddingVertical: 6,
                       borderRadius: 10,
                       backgroundColor: isSelected ? colors.primary : 'transparent',
                       opacity: isFuture ? 0.3 : pressed ? 0.6 : 1,
                     })}
                   >
-                    <Text style={{ fontSize: 10, fontWeight: '600', color: isSelected ? '#fff' : isToday ? colors.primary : colors.muted, marginBottom: 2 }}>
+                    <Text style={{ fontSize: 13, fontWeight: isSelected ? '700' : isToday ? '700' : '500', color: isSelected ? '#fff' : isToday ? colors.primary : colors.muted }}>
                       {dayName}
-                    </Text>
-                    <Text style={{ fontSize: 16, fontWeight: isSelected ? '700' : isToday ? '700' : '400', color: isSelected ? '#fff' : isToday ? colors.primary : colors.foreground, lineHeight: 20 }}>
-                      {dayNum}
                     </Text>
                   </Pressable>
                 );
