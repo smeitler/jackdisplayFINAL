@@ -3553,85 +3553,54 @@ export default function JournalScreen() {
   return (
     <ScreenContainer edges={['left', 'right']} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
-      <View style={[dvStyles.header, { paddingTop: insets.top + 4, flexDirection: 'column', alignItems: 'stretch', paddingHorizontal: 0 }]}>
-        {/* Top row: List | Month Year ↓ | Tasks */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 }}>
+      <View style={[dvStyles.header, { paddingTop: insets.top + 4, paddingHorizontal: 16, paddingBottom: 8 }]}>
+        {/* Single row: List | ← Day → | Tasks */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           {/* List button — left */}
           <Pressable
             onPress={() => setListModalVisible(true)}
-            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4 })}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4, minWidth: 44 })}
           >
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>List</Text>
           </Pressable>
-          {/* Month/Year label — tappable to open full calendar */}
-          <Pressable
-            onPress={() => setCalendarModalVisible(true)}
-            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.7 : 1 })}
-          >
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>
-              {(() => { const d = new Date(selectedDate + 'T12:00:00'); return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); })()}
-            </Text>
-            <IconSymbol name="chevron.down" size={13} color={colors.muted} />
-          </Pressable>
+          {/* Center: ← Day name → */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Pressable
+              onPress={() => goDay(-1)}
+              style={({ pressed }) => ({ padding: 6, opacity: pressed ? 0.5 : 1 })}
+            >
+              <IconSymbol name="chevron.left" size={18} color={colors.foreground} />
+            </Pressable>
+            <Pressable
+              onPress={() => setCalendarModalVisible(true)}
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, alignItems: 'center' })}
+            >
+              <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>
+                {(() => {
+                  const d = new Date(selectedDate + 'T12:00:00');
+                  const today = todayDateStr();
+                  if (selectedDate === today) return 'Today';
+                  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+                  const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+                  if (selectedDate === yStr) return 'Yesterday';
+                  return d.toLocaleDateString('en-US', { weekday: 'long' });
+                })()}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => goDay(1)}
+              disabled={selectedDate >= todayDateStr()}
+              style={({ pressed }) => ({ padding: 6, opacity: selectedDate >= todayDateStr() ? 0.2 : pressed ? 0.5 : 1 })}
+            >
+              <IconSymbol name="chevron.right" size={18} color={colors.foreground} />
+            </Pressable>
+          </View>
           {/* Tasks button — right */}
           <Pressable
             onPress={() => setTasksModalVisible(true)}
-            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4 })}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4, minWidth: 44, alignItems: 'flex-end' })}
           >
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Tasks</Text>
-          </Pressable>
-        </View>
-        {/* Week strip: ← [7 day cells] → */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 6 }}>
-          <Pressable
-            onPress={() => goDay(-1)}
-            style={({ pressed }) => ({ padding: 6, opacity: pressed ? 0.5 : 1 })}
-          >
-            <IconSymbol name="chevron.left" size={18} color={colors.foreground} />
-          </Pressable>
-          {/* 7-day strip centered on selectedDate */}
-          <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around' }}>
-            {(() => {
-              const days: React.ReactElement[] = [];
-              const selD = new Date(selectedDate + 'T12:00:00');
-              const todayD = new Date(todayDateStr() + 'T12:00:00');
-              for (let offset = -3; offset <= 3; offset++) {
-                const d = new Date(selD);
-                d.setDate(d.getDate() + offset);
-                const dateStr = d.toISOString().slice(0, 10);
-                const isSelected = dateStr === selectedDate;
-                const isToday = dateStr === todayDateStr();
-                const isFuture = d > todayD;
-                const dayName = d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2);
-                days.push(
-                  <Pressable
-                    key={dateStr}
-                    onPress={() => { if (!isFuture) setSelectedDate(dateStr); }}
-                    style={({ pressed }) => ({
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 38,
-                      paddingVertical: 6,
-                      borderRadius: 10,
-                      backgroundColor: isSelected ? colors.primary : 'transparent',
-                      opacity: isFuture ? 0.3 : pressed ? 0.6 : 1,
-                    })}
-                  >
-                    <Text style={{ fontSize: 13, fontWeight: isSelected ? '700' : isToday ? '700' : '500', color: isSelected ? '#fff' : isToday ? colors.primary : colors.muted }}>
-                      {dayName}
-                    </Text>
-                  </Pressable>
-                );
-              }
-              return days;
-            })()}
-          </View>
-          <Pressable
-            onPress={() => goDay(1)}
-            disabled={selectedDate >= todayDateStr()}
-            style={({ pressed }) => ({ padding: 6, opacity: selectedDate >= todayDateStr() ? 0.2 : pressed ? 0.5 : 1 })}
-          >
-            <IconSymbol name="chevron.right" size={18} color={colors.foreground} />
           </Pressable>
         </View>
       </View>

@@ -1721,3 +1721,4 @@
 - [x] Wire R2 credentials as environment variables (CF_R2_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID, CF_R2_SECRET_ACCESS_KEY, CF_R2_BUCKET_NAME, CF_R2_PUBLIC_URL)
 - [x] Journal header redesign: move calendar date-picker to center title area, add Tasks button on right side
 - [x] Journal header week strip: remove date numbers, keep only day abbreviations with selected day highlighted
+- [x] Journal header: replace week strip with single day label + left/right arrows, tap label opens calendar
