@@ -594,9 +594,15 @@ router.get("/recording/:id/status", requireDeviceKey, async (req: Request, res: 
     if (isNaN(recordingId)) { res.status(400).json({ error: "Invalid id" }); return; }
     const row = await db.getDeviceRecordingById(recordingId, device.userId);
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    // Parse habitResults JSON if present (only included when status === 'processed')
+    let habitResults: Record<string, any> | null = null;
+    if (row.status === 'processed' && row.habitResults) {
+      try { habitResults = JSON.parse(row.habitResults); } catch {}
+    }
     res.json({
       status: row.status,
       transcription: row.transcription ?? null,
+      ...(habitResults ? { habitResults } : {}),
     });
   } catch (err: any) {
     console.error("[device/recording/status]", err);
