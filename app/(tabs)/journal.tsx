@@ -3576,15 +3576,7 @@ export default function JournalScreen() {
               style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, alignItems: 'center' })}
             >
               <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>
-                {(() => {
-                  const d = new Date(selectedDate + 'T12:00:00');
-                  const today = todayDateStr();
-                  if (selectedDate === today) return 'Today';
-                  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-                  const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
-                  if (selectedDate === yStr) return 'Yesterday';
-                  return d.toLocaleDateString('en-US', { weekday: 'long' });
-                })()}
+                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
               </Text>
             </Pressable>
             <Pressable
