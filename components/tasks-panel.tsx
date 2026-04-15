@@ -589,14 +589,14 @@ export function TasksPanel() {
         transparent
         onRequestClose={() => setShowAdd(false)}
       >
-        <Pressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }]}
-          onPress={() => setShowAdd(false)}
-        />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={tStyles.kav}
+          style={{ flex: 1, justifyContent: "flex-end" }}
         >
+          <Pressable
+            style={[StyleSheet.absoluteFill]}
+            onPress={() => setShowAdd(false)}
+          />
           <View style={[tStyles.addSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
 
             {/* Title input */}
@@ -787,6 +787,7 @@ export function TasksPanel() {
         animationType="slide"
         onRequestClose={() => setShowCategoryPicker(false)}
       >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }]} onPress={() => setShowCategoryPicker(false)} />
         <View style={[tStyles.pickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
           <Text style={[tStyles.pickerTitle, { color: colors.foreground }]}>Life Area</Text>
@@ -809,6 +810,7 @@ export function TasksPanel() {
             ))}
           </View>
         </View>
+        </View>
       </Modal>
 
       {/* Subtask sheet */}
@@ -818,8 +820,8 @@ export function TasksPanel() {
         animationType="slide"
         onRequestClose={() => setShowSubtaskSheet(false)}
       >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, justifyContent: "flex-end" }}>
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }]} onPress={() => setShowSubtaskSheet(false)} />
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={tStyles.kav}>
           <View style={[tStyles.pickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
             <Text style={[tStyles.pickerTitle, { color: colors.foreground }]}>Subtasks</Text>
             <ScrollView style={{ maxHeight: 200 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 4 }}>
