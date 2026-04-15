@@ -543,6 +543,11 @@ export const tasks = mysqlTable("tasks", {
   completed: tinyint("completed").notNull().default(0),
   createdAt: varchar("createdAt", { length: 32 }).notNull(),
   deletedAt: timestamp("deletedAt"),
+  category: varchar("category", { length: 32 }),
+  subtasks: text("subtasks"),
+  recurring: varchar("recurring", { length: 16 }),
+  sortOrder: int("sortOrder").notNull().default(0),
+  completedAt: varchar("completedAt", { length: 32 }),
 }, (t) => ({
   userClientIdx: uniqueIndex("tasks_userId_clientId_idx").on(t.userId, t.clientId),
 }));

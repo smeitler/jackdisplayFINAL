@@ -1777,6 +1777,11 @@ export async function upsertTask(userId: number, task: {
   dueDate?: string | null;
   completed: boolean;
   createdAt: string;
+  category?: string | null;
+  subtasks?: string | null;
+  recurring?: string | null;
+  sortOrder?: number;
+  completedAt?: string | null;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -1790,6 +1795,11 @@ export async function upsertTask(userId: number, task: {
       dueDate: task.dueDate ?? null,
       completed: task.completed ? 1 : 0,
       createdAt: task.createdAt,
+      category: task.category ?? null,
+      subtasks: task.subtasks ?? null,
+      recurring: task.recurring ?? null,
+      sortOrder: task.sortOrder ?? 0,
+      completedAt: task.completedAt ?? null,
     })
     .onDuplicateKeyUpdate({
       set: {
@@ -1798,6 +1808,11 @@ export async function upsertTask(userId: number, task: {
         priority: task.priority,
         dueDate: task.dueDate ?? null,
         completed: task.completed ? 1 : 0,
+        category: task.category ?? null,
+        subtasks: task.subtasks ?? null,
+        recurring: task.recurring ?? null,
+        sortOrder: task.sortOrder ?? 0,
+        completedAt: task.completedAt ?? null,
       },
     });
 }

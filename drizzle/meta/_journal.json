@@ -141,6 +141,13 @@
       "when": 1776188818999,
       "tag": "0019_fresh_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1776221035437,
+      "tag": "0020_normal_quicksilver",
+      "breakpoints": true
     }
   ]
 }

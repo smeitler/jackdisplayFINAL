@@ -1270,7 +1270,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
   tasks: router({
     list: protectedProcedure.query(({ ctx }) => db.getUserTasks(ctx.user.id)),
     upsert: protectedProcedure
-      .input(z.object({ clientId: z.string().max(64), title: z.string().max(512), notes: z.string().default(''), priority: z.enum(['high', 'medium', 'low']).default('medium'), dueDate: z.string().max(10).optional().nullable(), completed: z.boolean().default(false), createdAt: z.string() }))
+      .input(z.object({ clientId: z.string().max(64), title: z.string().max(512), notes: z.string().default(''), priority: z.enum(['high', 'medium', 'low']).default('medium'), dueDate: z.string().max(10).optional().nullable(), completed: z.boolean().default(false), createdAt: z.string(), category: z.string().max(32).optional().nullable(), subtasks: z.string().optional().nullable(), recurring: z.string().max(16).optional().nullable(), sortOrder: z.number().int().optional(), completedAt: z.string().max(32).optional().nullable() }))
       .mutation(({ ctx, input }) => db.upsertTask(ctx.user.id, input)),
     delete: protectedProcedure
       .input(z.object({ clientId: z.string().max(64) }))
