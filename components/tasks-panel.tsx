@@ -623,27 +623,59 @@ export function TasksPanel() {
               returnKeyType="default"
             />
 
-            {/* Active chips row (shows selected values) */}
-            {(formDue || formCategory || formRecurring) ? (
+            {/* Inline date picker panel (shown when calendar icon tapped) */}
+            {showDatePicker && (
+              <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                {/* Quick chips */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                  style={{ marginTop: 10 }}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 8, flexDirection: "row", paddingBottom: 8 }}
+                >
+                  {[
+                    { label: "Today", val: todayStr() },
+                    { label: "Tomorrow", val: (() => { const d = new Date(); d.setDate(d.getDate()+1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })() },
+                    { label: "Next week", val: (() => { const d = new Date(); d.setDate(d.getDate()+7); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })() },
+                    { label: "In 2 weeks", val: (() => { const d = new Date(); d.setDate(d.getDate()+14); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })() },
+                  ].map(chip => (
+                    <Pressable key={chip.label}
+                      style={[tStyles.activeChip, { backgroundColor: formDue === chip.val ? colors.primary + "22" : colors.surface, borderColor: formDue === chip.val ? colors.primary : colors.border }]}
+                      onPress={() => setFormDue(chip.val)}
+                    >
+                      <Text style={[tStyles.activeChipText, { color: formDue === chip.val ? colors.primary : colors.foreground }]}>{chip.label}</Text>
+                    </Pressable>
+                  ))}
+                  {formDue ? (
+                    <Pressable
+                      style={[tStyles.activeChip, { backgroundColor: "#EF444422", borderColor: "#EF4444" }]}
+                      onPress={() => { setFormDue(""); setFormDueTime(null); setShowDatePicker(false); }}
+                    >
+                      <MaterialIcons name="close" size={12} color="#EF4444" />
+                      <Text style={[tStyles.activeChipText, { color: "#EF4444" }]}>Clear</Text>
+                    </Pressable>
+                  ) : null}
+                </ScrollView>
+                {/* Selected date display */}
+                {formDue ? (
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <MaterialIcons name="calendar-today" size={14} color={colors.primary} />
+                    <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600" }}>
+                      {formDue === todayStr() ? "Today" : formDue.slice(5).replace("-", "/")}
+                      {formDueTime ? " at " + formDueTime : ""}
+                    </Text>
+                    <Pressable onPress={() => setShowDatePicker(false)} style={{ marginLeft: "auto" }}>
+                      <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600" }}>Done</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            )}
+
+            {/* Active chips row (shows selected category/recurring) */}
+            {(formCategory || formRecurring) ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 style={{ marginBottom: 6 }}
                 contentContainerStyle={{ paddingHorizontal: 16, gap: 8, flexDirection: "row" }}
               >
-                {formDue ? (
-                  <Pressable
-                    style={[tStyles.activeChip, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <MaterialIcons name="calendar-today" size={12} color={colors.primary} />
-                    <Text style={[tStyles.activeChipText, { color: colors.primary }]}>
-                      {formDue === todayStr() ? "Today" : formDue.slice(5).replace("-", "/")}
-                      {formDueTime ? " " + formDueTime : ""}
-                    </Text>
-                    <Pressable onPress={() => { setFormDue(""); setFormDueTime(null); }} hitSlop={8}>
-                      <MaterialIcons name="close" size={11} color={colors.primary} />
-                    </Pressable>
-                  </Pressable>
-                ) : null}
                 {formCategory ? (
                   <Pressable
                     style={[tStyles.activeChip, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
