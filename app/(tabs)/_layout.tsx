@@ -13,7 +13,6 @@ import { useIsNova } from "@/components/nova-effects";
 import { useIsCalm } from "@/components/calm-effects";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { VoiceCommandPanel } from "@/components/voice-command-panel";
 
 const PANEL_UNREAD_KEY = "@panel_recordings_unread";
 
@@ -28,7 +27,6 @@ export default function TabLayout() {
   const { isDemoMode } = useApp();
   const router = useRouter();
   const [plusSheetVisible, setPlusSheetVisible] = useState(false);
-  const [voicePanelVisible, setVoicePanelVisible] = useState(false);
   const [panelUnread, setPanelUnread] = useState(0);
 
   // Poll AsyncStorage every 5s for panel recording unread count
@@ -179,11 +177,6 @@ export default function TabLayout() {
       >
         <TouchableOpacity
           onPress={openPlusSheet}
-          onLongPress={() => {
-            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            setVoicePanelVisible(true);
-          }}
-          delayLongPress={400}
           style={[plusBtnStyles.btn, { backgroundColor: '#E5383B' }]}
           activeOpacity={0.85}
         >
@@ -243,10 +236,6 @@ export default function TabLayout() {
           </TouchableOpacity>
         </View>
       </Modal>
-      <VoiceCommandPanel
-        visible={voicePanelVisible}
-        onClose={() => setVoicePanelVisible(false)}
-      />
     </>
   );
 }
