@@ -154,6 +154,8 @@ export function TasksPanel() {
   const [formRecurring, setFormRecurring] = React.useState<Task["recurring"]>(null);
   const [formSubtasks, setFormSubtasks] = React.useState<Subtask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = React.useState("");
+  const [showCategoryPicker, setShowCategoryPicker] = React.useState(false);
+  const [showSubtaskSheet, setShowSubtaskSheet] = React.useState(false);
 
   const upsertTaskMutation = trpc.tasks.upsert.useMutation();
   const deleteTaskMutation = trpc.tasks.delete.useMutation();
@@ -580,356 +582,288 @@ export function TasksPanel() {
         <MaterialIcons name="add" size={28} color="#fff" />
       </Pressable>
 
+      {/* ── Quick-add / Edit bottom sheet ── */}
       <Modal
         visible={showAdd}
         animationType="slide"
-        presentationStyle="pageSheet"
+        transparent
         onRequestClose={() => setShowAdd(false)}
       >
+        <Pressable
+          style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }]}
+          onPress={() => setShowAdd(false)}
+        />
         <KeyboardAvoidingView
-          style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={tStyles.kav}
         >
-          <View
-            style={[tStyles.modalContainer, { backgroundColor: colors.background }]}
-          >
-            <View
-              style={[
-                tStyles.modalHeader,
-                { borderBottomColor: colors.border },
-              ]}
-            >
-              <Pressable
-                onPress={() => setShowAdd(false)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+          <View style={[tStyles.addSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+
+            {/* Title input */}
+            <TextInput
+              style={[tStyles.addTitle, { color: colors.foreground }]}
+              value={formTitle}
+              onChangeText={setFormTitle}
+              placeholder="Task name"
+              placeholderTextColor={colors.muted}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSave}
+              multiline={false}
+            />
+
+            {/* Description input */}
+            <TextInput
+              style={[tStyles.addDesc, { color: colors.foreground }]}
+              value={formNotes}
+              onChangeText={setFormNotes}
+              placeholder="Tap to add a description..."
+              placeholderTextColor={colors.muted + "88"}
+              multiline
+              returnKeyType="default"
+            />
+
+            {/* Active chips row (shows selected values) */}
+            {(formDue || formCategory || formRecurring) ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 6 }}
+                contentContainerStyle={{ paddingHorizontal: 16, gap: 8, flexDirection: "row" }}
               >
-                <Text style={[tStyles.modalCancel, { color: colors.muted }]}>
-                  Cancel
-                </Text>
-              </Pressable>
-              <Text style={[tStyles.modalTitle, { color: colors.foreground }]}>
-                {editingTask ? "Edit Task" : "New Task"}
-              </Text>
-              <Pressable
-                onPress={handleSave}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-              >
-                <Text style={[tStyles.modalSave, { color: colors.primary }]}>
-                  Save
-                </Text>
-              </Pressable>
-            </View>
-
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={tStyles.modalBody}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>TASK</Text>
-              <TextInput
-                style={[
-                  tStyles.textInput,
-                  {
-                    color: colors.foreground,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                value={formTitle}
-                onChangeText={setFormTitle}
-                placeholder="What needs to be done?"
-                placeholderTextColor={colors.muted}
-                autoFocus
-                returnKeyType="next"
-              />
-
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>NOTES</Text>
-              <TextInput
-                style={[
-                  tStyles.textInput,
-                  tStyles.textArea,
-                  {
-                    color: colors.foreground,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                value={formNotes}
-                onChangeText={setFormNotes}
-                placeholder="Add notes (optional)"
-                placeholderTextColor={colors.muted}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>PRIORITY</Text>
-              <View style={tStyles.chipRow}>
-                {(["high", "medium", "low"] as const).map((p) => (
+                {formDue ? (
                   <Pressable
-                    key={p}
-                    style={[
-                      tStyles.chip,
-                      {
-                        borderColor: PRIORITY_COLORS[p],
-                        backgroundColor:
-                          formPriority === p
-                            ? PRIORITY_COLORS[p] + "33"
-                            : "transparent",
-                      },
-                    ]}
-                    onPress={() => setFormPriority(p)}
+                    style={[tStyles.activeChip, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                    onPress={() => setShowDatePicker(true)}
                   >
-                    <Text
-                      style={[tStyles.chipText, { color: PRIORITY_COLORS[p] }]}
-                    >
-                      {PRIORITY_LABELS[p]}
+                    <MaterialIcons name="calendar-today" size={12} color={colors.primary} />
+                    <Text style={[tStyles.activeChipText, { color: colors.primary }]}>
+                      {formDue === todayStr() ? "Today" : formDue.slice(5).replace("-", "/")}
+                      {formDueTime ? " " + formDueTime : ""}
                     </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>
-                DUE DATE
-              </Text>
-              <DatePickerButton
-                value={formDue || null}
-                timeValue={formDueTime}
-                onPress={() => setShowDatePicker(true)}
-                colors={colors}
-              />
-
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>
-                LIFE AREA (optional)
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginBottom: 4 }}
-              >
-                <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
-                  <Pressable
-                    style={[
-                      tStyles.chip,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor:
-                          formCategory === null
-                            ? colors.primary + "33"
-                            : "transparent",
-                      },
-                    ]}
-                    onPress={() => setFormCategory(null)}
-                  >
-                    <Text
-                      style={[
-                        tStyles.chipText,
-                        {
-                          color:
-                            formCategory === null ? colors.primary : colors.muted,
-                        },
-                      ]}
-                    >
-                      None
-                    </Text>
-                  </Pressable>
-                  {LIFE_AREAS.map((a) => (
-                    <Pressable
-                      key={a.id}
-                      style={[
-                        tStyles.chip,
-                        {
-                          borderColor: colors.border,
-                          backgroundColor:
-                            formCategory === a.id
-                              ? colors.primary + "33"
-                              : "transparent",
-                        },
-                      ]}
-                      onPress={() => setFormCategory(a.id)}
-                    >
-                      <Text
-                        style={[
-                          tStyles.chipText,
-                          {
-                            color:
-                              formCategory === a.id
-                                ? colors.primary
-                                : colors.muted,
-                          },
-                        ]}
-                      >
-                        {a.label}
-                      </Text>
+                    <Pressable onPress={() => { setFormDue(""); setFormDueTime(null); }} hitSlop={8}>
+                      <MaterialIcons name="close" size={11} color={colors.primary} />
                     </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>
-                RECURRING
-              </Text>
-              <View style={tStyles.chipRow}>
-                {([null, "daily", "weekly"] as const).map((r) => (
+                  </Pressable>
+                ) : null}
+                {formCategory ? (
                   <Pressable
-                    key={String(r)}
-                    style={[
-                      tStyles.chip,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor:
-                          formRecurring === r
-                            ? colors.primary + "33"
-                            : "transparent",
-                      },
-                    ]}
-                    onPress={() => setFormRecurring(r)}
+                    style={[tStyles.activeChip, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                    onPress={() => setShowCategoryPicker(true)}
                   >
-                    <Text
-                      style={[
-                        tStyles.chipText,
-                        {
-                          color:
-                            formRecurring === r ? colors.primary : colors.muted,
-                        },
-                      ]}
-                    >
-                      {r === null ? "None" : r === "daily" ? "Daily" : "Weekly"}
+                    <MaterialIcons name={(LIFE_AREAS.find(a => a.id === formCategory)?.icon ?? "label") as any} size={12} color={colors.primary} />
+                    <Text style={[tStyles.activeChipText, { color: colors.primary }]}>
+                      {LIFE_AREAS.find(a => a.id === formCategory)?.label ?? formCategory}
                     </Text>
+                    <Pressable onPress={() => setFormCategory(null)} hitSlop={8}>
+                      <MaterialIcons name="close" size={11} color={colors.primary} />
+                    </Pressable>
                   </Pressable>
-                ))}
-              </View>
+                ) : null}
+                {formRecurring ? (
+                  <Pressable
+                    style={[tStyles.activeChip, { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                    onPress={() => setFormRecurring(null)}
+                  >
+                    <MaterialIcons name="sync" size={12} color={colors.primary} />
+                    <Text style={[tStyles.activeChipText, { color: colors.primary }]}>
+                      {formRecurring === "daily" ? "Daily" : "Weekly"}
+                    </Text>
+                    <Pressable onPress={() => setFormRecurring(null)} hitSlop={8}>
+                      <MaterialIcons name="close" size={11} color={colors.primary} />
+                    </Pressable>
+                  </Pressable>
+                ) : null}
+              </ScrollView>
+            ) : null}
 
-              <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>
-                SUBTASKS
-              </Text>
-              {formSubtasks.map((s) => (
-                <View
-                  key={s.id}
-                  style={[tStyles.subtaskRow, { borderColor: colors.border }]}
-                >
-                  <Pressable
-                    style={[
-                      tStyles.subtaskCheck,
-                      {
-                        borderColor: colors.primary,
-                        backgroundColor: s.completed ? colors.primary : "transparent",
-                      },
-                    ]}
-                    onPress={() =>
-                      setFormSubtasks((prev) =>
-                        prev.map((x) =>
-                          x.id === s.id ? { ...x, completed: !x.completed } : x
-                        )
-                      )
-                    }
-                  >
-                    {s.completed && (
-                      <MaterialIcons name="check" size={10} color="#fff" />
-                    )}
-                  </Pressable>
-                  <Text
-                    style={{
-                      flex: 1,
-                      fontSize: 14,
-                      color: colors.foreground,
-                      textDecorationLine: s.completed ? "line-through" : "none",
-                    }}
-                  >
-                    {s.title}
-                  </Text>
-                  <Pressable
-                    onPress={() =>
-                      setFormSubtasks((prev) => prev.filter((x) => x.id !== s.id))
-                    }
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <MaterialIcons name="close" size={18} color={colors.muted} style={{ paddingHorizontal: 6 }} />
-                  </Pressable>
-                </View>
-              ))}
-              <View
-                style={[
-                  tStyles.subtaskAddRow,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                  },
-                ]}
+            {/* Icon toolbar above keyboard */}
+            <View style={[tStyles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+              {/* Priority flag */}
+              <Pressable
+                style={({ pressed }) => [tStyles.toolBtn, pressed && { opacity: 0.5 }]}
+                onPress={() => {
+                  const order: Task["priority"][] = ["medium", "high", "low"];
+                  const idx = order.indexOf(formPriority);
+                  setFormPriority(order[(idx + 1) % 3]);
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
               >
-                <TextInput
-                  style={{
-                    flex: 1,
-                    fontSize: 14,
-                    color: colors.foreground,
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                  }}
-                  value={newSubtaskTitle}
-                  onChangeText={setNewSubtaskTitle}
-                  placeholder="Add subtask…"
-                  placeholderTextColor={colors.muted}
-                  returnKeyType="done"
-                  onSubmitEditing={() => {
-                    if (!newSubtaskTitle.trim()) return;
-                    setFormSubtasks((prev) => [
-                      ...prev,
-                      {
-                        id: generateId(),
-                        title: newSubtaskTitle.trim(),
-                        completed: false,
-                      },
-                    ]);
-                    setNewSubtaskTitle("");
-                  }}
+                <MaterialIcons
+                  name="flag"
+                  size={22}
+                  color={formPriority === "medium" ? colors.muted : PRIORITY_COLORS[formPriority]}
                 />
-                <Pressable
-                  style={({ pressed }) => [
-                    tStyles.subtaskAddBtn,
-                    { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
-                  ]}
-                  onPress={() => {
-                    if (!newSubtaskTitle.trim()) return;
-                    setFormSubtasks((prev) => [
-                      ...prev,
-                      {
-                        id: generateId(),
-                        title: newSubtaskTitle.trim(),
-                        completed: false,
-                      },
-                    ]);
-                    setNewSubtaskTitle("");
-                  }}
-                >
-                  <MaterialIcons name="add" size={22} color="#fff" />
-                </Pressable>
-              </View>
+              </Pressable>
 
+              {/* Due date */}
+              <Pressable
+                style={({ pressed }) => [tStyles.toolBtn, pressed && { opacity: 0.5 }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <MaterialIcons
+                  name="calendar-today"
+                  size={22}
+                  color={formDue ? colors.primary : colors.muted}
+                />
+              </Pressable>
+
+              {/* Life area tag */}
+              <Pressable
+                style={({ pressed }) => [tStyles.toolBtn, pressed && { opacity: 0.5 }]}
+                onPress={() => setShowCategoryPicker(true)}
+              >
+                <MaterialIcons
+                  name="label-outline"
+                  size={22}
+                  color={formCategory ? colors.primary : colors.muted}
+                />
+              </Pressable>
+
+              {/* Recurring */}
+              <Pressable
+                style={({ pressed }) => [tStyles.toolBtn, pressed && { opacity: 0.5 }]}
+                onPress={() => {
+                  const order: (Task["recurring"])[] = [null, "daily", "weekly"];
+                  const idx = order.indexOf(formRecurring);
+                  setFormRecurring(order[(idx + 1) % 3]);
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <MaterialIcons
+                  name="sync"
+                  size={22}
+                  color={formRecurring ? colors.primary : colors.muted}
+                />
+              </Pressable>
+
+              {/* Subtasks */}
+              <Pressable
+                style={({ pressed }) => [tStyles.toolBtn, pressed && { opacity: 0.5 }]}
+                onPress={() => setShowSubtaskSheet(true)}
+              >
+                <MaterialIcons
+                  name="checklist"
+                  size={22}
+                  color={formSubtasks.length > 0 ? colors.primary : colors.muted}
+                />
+              </Pressable>
+
+              {/* Divider */}
+              <View style={{ flex: 1 }} />
+
+              {/* Delete (edit mode only) */}
               {editingTask && (
                 <Pressable
-                  style={[tStyles.deleteTaskBtn, { borderColor: "#EF4444" }]}
+                  style={({ pressed }) => [tStyles.toolBtn, pressed && { opacity: 0.5 }]}
                   onPress={() => {
                     Alert.alert("Delete Task", "Are you sure?", [
                       { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: () => {
-                          handleDelete(editingTask);
-                          setShowAdd(false);
-                        },
-                      },
+                      { text: "Delete", style: "destructive", onPress: () => { handleDelete(editingTask); setShowAdd(false); } },
                     ]);
                   }}
                 >
-                  <Text
-                    style={{ color: "#EF4444", fontWeight: "700", fontSize: 15 }}
-                  >
-                    Delete Task
-                  </Text>
+                  <MaterialIcons name="delete-outline" size={22} color="#EF4444" />
                 </Pressable>
               )}
+
+              {/* Create / Save */}
+              <Pressable
+                style={[tStyles.createBtn, { backgroundColor: formTitle.trim() ? colors.primary : colors.border }]}
+                onPress={handleSave}
+                disabled={!formTitle.trim()}
+              >
+                <Text style={[tStyles.createBtnText, { color: formTitle.trim() ? "#fff" : colors.muted }]}>
+                  {editingTask ? "Save" : "Create"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Category picker sheet */}
+      <Modal
+        visible={showCategoryPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCategoryPicker(false)}
+      >
+        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }]} onPress={() => setShowCategoryPicker(false)} />
+        <View style={[tStyles.pickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+          <Text style={[tStyles.pickerTitle, { color: colors.foreground }]}>Life Area</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, padding: 16 }}>
+            <Pressable
+              style={[tStyles.pickerChip, { borderColor: formCategory === null ? colors.primary : colors.border, backgroundColor: formCategory === null ? colors.primary + "22" : "transparent" }]}
+              onPress={() => { setFormCategory(null); setShowCategoryPicker(false); }}
+            >
+              <Text style={{ color: formCategory === null ? colors.primary : colors.muted, fontWeight: "600", fontSize: 13 }}>None</Text>
+            </Pressable>
+            {LIFE_AREAS.map(a => (
+              <Pressable
+                key={a.id}
+                style={[tStyles.pickerChip, { borderColor: formCategory === a.id ? colors.primary : colors.border, backgroundColor: formCategory === a.id ? colors.primary + "22" : "transparent" }]}
+                onPress={() => { setFormCategory(a.id); setShowCategoryPicker(false); }}
+              >
+                <MaterialIcons name={a.icon} size={14} color={formCategory === a.id ? colors.primary : colors.muted} />
+                <Text style={{ color: formCategory === a.id ? colors.primary : colors.foreground, fontWeight: "600", fontSize: 13 }}>{a.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Subtask sheet */}
+      <Modal
+        visible={showSubtaskSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubtaskSheet(false)}
+      >
+        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }]} onPress={() => setShowSubtaskSheet(false)} />
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={tStyles.kav}>
+          <View style={[tStyles.pickerSheet, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            <Text style={[tStyles.pickerTitle, { color: colors.foreground }]}>Subtasks</Text>
+            <ScrollView style={{ maxHeight: 200 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 4 }}>
+              {formSubtasks.map(s => (
+                <View key={s.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}>
+                  <Pressable
+                    style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.primary, backgroundColor: s.completed ? colors.primary : "transparent", alignItems: "center", justifyContent: "center" }}
+                    onPress={() => setFormSubtasks(prev => prev.map(x => x.id === s.id ? { ...x, completed: !x.completed } : x))}
+                  >
+                    {s.completed && <MaterialIcons name="check" size={11} color="#fff" />}
+                  </Pressable>
+                  <Text style={{ flex: 1, fontSize: 14, color: colors.foreground, textDecorationLine: s.completed ? "line-through" : "none" }}>{s.title}</Text>
+                  <Pressable onPress={() => setFormSubtasks(prev => prev.filter(x => x.id !== s.id))} hitSlop={8}>
+                    <MaterialIcons name="close" size={18} color={colors.muted} />
+                  </Pressable>
+                </View>
+              ))}
             </ScrollView>
+            <View style={[tStyles.subtaskAddRow, { borderColor: colors.border, backgroundColor: colors.surface, marginHorizontal: 16, marginBottom: 16 }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 10, paddingHorizontal: 12 }}
+                value={newSubtaskTitle}
+                onChangeText={setNewSubtaskTitle}
+                placeholder="Add subtask…"
+                placeholderTextColor={colors.muted}
+                returnKeyType="done"
+                autoFocus
+                onSubmitEditing={() => {
+                  if (!newSubtaskTitle.trim()) return;
+                  setFormSubtasks(prev => [...prev, { id: generateId(), title: newSubtaskTitle.trim(), completed: false }]);
+                  setNewSubtaskTitle("");
+                }}
+              />
+              <Pressable
+                style={[tStyles.subtaskAddBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (!newSubtaskTitle.trim()) return;
+                  setFormSubtasks(prev => [...prev, { id: generateId(), title: newSubtaskTitle.trim(), completed: false }]);
+                  setNewSubtaskTitle("");
+                }}
+              >
+                <MaterialIcons name="add" size={22} color="#fff" />
+              </Pressable>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1141,5 +1075,84 @@ const tStyles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+  },
+  // Quick-add bottom sheet
+  kav: { justifyContent: "flex-end" },
+  addSheet: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  addTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    lineHeight: 28,
+  },
+  addDesc: {
+    fontSize: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    lineHeight: 20,
+    minHeight: 36,
+  },
+  activeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  activeChipText: { fontSize: 12, fontWeight: "600" },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    gap: 4,
+  },
+  toolBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  createBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createBtnText: { fontSize: 14, fontWeight: "700" },
+  // Picker sheets
+  pickerSheet: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    paddingTop: 12,
+    paddingBottom: 32,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  pickerChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
   },
 });
