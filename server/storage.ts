@@ -108,3 +108,30 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
 
   return { key, url };
 }
+
+/**
+ * Stream an R2 object body directly without a presigned URL.
+ * Returns the raw Node.js Readable stream and content metadata.
+ * Use this when the bucket does not have public access enabled.
+ */
+export async function storageStream(
+  relKey: string,
+): Promise<{ body: NodeJS.ReadableStream; contentType: string; contentLength: number | undefined }> {
+  const { bucket } = getR2Config();
+  const key = normalizeKey(relKey);
+  const client = getClient();
+
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+
+  if (!response.Body) {
+    throw new Error(`R2 object body is empty for key: ${key}`);
+  }
+
+  return {
+    body: response.Body as NodeJS.ReadableStream,
+    contentType: response.ContentType ?? "application/octet-stream",
+    contentLength: response.ContentLength,
+  };
+}

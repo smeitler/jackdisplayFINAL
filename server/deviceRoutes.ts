@@ -713,19 +713,16 @@ router.get("/audio/:key", requireDeviceKey, async (req: Request, res: Response) 
   }
   const r2Key = `voice-commands/${key}.mp3`;
   try {
-    const { storageGet } = await import('./storage.js');
-    const { url } = await storageGet(r2Key);
-    // Proxy R2 content directly to the ESP32 as audio/mpeg
-    // Use axios with responseType 'stream' (Node 18 built-in fetch doesn't support piping easily)
-    const axios = (await import('axios')).default;
-    const r2Res = await axios.get(url, { responseType: 'stream', timeout: 15000 });
-    res.setHeader('Content-Type', 'audio/mpeg');
-    const cl = r2Res.headers['content-length'];
-    if (cl) res.setHeader('Content-Length', cl);
-    r2Res.data.pipe(res);
+    // Use storageStream (direct GetObject) instead of presigned URL.
+    // Presigned URLs return 403 when the bucket does not have public access enabled.
+    const { storageStream } = await import('./storage.js');
+    const { body, contentType, contentLength } = await storageStream(r2Key);
+    res.setHeader('Content-Type', contentType || 'audio/mpeg');
+    if (contentLength) res.setHeader('Content-Length', String(contentLength));
+    (body as any).pipe(res);
   } catch (err: any) {
     console.error(`[device/audio] error streaming ${r2Key}:`, err?.message);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(404).json({ error: 'Audio clip not found' });
   }
 });
 
