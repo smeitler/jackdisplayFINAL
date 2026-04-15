@@ -1,10 +1,10 @@
 /**
- * Photo upload utility — uploads a local file URI to the server's R2 storage
- * and returns the permanent R2 URL and storage key.
+ * Photo upload utility — uploads a local file URI to the server's S3 storage
+ * and returns the permanent S3 URL.
  *
  * Usage:
- *   const { url, key } = await uploadPhotoToServer(localUri, sessionToken);
- *   // store url for display, key for server sync (presigned URL regeneration)
+ *   const url = await uploadPhotoToServer(localUri, sessionToken);
+ *   // store url instead of localUri
  */
 
 import { getApiBaseUrl } from "@/constants/oauth";
@@ -17,16 +17,16 @@ export function isRemoteUrl(uri: string): boolean {
 }
 
 /**
- * Upload a local file URI to the server and return the permanent R2 URL and storage key.
- * If the URI is already remote, returns it with an empty key.
+ * Upload a local file URI to the server and return the permanent S3 URL.
+ * If the URI is already remote, returns it unchanged.
  * Throws on failure.
  */
 export async function uploadPhotoToServer(
   localUri: string,
   sessionToken: string,
-): Promise<{ url: string; key: string }> {
-  // Already uploaded — return as-is with no key (key unknown for legacy uploads)
-  if (isRemoteUrl(localUri)) return { url: localUri, key: "" };
+): Promise<string> {
+  // Already uploaded
+  if (isRemoteUrl(localUri)) return localUri;
 
   const apiBase = getApiBaseUrl();
   const uploadUrl = `${apiBase}/api/upload-user-photo`;
@@ -44,14 +44,14 @@ export async function uploadPhotoToServer(
     });
     if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     const json = await uploadResp.json();
-    return { url: json.url as string, key: (json.key as string) ?? "" };
+    return json.url as string;
   }
 
   // Native: use FileSystem.uploadAsync (multipart)
   const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
     httpMethod: "POST",
     uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-    fieldName: "file",
+    fieldName: "field",
     headers: { Authorization: `Bearer ${sessionToken}` },
     mimeType: "image/jpeg",
   });
@@ -61,27 +61,25 @@ export async function uploadPhotoToServer(
   }
 
   const json = JSON.parse(uploadResult.body);
-  return { url: json.url as string, key: (json.key as string) ?? "" };
+  return json.url as string;
 }
 
 /**
- * Upload all local URIs in a VisionBoard object to R2 and return a new board
- * with all URIs replaced by permanent R2 URLs, plus a key map for server sync.
+ * Upload all local URIs in a VisionBoard object to S3 and return a new board
+ * with all URIs replaced by permanent S3 URLs.
  * Already-remote URLs are passed through unchanged.
  */
 export async function uploadVisionBoardPhotos(
   board: Record<string, string[]>,
   sessionToken: string,
-): Promise<{ board: Record<string, string[]>; keyMap: Record<string, string> }> {
+): Promise<Record<string, string[]>> {
   const result: Record<string, string[]> = {};
-  const keyMap: Record<string, string> = {};
   for (const [catId, uris] of Object.entries(board)) {
     const uploaded: string[] = [];
     for (const uri of uris) {
       try {
-        const { url, key } = await uploadPhotoToServer(uri, sessionToken);
+        const url = await uploadPhotoToServer(uri, sessionToken);
         uploaded.push(url);
-        if (key) keyMap[url] = key;
       } catch (err) {
         console.warn("[uploadVisionBoardPhotos] failed to upload", uri, err);
         // Keep local URI as fallback so user doesn't lose the image
@@ -90,5 +88,5 @@ export async function uploadVisionBoardPhotos(
     }
     result[catId] = uploaded;
   }
-  return { board: result, keyMap };
+  return result;
 }

@@ -137,8 +137,8 @@ async function startServer() {
       const { storagePut } = await import("../storage.js");
       const ext = filePart.filename.split(".").pop() ?? "jpg";
       const key = `user-photos/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { url, key: storageKey } = await storagePut(key, filePart.data, filePart.contentType);
-      res.json({ url, key: storageKey });
+      const { url } = await storagePut(key, filePart.data, filePart.contentType);
+      res.json({ url });
     } catch (err: any) {
       console.error("[upload-user-photo]", err);
       res.status(500).json({ error: err.message });
@@ -185,8 +185,8 @@ async function startServer() {
       if (!filePart) { res.status(400).json({ error: "No file part" }); return; }
       const { storagePut } = await import("../storage.js");
       const key = `team-posts/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-      const { url, key: storageKey } = await storagePut(key, filePart.data, filePart.contentType);
-      res.json({ url, key: storageKey });
+      const { url } = await storagePut(key, filePart.data, filePart.contentType);
+      res.json({ url });
     } catch (err: any) {
       console.error("[upload-team-image]", err);
       res.status(500).json({ error: err.message });

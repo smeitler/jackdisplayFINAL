@@ -127,27 +127,6 @@
       "when": 1775862874021,
       "tag": "0017_lively_true_believers",
       "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "5",
-      "when": 1776185194198,
-      "tag": "0018_easy_mariko_yashida",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "5",
-      "when": 1776188818999,
-      "tag": "0019_fresh_starfox",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "5",
-      "when": 1776221035437,
-      "tag": "0020_normal_quicksilver",
-      "breakpoints": true
     }
   ]
 }

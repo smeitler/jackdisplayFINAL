@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, Pressable, StyleSheet, Alert, ActivityIndicator,
-  Platform, Animated,
+  Platform,
 } from "react-native";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
@@ -16,10 +16,7 @@ import {
   type JournalEntry,
 } from "@/lib/journal-store";
 import { useApp } from "@/lib/app-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ThemeColorPalette } from "@/constants/theme";
-
-const TASKS_STORAGE_KEY = '@you_tasks_v1';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type Recording = {
@@ -86,7 +83,6 @@ function categoryColor(cat: string | null | undefined, colors: ThemeColorPalette
 
 function statusLabel(status: string): string {
   if (status === "pending" || status === "processing") return "⏳ Transcribing…";
-  if (status === "transcribed") return "⏳ Analysing…";
   if (status === "processed") return "✓ Ready";
   if (status === "failed") return "⚠ Failed";
   return status;
@@ -100,10 +96,10 @@ function ratingColor(rating: string | null, colors: ThemeColorPalette): string {
 }
 
 function ratingEmoji(rating: string | null): string {
-  if (rating === "green") return "✅";
-  if (rating === "yellow") return "🟡";
-  if (rating === "red") return "❌";
-  return "—";
+  if (rating === "green") return "G";
+  if (rating === "yellow") return "Y";
+  if (rating === "red") return "R";
+  return "-";
 }
 
 function buildJournalBody(
@@ -235,25 +231,19 @@ function AudioPlayButton({
 function RecordingCard({
   rec,
   colors,
-  habitMap,
   onSaved,
   onDelete,
 }: {
   rec: Recording;
   colors: ThemeColorPalette;
-  habitMap: Record<string, string>;
   onSaved: () => void;
   onDelete: (id: number) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const { submitCheckIn } = useApp();
-  const upsertDayNoteMutation = trpc.dayNotes.upsert.useMutation();
-  const upsertTaskMutation = trpc.tasks.upsert.useMutation();
   const accent = categoryColor(rec.category, colors);
   const isProcessed = rec.status === "processed";
-  // 'transcribed' = Whisper done, LLM extraction still running — show transcript but keep spinner
-  const isTranscribed = rec.status === "transcribed";
   const isPending = rec.status === "pending" || rec.status === "processing";
 
   // Parse extracted data
@@ -276,7 +266,7 @@ function RecordingCard({
   const habitEntries = Object.entries(habitResults).filter(([, v]) => v && v.rating);
 
   const handleSaveToJournal = useCallback(async () => {
-    if (!isProcessed && !isTranscribed) return;
+    if (!isProcessed) return;
     setSaving(true);
     try {
       const userId = await getLastUserId();
@@ -326,42 +316,6 @@ function RecordingCard({
           }
         }
         await saveDayNotes(allNotes);
-        // Sync day notes to server
-        for (const [habitId, result] of habitEntries) {
-          if (result.note?.trim()) {
-            upsertDayNoteMutation.mutate({ habitId, date: dateStr, note: result.note.trim() });
-          }
-        }
-      }
-
-      // 4b. Save extracted tasks to local storage
-      if (extractedTasks.length > 0) {
-        try {
-          const raw = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
-          const existing: any[] = raw ? JSON.parse(raw) : [];
-          const newTasks = extractedTasks.map((t) => ({
-            id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            title: t.title,
-            notes: t.notes ?? '',
-            dueDate: null,
-            priority: (t.priority === 'high' || t.priority === 'low') ? t.priority : 'medium',
-            completed: false,
-            createdAt: new Date().toISOString(),
-          }));
-          await AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify([...newTasks, ...existing]));
-          // Sync tasks to server
-          for (const task of newTasks) {
-            upsertTaskMutation.mutate({
-              clientId: task.id,
-              title: task.title,
-              notes: task.notes,
-              priority: task.priority as 'high' | 'medium' | 'low',
-              dueDate: null,
-              completed: false,
-              createdAt: task.createdAt,
-            });
-          }
-        } catch {}
       }
 
       // 4. ACK the recording so the panel can delete the SD file
@@ -376,22 +330,12 @@ function RecordingCard({
 
       setSaving(false);
       onSaved();
+      Alert.alert("Saved!", "Recording saved to your journal.");
     } catch (err: any) {
       setSaving(false);
-      // Silent fail on auto-save — user can still tap manually if needed
-      console.warn("[PanelRecording] Auto-save failed:", err?.message);
+      Alert.alert("Error", err?.message ?? "Could not save to journal");
     }
   }, [rec, isProcessed, journalEntries, gratitudeItems, habitEntries, submitCheckIn, onSaved]);
-
-  // Auto-save: fire once when recording transitions to processed and hasn't been acked
-  const autoSaveFired = React.useRef(false);
-  React.useEffect(() => {
-    if (isProcessed && rec.acked === 0 && !autoSaveFired.current && !saving) {
-      autoSaveFired.current = true;
-      handleSaveToJournal();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProcessed, rec.acked]);
 
   const confirmDelete = () => {
     Alert.alert(
@@ -415,7 +359,7 @@ function RecordingCard({
         </View>
         <Text style={[
           styles.statusText,
-          { color: isPending ? colors.warning : isTranscribed ? colors.primary : isProcessed ? colors.success : colors.error },
+          { color: isPending ? colors.warning : isProcessed ? colors.success : colors.error },
         ]}>
           {statusLabel(rec.status)}
         </Text>
@@ -426,41 +370,24 @@ function RecordingCard({
 
       {/* Transcription preview / pending state */}
       {rec.transcription ? (
-        <>
-          <Pressable onPress={() => setExpanded((e) => !e)}>
-            <Text
-              style={[styles.transcript, { color: colors.foreground }]}
-              numberOfLines={expanded ? undefined : 3}
-            >
-              {rec.transcription}
+        <Pressable onPress={() => setExpanded((e) => !e)}>
+          <Text
+            style={[styles.transcript, { color: colors.foreground }]}
+            numberOfLines={expanded ? undefined : 3}
+          >
+            {rec.transcription}
+          </Text>
+          {rec.transcription.length > 120 && (
+            <Text style={[styles.expandToggle, { color: colors.primary }]}>
+              {expanded ? "Show less" : "Show more"}
             </Text>
-            {rec.transcription.length > 120 && (
-              <Text style={[styles.expandToggle, { color: colors.primary }]}>
-                {expanded ? "Show less" : "Show more"}
-              </Text>
-            )}
-          </Pressable>
-          {isTranscribed && (
-            <View style={styles.pendingRow}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.pendingText, { color: colors.muted }]}>
-                Analysing habits and extracting insights…
-              </Text>
-            </View>
           )}
-        </>
+        </Pressable>
       ) : isPending ? (
         <View style={styles.pendingRow}>
           <ActivityIndicator size="small" color={colors.warning} />
           <Text style={[styles.pendingText, { color: colors.muted }]}>
             Processing your recording…
-          </Text>
-        </View>
-      ) : isTranscribed ? (
-        <View style={styles.pendingRow}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[styles.pendingText, { color: colors.muted }]}>
-            Analysing habits and extracting insights…
           </Text>
         </View>
       ) : null}
@@ -487,7 +414,7 @@ function RecordingCard({
               <Text style={styles.ratingEmoji}>{ratingEmoji(result.rating)}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.habitId, { color: ratingColor(result.rating, colors) }]}>
-                  {habitMap[habitId] ?? habitId}
+                  {habitId}
                 </Text>
                 {result.note ? (
                   <Text style={[styles.habitNote, { color: colors.muted }]} numberOfLines={2}>
@@ -524,27 +451,20 @@ function RecordingCard({
           disabled={rec.status === "failed"}
         />
 
-        {(isProcessed || isTranscribed) && rec.acked === 0 && (
-          saving ? (
-            <View style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: 0.7 }]}>
+        {isProcessed && (
+          <Pressable
+            onPress={handleSaveToJournal}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 },
+            ]}
+          >
+            {saving ? (
               <ActivityIndicator size="small" color="#fff" />
-            </View>
-          ) : (
-            <Pressable
-              onPress={handleSaveToJournal}
-              style={({ pressed }) => [
-                styles.saveBtn,
-                { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
+            ) : (
               <Text style={styles.saveBtnText}>Save to Journal</Text>
-            </Pressable>
-          )
-        )}
-        {(isProcessed || isTranscribed) && rec.acked === 1 && (
-          <View style={[styles.saveBtn, { backgroundColor: colors.success }]}>
-            <Text style={styles.saveBtnText}>Saved</Text>
-          </View>
+            )}
+          </Pressable>
         )}
 
         <View style={{ flex: 1 }} />
@@ -565,76 +485,11 @@ function RecordingCard({
 }
 
 // ─── Main section component ─────────────────────────────────────────────────
-export function PanelRecordingsSection({
-  colors,
-  onUnreadCountChange,
-  onRefreshRef,
-}: {
-  colors: ThemeColorPalette;
-  onUnreadCountChange?: (count: number) => void;
-  /** Pass a React.MutableRefObject — the component will write a refetch fn into it so the parent can trigger pull-to-refresh */
-  onRefreshRef?: React.MutableRefObject<(() => void) | null>;
-}) {
-  const { habits } = useApp();
-  const [toastMsg, setToastMsg] = React.useState<string | null>(null);
-  const toastOpacity = React.useRef(new Animated.Value(0)).current;
-  const prevProcessedIds = React.useRef<Set<number>>(new Set());
-
-  // Build a habit id → name map so habit ratings show names instead of IDs
-  const habitMap = React.useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const h of habits) {
-      map[h.id] = h.name;
-    }
-    return map;
-  }, [habits]);
-
-  // Determine if any recordings are still pending — use faster polling if so
-  const [hasPending, setHasPending] = React.useState(false);
-
+export function PanelRecordingsSection({ colors }: { colors: ThemeColorPalette }) {
   const { data: recordings, isLoading, refetch } = trpc.devices.getRecordings.useQuery(
     {},
-    {
-      staleTime: hasPending ? 1_000 : 15_000,
-      refetchInterval: hasPending ? 2_000 : 10_000, // 2s when pending, 10s otherwise
-    }
+    { staleTime: 15_000, refetchInterval: 10_000 } // Poll every 10s so pending → processed updates appear
   );
-
-  // Expose refetch to parent for pull-to-refresh
-  React.useEffect(() => {
-    if (onRefreshRef) onRefreshRef.current = () => { refetch(); };
-    return () => { if (onRefreshRef) onRefreshRef.current = null; };
-  }, [refetch, onRefreshRef]);
-
-  // Update pending state and detect newly processed recordings for toast
-  React.useEffect(() => {
-    if (!recordings) return;
-    const pending = recordings.some((r: any) => r.status === "pending" || r.status === "processing" || r.status === "transcribed");
-    setHasPending(pending);
-
-    // Detect newly processed recordings (were pending before, now processed)
-    const newlyProcessed = recordings.filter(
-      (r: any) => (r.status === "processed" || r.status === "transcribed") && !prevProcessedIds.current.has(r.id)
-    );
-    if (newlyProcessed.length > 0 && prevProcessedIds.current.size > 0) {
-      // Show toast for the first newly processed recording
-      const cat = categoryLabel(newlyProcessed[0].category);
-      setToastMsg(`${cat} recording ready — tap to review`);
-      Animated.sequence([
-        Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.delay(3500),
-        Animated.timing(toastOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]).start(() => setToastMsg(null));
-    }
-    // Update known processed IDs
-    recordings.forEach((r: any) => {
-      if (r.status === "processed" || r.status === "transcribed") prevProcessedIds.current.add(r.id);
-    });
-
-    // Report unread count to parent (unacked processed recordings)
-    const unread = recordings.filter((r: any) => (r.status === "processed" || r.status === "transcribed") && !r.acked).length;
-    onUnreadCountChange?.(unread);
-  }, [recordings]);
 
   const deleteMutation = trpc.devices.deleteRecording.useMutation({
     onSuccess: () => refetch(),
@@ -660,18 +515,6 @@ export function PanelRecordingsSection({
 
   return (
     <View style={styles.section}>
-      {/* Toast notification for newly processed recordings */}
-      {toastMsg && (
-        <Animated.View style={[
-          styles.toast,
-          { backgroundColor: colors.primary, opacity: toastOpacity },
-        ]}>
-          <Text style={[styles.toastText, { color: colors.background }]}>
-            🎤 {toastMsg}
-          </Text>
-        </Animated.View>
-      )}
-
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
           Panel Recordings
@@ -686,7 +529,6 @@ export function PanelRecordingsSection({
           key={rec.id != null ? String(rec.id) : `rec-${idx}`}
           rec={rec as Recording}
           colors={colors}
-          habitMap={habitMap}
           onSaved={handleSaved}
           onDelete={handleDelete}
         />
@@ -846,19 +688,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   emptyBox: {
-    paddingVertical: 20,
-    alignItems: "center" as const,
-  },
-  toast: {
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 10,
-    alignItems: "center" as const,
-  },
-  toastText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    textAlign: "center" as const,
+    paddingVertical: 16,
+    alignItems: "center",
   },
 });

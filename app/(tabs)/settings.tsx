@@ -26,7 +26,6 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { TasksPanel } from "@/components/tasks-panel";
 import { useContentMaxWidth } from "@/hooks/use-is-ipad";
 import { formatDisplayDate } from "@/lib/storage";
 
@@ -1194,7 +1193,7 @@ const tStyles = StyleSheet.create({
 });
 
 // ─── Main "You" Screen ────────────────────────────────────────────────────────
-type YouTab = "analytics" | "vision" | "rewards";
+type YouTab = "analytics" | "vision" | "rewards" | "tasks";
 
 export default function YouScreen() {
   const colors = useColors();
@@ -1212,6 +1211,7 @@ export default function YouScreen() {
     { key: "analytics", label: "Analytics" },
     { key: "vision", label: "Vision Board" },
     { key: "rewards", label: "Rewards" },
+    { key: "tasks", label: "Tasks" },
   ];
 
   return (
@@ -1254,6 +1254,7 @@ export default function YouScreen() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "vision" && <VisionBoardTab />}
         {activeTab === "rewards" && <RewardsTab />}
+        {activeTab === "tasks" && <TasksTab />}
       </View>
     </ScreenContainer>
   );

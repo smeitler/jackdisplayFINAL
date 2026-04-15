@@ -12,9 +12,6 @@ import { useEffect, useState } from "react";
 import { useIsNova } from "@/components/nova-effects";
 import { useIsCalm } from "@/components/calm-effects";
 import * as Haptics from "expo-haptics";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const PANEL_UNREAD_KEY = "@panel_recordings_unread";
 
 export default function TabLayout() {
   const colors = useColors();
@@ -27,20 +24,6 @@ export default function TabLayout() {
   const { isDemoMode } = useApp();
   const router = useRouter();
   const [plusSheetVisible, setPlusSheetVisible] = useState(false);
-  const [panelUnread, setPanelUnread] = useState(0);
-
-  // Poll AsyncStorage every 5s for panel recording unread count
-  useEffect(() => {
-    const check = async () => {
-      try {
-        const val = await AsyncStorage.getItem(PANEL_UNREAD_KEY);
-        setPanelUnread(val ? parseInt(val, 10) : 0);
-      } catch {}
-    };
-    check();
-    const interval = setInterval(check, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Dark navy background — matches the reference screenshot aesthetic
   const tabBarBg = colors.background;
@@ -122,8 +105,6 @@ export default function TabLayout() {
           name="journal"
           options={{
             title: "Journal",
-            tabBarBadge: panelUnread > 0 ? panelUnread : undefined,
-            tabBarBadgeStyle: { backgroundColor: colors.error, fontSize: 10 },
             tabBarIcon: ({ color, focused }) => (
               <IconSymbol size={focused ? 28 : 26} name="book.fill" color={color} />
             ),

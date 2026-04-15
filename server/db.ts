@@ -38,8 +38,6 @@ import {
   dayNotes,
   gratitudeEntries,
   tasks,
-  rewardClaims,
-  InsertRewardClaim,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1005,8 +1003,6 @@ export async function getDeviceSchedule(deviceId: number) {
       clientId: habits.clientId,
       name: habits.name,
       categoryClientId: habits.categoryClientId,
-      emoji: habits.emoji,
-      description: habits.description,
       order: habits.order,
     })
     .from(habits)
@@ -1318,7 +1314,7 @@ export async function getDeviceRecordings(
   sizeBytes: number; contentType: string; transcription: string | null;
   status: string; journalEntries: string | null; gratitudeItems: string | null;
   habitResults: string | null; extractedTasks: string | null; audioUrl: string | null;
-  audioKey: string | null; acked: number; createdAt: Date;
+  acked: number; createdAt: Date;
 }[]> {
   const db = await getDb();
   if (!db) return [];
@@ -1326,7 +1322,7 @@ export async function getDeviceRecordings(
     const result = await db.execute(
       sql`SELECT r.id, r.deviceId, r.filename, r.category, r.sizeBytes, r.contentType,
               r.transcription, r.status, r.journalEntries, r.gratitudeItems,
-              r.habitResults, r.extractedTasks, r.audioUrl, r.audioKey, r.acked, r.createdAt
+              r.habitResults, r.extractedTasks, r.audioUrl, r.acked, r.createdAt
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE d.userId = ${userId} AND r.acked = 0
@@ -1335,15 +1331,6 @@ export async function getDeviceRecordings(
     );
     // Drizzle mysql2 db.execute() returns [rows, fields] — extract just the rows
     const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
-    // Regenerate fresh presigned URLs from stored R2 keys (presigned URLs expire after 1h)
-    const { storageGet } = await import('./storage.js').catch(() => ({ storageGet: null }));
-    if (storageGet) {
-      for (const row of rows as any[]) {
-        if (row.audioKey) {
-          try { row.audioUrl = await storageGet(row.audioKey); } catch {}
-        }
-      }
-    }
     return (rows as any[]);
   } catch (err: any) {
     console.warn("[db/getDeviceRecordings] skipped:", err?.message);
@@ -1362,7 +1349,6 @@ export async function updateDeviceRecording(
     habitResults?: string;
     extractedTasks?: string;
     audioUrl?: string;
-    audioKey?: string;
     acked?: number;
     ackedAt?: Date | null;
   }
@@ -1384,7 +1370,6 @@ export async function updateDeviceRecording(
       if (fields.habitResults !== undefined)  { sets.push('habitResults = ?');  vals.push(fields.habitResults); }
       if (fields.extractedTasks !== undefined){ sets.push('extractedTasks = ?');vals.push(fields.extractedTasks); }
       if (fields.audioUrl !== undefined)      { sets.push('audioUrl = ?');      vals.push(fields.audioUrl); }
-      if (fields.audioKey !== undefined)      { sets.push('audioKey = ?');      vals.push(fields.audioKey); }
       if (fields.acked !== undefined)         { sets.push('acked = ?');         vals.push(fields.acked); }
       if (fields.ackedAt !== undefined)       { sets.push('ackedAt = ?');       vals.push(fields.ackedAt); }
       if (sets.length === 0) return;
@@ -1480,12 +1465,12 @@ export async function saveDeviceRecording(
 export async function getDeviceRecordingById(
   recordingId: number,
   userId: number
-): Promise<{ id: number; acked: number | boolean; status: string; transcription: string | null; habitResults: string | null } | null> {
+): Promise<{ id: number; acked: number | boolean; status: string } | null> {
   const db = await getDb();
   if (!db) return null;
   try {
     const result = await db.execute(
-      sql`SELECT r.id, r.acked, r.status, r.transcription, r.habitResults
+      sql`SELECT r.id, r.acked, r.status
           FROM deviceRecordings r
           INNER JOIN devices d ON d.id = r.deviceId
           WHERE r.id = ${recordingId} AND d.userId = ${userId}
@@ -1495,7 +1480,7 @@ export async function getDeviceRecordingById(
     const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
     const row = (rows as any[])[0];
     if (!row) return null;
-    return { id: row.id, acked: row.acked, status: row.status, transcription: row.transcription ?? null, habitResults: row.habitResults ?? null };
+    return { id: row.id, acked: row.acked, status: row.status };
   } catch (err: any) {
     console.warn('[db/getDeviceRecordingById] skipped:', err?.message);
     return null;
@@ -1573,30 +1558,19 @@ export async function getUserJournalEntries(userId: number) {
 
 // ─── Vision Board ─────────────────────────────────────────────────────────────
 
-/** Get all vision board images for a user. Regenerates presigned URLs from R2 keys. */
+/** Get all vision board images for a user. */
 export async function getUserVisionBoardImages(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(visionBoardImages)
+  return db.select().from(visionBoardImages)
     .where(eq(visionBoardImages.userId, userId))
     .orderBy(visionBoardImages.categoryClientId, visionBoardImages.order);
-  // Regenerate fresh presigned URLs from stored R2 keys (presigned URLs expire after 1h)
-  const { storageGet } = await import('./storage.js').catch(() => ({ storageGet: null }));
-  if (storageGet) {
-    for (const row of rows) {
-      if ((row as any).imageKey) {
-        try { (row as any).imageUrl = await storageGet((row as any).imageKey); } catch {}
-      }
-    }
-  }
-  return rows;
 }
 
 /** Replace all vision board images for a user (full sync). */
 export async function replaceUserVisionBoard(userId: number, images: Array<{
   categoryClientId: string;
   imageUrl: string;
-  imageKey?: string;
   order: number;
 }>): Promise<void> {
   const db = await getDb();
@@ -1609,7 +1583,6 @@ export async function replaceUserVisionBoard(userId: number, images: Array<{
       userId,
       categoryClientId: img.categoryClientId,
       imageUrl: img.imageUrl,
-      imageKey: img.imageKey ?? null,
       order: img.order,
     }));
     await db.insert(visionBoardImages).values(rows);
@@ -1777,11 +1750,6 @@ export async function upsertTask(userId: number, task: {
   dueDate?: string | null;
   completed: boolean;
   createdAt: string;
-  category?: string | null;
-  subtasks?: string | null;
-  recurring?: string | null;
-  sortOrder?: number;
-  completedAt?: string | null;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -1795,11 +1763,6 @@ export async function upsertTask(userId: number, task: {
       dueDate: task.dueDate ?? null,
       completed: task.completed ? 1 : 0,
       createdAt: task.createdAt,
-      category: task.category ?? null,
-      subtasks: task.subtasks ?? null,
-      recurring: task.recurring ?? null,
-      sortOrder: task.sortOrder ?? 0,
-      completedAt: task.completedAt ?? null,
     })
     .onDuplicateKeyUpdate({
       set: {
@@ -1808,11 +1771,6 @@ export async function upsertTask(userId: number, task: {
         priority: task.priority,
         dueDate: task.dueDate ?? null,
         completed: task.completed ? 1 : 0,
-        category: task.category ?? null,
-        subtasks: task.subtasks ?? null,
-        recurring: task.recurring ?? null,
-        sortOrder: task.sortOrder ?? 0,
-        completedAt: task.completedAt ?? null,
       },
     });
 }
@@ -1824,71 +1782,4 @@ export async function deleteTask(userId: number, clientId: string): Promise<void
   await db.update(tasks)
     .set({ deletedAt: new Date() })
     .where(and(eq(tasks.userId, userId), eq(tasks.clientId, clientId)));
-}
-
-// ─── Reward Claims ────────────────────────────────────────────────────────────
-/** Get all reward claims for a user. */
-export async function getUserRewardClaims(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(rewardClaims).where(eq(rewardClaims.userId, userId));
-}
-/** Upsert a reward claim (insert or update by userId+habitId+periodKey). */
-export async function upsertRewardClaim(userId: number, claim: {
-  habitId: string;
-  periodKey: string;
-  claimedAt: string;
-}): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  const row: InsertRewardClaim = {
-    userId,
-    habitId: claim.habitId,
-    periodKey: claim.periodKey,
-    claimedAt: claim.claimedAt,
-  };
-  await db.insert(rewardClaims).values(row)
-    .onDuplicateKeyUpdate({ set: { claimedAt: row.claimedAt } });
-}
-/** Delete a reward claim by userId+habitId+periodKey. */
-export async function deleteRewardClaim(userId: number, habitId: string, periodKey: string): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.delete(rewardClaims)
-    .where(and(eq(rewardClaims.userId, userId), eq(rewardClaims.habitId, habitId), eq(rewardClaims.periodKey, periodKey)));
-}
-/** Bulk sync reward claims — replace all claims for a user. */
-export async function replaceUserRewardClaims(userId: number, claims: Array<{
-  habitId: string;
-  periodKey: string;
-  claimedAt: string;
-}>): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.delete(rewardClaims).where(eq(rewardClaims.userId, userId));
-  if (claims.length > 0) {
-    const rows: InsertRewardClaim[] = claims.map(c => ({
-      userId,
-      habitId: c.habitId,
-      periodKey: c.periodKey,
-      claimedAt: c.claimedAt,
-    }));
-    await db.insert(rewardClaims).values(rows);
-  }
-}
-
-// ─── Rotate device API key ─────────────────────────────────────────────────────
-/** Generate a new API key for a device owned by the given user. Returns the new key, or null if not found. */
-export async function rotateDeviceApiKey(deviceId: number, userId: number): Promise<string | null> {
-  const db = await getDb();
-  if (!db) return null;
-  // Verify ownership
-  const rows = await db.select({ id: devices.id })
-    .from(devices)
-    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
-    .limit(1);
-  if (rows.length === 0) return null;
-  const newKey = crypto.randomBytes(32).toString("hex");
-  await db.update(devices).set({ apiKey: newKey }).where(eq(devices.id, deviceId));
-  return newKey;
 }
