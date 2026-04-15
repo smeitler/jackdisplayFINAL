@@ -184,6 +184,7 @@ export default function PanelSettingsScreen() {
   const devicesQuery = trpc.devices.list.useQuery();
   const updateMutation = trpc.devices.updateSettings.useMutation();
   const habitsBulkSync = trpc.habits.bulkSync.useMutation();
+  const rotateKeyMutation = trpc.devices.rotateKey.useMutation();
 
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
@@ -415,6 +416,51 @@ export default function PanelSettingsScreen() {
               Tap More → Sync Now on your panel
             </Text>
           </View>
+          {device && (
+            <>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+              <View style={styles.aboutRow}>
+                <Text style={[styles.aboutLabel, { color: colors.muted }]}>API Key</Text>
+                <Pressable
+                  onPress={() => {
+                    Alert.alert(
+                      "Rotate API Key",
+                      "This generates a new key and invalidates the old one. The panel will stop syncing until you re-pair it. Continue?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Rotate Key",
+                          style: "destructive",
+                          onPress: () => {
+                            if (!device?.id) return;
+                            rotateKeyMutation.mutate(
+                              { deviceId: device.id },
+                              {
+                                onSuccess: () => {
+                                  devicesQuery.refetch();
+                                  toast("Key rotated — re-pair your panel to reconnect");
+                                },
+                                onError: (err) => Alert.alert("Error", err.message),
+                              }
+                            );
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
+                >
+                  {rotateKeyMutation.isPending ? (
+                    <ActivityIndicator size="small" color={colors.error} />
+                  ) : (
+                    <Text style={[styles.aboutValue, { color: colors.error, fontWeight: "600" }]}>
+                      Rotate Key…
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          )}
         </SectionCard>
 
         <View style={{ height: 40 }} />

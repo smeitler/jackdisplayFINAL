@@ -4,6 +4,7 @@ import {
   View, Text, ScrollView, Pressable, StyleSheet, Alert, Platform,
   TextInput, KeyboardAvoidingView, Animated, ActivityIndicator,
   Modal, FlatList, Dimensions, Image, useWindowDimensions, Keyboard, PanResponder,
+  RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
@@ -33,12 +34,15 @@ import { uploadPhotoToServer, isRemoteUrl } from "@/lib/photo-upload";
 import { getSessionToken } from "@/lib/_core/auth";
 import { useIsCalm } from "@/components/calm-effects";
 import { PanelRecordingsSection } from "@/components/panel-recordings-section";
+import { TasksPanel } from "@/components/tasks-panel";
 import { WheelColumn } from "@/components/wheel-time-picker";
 import Svg, { Path as SvgPath } from "react-native-svg";
 import { Image as ExpoImage } from "expo-image";
 
 // SCREEN_WIDTH is used as a fallback; CalendarTab uses useWindowDimensions() for reactivity
 const { width: SCREEN_WIDTH } = Dimensions.get("window") ?? { width: 390 };
+
+const PANEL_UNREAD_KEY = "@panel_recordings_unread";
 
 // ─── Sub-tab type ────────────────────────────────────────────────────────────
 type SubTab = "habits" | "journal";
@@ -1429,7 +1433,7 @@ function CalendarTab({ entries, onDayPress, colors }: {
 
                     // Fill: photo > text entry (darker) > no entry (dim)
                     const bgColor = photoUri ? "#000" : hasEntries ? colors.primary : colors.surface;
-                    const cellOpacity = isFuture ? 0.18 : photoUri ? 1 : hasEntries ? 0.75 : 0.22;
+                    const cellOpacity = isFuture ? 0.25 : photoUri ? 1 : hasEntries ? 0.85 : 0.45;
 
                     return (
                       <Pressable
@@ -1441,8 +1445,6 @@ function CalendarTab({ entries, onDayPress, colors }: {
                           borderRadius: 4,
                           backgroundColor: bgColor,
                           opacity: pressed ? 0.6 : cellOpacity,
-                          borderWidth: isToday ? 1.5 : 0,
-                          borderColor: isToday ? colors.primary : "transparent",
                         })}
                       >
                         {/* Wrap in clipping View — overflow:hidden on Pressable causes black images on iOS */}
@@ -1456,18 +1458,26 @@ function CalendarTab({ entries, onDayPress, colors }: {
                             />
                           </View>
                         ) : null}
-                        {/* Date number */}
+                        {/* Today indicator — white border ring visible on any background */}
+                        {isToday ? (
+                          <View style={[StyleSheet.absoluteFill, {
+                            borderRadius: 4,
+                            borderWidth: 2.5,
+                            borderColor: '#ffffff',
+                          }]} pointerEvents="none" />
+                        ) : null}
+                        {/* Date number — top-left */}
                         <Text style={{
-                          fontSize: 10,
-                          fontWeight: "700",
-                          lineHeight: 13,
-                          color: photoUri ? "#fff" : isToday ? colors.primary : colors.foreground,
-                          opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85,
-                          paddingLeft: 3,
-                          paddingTop: 2,
-                          textShadowColor: photoUri ? "rgba(0,0,0,0.8)" : "transparent",
+                          position: 'absolute',
+                          top: 3,
+                          left: 4,
+                          fontSize: 11,
+                          fontWeight: isToday ? "800" : "600",
+                          color: '#ffffff',
+                          opacity: isFuture ? 0.35 : 1,
+                          textShadowColor: 'rgba(0,0,0,0.8)',
                           textShadowOffset: { width: 0, height: 1 },
-                          textShadowRadius: photoUri ? 2 : 0,
+                          textShadowRadius: 2,
                         }}>{day}</Text>
                       </Pressable>
                     );
@@ -2057,15 +2067,14 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
                     if (photo) { photoUri = photo.uri; break; }
                   }
                   const bgColor = photoUri ? '#000' : hasEntries ? colors.primary : colors.surface;
-                  const cellOpacity = isFuture ? 0.18 : photoUri ? 1 : hasEntries ? 0.75 : 0.22;
+                  const cellOpacity = isFuture ? 0.25 : photoUri ? 1 : hasEntries ? 0.85 : 0.45;
                   return (
                     <Pressable
                       key={day}
                       onPress={() => !isFuture && onDayPress?.(dateStr)}
                       style={({ pressed }) => ({
                         width: cellWidth, height: cellHeight, borderRadius: 4,
-                        backgroundColor: bgColor, opacity: isFuture ? 0.18 : pressed ? 0.6 : cellOpacity,
-                        borderWidth: isToday ? 1.5 : 0, borderColor: isToday ? colors.primary : 'transparent',
+                        backgroundColor: bgColor, opacity: isFuture ? 0.25 : pressed ? 0.6 : cellOpacity,
                       })}
                     >
                       {/* Wrap ExpoImage in its own clipping View — putting overflow:hidden on Pressable causes black images on iOS */}
@@ -2074,7 +2083,14 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
                           <ExpoImage source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                         </View>
                       ) : null}
-                      <Text style={{ fontSize: 10, fontWeight: '700', lineHeight: 13, color: photoUri ? '#fff' : isToday ? colors.primary : colors.foreground, opacity: photoUri ? 0.9 : isFuture ? 0.4 : 0.85, paddingLeft: 3, paddingTop: 2 }}>{day}</Text>
+                      {/* Today indicator — white border ring visible on any background */}
+                      {isToday ? (
+                        <View style={[StyleSheet.absoluteFill, {
+                          borderRadius: 4, borderWidth: 2.5, borderColor: '#ffffff',
+                        }]} pointerEvents="none" />
+                      ) : null}
+                      {/* Date number — top-left */}
+                      <Text style={{ position: 'absolute', top: 3, left: 4, fontSize: 11, fontWeight: isToday ? '800' : '600', color: '#ffffff', opacity: isFuture ? 0.35 : 1, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{day}</Text>
                     </Pressable>
                   );
                 })}
@@ -2881,6 +2897,8 @@ export default function JournalScreen() {
         loaded.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setEntries(loaded);
       }).catch(() => {/* silent */});
+      // Clear panel recordings badge when journal tab is opened
+      AsyncStorage.setItem(PANEL_UNREAD_KEY, "0").catch(() => {});
     }, [userId])
   );
 
@@ -2909,7 +2927,7 @@ export default function JournalScreen() {
               entry.attachments.map(async (a) => {
                 if (a.type === 'photo' && !isRemoteUrl(a.uri)) {
                   try {
-                    const s3Url = await uploadPhotoToServer(a.uri, token);
+                    const { url: s3Url } = await uploadPhotoToServer(a.uri, token);
                     return { ...a, uri: s3Url };
                   } catch (uploadErr) {
                     console.warn('[Journal] Photo upload failed, keeping local URI:', uploadErr);
@@ -2977,9 +2995,12 @@ export default function JournalScreen() {
   const [selectedDate, setSelectedDate] = useState(todayDateStr());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const pickerTempDate = useRef(selectedDate);
+  const [dvRefreshing, setDvRefreshing] = useState(false);
+  const panelRefreshRef = useRef<(() => void) | null>(null);
   const { habits, checkIns, categories, submitCheckIn, streak } = useApp();
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [listModalVisible, setListModalVisible] = useState(false);
+  const [tasksModalVisible, setTasksModalVisible] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goDay = useCallback((delta: number) => {
@@ -3544,56 +3565,48 @@ export default function JournalScreen() {
   return (
     <ScreenContainer edges={['left', 'right']} containerClassName={isCalm ? 'bg-[#0D1135]' : undefined}>
       {/* ── Day-navigation header ── */}
-      <View style={[dvStyles.header, { paddingTop: insets.top + 4 }]}>
-        {/* List button — left */}
-        <Pressable
-          onPress={() => setListModalVisible(true)}
-          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>List</Text>
-        </Pressable>
-
-        {/* Day nav: left arrow + label + right arrow */}
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={[dvStyles.header, { paddingTop: insets.top + 4, paddingHorizontal: 16, paddingBottom: 8 }]}>
+        {/* Single row: List | ← Day → | Tasks */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* List button — left */}
           <Pressable
-            onPress={() => goDay(-1)}
-            style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.5 : 1 }]}
+            onPress={() => setListModalVisible(true)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4, minWidth: 44 })}
           >
-            <IconSymbol name="chevron.left" size={22} color={colors.foreground} />
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>List</Text>
           </Pressable>
-
+          {/* Center: ← Day name → */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Pressable
+              onPress={() => goDay(-1)}
+              style={({ pressed }) => ({ padding: 6, opacity: pressed ? 0.5 : 1 })}
+            >
+              <IconSymbol name="chevron.left" size={18} color={colors.foreground} />
+            </Pressable>
+            <Pressable
+              onPress={() => setCalendarModalVisible(true)}
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, alignItems: 'center' })}
+            >
+              <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>
+                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => goDay(1)}
+              disabled={selectedDate >= todayDateStr()}
+              style={({ pressed }) => ({ padding: 6, opacity: selectedDate >= todayDateStr() ? 0.2 : pressed ? 0.5 : 1 })}
+            >
+              <IconSymbol name="chevron.right" size={18} color={colors.foreground} />
+            </Pressable>
+          </View>
+          {/* Tasks button — right */}
           <Pressable
-            onPress={() => {
-              initPickerRefs(selectedDate);
-              const d = new Date(selectedDate + 'T12:00:00');
-              setPickerMonth(d.getMonth());
-              setPickerDayCount(getDaysInMonth(d.getMonth()));
-              setDatePickerVisible(true);
-            }}
-            style={({ pressed }) => [dvStyles.dayLabelBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={() => setTasksModalVisible(true)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, padding: 4, minWidth: 44, alignItems: 'flex-end' })}
           >
-            <Text style={[dvStyles.dayLabel, { color: colors.foreground }]}>{dayLabel}</Text>
-            <IconSymbol name="chevron.down" size={14} color={colors.muted} style={{ marginLeft: 4, marginTop: 2 }} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => goDay(1)}
-            disabled={selectedDate >= todayDateStr()}
-            style={({ pressed }) => [dvStyles.navBtn, {
-              opacity: selectedDate >= todayDateStr() ? 0.25 : pressed ? 0.5 : 1,
-            }]}
-          >
-            <IconSymbol name="chevron.right" size={22} color={colors.foreground} />
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Tasks</Text>
           </Pressable>
         </View>
-
-        {/* Calendar button — right */}
-        <Pressable
-          onPress={() => setCalendarModalVisible(true)}
-          style={({ pressed }) => [dvStyles.navBtn, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Calendar</Text>
-        </Pressable>
       </View>
 
       {/* ── Day content ── */}
@@ -3607,6 +3620,17 @@ export default function JournalScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={dvRefreshing}
+              onRefresh={() => {
+                setDvRefreshing(true);
+                panelRefreshRef.current?.();
+                // Give the query a moment to fire, then clear spinner
+                setTimeout(() => setDvRefreshing(false), 1500);
+              }}
+            />
+          }
         >
           {/* ── JOURNAL ENTRY — simplified tap-to-open card ── */}
           <Pressable
@@ -3980,7 +4004,13 @@ export default function JournalScreen() {
 
           {/* Save Entry button removed — auto-saves on keystroke */}
           {/* ── PANEL RECORDINGS ── */}
-          <PanelRecordingsSection colors={colors} />
+          <PanelRecordingsSection
+            colors={colors}
+            onUnreadCountChange={(count) => {
+              AsyncStorage.setItem(PANEL_UNREAD_KEY, String(count)).catch(() => {});
+            }}
+            onRefreshRef={panelRefreshRef}
+          />
         </ScrollView>
       )}
 
@@ -4176,6 +4206,24 @@ export default function JournalScreen() {
         />
       </Modal>
 
+      {/* ── Tasks Modal ── */}
+      <Modal
+        visible={tasksModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setTasksModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ width: 60 }} />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground }}>Tasks</Text>
+            <Pressable onPress={() => setTasksModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+              <Text style={{ fontSize: 16, color: colors.primary, fontWeight: '600' }}>Done</Text>
+            </Pressable>
+          </View>
+          <TasksPanel />
+        </View>
+      </Modal>
       {/* ── Date Picker Bottom Sheet ── */}
       <Modal
         visible={datePickerVisible}

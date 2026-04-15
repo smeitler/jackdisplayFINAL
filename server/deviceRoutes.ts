@@ -113,6 +113,8 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       id: h.clientId,
       name: h.name,
       category: h.categoryClientId,
+      emoji: (h as any).emoji ?? '⭐',
+      description: (h as any).description ?? null,
     }));
 
     // Mark device as having seen this version so needsSync clears
@@ -383,16 +385,18 @@ async function processRecordingAsync(
   try {
     await db.updateDeviceRecording(recordingId, { status: 'processing' });
 
-    // 1. Upload audio to S3 for playback URL
+    // 1. Upload audio to R2 for playback
     let audioUrl = '';
+    let audioKey = '';
     try {
       const { storagePut } = await import('./storage.js');
       const ext = contentType.includes('mp3') ? 'mp3' : 'wav';
       const fileKey = `device-recordings/${deviceId}/${recordingId}.${ext}`;
       const result = await storagePut(fileKey, audioBuffer, contentType);
       audioUrl = result.url;
+      audioKey = result.key;
     } catch (err: any) {
-      console.warn('[device/upload] S3 upload failed (non-fatal):', err?.message);
+      console.warn('[device/upload] R2 upload failed (non-fatal):', err?.message);
     }
 
     // 2. Transcribe with Whisper
@@ -403,14 +407,23 @@ async function processRecordingAsync(
     });
     if ('error' in transcription) {
       console.error('[device/upload] transcription error:', transcription.error);
-      await db.updateDeviceRecording(recordingId, { status: 'failed', audioUrl: audioUrl || undefined });
+      await db.updateDeviceRecording(recordingId, { status: 'failed', audioUrl: audioUrl || undefined, audioKey: audioKey || undefined });
       return;
     }
     const transcript = transcription.text?.trim() ?? '';
     if (!transcript) {
-      await db.updateDeviceRecording(recordingId, { status: 'processed', transcription: '', audioUrl: audioUrl || undefined });
+      await db.updateDeviceRecording(recordingId, { status: 'processed', transcription: '', audioUrl: audioUrl || undefined, audioKey: audioKey || undefined });
       return;
     }
+
+    // 2b. Mark as 'transcribed' immediately — panel can show the text now without waiting for LLM
+    await db.updateDeviceRecording(recordingId, {
+      status: 'transcribed',
+      transcription: transcript,
+      audioUrl: audioUrl || undefined,
+      audioKey: audioKey || undefined,
+    });
+    console.log(`[device/upload] transcribed recording ${recordingId} (${transcript.length} chars) — starting LLM extraction`);
 
     // 3. Get user habits for context
     const userHabits = await db.getUserHabits(userId).catch(() => [] as any[]);
@@ -470,6 +483,7 @@ async function processRecordingAsync(
       habitResults: JSON.stringify(habitResults),
       extractedTasks: JSON.stringify(extractedTasks),
       audioUrl: audioUrl || undefined,
+      audioKey: audioKey || undefined,
     });
     console.log(`[device/upload] processed recording ${recordingId}: ${journalEntries.length} entries, ${gratitudeItems.length} gratitudes, ${Object.keys(habitResults).length} habits, ${extractedTasks.length} tasks`);
   } catch (err: any) {
@@ -574,6 +588,32 @@ router.get("/recording/:id/acked", requireDeviceKey, async (req: Request, res: R
   }
 });
 
+// ─── GET /api/device/recording/:id/status ──────────────────────────────────────────────────────
+// Called by the panel to poll transcription status. Returns { status, transcription } so the
+// panel can show a loading screen until status === 'processed' then display the transcription.
+router.get("/recording/:id/status", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const recordingId = parseInt(req.params.id, 10);
+    if (isNaN(recordingId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const row = await db.getDeviceRecordingById(recordingId, device.userId);
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    // Parse habitResults JSON if present (only included when status === 'processed')
+    let habitResults: Record<string, any> | null = null;
+    if (row.status === 'processed' && row.habitResults) {
+      try { habitResults = JSON.parse(row.habitResults); } catch {}
+    }
+    res.json({
+      status: row.status,
+      transcription: row.transcription ?? null,
+      ...(habitResults ? { habitResults } : {}),
+    });
+  } catch (err: any) {
+    console.error("[device/recording/status]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── GET /api/device/prompts ─────────────────────────────────────────────────────────────────────
 // Returns the user's active habits formatted as recording prompts.
 // The panel fetches this before recording to show the same prompts as the app.
@@ -604,6 +644,58 @@ router.get("/prompts", requireDeviceKey, async (req: Request, res: Response) => 
     res.json({ habits, prompts });
   } catch (err: any) {
     console.error('[device/prompts]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /api/device/today-summary ─────────────────────────────────────────────────────────────────
+// Returns today's check-in ratings, gratitude items, and last journal entry for the panel preview.
+router.get("/today-summary", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    const userId = device.userId;
+
+    // Today's date string YYYY-MM-DD in UTC
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 1. Today's check-in ratings (habitClientId -> rating)
+    const allCheckIns = await db.getUserCheckIns(userId).catch(() => [] as any[]);
+    const todayCheckIns = (allCheckIns as any[]).filter((c: any) => c.date === today);
+    const ratings: Record<string, string> = {};
+    for (const c of todayCheckIns) {
+      ratings[c.habitClientId] = c.rating;
+    }
+
+    // 2. Today's gratitude items (flatten all itemsJson arrays from today)
+    const allGratitudes = await db.getUserGratitudeEntries(userId).catch(() => [] as any[]);
+    const todayGratitudes: string[] = [];
+    for (const g of allGratitudes as any[]) {
+      if (g.date !== today) continue;
+      try {
+        const items = JSON.parse(g.itemsJson || '[]');
+        if (Array.isArray(items)) todayGratitudes.push(...items.filter((s: unknown) => typeof s === 'string'));
+      } catch { /* ignore */ }
+    }
+
+    // 3. Most recent journal entry today (title + first 200 chars of body/transcription)
+    const allJournal = await db.getUserJournalEntries(userId).catch(() => [] as any[]);
+    const todayJournal = (allJournal as any[]).filter((j: any) => j.date === today && !j.deletedAt);
+    const lastEntry = todayJournal[0] ?? null;
+    const lastEntryPreview = lastEntry ? {
+      title: lastEntry.title || '',
+      body: (lastEntry.body || '').slice(0, 200),
+      transcription: (lastEntry.transcriptionText || '').slice(0, 200),
+    } : null;
+
+    res.json({
+      date: today,
+      ratings,
+      gratitudes: todayGratitudes.slice(0, 10),
+      lastEntry: lastEntryPreview,
+      entryCount: todayJournal.length,
+    });
+  } catch (err: any) {
+    console.error('[device/today-summary]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

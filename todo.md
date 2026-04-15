@@ -1709,3 +1709,18 @@
 - [ ] Sync rewards data to server on every save
 - [ ] Restore all data (journal, vision board, rewards) from server on every login
 - [ ] Ensure clearLocalData never wipes any user-created content
+- [x] Pull-to-refresh on journal tab to manually re-fetch panel recordings (already implemented via RefreshControl + panelRefreshRef)
+- [x] Vision board photos: reload from server (S3 URLs) after syncFromServer completes — vision.tsx now watches isSyncing and reloads board when sync finishes
+- [x] Rewards period claims synced to server — new rewardClaims DB table, tRPC router, upsert/delete on claim/unclaim, bulk restore on login via syncFromServer and useQuery merge
+- [x] Fix transcription not showing in panel recordings: 'transcribed' status not handled in PanelRecordingsSection (only 'processed' was checked)
+- [x] Firmware: retry-with-backoff (3 attempts, 1s/2s/4s) added to httpGet and httpPost
+- [x] Firmware: independent 30s ACK poll timer added to loop() so SD space is reclaimed faster
+- [x] App + server: rotate API key feature — POST /api/device/rotate-key endpoint + Rotate Key button in Panel Settings
+- [x] Migrate file storage from Manus proxy to Cloudflare R2 (recordings, vision board photos, generated audio, journal attachments)
+- [x] Rewrite storage.ts to use @aws-sdk/client-s3 with R2 endpoint and presigned URLs
+- [x] Wire R2 credentials as environment variables (CF_R2_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID, CF_R2_SECRET_ACCESS_KEY, CF_R2_BUCKET_NAME, CF_R2_PUBLIC_URL)
+- [x] Journal header redesign: move calendar date-picker to center title area, add Tasks button on right side
+- [x] Journal header week strip: remove date numbers, keep only day abbreviations with selected day highlighted
+- [x] Journal header: replace week strip with single day label + left/right arrows, tap label opens calendar
+- [x] Journal header: show actual date (e.g. "April 14") instead of "Today"/"Yesterday"/weekday
+- [ ] Calendar modal: make date numbers brighter and centered in cells, add today indicator (circle outline)

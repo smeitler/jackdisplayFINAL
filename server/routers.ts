@@ -532,6 +532,15 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.deleteDeviceRecording(ctx.user.id, input.id)
       ),
+
+    /** Rotate the API key for a paired device. The device must be re-paired or updated via NVS to use the new key. */
+    rotateKey: protectedProcedure
+      .input(z.object({ deviceId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const newKey = await db.rotateDeviceApiKey(input.deviceId, ctx.user.id);
+        if (!newKey) throw new Error("Device not found or not owned by this account");
+        return { newKey };
+      }),
   }),
 
   // ─── Moderation (Apple Guideline 1.2) ─────────────────────────────────────────
@@ -1120,6 +1129,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
       .input(z.array(z.object({
         categoryClientId: z.string().max(64),
         imageUrl: z.string(),
+        imageKey: z.string().optional(),
         order: z.number().int().default(0),
       })))
       .mutation(({ ctx, input }) =>
@@ -1204,6 +1214,36 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
       ),
   }),
 
+  // ─── Reward Claims ──────────────────────────────────────────────────────────
+  rewardClaims: router({
+    /** Get all period-based reward claims for the authenticated user. */
+    list: protectedProcedure.query(({ ctx }) =>
+      db.getUserRewardClaims(ctx.user.id)
+    ),
+    /** Upsert a reward claim (claim or update a period reward). */
+    upsert: protectedProcedure
+      .input(z.object({
+        habitId: z.string().max(64),
+        periodKey: z.string().max(16),
+        claimedAt: z.string(),
+      }))
+      .mutation(({ ctx, input }) =>
+        db.upsertRewardClaim(ctx.user.id, input)
+      ),
+    /** Delete a reward claim (unclaim). */
+    delete: protectedProcedure
+      .input(z.object({ habitId: z.string().max(64), periodKey: z.string().max(16) }))
+      .mutation(({ ctx, input }) =>
+        db.deleteRewardClaim(ctx.user.id, input.habitId, input.periodKey)
+      ),
+    /** Bulk sync — replace all claims for this user (used on first login push). */
+    bulkSync: protectedProcedure
+      .input(z.array(z.object({ habitId: z.string().max(64), periodKey: z.string().max(16), claimedAt: z.string() })))
+      .mutation(({ ctx, input }) =>
+        db.replaceUserRewardClaims(ctx.user.id, input)
+      ),
+  }),
+
   // ─── Day Notes ──────────────────────────────────────────────────────────────
   dayNotes: router({
     list: protectedProcedure.query(({ ctx }) => db.getUserDayNotes(ctx.user.id)),
@@ -1230,7 +1270,7 @@ Return ONLY valid JSON: {"results": {"habit_id": {"rating": "green"|"yellow"|"re
   tasks: router({
     list: protectedProcedure.query(({ ctx }) => db.getUserTasks(ctx.user.id)),
     upsert: protectedProcedure
-      .input(z.object({ clientId: z.string().max(64), title: z.string().max(512), notes: z.string().default(''), priority: z.enum(['high', 'medium', 'low']).default('medium'), dueDate: z.string().max(10).optional().nullable(), completed: z.boolean().default(false), createdAt: z.string() }))
+      .input(z.object({ clientId: z.string().max(64), title: z.string().max(512), notes: z.string().default(''), priority: z.enum(['high', 'medium', 'low']).default('medium'), dueDate: z.string().max(10).optional().nullable(), completed: z.boolean().default(false), createdAt: z.string(), category: z.string().max(32).optional().nullable(), subtasks: z.string().optional().nullable(), recurring: z.string().max(16).optional().nullable(), sortOrder: z.number().int().optional(), completedAt: z.string().max(32).optional().nullable() }))
       .mutation(({ ctx, input }) => db.upsertTask(ctx.user.id, input)),
     delete: protectedProcedure
       .input(z.object({ clientId: z.string().max(64) }))
