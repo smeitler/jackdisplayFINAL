@@ -1194,7 +1194,7 @@ const tStyles = StyleSheet.create({
 });
 
 // ─── Main "You" Screen ────────────────────────────────────────────────────────
-type YouTab = "analytics" | "vision" | "rewards" | "tasks";
+type YouTab = "analytics" | "vision" | "rewards";
 
 export default function YouScreen() {
   const colors = useColors();
@@ -1212,7 +1212,6 @@ export default function YouScreen() {
     { key: "analytics", label: "Analytics" },
     { key: "vision", label: "Vision Board" },
     { key: "rewards", label: "Rewards" },
-    { key: "tasks", label: "Tasks" },
   ];
 
   return (
@@ -1255,7 +1254,6 @@ export default function YouScreen() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "vision" && <VisionBoardTab />}
         {activeTab === "rewards" && <RewardsTab />}
-        {activeTab === "tasks" && <TasksPanel />}
       </View>
     </ScreenContainer>
   );
