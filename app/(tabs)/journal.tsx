@@ -2991,7 +2991,7 @@ export default function JournalScreen() {
     }
   }
 
-  // ── Day-view state ─────────────────────────────────────────────────────────
+  // ── Day-view state ─────────────────────────────────────────────────────────────────────────────────
   const [selectedDate, setSelectedDate] = useState(todayDateStr());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const pickerTempDate = useRef(selectedDate);
@@ -3851,18 +3851,19 @@ export default function JournalScreen() {
               if (catHabits.length === 0) return null;
               return (
                 <View key={cat.id} style={dvStyles.ciSection}>
-                  {/* Category header */}
+                  {/* Category header — long-press label area to edit */}
                   <View style={dvStyles.ciSectionHeader}>
-                    <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
-                    <Text style={[dvStyles.ciSectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
                     <Pressable
-                      onPress={() => setDvCategoryModal({ open: true, category: cat })}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
-                      hitSlop={8}
+                      onLongPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        setDvCategoryModal({ open: true, category: cat });
+                      }}
+                      delayLongPress={400}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}
                     >
-                      <IconSymbol name="pencil" size={14} color={colors.muted} />
+                      <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
+                      <Text style={[dvStyles.ciSectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
                     </Pressable>
-                    <View style={{ flex: 1 }} />
                     {/* Rate whole category */}
                     <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
                       {(['red', 'yellow', 'green'] as const).map((r, i) => (
@@ -3901,16 +3902,16 @@ export default function JournalScreen() {
                           ]}
                         >
                           <View style={{ flex: 1 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Pressable
+                              onLongPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                setDvHabitModal({ open: true, habit: { ...habit } });
+                              }}
+                              delayLongPress={400}
+                              style={{ alignSelf: 'flex-start' }}
+                            >
                               <Text style={[dvStyles.ciHabitName, { color: colors.foreground }]}>{habit.name}</Text>
-                              <Pressable
-                                onPress={() => setDvHabitModal({ open: true, habit: { ...habit } })}
-                                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 2 })}
-                                hitSlop={8}
-                              >
-                                <IconSymbol name="pencil" size={13} color={colors.muted} />
-                              </Pressable>
-                            </View>
+                            </Pressable>
                             <TextInput
                               style={[dvStyles.ciHabitDesc, { color: colors.muted, padding: 0, margin: 0 }]}
                               value={dvHabitNotes[habit.id] ?? ''}
