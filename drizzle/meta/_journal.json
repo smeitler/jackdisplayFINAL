@@ -148,6 +148,20 @@
       "when": 1776221035437,
       "tag": "0020_normal_quicksilver",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1776224621418,
+      "tag": "0021_puzzling_paladin",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1776224653636,
+      "tag": "0022_dusty_nicolaos",
+      "breakpoints": true
     }
   ]
 }
