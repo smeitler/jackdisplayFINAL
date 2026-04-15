@@ -28,7 +28,7 @@ import {
   JOURNAL_TEMPLATES, generateId, todayDateStr, formatDateLabel, formatTime,
   loadEntries, addEntry, updateEntry as updateEntryInStore, deleteEntry as deleteEntryFromStore,
 } from "@/lib/journal-store";
-import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating } from "@/lib/storage";
+import { getLastUserId, loadHabits, loadDayNotes, saveDayNotes, type Habit, type Rating, type CategoryDef, LIFE_AREAS, type LifeArea } from "@/lib/storage";
 import { entryToServerInput } from "@/lib/journal-server-sync";
 import { uploadPhotoToServer, isRemoteUrl } from "@/lib/photo-upload";
 import { getSessionToken } from "@/lib/_core/auth";
@@ -2997,7 +2997,7 @@ export default function JournalScreen() {
   const pickerTempDate = useRef(selectedDate);
   const [dvRefreshing, setDvRefreshing] = useState(false);
   const panelRefreshRef = useRef<(() => void) | null>(null);
-  const { habits, checkIns, categories, submitCheckIn, streak } = useApp();
+  const { habits, checkIns, categories, submitCheckIn, streak, updateHabit, updateCategory, deleteHabit, deleteCategory } = useApp();
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [listModalVisible, setListModalVisible] = useState(false);
   const [tasksModalVisible, setTasksModalVisible] = useState(false);
@@ -3114,6 +3114,9 @@ export default function JournalScreen() {
   // Day-view toolbar sheet state
   const [dvShowAttachSheet, setDvShowAttachSheet] = useState(false);
   const [dvShowMoreSheet, setDvShowMoreSheet] = useState(false);
+  // Inline edit modals for habits and categories
+  const [dvHabitModal, setDvHabitModal] = useState<{ open: boolean; habit: Habit | null }>({ open: false, habit: null });
+  const [dvCategoryModal, setDvCategoryModal] = useState<{ open: boolean; category: CategoryDef | null }>({ open: false, category: null });
   const [dvTagInput, setDvTagInput] = useState('');
   const [dvShowTagInput, setDvShowTagInput] = useState(false);
   const [dvTags, setDvTags] = useState<string[]>([]);
@@ -3852,6 +3855,13 @@ export default function JournalScreen() {
                   <View style={dvStyles.ciSectionHeader}>
                     <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
                     <Text style={[dvStyles.ciSectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
+                    <Pressable
+                      onPress={() => setDvCategoryModal({ open: true, category: cat })}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+                      hitSlop={8}
+                    >
+                      <IconSymbol name="pencil" size={14} color={colors.muted} />
+                    </Pressable>
                     <View style={{ flex: 1 }} />
                     {/* Rate whole category */}
                     <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
@@ -3891,7 +3901,16 @@ export default function JournalScreen() {
                           ]}
                         >
                           <View style={{ flex: 1 }}>
-                            <Text style={[dvStyles.ciHabitName, { color: colors.foreground }]}>{habit.name}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={[dvStyles.ciHabitName, { color: colors.foreground }]}>{habit.name}</Text>
+                              <Pressable
+                                onPress={() => setDvHabitModal({ open: true, habit: { ...habit } })}
+                                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 2 })}
+                                hitSlop={8}
+                              >
+                                <IconSymbol name="pencil" size={13} color={colors.muted} />
+                              </Pressable>
+                            </View>
                             <TextInput
                               style={[dvStyles.ciHabitDesc, { color: colors.muted, padding: 0, margin: 0 }]}
                               value={dvHabitNotes[habit.id] ?? ''}
@@ -4224,6 +4243,131 @@ export default function JournalScreen() {
           <TasksPanel />
         </View>
       </Modal>
+      {/* ── Inline Habit Edit Modal ── */}
+      {dvHabitModal.open && dvHabitModal.habit && (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => setDvHabitModal({ open: false, habit: null })}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={0}>
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setDvHabitModal({ open: false, habit: null })} />
+            <View style={[dvStyles.inlineEditSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 14 }} />
+              <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground, marginBottom: 14 }}>Edit Habit</Text>
+              {/* Name field */}
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Name</Text>
+              <TextInput
+                style={[dvStyles.inlineEditInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                defaultValue={dvHabitModal.habit.name}
+                onChangeText={(t) => setDvHabitModal((prev) => prev.habit ? { ...prev, habit: { ...prev.habit!, name: t } } : prev)}
+                returnKeyType="done"
+                blurOnSubmit
+                maxLength={40}
+              />
+              {/* Description field */}
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: 12 }}>Note / Description</Text>
+              <TextInput
+                style={[dvStyles.inlineEditInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, minHeight: 60, textAlignVertical: 'top', paddingTop: 10 }]}
+                defaultValue={dvHabitModal.habit.description ?? ''}
+                onChangeText={(t) => setDvHabitModal((prev) => prev.habit ? { ...prev, habit: { ...prev.habit!, description: t } } : prev)}
+                multiline
+                returnKeyType="done"
+                blurOnSubmit
+                maxLength={120}
+              />
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+                <Pressable
+                  onPress={() => setDvHabitModal({ open: false, habit: null })}
+                  style={({ pressed }) => [dvStyles.inlineEditBtn, { borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: colors.muted }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={async () => {
+                    const h = dvHabitModal.habit!;
+                    await updateHabit(h.id, { name: h.name, description: h.description });
+                    setDvHabitModal({ open: false, habit: null });
+                  }}
+                  style={({ pressed }) => [dvStyles.inlineEditBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#fff' }}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
+
+      {/* ── Inline Category (Goal) Edit Modal ── */}
+      {dvCategoryModal.open && dvCategoryModal.category && (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => setDvCategoryModal({ open: false, category: null })}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={0}>
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setDvCategoryModal({ open: false, category: null })} />
+            <View style={[dvStyles.inlineEditSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 10, marginBottom: 14 }} />
+              <Text style={{ fontSize: 17, fontWeight: '700', color: colors.foreground, marginBottom: 14 }}>Edit Goal</Text>
+              {/* Label field */}
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Goal Name</Text>
+              <TextInput
+                style={[dvStyles.inlineEditInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                defaultValue={dvCategoryModal.category.label}
+                onChangeText={(t) => setDvCategoryModal((prev) => prev.category ? { ...prev, category: { ...prev.category!, label: t } } : prev)}
+                returnKeyType="done"
+                blurOnSubmit
+                maxLength={40}
+              />
+              {/* Life area picker */}
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 12 }}>Life Area</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {LIFE_AREAS.map((area) => {
+                    const isSelected = dvCategoryModal.category?.lifeArea === area.id;
+                    return (
+                      <Pressable
+                        key={area.id}
+                        onPress={() => setDvCategoryModal((prev) => prev.category ? { ...prev, category: { ...prev.category!, lifeArea: area.id as LifeArea } } : prev)}
+                        style={({ pressed }) => ([
+                          dvStyles.lifeAreaChip,
+                          { borderColor: isSelected ? colors.primary : colors.border, backgroundColor: isSelected ? colors.primary + '22' : colors.background, opacity: pressed ? 0.7 : 1 },
+                        ])}
+                      >
+                        <CategoryIcon categoryId={area.id} lifeArea={area.id} size={14} color={isSelected ? colors.primary : colors.muted} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: isSelected ? colors.primary : colors.muted }}>{area.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                <Pressable
+                  onPress={() => setDvCategoryModal({ open: false, category: null })}
+                  style={({ pressed }) => [dvStyles.inlineEditBtn, { borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: colors.muted }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={async () => {
+                    const c = dvCategoryModal.category!;
+                    await updateCategory(c.id, { label: c.label, lifeArea: c.lifeArea });
+                    setDvCategoryModal({ open: false, category: null });
+                  }}
+                  style={({ pressed }) => [dvStyles.inlineEditBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#fff' }}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
+
       {/* ── Date Picker Bottom Sheet ── */}
       <Modal
         visible={datePickerVisible}
@@ -4380,4 +4524,21 @@ const dvStyles = StyleSheet.create({
   ciHabitRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
   ciHabitName: { fontSize: 15, fontWeight: '500' },
   ciHabitDesc: { fontSize: 12, marginTop: 2 },
+  // Inline edit sheet styles
+  inlineEditSheet: {
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    borderWidth: 1, padding: 20, paddingBottom: 40,
+  },
+  inlineEditInput: {
+    height: 48, borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, fontSize: 15,
+  },
+  inlineEditBtn: {
+    flex: 1, height: 44, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  lifeAreaChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1,
+  },
 });
