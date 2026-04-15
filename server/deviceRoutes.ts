@@ -700,4 +700,33 @@ router.get("/today-summary", requireDeviceKey, async (req: Request, res: Respons
   }
 });
 
+// ─── GET /api/device/audio/:key ──────────────────────────────────────────────
+// Streams a pre-recorded voice confirmation clip from R2 to the ESP32.
+// Files are stored in R2 under voice-commands/{key}.mp3
+// Key examples: listening, command_not_understood, alarm_0630, habit_logged_green
+// Auth: X-Device-Key header (same as all device endpoints)
+router.get("/audio/:key", requireDeviceKey, async (req: Request, res: Response) => {
+  const { key } = req.params;
+  // Sanitize: only allow alphanumeric, underscore, hyphen
+  if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
+    return res.status(400).json({ error: 'Invalid audio key' });
+  }
+  const r2Key = `voice-commands/${key}.mp3`;
+  try {
+    const { storageGet } = await import('./storage.js');
+    const { url } = await storageGet(r2Key);
+    // Proxy R2 content directly to the ESP32 as audio/mpeg
+    // Use axios with responseType 'stream' (Node 18 built-in fetch doesn't support piping easily)
+    const axios = (await import('axios')).default;
+    const r2Res = await axios.get(url, { responseType: 'stream', timeout: 15000 });
+    res.setHeader('Content-Type', 'audio/mpeg');
+    const cl = r2Res.headers['content-length'];
+    if (cl) res.setHeader('Content-Length', cl);
+    r2Res.data.pipe(res);
+  } catch (err: any) {
+    console.error(`[device/audio] error streaming ${r2Key}:`, err?.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
