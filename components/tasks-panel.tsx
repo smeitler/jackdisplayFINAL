@@ -16,6 +16,7 @@ import * as Haptics from "expo-haptics";
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { DatePickerSheet, DatePickerButton } from "@/components/date-picker-sheet";
 
 export const TASKS_KEY = "@you_tasks_v2";
 
@@ -147,6 +148,8 @@ export function TasksPanel() {
   const [formNotes, setFormNotes] = React.useState("");
   const [formPriority, setFormPriority] = React.useState<Task["priority"]>("medium");
   const [formDue, setFormDue] = React.useState("");
+  const [formDueTime, setFormDueTime] = React.useState<string | null>(null);
+  const [showDatePicker, setShowDatePicker] = React.useState(false);
   const [formCategory, setFormCategory] = React.useState<string | null>(null);
   const [formRecurring, setFormRecurring] = React.useState<Task["recurring"]>(null);
   const [formSubtasks, setFormSubtasks] = React.useState<Subtask[]>([]);
@@ -181,7 +184,7 @@ export function TasksPanel() {
   function openAdd() {
     setEditingTask(null);
     setFormTitle(""); setFormNotes(""); setFormPriority("medium");
-    setFormDue(""); setFormCategory(null); setFormRecurring(null);
+    setFormDue(""); setFormDueTime(null); setFormCategory(null); setFormRecurring(null);
     setFormSubtasks([]); setNewSubtaskTitle("");
     setShowAdd(true);
   }
@@ -192,6 +195,7 @@ export function TasksPanel() {
     setFormNotes(task.notes);
     setFormPriority(task.priority);
     setFormDue(task.dueDate ?? "");
+    setFormDueTime(null);
     setFormCategory(task.category);
     setFormRecurring(task.recurring);
     setFormSubtasks([...task.subtasks]);
@@ -686,22 +690,13 @@ export function TasksPanel() {
               </View>
 
               <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>
-                DUE DATE (YYYY-MM-DD)
+                DUE DATE
               </Text>
-              <TextInput
-                style={[
-                  tStyles.textInput,
-                  {
-                    color: colors.foreground,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                value={formDue}
-                onChangeText={setFormDue}
-                placeholder={todayStr()}
-                placeholderTextColor={colors.muted}
-                returnKeyType="done"
+              <DatePickerButton
+                value={formDue || null}
+                timeValue={formDueTime}
+                onPress={() => setShowDatePicker(true)}
+                colors={colors}
               />
 
               <Text style={[tStyles.fieldLabel, { color: colors.muted }]}>
@@ -938,6 +933,19 @@ export function TasksPanel() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Date Picker Sheet */}
+      <DatePickerSheet
+        visible={showDatePicker}
+        value={formDue || null}
+        timeValue={formDueTime}
+        onDone={(date, time) => {
+          setFormDue(date);
+          setFormDueTime(time);
+          setShowDatePicker(false);
+        }}
+        onCancel={() => setShowDatePicker(false)}
+      />
     </GestureHandlerRootView>
   );
 }
