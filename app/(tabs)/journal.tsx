@@ -1191,9 +1191,23 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
   onEdit: (entry: JournalEntry) => void;
   colors: any;
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredEntries = useMemo(() => {
+    if (!searchQuery.trim()) return entries;
+    const q = searchQuery.toLowerCase();
+    return entries.filter(
+      (e) =>
+        (e.title ?? '').toLowerCase().includes(q) ||
+        (e.body ?? '').toLowerCase().includes(q) ||
+        (e.date ?? '').includes(q) ||
+        (e.tags ?? []).some((t) => t.toLowerCase().includes(q))
+    );
+  }, [entries, searchQuery]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, JournalEntry[]>();
-    for (const e of entries) {
+    for (const e of filteredEntries) {
       const list = map.get(e.date) ?? [];
       list.push(e);
       map.set(e.date, list);
@@ -1201,7 +1215,7 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
     return Array.from(map.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([date, items]) => ({ date, items }));
-  }, [entries]);
+  }, [filteredEntries]);
 
   if (entries.length === 0) {
     return (
@@ -1217,6 +1231,29 @@ function JournalListTab({ entries, onDelete, onEdit, colors }: {
 
   return (
     <View style={{ gap: 16 }}>
+      {/* Search box */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1,
+        borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8,
+      }}>
+        <IconSymbol name="magnifyingglass" size={16} color={colors.muted} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search entries..."
+          placeholderTextColor={colors.muted}
+          style={{ flex: 1, fontSize: 15, color: colors.foreground }}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+      </View>
+      {filteredEntries.length === 0 && searchQuery.trim().length > 0 && (
+        <View style={{ alignItems: 'center', paddingVertical: 32, gap: 8 }}>
+          <IconSymbol name="magnifyingglass" size={32} color={colors.muted} />
+          <Text style={{ fontSize: 15, color: colors.muted }}>No entries match “{searchQuery}”</Text>
+        </View>
+      )}
       {grouped.map(({ date, items }) => (
         <View key={date}>
           <Text style={{ fontSize: 13, fontWeight: "700", color: colors.muted, marginBottom: 8 }}>
@@ -3117,6 +3154,10 @@ export default function JournalScreen() {
   // Inline edit modals for habits and categories
   const [dvHabitModal, setDvHabitModal] = useState<{ open: boolean; habit: Habit | null }>({ open: false, habit: null });
   const [dvCategoryModal, setDvCategoryModal] = useState<{ open: boolean; category: CategoryDef | null }>({ open: false, category: null });
+  // Section collapse state — all open by default
+  const [dvHabitsOpen, setDvHabitsOpen] = useState(true);
+  const [dvGratOpen, setDvGratOpen] = useState(true);
+  const [dvTasksOpen, setDvTasksOpen] = useState(true);
   const [dvTagInput, setDvTagInput] = useState('');
   const [dvShowTagInput, setDvShowTagInput] = useState(false);
   const [dvTags, setDvTags] = useState<string[]>([]);
@@ -3827,43 +3868,78 @@ export default function JournalScreen() {
             </View>
           </Modal>
 
-          {/* ── Legend row ── */}
+          {/* ── HABITS section with collapsible dropdown ── */}
           {habits.filter((h) => h.isActive).length > 0 && (
-            <View style={[dvStyles.legendRow, { borderBottomColor: colors.border }]}>
-              {(['red', 'yellow', 'green'] as const).map((r) => (
-                <View key={r} style={dvStyles.legendItem}>
-                  <View style={[dvStyles.legendDot, { backgroundColor: RATING_COLORS_DV[r] }]} />
-                  <Text style={[dvStyles.legendText, { color: colors.muted }]}>
-                    {r === 'red' ? 'Missed' : r === 'yellow' ? 'Okay' : 'Crushed it'}
-                  </Text>
+            <View style={{ marginBottom: 4 }}>
+              {/* Section header row */}
+              <Pressable
+                onPress={() => setDvHabitsOpen((v) => !v)}
+                style={({ pressed }) => [{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                  paddingHorizontal: 4, paddingVertical: 10, opacity: pressed ? 0.7 : 1,
+                }]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 0 }]}>HABITS</Text>
+                  {!dvHabitsOpen && (
+                    <View style={{ backgroundColor: colors.primary + '22', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '600' }}>
+                        {habits.filter((h) => h.isActive).length}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              ))}
-            </View>
-          )}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Pressable
+                    onPress={() => setDvCategoryModal({ open: true, category: categories[0] ?? null })}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+                    hitSlop={8}
+                  >
+                    <IconSymbol name="pencil" size={15} color={colors.muted} />
+                  </Pressable>
+                  <IconSymbol
+                    name={dvHabitsOpen ? 'chevron.down' : 'chevron.right'}
+                    size={16}
+                    color={colors.muted}
+                  />
+                </View>
+              </Pressable>
 
-          {/* Rate All row removed per user request */}
+              {dvHabitsOpen && (
+                <View>
+                  {/* Legend row */}
+                  <View style={[dvStyles.legendRow, { borderBottomColor: colors.border }]}>
+                    {(['red', 'yellow', 'green'] as const).map((r) => (
+                      <View key={r} style={dvStyles.legendItem}>
+                        <View style={[dvStyles.legendDot, { backgroundColor: RATING_COLORS_DV[r] }]} />
+                        <Text style={[dvStyles.legendText, { color: colors.muted }]}>
+                          {r === 'red' ? 'Missed' : r === 'yellow' ? 'Okay' : 'Crushed it'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
 
-          {/* ── HABITS grouped by category (check-in review style) ── */}
-          {(() => {
-            const sortedCats = [...categories].sort((a, b) => a.order - b.order);
-            return sortedCats.map((cat) => {
-              const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
-              if (catHabits.length === 0) return null;
-              return (
-                <View key={cat.id} style={dvStyles.ciSection}>
-                  {/* Category header — long-press label area to edit */}
-                  <View style={dvStyles.ciSectionHeader}>
-                    <Pressable
-                      onLongPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        setDvCategoryModal({ open: true, category: cat });
-                      }}
-                      delayLongPress={400}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}
-                    >
-                      <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
-                      <Text style={[dvStyles.ciSectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
-                    </Pressable>
+                  {/* Habits grouped by category */}
+                  {(() => {
+                    const sortedCats = [...categories].sort((a, b) => a.order - b.order);
+                    return sortedCats.map((cat) => {
+                      const catHabits = habits.filter((h) => h.isActive && h.category === cat.id);
+                      if (catHabits.length === 0) return null;
+                      return (
+                        <View key={cat.id} style={dvStyles.ciSection}>
+                          {/* Category header — pencil to edit, tap to collapse */}
+                          <View style={dvStyles.ciSectionHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                              <CategoryIcon categoryId={cat.id} lifeArea={cat.lifeArea} size={18} color={colors.primary} />
+                              <Text style={[dvStyles.ciSectionTitle, { color: colors.foreground }]}>{cat.label}</Text>
+                            </View>
+                            <Pressable
+                              onPress={() => setDvCategoryModal({ open: true, category: cat })}
+                              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4, marginRight: 6 })}
+                              hitSlop={8}
+                            >
+                              <IconSymbol name="pencil" size={14} color={colors.muted} />
+                            </Pressable>
                     {/* Rate whole category */}
                     <View style={[dvStyles.segmentedBtn, { backgroundColor: colors.border }]}>
                       {(['red', 'yellow', 'green'] as const).map((r, i) => (
@@ -3958,6 +4034,10 @@ export default function JournalScreen() {
               );
             });
           })()}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* ── Voice transcript entries (read-only header, editable body) ── */}
           {dayEntries.filter((e) => e.tags?.includes('voice')).map((entry) => {
@@ -3993,36 +4073,103 @@ export default function JournalScreen() {
             );
           })}
 
-          {/* ── GRATEFUL FOR — individual cards ── */}
-          <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 6 }]}>GRATEFUL FOR</Text>
-          {dvGratItems.map((item, idx) => (
-            <View key={idx} style={[dvStyles.gratCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <TextInput
-                value={item}
-                onChangeText={(text) => {
-                  const updated = [...dvGratItems];
-                  updated[idx] = text;
-                  setDvGratItems(updated);
-                  if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-                  autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(dvJournalNote, updated), 800);
-                }}
-                placeholder={`Grateful for...`}
-                placeholderTextColor={colors.muted}
-                style={[dvStyles.gratInput, { color: colors.foreground }]}
-                returnKeyType="done"
-              />
-            </View>
-          ))}
+          {/* ── GRATEFUL FOR — collapsible section ── */}
+          <View style={{ marginBottom: 4 }}>
+            <Pressable
+              onPress={() => setDvGratOpen((v) => !v)}
+              style={({ pressed }) => [{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 4, paddingVertical: 10, opacity: pressed ? 0.7 : 1,
+              }]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 0 }]}>GRATEFUL FOR</Text>
+                {!dvGratOpen && (
+                  <View style={{ backgroundColor: colors.primary + '22', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '600' }}>
+                      {dvGratItems.filter((g) => g.trim().length > 0).length}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Pressable
+                  onPress={() => setDvGratItems((prev) => [...prev, ''])}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+                  hitSlop={8}
+                >
+                  <IconSymbol name="pencil" size={15} color={colors.muted} />
+                </Pressable>
+                <IconSymbol
+                  name={dvGratOpen ? 'chevron.down' : 'chevron.right'}
+                  size={16}
+                  color={colors.muted}
+                />
+              </View>
+            </Pressable>
 
-          {/* ── Add more gratitude slot ── */}
-          <Pressable
-            onPress={() => setDvGratItems((prev) => [...prev, ''])}
-            style={({ pressed }) => [dvStyles.addGratBtn, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
-          >
-            <Text style={[dvStyles.addGratText, { color: colors.muted }]}>+ Add another</Text>
-          </Pressable>
+            {dvGratOpen && (
+              <View>
+                {dvGratItems.map((item, idx) => (
+                  <View key={idx} style={[dvStyles.gratCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <TextInput
+                      value={item}
+                      onChangeText={(text) => {
+                        const updated = [...dvGratItems];
+                        updated[idx] = text;
+                        setDvGratItems(updated);
+                        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+                        autoSaveTimer.current = setTimeout(() => saveDvNoteAndGrat(dvJournalNote, updated), 800);
+                      }}
+                      placeholder={`Grateful for...`}
+                      placeholderTextColor={colors.muted}
+                      style={[dvStyles.gratInput, { color: colors.foreground }]}
+                      returnKeyType="done"
+                    />
+                  </View>
+                ))}
+                <Pressable
+                  onPress={() => setDvGratItems((prev) => [...prev, ''])}
+                  style={({ pressed }) => [dvStyles.addGratBtn, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Text style={[dvStyles.addGratText, { color: colors.muted }]}>+ Add another</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
 
-          {/* Save Entry button removed — auto-saves on keystroke */}
+          {/* ── TASKS — collapsible section ── */}
+          <View style={{ marginBottom: 4 }}>
+            <Pressable
+              onPress={() => setDvTasksOpen((v) => !v)}
+              style={({ pressed }) => [{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 4, paddingVertical: 10, opacity: pressed ? 0.7 : 1,
+              }]}
+            >
+              <Text style={[dvStyles.cardTitle, { color: colors.muted, marginBottom: 0 }]}>TASKS</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Pressable
+                  onPress={() => setTasksModalVisible(true)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+                  hitSlop={8}
+                >
+                  <IconSymbol name="pencil" size={15} color={colors.muted} />
+                </Pressable>
+                <IconSymbol
+                  name={dvTasksOpen ? 'chevron.down' : 'chevron.right'}
+                  size={16}
+                  color={colors.muted}
+                />
+              </View>
+            </Pressable>
+            {dvTasksOpen && (
+              <View style={[dvStyles.ciCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
+                <TasksPanel />
+              </View>
+            )}
+          </View>
+
           {/* ── PANEL RECORDINGS ── */}
           <PanelRecordingsSection
             colors={colors}
