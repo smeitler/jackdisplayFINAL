@@ -15,6 +15,7 @@ import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 export const TASKS_KEY = "@you_tasks_v2";
 
@@ -39,15 +40,15 @@ export interface Task {
   completedAt: string | null;
 }
 
-const LIFE_AREAS = [
-  { id: "body",          label: "Body",         emoji: "💪" },
-  { id: "mind",          label: "Mind",         emoji: "🧠" },
-  { id: "relationships", label: "Relationships", emoji: "❤️" },
-  { id: "focus",         label: "Focus",        emoji: "🎯" },
-  { id: "career",        label: "Career",       emoji: "💼" },
-  { id: "money",         label: "Money",        emoji: "💰" },
-  { id: "contribution",  label: "Contribution", emoji: "🤝" },
-  { id: "spirituality",  label: "Spirituality", emoji: "✨" },
+const LIFE_AREAS: { id: string; label: string; icon: React.ComponentProps<typeof MaterialIcons>["name"] }[] = [
+  { id: "body",          label: "Body",         icon: "fitness-center" },
+  { id: "mind",          label: "Mind",         icon: "psychology" },
+  { id: "relationships", label: "Relationships", icon: "favorite" },
+  { id: "focus",         label: "Focus",        icon: "my-location" },
+  { id: "career",        label: "Career",       icon: "work" },
+  { id: "money",         label: "Money",        icon: "payments" },
+  { id: "contribution",  label: "Contribution", icon: "volunteer-activism" },
+  { id: "spirituality",  label: "Spirituality", icon: "wb-sunny" },
 ];
 
 const PRIORITY_COLORS = { high: "#EF4444", medium: "#F59E0B", low: "#22C55E" };
@@ -376,7 +377,7 @@ export function TasksPanel() {
                 onPress={() => handleToggle(item)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {item.completed && <Text style={tStyles.checkmark}>✓</Text>}
+                {item.completed && <MaterialIcons name="check" size={14} color="#fff" />}
               </TouchableOpacity>
 
               <View style={{ flex: 1, gap: 3 }}>
@@ -395,9 +396,12 @@ export function TasksPanel() {
                     {item.title}
                   </Text>
                   {item.recurring && (
-                    <Text style={tStyles.recurringBadge}>
-                      {item.recurring === "daily" ? "↻D" : "↻W"}
-                    </Text>
+                    <View style={tStyles.recurringBadge}>
+                      <MaterialIcons name="sync" size={11} color="#0a7ea4" />
+                      <Text style={tStyles.recurringBadgeText}>
+                        {item.recurring === "daily" ? "D" : "W"}
+                      </Text>
+                    </View>
                   )}
                 </View>
 
@@ -446,7 +450,7 @@ export function TasksPanel() {
                     <View
                       style={[tStyles.categoryBadge, { backgroundColor: colors.border }]}
                     >
-                      <Text style={{ fontSize: 10 }}>{lifeArea.emoji}</Text>
+                      <MaterialIcons name={lifeArea.icon} size={10} color={colors.muted} />
                       <Text style={[tStyles.categoryText, { color: colors.muted }]}>
                         {lifeArea.label}
                       </Text>
@@ -463,9 +467,7 @@ export function TasksPanel() {
               </View>
 
               <View style={tStyles.dragHandle}>
-                <Text style={{ color: colors.muted, fontSize: 16, lineHeight: 18 }}>
-                  ⠿
-                </Text>
+                <MaterialIcons name="drag-handle" size={20} color={colors.muted} />
               </View>
             </TouchableOpacity>
           </Swipeable>
@@ -485,7 +487,7 @@ export function TasksPanel() {
             { backgroundColor: colors.surface, borderBottomColor: colors.border },
           ]}
         >
-          <Text style={{ fontSize: 16 }}>🔥</Text>
+          <MaterialIcons name="local-fire-department" size={18} color="#F59E0B" />
           <Text style={[tStyles.streakText, { color: colors.foreground }]}>
             {streak}-day streak
           </Text>
@@ -532,9 +534,12 @@ export function TasksPanel() {
 
       {filtered.length === 0 ? (
         <View style={tStyles.emptyState}>
-          <Text style={tStyles.emptyEmoji}>
-            {filter === "done" ? "✅" : filter === "today" ? "🌅" : "📋"}
-          </Text>
+          <MaterialIcons
+            name={filter === "done" ? "check-circle" : filter === "today" ? "wb-sunny" : "assignment"}
+            size={48}
+            color={colors.muted}
+            style={{ marginBottom: 8 }}
+          />
           <Text style={[tStyles.emptyTitle, { color: colors.foreground }]}>
             {filter === "done"
               ? "No completed tasks"
@@ -568,7 +573,7 @@ export function TasksPanel() {
         ]}
         onPress={openAdd}
       >
-        <Text style={tStyles.fabText}>+</Text>
+        <MaterialIcons name="add" size={28} color="#fff" />
       </Pressable>
 
       <Modal
@@ -759,7 +764,7 @@ export function TasksPanel() {
                           },
                         ]}
                       >
-                        {a.emoji} {a.label}
+                        {a.label}
                       </Text>
                     </Pressable>
                   ))}
@@ -794,7 +799,7 @@ export function TasksPanel() {
                         },
                       ]}
                     >
-                      {r === null ? "None" : r === "daily" ? "↻ Daily" : "↻ Weekly"}
+                      {r === null ? "None" : r === "daily" ? "Daily" : "Weekly"}
                     </Text>
                   </Pressable>
                 ))}
@@ -825,7 +830,7 @@ export function TasksPanel() {
                     }
                   >
                     {s.completed && (
-                      <Text style={{ fontSize: 10, color: "#fff" }}>✓</Text>
+                      <MaterialIcons name="check" size={10} color="#fff" />
                     )}
                   </Pressable>
                   <Text
@@ -842,12 +847,9 @@ export function TasksPanel() {
                     onPress={() =>
                       setFormSubtasks((prev) => prev.filter((x) => x.id !== s.id))
                     }
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text
-                      style={{ color: colors.muted, fontSize: 16, paddingHorizontal: 6 }}
-                    >
-                      ✕
-                    </Text>
+                    <MaterialIcons name="close" size={18} color={colors.muted} style={{ paddingHorizontal: 6 }} />
                   </Pressable>
                 </View>
               ))}
@@ -904,9 +906,7 @@ export function TasksPanel() {
                     setNewSubtaskTitle("");
                   }}
                 >
-                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 18 }}>
-                    +
-                  </Text>
+                  <MaterialIcons name="add" size={22} color="#fff" />
                 </Pressable>
               </View>
 
@@ -1021,13 +1021,18 @@ const tStyles = StyleSheet.create({
   categoryText: { fontSize: 10, fontWeight: "600" },
   dueText: { fontSize: 11, fontWeight: "600" },
   recurringBadge: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#0a7ea4",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 2,
     backgroundColor: "#0a7ea422",
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
+  },
+  recurringBadgeText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: "#0a7ea4",
   },
   subtaskBar: { flex: 1, height: 4, borderRadius: 2, overflow: "hidden", maxWidth: 80 },
   subtaskFill: { height: 4, borderRadius: 2 },
