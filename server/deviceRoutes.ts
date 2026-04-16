@@ -777,7 +777,7 @@ router.post("/voice/transcribe", requireDeviceKey, async (req: Request, res: Res
     const transcript = (transcription.text ?? '').trim();
     console.log(`[device/voice/transcribe] transcript: "${transcript}"`);
     if (!transcript) {
-      return res.json({ responseKey: 'command_not_understood', command: { type: 'unknown' } });
+      return res.json({ responseKey: 'command_not_understood', transcript: '', command: { type: 'unknown' } });
     }
 
     // ── 3. Parse command intent via LLM ──────────────────────────────────────
