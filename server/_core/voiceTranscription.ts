@@ -1,29 +1,14 @@
 /**
- * Voice transcription helper using internal Speech-to-Text service
+ * Voice transcription helper using ElevenLabs Scribe STT API
+ *
+ * Uses ELEVENLABS_API_KEY — no dependency on Manus Forge or OpenAI proxy.
+ * Endpoint: POST https://api.elevenlabs.io/v1/speech-to-text
+ * Model: scribe_v2 (most accurate, 90+ languages)
  *
  * Frontend implementation guide:
  * 1. Capture audio using MediaRecorder API
  * 2. Upload audio to storage (e.g., S3) to get URL
  * 3. Call transcription with the URL
- *
- * Example usage:
- * ```tsx
- * // Frontend component
- * const transcribeMutation = trpc.voice.transcribe.useMutation({
- *   onSuccess: (data) => {
- *     console.log(data.text); // Full transcription
- *     console.log(data.language); // Detected language
- *     console.log(data.segments); // Timestamped segments
- *   }
- * });
- *
- * // After uploading audio to storage
- * transcribeMutation.mutate({
- *   audioUrl: uploadedAudioUrl,
- *   language: 'en', // optional
- *   prompt: 'Transcribe the meeting' // optional
- * });
- * ```
  */
 import { ENV } from "./env";
 
@@ -31,33 +16,15 @@ export type TranscribeOptions = {
   audioUrl: string; // URL to the audio file (e.g., S3 URL)
   mimeType?: string; // Optional: override the MIME type (e.g., "audio/m4a", "audio/webm")
   language?: string; // Optional: specify language code (e.g., "en", "es", "zh")
-  prompt?: string; // Optional: custom prompt for the transcription
+  prompt?: string;   // Optional: custom prompt / keyterms hint
 };
 
-// Native Whisper API segment format
-export type WhisperSegment = {
-  id: number;
-  seek: number;
-  start: number;
-  end: number;
+// Normalised response — same shape callers already expect
+export type TranscriptionResponse = {
   text: string;
-  tokens: number[];
-  temperature: number;
-  avg_logprob: number;
-  compression_ratio: number;
-  no_speech_prob: number;
-};
-
-// Native Whisper API response format
-export type WhisperResponse = {
-  task: "transcribe";
   language: string;
-  duration: number;
-  text: string;
-  segments: WhisperSegment[];
+  duration?: number;
 };
-
-export type TranscriptionResponse = WhisperResponse; // Return native Whisper API response directly
 
 export type TranscriptionError = {
   error: string;
@@ -70,94 +37,93 @@ export type TranscriptionError = {
   details?: string;
 };
 
+const ELEVENLABS_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text";
+
 /**
- * Transcribe audio to text using the internal Speech-to-Text service
- *
- * @param options - Audio data and metadata
- * @returns Transcription result or error
+ * Transcribe audio to text using ElevenLabs Scribe v2.
+ * Downloads audio from a URL then sends to Scribe.
  */
 export async function transcribeAudio(
   options: TranscribeOptions,
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
-    // Step 1: Validate environment configuration
-    if (!ENV.forgeApiUrl) {
-      return {
-        error: "Voice transcription service is not configured",
-        code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_URL is not set",
-      };
-    }
-    if (!ENV.forgeApiKey) {
-      return {
-        error: "Voice transcription service authentication is missing",
-        code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_KEY is not set",
-      };
+    if (!ENV.elevenLabsApiKey) {
+      return { error: "ElevenLabs API key is not configured", code: "SERVICE_ERROR", details: "ELEVENLABS_API_KEY is not set" };
     }
 
-    // Step 2: Download audio from URL
+    // Download audio from URL
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
       const response = await fetch(options.audioUrl);
       if (!response.ok) {
-        return {
-          error: "Failed to download audio file",
-          code: "INVALID_FORMAT",
-          details: `HTTP ${response.status}: ${response.statusText}`,
-        };
+        return { error: "Failed to download audio file", code: "INVALID_FORMAT", details: `HTTP ${response.status}: ${response.statusText}` };
       }
-
       audioBuffer = Buffer.from(await response.arrayBuffer());
-      // Use caller-provided mimeType if available (more reliable than content-type header from storage)
       mimeType = options.mimeType || response.headers.get("content-type") || "audio/m4a";
-
-      // Check file size (100MB limit — supports up to ~30 min recordings)
       const sizeMB = audioBuffer.length / (1024 * 1024);
       if (sizeMB > 100) {
-        return {
-          error: "Audio file exceeds maximum size limit",
-          code: "FILE_TOO_LARGE",
-          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 100MB`,
-        };
+        return { error: "Audio file exceeds maximum size limit", code: "FILE_TOO_LARGE", details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 100MB` };
       }
     } catch (error) {
-      return {
-        error: "Failed to fetch audio file",
-        code: "SERVICE_ERROR",
-        details: error instanceof Error ? error.message : "Unknown error",
-      };
+      return { error: "Failed to fetch audio file", code: "SERVICE_ERROR", details: error instanceof Error ? error.message : "Unknown error" };
     }
 
-    // Step 3: Create FormData for multipart upload to Whisper API
+    return transcribeAudioBuffer(audioBuffer, mimeType, options);
+  } catch (error) {
+    return { error: "Voice transcription failed", code: "SERVICE_ERROR", details: error instanceof Error ? error.message : "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Transcribe audio directly from a Buffer using ElevenLabs Scribe v2.
+ * More efficient when audio data is already in memory (e.g., device upload).
+ */
+export async function transcribeAudioBuffer(
+  audioBuffer: Buffer,
+  mimeType: string,
+  options?: Omit<TranscribeOptions, "audioUrl" | "mimeType">,
+): Promise<TranscriptionResponse | TranscriptionError> {
+  try {
+    if (!ENV.elevenLabsApiKey) {
+      return { error: "ElevenLabs API key is not configured", code: "SERVICE_ERROR", details: "ELEVENLABS_API_KEY is not set" };
+    }
+
+    const sizeMB = audioBuffer.length / (1024 * 1024);
+    if (sizeMB > 100) {
+      return { error: "Audio file exceeds maximum size limit", code: "FILE_TOO_LARGE", details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 100MB` };
+    }
+
+    // Normalise MIME type — strip codec suffixes (e.g. "audio/webm;codecs=opus" → "audio/webm")
+    const normalizedMimeType = mimeType.split(";")[0].trim().toLowerCase();
+    const filename = `audio.${getFileExtension(normalizedMimeType)}`;
+
     const formData = new FormData();
-
-    // Create a Blob from the buffer and append to form
-    const filename = `audio.${getFileExtension(mimeType)}`;
-    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
+    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: normalizedMimeType });
     formData.append("file", audioBlob, filename);
+    formData.append("model_id", "scribe_v2");
+    formData.append("timestamps_granularity", "none"); // faster, we only need text
+    formData.append("tag_audio_events", "false");      // skip [music] [laughter] tags
 
-    formData.append("model", "whisper-1");
-    formData.append("response_format", "verbose_json");
+    // Language hint — improves accuracy for known languages
+    if (options?.language) {
+      formData.append("language_code", options.language);
+    }
 
-    // Add prompt - use custom prompt if provided, otherwise generate based on language
-    const prompt =
-      options.prompt ||
-      (options.language
-        ? `Transcribe the user's voice to text, the user's working language is ${getLanguageName(options.language)}`
-        : "Transcribe the user's voice to text");
-    formData.append("prompt", prompt);
+    // Keyterms hint — helps Scribe recognise domain-specific words (alarm names, habit names, etc.)
+    if (options?.prompt) {
+      // Scribe uses "keyterms" array rather than a free-text prompt
+      // Split comma-separated prompt into individual keyterms
+      const terms = options.prompt.split(",").map(t => t.trim()).filter(Boolean);
+      for (const term of terms) {
+        formData.append("keyterms", term);
+      }
+    }
 
-    // Step 4: Call the transcription service
-    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-
-    const fullUrl = new URL("v1/audio/transcriptions", baseUrl).toString();
-
-    const response = await fetch(fullUrl, {
+    const response = await fetch(ELEVENLABS_STT_URL, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${ENV.forgeApiKey}`,
+        "xi-api-key": ENV.elevenLabsApiKey,
         "Accept-Encoding": "identity",
       },
       body: formData,
@@ -165,99 +131,29 @@ export async function transcribeAudio(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
-      return {
-        error: "Transcription service request failed",
-        code: "TRANSCRIPTION_FAILED",
-        details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}`,
-      };
+      return { error: "Transcription service request failed", code: "TRANSCRIPTION_FAILED", details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}` };
     }
 
-    // Step 5: Parse and return the transcription result
-    const whisperResponse = (await response.json()) as WhisperResponse;
+    const scribeResponse = (await response.json()) as { text?: string; language_code?: string; duration?: number };
 
-    // Validate response structure
-    // Allow empty text (means no speech detected) but reject truly invalid responses
-    if (typeof whisperResponse.text !== "string") {
-      return {
-        error: "Invalid transcription response",
-        code: "SERVICE_ERROR",
-        details: "Transcription service returned an invalid response format",
-      };
+    if (typeof scribeResponse.text !== "string") {
+      return { error: "Invalid transcription response", code: "SERVICE_ERROR", details: "ElevenLabs Scribe returned an invalid response format" };
     }
 
-    return whisperResponse; // Return native Whisper API response directly
-  } catch (error) {
-    // Handle unexpected errors
     return {
-      error: "Voice transcription failed",
-      code: "SERVICE_ERROR",
-      details: error instanceof Error ? error.message : "An unexpected error occurred",
+      text: scribeResponse.text,
+      language: scribeResponse.language_code ?? options?.language ?? "en",
+      duration: scribeResponse.duration,
     };
-  }
-}
-
-/**
- * Transcribe audio directly from a Buffer, bypassing the URL download step.
- * This is more efficient when you already have the audio data in memory.
- */
-export async function transcribeAudioBuffer(
-  audioBuffer: Buffer,
-  mimeType: string,
-  options?: Omit<TranscribeOptions, 'audioUrl' | 'mimeType'>,
-): Promise<TranscriptionResponse | TranscriptionError> {
-  try {
-    if (!ENV.forgeApiUrl) {
-      return { error: 'Voice transcription service is not configured', code: 'SERVICE_ERROR', details: 'BUILT_IN_FORGE_API_URL is not set' };
-    }
-    if (!ENV.forgeApiKey) {
-      return { error: 'Voice transcription service authentication is missing', code: 'SERVICE_ERROR', details: 'BUILT_IN_FORGE_API_KEY is not set' };
-    }
-    // 100MB limit — supports up to ~30 min recordings at typical bitrates
-    const sizeMB = audioBuffer.length / (1024 * 1024);
-    if (sizeMB > 100) {
-      return { error: 'Audio file exceeds maximum size limit', code: 'FILE_TOO_LARGE', details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 100MB` };
-    }
-    // Normalize mimeType: strip codec suffixes (e.g. "audio/webm;codecs=opus" → "audio/webm")
-    // Whisper API rejects MIME types with codec parameters
-    const normalizedMimeType = mimeType.split(';')[0].trim().toLowerCase();
-    const formData = new FormData();
-    const filename = `audio.${getFileExtension(normalizedMimeType)}`;
-    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: normalizedMimeType });
-    formData.append('file', audioBlob, filename);
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'verbose_json');
-    const prompt = options?.prompt ||
-      (options?.language
-        ? `Transcribe the user's voice to text, the user's working language is ${getLanguageName(options.language)}`
-        : 'Transcribe the user\'s voice to text');
-    formData.append('prompt', prompt);
-    const baseUrl = ENV.forgeApiUrl.endsWith('/') ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-    const fullUrl = new URL('v1/audio/transcriptions', baseUrl).toString();
-    const response = await fetch(fullUrl, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${ENV.forgeApiKey}`, 'Accept-Encoding': 'identity' },
-      body: formData,
-    });
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      return { error: 'Transcription service request failed', code: 'TRANSCRIPTION_FAILED', details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ''}` };
-    }
-    const whisperResponse = (await response.json()) as WhisperResponse;
-    // Allow empty text (means no speech detected) but reject truly invalid responses
-    if (typeof whisperResponse.text !== 'string') {
-      return { error: 'Invalid transcription response', code: 'SERVICE_ERROR', details: 'Transcription service returned an invalid response format' };
-    }
-    return whisperResponse;
   } catch (error) {
-    return { error: 'Voice transcription failed', code: 'SERVICE_ERROR', details: error instanceof Error ? error.message : 'An unexpected error occurred' };
+    return { error: "Voice transcription failed", code: "SERVICE_ERROR", details: error instanceof Error ? error.message : "An unexpected error occurred" };
   }
 }
 
 /**
- * Helper function to get file extension from MIME type
+ * Helper: map MIME type to file extension
  */
 function getFileExtension(mimeType: string): string {
-  // Strip codec suffixes like ";codecs=opus" before lookup
   const baseMime = mimeType.split(";")[0].trim().toLowerCase();
   const mimeToExt: Record<string, string> = {
     "audio/webm": "webm",
@@ -273,77 +169,19 @@ function getFileExtension(mimeType: string): string {
     "audio/aac": "m4a",
     "audio/flac": "flac",
   };
-
-  return mimeToExt[baseMime] || "webm";
+  return mimeToExt[baseMime] || "wav";
 }
 
 /**
- * Helper function to get full language name from ISO code
+ * Helper: ISO language code → full name
  */
 function getLanguageName(langCode: string): string {
   const langMap: Record<string, string> = {
-    en: "English",
-    es: "Spanish",
-    fr: "French",
-    de: "German",
-    it: "Italian",
-    pt: "Portuguese",
-    ru: "Russian",
-    ja: "Japanese",
-    ko: "Korean",
-    zh: "Chinese",
-    ar: "Arabic",
-    hi: "Hindi",
-    nl: "Dutch",
-    pl: "Polish",
-    tr: "Turkish",
-    sv: "Swedish",
-    da: "Danish",
-    no: "Norwegian",
-    fi: "Finnish",
+    en: "English", es: "Spanish", fr: "French", de: "German",
+    it: "Italian", pt: "Portuguese", ru: "Russian", ja: "Japanese",
+    ko: "Korean", zh: "Chinese", ar: "Arabic", hi: "Hindi",
+    nl: "Dutch", pl: "Polish", tr: "Turkish", sv: "Swedish",
+    da: "Danish", no: "Norwegian", fi: "Finnish",
   };
-
   return langMap[langCode] || langCode;
 }
-
-/**
- * Example tRPC procedure implementation:
- *
- * ```ts
- * // In server/routers.ts
- * import { transcribeAudio } from "./_core/voiceTranscription";
- *
- * export const voiceRouter = router({
- *   transcribe: protectedProcedure
- *     .input(z.object({
- *       audioUrl: z.string(),
- *       language: z.string().optional(),
- *       prompt: z.string().optional(),
- *     }))
- *     .mutation(async ({ input, ctx }) => {
- *       const result = await transcribeAudio(input);
- *
- *       // Check if it's an error
- *       if ('error' in result) {
- *         throw new TRPCError({
- *           code: 'BAD_REQUEST',
- *           message: result.error,
- *           cause: result,
- *         });
- *       }
- *
- *       // Optionally save transcription to database
- *       await db.insert(transcriptions).values({
- *         userId: ctx.user.id,
- *         text: result.text,
- *         duration: result.duration,
- *         language: result.language,
- *         audioUrl: input.audioUrl,
- *         createdAt: new Date(),
- *       });
- *
- *       return result;
- *     }),
- * });
- * ```
- */
