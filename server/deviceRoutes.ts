@@ -726,4 +726,206 @@ router.get("/audio/:key", requireDeviceKey, async (req: Request, res: Response) 
   }
 });
 
+// ─── POST /api/device/voice/transcribe ──────────────────────────────────────
+// Real-time voice command endpoint for the CrowPanel.
+// Accepts raw PCM audio (16kHz 16-bit mono), transcribes it synchronously,
+// parses the command intent via LLM, executes any server-side actions
+// (alarm set/toggle), and returns { responseKey, command } for the firmware
+// to play the confirmation audio and perform local actions.
+//
+// Response schema (mirrors firmware expectations in sendVoiceToServer()):
+//   { responseKey: string, command: { type: string, ...params } }
+//
+// Command types:
+//   set_alarm       — { hour, minute, days }  → upserts alarm, returns "alarm_set_{H}_{MM}_{ampm}"
+//   alarm_off       — {}                       → disables alarm, returns "alarm_disabled"
+//   alarm_on        — {}                       → enables alarm, returns "alarm_enabled"
+//   snooze          — { minutes }              → firmware handles locally, returns "snooze_ok"
+//   stop_alarm      — {}                       → firmware handles locally, returns "ok"
+//   habit_green/yellow/red/skip — {}           → firmware handles locally
+//   journal         — {}                       → stores transcript async, returns "journal_saved"
+//   unknown         — {}                       → returns "command_not_understood"
+
+router.post("/voice/transcribe", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device as { id: number; userId: number };
+    const contentType = (req.headers["content-type"] as string) || "audio/pcm";
+
+    // ── 1. Read raw audio body ────────────────────────────────────────────────
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", resolve);
+      req.on("error", reject);
+    });
+    const audioBuffer = Buffer.concat(chunks);
+    if (audioBuffer.length === 0) {
+      return res.status(400).json({ error: "Empty audio body" });
+    }
+    console.log(`[device/voice/transcribe] device=${device.id} size=${audioBuffer.length} ct=${contentType}`);
+
+    // ── 2. Transcribe with Whisper ────────────────────────────────────────────
+    const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+    const transcription = await transcribeAudioBuffer(audioBuffer, contentType, {
+      language: 'en',
+      prompt: 'Alarm commands, habit check-in, snooze, stop alarm, set alarm, journal entry',
+    });
+    if ('error' in transcription) {
+      console.error('[device/voice/transcribe] transcription error:', transcription.error);
+      return res.json({ responseKey: 'command_not_understood', command: { type: 'unknown' } });
+    }
+    const transcript = (transcription.text ?? '').trim();
+    console.log(`[device/voice/transcribe] transcript: "${transcript}"`);
+    if (!transcript) {
+      return res.json({ responseKey: 'command_not_understood', command: { type: 'unknown' } });
+    }
+
+    // ── 3. Parse command intent via LLM ──────────────────────────────────────
+    const { invokeLLM } = await import('./_core/llm.js');
+    const llmResp = await invokeLLM({
+      messages: [
+        {
+          role: 'system',
+          content: `You are a voice command parser for a smart alarm clock. Given a voice transcript, identify the user's intent and extract parameters.
+
+Supported command types:
+- "set_alarm": user wants to set or change their alarm time. Extract hour (0-23, 24h), minute (0-59), days (comma-separated 0-6, 0=Sun; default "1,2,3,4,5" for weekdays, "0,1,2,3,4,5,6" for every day).
+- "alarm_off": user wants to turn off / disable their alarm.
+- "alarm_on": user wants to turn on / enable their alarm.
+- "snooze": user wants to snooze the current alarm. Extract minutes (default 9).
+- "stop_alarm": user wants to dismiss/stop the alarm.
+- "habit_green": user is rating a habit as completed/won.
+- "habit_yellow": user is rating a habit as partial.
+- "habit_red": user is rating a habit as missed/failed.
+- "skip_habit": user wants to skip the current habit.
+- "journal": user is recording a journal entry or reflection.
+- "unknown": none of the above.
+
+Return ONLY valid JSON: {"type": "<command_type>", "hour": <int or null>, "minute": <int or null>, "days": "<string or null>", "minutes": <int or null>}`,
+        },
+        { role: 'user', content: `Transcript: "${transcript}"` },
+      ],
+      response_format: { type: 'json_object' },
+    });
+
+    let cmdType = 'unknown';
+    let cmdHour: number | null = null;
+    let cmdMinute: number | null = null;
+    let cmdDays: string | null = null;
+    let cmdSnoozeMin: number = 9;
+    try {
+      const parsed = JSON.parse(llmResp.choices[0].message.content as string);
+      cmdType    = (typeof parsed.type === 'string') ? parsed.type : 'unknown';
+      cmdHour    = (typeof parsed.hour === 'number') ? parsed.hour : null;
+      cmdMinute  = (typeof parsed.minute === 'number') ? parsed.minute : null;
+      cmdDays    = (typeof parsed.days === 'string') ? parsed.days : null;
+      cmdSnoozeMin = (typeof parsed.minutes === 'number') ? parsed.minutes : 9;
+    } catch {
+      cmdType = 'unknown';
+    }
+    console.log(`[device/voice/transcribe] cmd=${cmdType} hour=${cmdHour} min=${cmdMinute}`);
+
+    // ── 4. Execute server-side actions ────────────────────────────────────────
+    let responseKey = 'ok';
+
+    if (cmdType === 'set_alarm' && cmdHour !== null && cmdMinute !== null) {
+      // Upsert the user's alarm
+      const days = cmdDays ?? '1,2,3,4,5';
+      await db.upsertAlarm({
+        userId: device.userId,
+        hour: cmdHour,
+        minute: cmdMinute,
+        days,
+        enabled: true,
+      });
+      await db.bumpScheduleVersionForUser(device.userId).catch(() => {});
+      // Build response key: alarm_set_6_30_am or alarm_set_14_00
+      const h12 = cmdHour % 12 || 12;
+      const ampm = cmdHour >= 12 ? 'pm' : 'am';
+      const minStr = String(cmdMinute).padStart(2, '0');
+      responseKey = `alarm_set_${h12}_${minStr}_${ampm}`;
+      console.log(`[device/voice/transcribe] set alarm ${cmdHour}:${minStr} days=${days}`);
+
+    } else if (cmdType === 'alarm_off') {
+      const existing = await db.getUserAlarm(device.userId);
+      if (existing) {
+        await db.upsertAlarm({ ...existing, enabled: false });
+        await db.bumpScheduleVersionForUser(device.userId).catch(() => {});
+      }
+      responseKey = 'alarm_disabled';
+
+    } else if (cmdType === 'alarm_on') {
+      const existing = await db.getUserAlarm(device.userId);
+      if (existing) {
+        await db.upsertAlarm({ ...existing, enabled: true });
+        await db.bumpScheduleVersionForUser(device.userId).catch(() => {});
+      }
+      responseKey = 'alarm_enabled';
+
+    } else if (cmdType === 'snooze') {
+      responseKey = 'snooze_ok';
+
+    } else if (cmdType === 'stop_alarm') {
+      responseKey = 'ok';
+
+    } else if (cmdType === 'habit_green') {
+      responseKey = 'habit_logged_green';
+
+    } else if (cmdType === 'habit_yellow') {
+      responseKey = 'habit_logged_yellow';
+
+    } else if (cmdType === 'habit_red') {
+      responseKey = 'habit_logged_red';
+
+    } else if (cmdType === 'skip_habit') {
+      responseKey = 'ok';
+
+    } else if (cmdType === 'journal') {
+      // Store transcript as a device recording async (fire-and-forget)
+      db.saveDeviceRecording(device.id, {
+        filename: `journal-voice-${Date.now()}.pcm`,
+        category: 'journal',
+        sizeBytes: audioBuffer.length,
+        contentType,
+        data: audioBuffer,
+      }).then(async () => {
+        try {
+          const mysql = await import('mysql2/promise');
+          const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+          const [rows] = await conn.execute(
+            'SELECT id FROM deviceRecordings WHERE deviceId = ? ORDER BY id DESC LIMIT 1',
+            [device.id]
+          ) as any;
+          await conn.end();
+          const recordingId = rows[0]?.id ?? null;
+          if (recordingId) {
+            processRecordingAsync(recordingId, device.id, device.userId, audioBuffer, contentType, 'journal').catch(() => {});
+          }
+        } catch {}
+      }).catch(() => {});
+      responseKey = 'journal_saved';
+
+    } else {
+      responseKey = 'command_not_understood';
+      cmdType = 'unknown';
+    }
+
+    // ── 5. Return result to firmware ──────────────────────────────────────────
+    res.json({
+      responseKey,
+      transcript,
+      command: {
+        type: cmdType,
+        ...(cmdHour !== null ? { hour: cmdHour } : {}),
+        ...(cmdMinute !== null ? { minute: cmdMinute } : {}),
+        ...(cmdDays ? { days: cmdDays } : {}),
+        ...(cmdType === 'snooze' ? { minutes: cmdSnoozeMin } : {}),
+      },
+    });
+  } catch (err: any) {
+    console.error('[device/voice/transcribe]', err);
+    res.json({ responseKey: 'command_not_understood', command: { type: 'unknown' } });
+  }
+});
+
 export default router;
