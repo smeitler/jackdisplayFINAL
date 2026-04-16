@@ -928,4 +928,39 @@ Return ONLY valid JSON: {"type": "<command_type>", "hour": <int or null>, "minut
   }
 });
 
+// ─── POST /api/device/voice/debug-upload ────────────────────────────────────
+// Accepts a raw WAV file from the device and saves it to /tmp/voice_debug.wav
+// for server-side inspection. Also runs it through Scribe and returns the transcript.
+router.post('/voice/debug-upload', requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', resolve);
+      req.on('error', reject);
+    });
+    const audioBuffer = Buffer.concat(chunks);
+    const contentType = (req.headers['content-type'] as string) || 'audio/wav';
+    console.log(`[device/voice/debug-upload] received ${audioBuffer.length} bytes, ct=${contentType}`);
+
+    // Save to filesystem
+    const fs = await import('fs');
+    const path = await import('path');
+    const savePath = path.join('/tmp', 'voice_debug.wav');
+    fs.writeFileSync(savePath, audioBuffer);
+    console.log(`[device/voice/debug-upload] saved to ${savePath}`);
+
+    // Also run through Scribe so we can see the transcript
+    const { transcribeAudioBuffer } = await import('./_core/voiceTranscription.js');
+    const transcription = await transcribeAudioBuffer(audioBuffer, contentType, { language: 'en' });
+    const transcript = 'error' in transcription ? `ERROR: ${transcription.error}` : (transcription.text ?? '');
+    console.log(`[device/voice/debug-upload] transcript: "${transcript}"`);
+
+    res.json({ ok: true, size: audioBuffer.length, transcript, savedTo: savePath });
+  } catch (err: any) {
+    console.error('[device/voice/debug-upload]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;
