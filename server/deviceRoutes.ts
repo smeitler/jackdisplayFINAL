@@ -140,6 +140,10 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
       enabled: a.enabled,
       soundId: a.soundId ?? "edm",
       alarmSoundUrl: getAlarmSoundProxyUrl(a.soundId),
+      snoozeMinutes: (a as any).snoozeMinutes ?? 10,
+      assignedStackId: (a as any).assignedStackId ?? null,
+      label: (a as any).label ?? null,
+      requireCheckin: (a as any).requireCheckin ?? false,
     }));
 
     // Include active habits so the firmware can show the check-in screen
@@ -169,6 +173,52 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
     });
   } catch (err: any) {
     console.error("[device/schedule]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/device/alarm/upsert ─────────────────────────────────────────
+// Called by the panel alarm edit screen to save alarm changes to the server.
+// Mirrors the app's alarm.upsert tRPC mutation.
+
+router.post("/alarm/upsert", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device;
+    if (!device.userId) {
+      res.status(403).json({ error: "Device not linked to a user" });
+      return;
+    }
+    const { hour, minute, days, enabled, soundId, snoozeMinutes, assignedStackId, label, requireCheckin } = req.body as {
+      hour?: number;
+      minute?: number;
+      days?: string;
+      enabled?: boolean;
+      soundId?: string;
+      snoozeMinutes?: number;
+      assignedStackId?: string | null;
+      label?: string | null;
+      requireCheckin?: boolean;
+    };
+    if (hour === undefined || minute === undefined || !days) {
+      res.status(400).json({ error: "hour, minute, and days are required" });
+      return;
+    }
+    await db.upsertAlarm({
+      userId: device.userId,
+      hour,
+      minute,
+      days,
+      enabled: enabled ?? true,
+      soundId: soundId ?? "edm",
+      snoozeMinutes: snoozeMinutes ?? 10,
+      assignedStackId: assignedStackId ?? null,
+      label: label ?? null,
+      requireCheckin: requireCheckin ?? false,
+    });
+    await db.bumpScheduleVersionForUser(device.userId).catch(() => {});
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[device/alarm/upsert]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -324,7 +324,7 @@ export async function upsertAlarm(data: InsertAlarmConfig) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.insert(alarmConfigs).values(data).onDuplicateKeyUpdate({
-    set: { hour: data.hour, minute: data.minute, days: data.days, enabled: data.enabled, elevenLabsVoice: data.elevenLabsVoice, soundId: data.soundId },
+    set: { hour: data.hour, minute: data.minute, days: data.days, enabled: data.enabled, elevenLabsVoice: data.elevenLabsVoice, soundId: data.soundId, snoozeMinutes: data.snoozeMinutes ?? 10, assignedStackId: data.assignedStackId ?? null, label: data.label ?? null, requireCheckin: data.requireCheckin ?? false },
   });
 }
 

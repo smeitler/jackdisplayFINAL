@@ -108,6 +108,10 @@ export const alarmConfigs = mysqlTable("alarmConfigs", {
   enabled: boolean("enabled").notNull().default(true),
   elevenLabsVoice: varchar("elevenLabsVoice", { length: 32 }).default("rachel"),
   soundId: varchar("soundId", { length: 64 }).default("drumming"),
+  snoozeMinutes: int("snoozeMinutes").default(10),
+  assignedStackId: varchar("assignedStackId", { length: 64 }).default(null),
+  label: varchar("label", { length: 64 }).default(null),
+  requireCheckin: boolean("requireCheckin").default(false),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type AlarmConfig = typeof alarmConfigs.$inferSelect;

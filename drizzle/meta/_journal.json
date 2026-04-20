@@ -162,6 +162,13 @@
       "when": 1776224653636,
       "tag": "0022_dusty_nicolaos",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1776721850067,
+      "tag": "0023_clumsy_wonder_man",
+      "breakpoints": true
     }
   ]
 }
