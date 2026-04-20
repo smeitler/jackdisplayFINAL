@@ -18,6 +18,8 @@ import { clearLocalData } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 
 import * as WebBrowser from "expo-web-browser";
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { StyleSheet as RNStyleSheet } from "react-native";
 import { VoicePickerSection } from "@/components/voice-picker-section";
 import { VoiceJournalSection } from "@/components/voice-journal-section";
 import { MorningPracticeSection } from "@/components/morning-practice-section";
@@ -28,16 +30,15 @@ import { useIsCalm } from "@/components/calm-effects";
 function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/hooks/use-colors').useColors> }) {
   const router = useRouter();
   const devicesQuery = trpc.devices.list.useQuery();
-  const createTokenMutation = trpc.devices.createPairingToken.useMutation();
+  const claimByMacMutation = trpc.devices.claimByMac.useMutation();
   const removeDeviceMutation = trpc.devices.remove.useMutation({
     onSuccess: () => devicesQuery.refetch(),
   });
   const habitsBulkSync = trpc.habits.bulkSync.useMutation();
   const { habits: appHabits } = useApp();
-  const [pairingToken, setPairingToken] = useState<string | null>(null);
-  const [tokenExpiry, setTokenExpiry] = useState<Date | null>(null);
-  const [showPairingFlow, setShowPairingFlow] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerScanned, setScannerScanned] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
   const [syncingHabits, setSyncingHabits] = useState(false);
   const [habitsSynced, setHabitsSynced] = useState(false);
 
@@ -72,26 +73,36 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
     }
   }
 
-  async function handleGenerateToken() {
+  async function handleOpenScanner() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const result = await createTokenMutation.mutateAsync();
-      setPairingToken(result.token);
-      setTokenExpiry(new Date(result.expiresAt));
-      setShowPairingFlow(true);
-    } catch (err) {
-      Alert.alert('Error', 'Could not generate pairing token. Please try again.');
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Camera Permission Required', 'Allow camera access to scan the QR code on your panel.');
+        return;
+      }
     }
+    setScannerScanned(false);
+    setShowScanner(true);
   }
 
-  async function handleCopyToken() {
-    if (!pairingToken) return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  async function handleBarcode({ data }: BarcodeScanningResult) {
+    if (scannerScanned) return;
+    if (!data.startsWith('JACK:')) {
+      Alert.alert('Invalid QR Code', 'This is not a DayCheck panel QR code.');
+      return;
+    }
+    const mac = data.slice(5);
+    setScannerScanned(true);
+    setShowScanner(false);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
-      await Share.share({ message: pairingToken, title: 'Jack Alarm Pairing Token' });
-    } catch { /* user cancelled share */ }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+      await claimByMacMutation.mutateAsync({ macAddress: mac });
+      await devicesQuery.refetch();
+      Alert.alert('Paired!', 'Your panel is now linked to your account.');
+    } catch (e: any) {
+      Alert.alert('Pairing Failed', e?.message ?? 'Make sure the panel is online and try again.');
+    }
   }
 
   function handleRemoveDevice(deviceId: number) {
@@ -119,7 +130,35 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
   const devices = devicesQuery.data ?? [];
 
   return (
-    <View style={[{ borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, marginTop: 20, backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={{ borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, marginTop: 20, backgroundColor: colors.surface, borderColor: colors.border }}>
+      {/* Full-screen QR scanner */}
+      {showScanner && (
+        <View style={RNStyleSheet.absoluteFillObject as any}>
+          <CameraView
+            style={RNStyleSheet.absoluteFillObject}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={scannerScanned ? undefined : handleBarcode}
+          />
+          <View style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', textShadowColor: '#000', textShadowRadius: 4 }}>
+              Point at the QR code on your panel
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setShowScanner(false)}
+            style={({ pressed }) => ({
+              position: 'absolute', top: 50, right: 20,
+              backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20,
+              paddingHorizontal: 16, paddingVertical: 8,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700' }}>✕ Cancel</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 }}>
         <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22' }}>
@@ -162,68 +201,25 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
         </View>
       )}
 
-      {/* Single-device note */}
-      {devices.length > 0 && !showPairingFlow && (
-        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 16, paddingVertical: 10 }}>
-          <Text style={{ fontSize: 12, color: colors.muted, textAlign: 'center' }}>
-            Only one Jack Alarm can be connected at a time. Remove the current device to pair a new one.
-          </Text>
-        </View>
-      )}
-      {/* Pairing flow */}
-      {showPairingFlow && pairingToken ? (
-        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, padding: 16, gap: 12 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>Step 1 — Copy this token:</Text>
-          <Pressable
-            onPress={handleCopyToken}
-            style={({ pressed }) => [{
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-              backgroundColor: colors.background, borderRadius: 10,
-              borderWidth: 1, borderColor: colors.border,
-              padding: 12, opacity: pressed ? 0.7 : 1,
-            }]}
-          >
-            <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: colors.primary, fontVariant: ['tabular-nums'], letterSpacing: 1 }}>
-              {pairingToken}
-            </Text>
-            <IconSymbol name={copied ? 'checkmark.circle.fill' : 'doc.on.doc'} size={20} color={copied ? '#22C55E' : colors.muted} />
-          </Pressable>
-          <Text style={{ fontSize: 13, color: colors.muted, lineHeight: 18 }}>
-            Step 2 — On your Jack Alarm, go to <Text style={{ fontWeight: '700', color: colors.foreground }}>Settings → Pair with App</Text> and enter this token.
-          </Text>
-          {tokenExpiry && (
-            <Text style={{ fontSize: 11, color: colors.muted }}>
-              Token expires at {tokenExpiry.toLocaleTimeString()}
-            </Text>
-          )}
-          <Pressable
-            onPress={() => { setShowPairingFlow(false); setPairingToken(null); devicesQuery.refetch(); }}
-            style={({ pressed }) => [{
-              alignItems: 'center', paddingVertical: 10, borderRadius: 10,
-              backgroundColor: colors.primary + '18', opacity: pressed ? 0.7 : 1,
-            }]}
-          >
-            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Done — Close</Text>
-          </Pressable>
-        </View>
-      ) : devices.length === 0 ? (
-        <Pressable
-          onPress={handleGenerateToken}
-          disabled={createTokenMutation.isPending}
-          style={({ pressed }) => [{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-            borderTopWidth: 1, borderTopColor: colors.border,
-            paddingVertical: 14, paddingHorizontal: 16,
-            opacity: pressed ? 0.7 : 1,
-          }]}
-        >
-          {createTokenMutation.isPending
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <IconSymbol name="antenna.radiowaves.left.and.right" size={18} color={colors.primary} />
-          }
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>Pair Jack Alarm</Text>
-        </Pressable>
-      ) : null}
+      {/* Pair button — always visible */}
+      <Pressable
+        onPress={handleOpenScanner}
+        disabled={claimByMacMutation.isPending}
+        style={({ pressed }) => [{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+          borderTopWidth: 1, borderTopColor: colors.border,
+          paddingVertical: 14, paddingHorizontal: 16,
+          opacity: pressed || claimByMacMutation.isPending ? 0.7 : 1,
+        }]}
+      >
+        {claimByMacMutation.isPending
+          ? <ActivityIndicator size="small" color={colors.primary} />
+          : <IconSymbol name="qrcode.viewfinder" size={18} color={colors.primary} />
+        }
+        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>
+          {devices.length > 0 ? 'Scan QR to Re-pair' : 'Scan Panel QR Code'}
+        </Text>
+      </Pressable>
       {/* Sync Habits to Panel button — only shown when a device is paired */}
       {devices.length > 0 && (
         <Pressable
