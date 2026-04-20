@@ -533,6 +533,17 @@ export const appRouter = router({
         db.deleteDeviceRecording(ctx.user.id, input.id)
       ),
 
+    /** Claim a device by its API key — links it to the current user's account.
+     * Use this if the device was registered under a different account or needs to be re-linked.
+     */
+    claimDevice: protectedProcedure
+      .input(z.object({ apiKey: z.string().min(10).max(128) }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await db.claimDeviceByApiKey(input.apiKey, ctx.user.id);
+        if (!result) throw new Error("Device not found — check the API key and try again");
+        return { deviceId: result.deviceId };
+      }),
+
     /** Rotate the API key for a paired device. The device must be re-paired or updated via NVS to use the new key. */
     rotateKey: protectedProcedure
       .input(z.object({ deviceId: z.number().int().positive() }))

@@ -978,6 +978,20 @@ export async function getDeviceByApiKey(apiKey: string) {
   return rows[0];
 }
 
+/** Claim a device by its API key — links it to the given userId.
+ * Returns the device id if found and updated, null otherwise.
+ */
+export async function claimDeviceByApiKey(apiKey: string, userId: number): Promise<{ deviceId: number } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ id: devices.id, userId: devices.userId }).from(devices).where(eq(devices.apiKey, apiKey)).limit(1);
+  if (rows.length === 0) return null;
+  const device = rows[0];
+  // Update userId (allow re-claiming even if already owned)
+  await db.update(devices).set({ userId, pairingToken: null }).where(eq(devices.id, device.id));
+  return { deviceId: device.id };
+}
+
 /** Get all devices for a user */
 export async function getUserDevices(userId: number) {
   const db = await getDb();

@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   ToastAndroid,
   View,
 } from "react-native";
@@ -185,7 +186,10 @@ export default function PanelSettingsScreen() {
   const updateMutation = trpc.devices.updateSettings.useMutation();
   const habitsBulkSync = trpc.habits.bulkSync.useMutation();
   const rotateKeyMutation = trpc.devices.rotateKey.useMutation();
+  const claimDeviceMutation = trpc.devices.claimDevice.useMutation();
 
+  const [claimKey, setClaimKey] = useState("");
+  const [claimError, setClaimError] = useState("");
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [syncingHabits, setSyncingHabits] = useState(false);
@@ -463,6 +467,59 @@ export default function PanelSettingsScreen() {
           )}
         </SectionCard>
 
+        {/* Section 5: Claim Panel */}
+        {!device && (
+          <SectionCard
+            title="Link Your Panel"
+            icon="link"
+            iconColor={colors.primary}
+            colors={colors}
+          >
+            <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 10 }]}>
+              Enter the API key shown in your panel's serial log ([NVS] apiKey loaded: ...) to link it to your account.
+            </Text>
+            <TextInput
+              value={claimKey}
+              onChangeText={(t) => { setClaimKey(t); setClaimError(""); }}
+              placeholder="Paste API key here"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              style={[
+                styles.claimInput,
+                { color: colors.foreground, borderColor: claimError ? colors.error : colors.border, backgroundColor: colors.surface },
+              ]}
+            />
+            {claimError ? (
+              <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{claimError}</Text>
+            ) : null}
+            <Pressable
+              onPress={async () => {
+                if (!claimKey.trim()) { setClaimError("Please enter the API key"); return; }
+                try {
+                  await claimDeviceMutation.mutateAsync({ apiKey: claimKey.trim() });
+                  devicesQuery.refetch();
+                  setClaimKey("");
+                  toast("Panel linked successfully!");
+                } catch (err: any) {
+                  setClaimError(err.message ?? "Failed to link panel");
+                }
+              }}
+              style={({ pressed }) => [
+                styles.claimBtn,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              {claimDeviceMutation.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.claimBtnText}>Link Panel</Text>
+              )}
+            </Pressable>
+          </SectionCard>
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </ScreenContainer>
@@ -562,6 +619,26 @@ const styles = StyleSheet.create({
   hourChipText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  claimInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontFamily: 'monospace',
+    marginBottom: 8,
+  },
+  claimBtn: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  claimBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
   aboutRow: {
     flexDirection: "row",
