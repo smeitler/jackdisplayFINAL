@@ -19,7 +19,7 @@ import { trpc } from "@/lib/trpc";
 
 import * as WebBrowser from "expo-web-browser";
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
-import { StyleSheet as RNStyleSheet } from "react-native";
+import { Modal, StyleSheet as RNStyleSheet } from "react-native";
 import { VoicePickerSection } from "@/components/voice-picker-section";
 import { VoiceJournalSection } from "@/components/voice-journal-section";
 import { MorningPracticeSection } from "@/components/morning-practice-section";
@@ -130,17 +130,16 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
   const devices = devicesQuery.data ?? [];
 
   return (
-    <View style={{ borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, marginTop: 20, backgroundColor: colors.surface, borderColor: colors.border }}>
-      {/* Full-screen QR scanner */}
-      {showScanner && (
-        <View style={RNStyleSheet.absoluteFillObject as any}>
+    <>
+    <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
           <CameraView
             style={RNStyleSheet.absoluteFillObject}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={scannerScanned ? undefined : handleBarcode}
           />
-          <View style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center' }}>
+          <View style={{ position: 'absolute', bottom: 80, left: 0, right: 0, alignItems: 'center' }}>
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', textShadowColor: '#000', textShadowRadius: 4 }}>
               Point at the QR code on your panel
             </Text>
@@ -148,7 +147,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
           <Pressable
             onPress={() => setShowScanner(false)}
             style={({ pressed }) => ({
-              position: 'absolute', top: 50, right: 20,
+              position: 'absolute', top: 60, right: 20,
               backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20,
               paddingHorizontal: 16, paddingVertical: 8,
               opacity: pressed ? 0.7 : 1,
@@ -157,7 +156,9 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
             <Text style={{ color: '#fff', fontWeight: '700' }}>✕ Cancel</Text>
           </Pressable>
         </View>
-      )}
+      </Modal>
+
+    <View style={{ borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, marginTop: 20, backgroundColor: colors.surface, borderColor: colors.border }}>
 
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 }}>
@@ -267,10 +268,10 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
         </View>
         <IconSymbol name="chevron.right" size={14} color={colors.muted} />
       </Pressable>
-    </View>
+     </View>
+    </>
   );
 }
-
 const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
   { id: 'classic',  label: 'Classic',  emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3') },
 ];
