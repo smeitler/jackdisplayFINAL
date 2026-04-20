@@ -458,8 +458,8 @@ async function processRecordingAsync(
     const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Hit the gym for about 45 minutes."}}` : '';
 
     // 4. LLM extraction — full analysis matching voiceJournal.transcribeAndAnalyze
-    const { invokeAnthropic } = await import('./_core/llm.js');
-    const llmResp = await invokeAnthropic({
+    const { invokeLLM } = await import('./_core/llm.js');
+    const llmResp = await invokeLLM({
       messages: [
         {
           role: 'system',
