@@ -9,6 +9,7 @@
  *
  * Endpoints:
  *   POST /api/device/register              — First-time registration using pairing token
+ *   POST /api/device/self-register          — Token-free self-registration on WiFi connect (QR pairing flow)
  *   GET  /api/device/schedule              — Get current alarm schedule
  *   GET  /api/device/audio-manifest        — Get list of habit audio files to cache on SD card
  *   POST /api/device/event                 — Report an alarm event (fired, dismissed, snooze)
@@ -81,6 +82,39 @@ router.post("/register", async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error("[device/register]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/device/self-register ─────────────────────────────────────────
+// Called by the ESP32 on every WiFi connect. No token required — the panel
+// announces itself by MAC so the app can later claim it via QR scan.
+// If the MAC already exists, returns the existing API key (idempotent).
+// New devices are created unclaimed (userId = 0) until the user scans the QR.
+
+router.post("/self-register", async (req: Request, res: Response) => {
+  try {
+    const { macAddress, firmwareVersion } = req.body as {
+      macAddress?: string;
+      firmwareVersion?: string;
+    };
+    if (!macAddress) {
+      res.status(400).json({ error: "macAddress is required" });
+      return;
+    }
+    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+    if (!macRegex.test(macAddress)) {
+      res.status(400).json({ error: "Invalid MAC address format (expected AA:BB:CC:DD:EE:FF)" });
+      return;
+    }
+    const result = await db.selfRegisterDevice({ macAddress, firmwareVersion });
+    res.json({
+      deviceId: result.deviceId,
+      apiKey: result.apiKey,
+      message: "Device self-registered",
+    });
+  } catch (err: any) {
+    console.error("[device/self-register]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

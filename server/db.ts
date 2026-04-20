@@ -1010,6 +1010,45 @@ export async function claimDeviceByMac(macAddress: string, userId: number): Prom
   return { deviceId: device.id, apiKey: device.apiKey };
 }
 
+
+/**
+ * Self-register a device by MAC address (no pairing token required).
+ * Called by the firmware on every WiFi connect.
+ * Idempotent: if the MAC already exists, returns the existing API key.
+ * New devices are created unclaimed (userId = 0) until the user scans the QR.
+ */
+export async function selfRegisterDevice(data: {
+  macAddress: string;
+  firmwareVersion?: string;
+}): Promise<{ deviceId: number; apiKey: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Check if device already exists by MAC
+  const existing = await db.select({ id: devices.id, apiKey: devices.apiKey })
+    .from(devices)
+    .where(eq(devices.macAddress, data.macAddress))
+    .limit(1);
+  if (existing.length > 0) {
+    // Update firmware version and lastSeenAt, return existing key
+    await db.update(devices).set({
+      firmwareVersion: data.firmwareVersion ?? undefined,
+      lastSeenAt: new Date(),
+    }).where(eq(devices.id, existing[0].id));
+    return { deviceId: existing[0].id, apiKey: existing[0].apiKey };
+  }
+  // New device -- create unclaimed row (userId = 0 sentinel)
+  const apiKey = generateApiKey();
+  const result = await db.insert(devices).values({
+    userId: 0,
+    macAddress: data.macAddress,
+    apiKey,
+    firmwareVersion: data.firmwareVersion ?? null,
+    lastSeenAt: new Date(),
+  });
+  const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+  return { deviceId: Number(insertId), apiKey };
+}
+
 /** Get all devices for a user */
 export async function getUserDevices(userId: number) {
   const db = await getDb();
