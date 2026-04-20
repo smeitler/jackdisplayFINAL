@@ -803,8 +803,8 @@ router.post("/voice/transcribe", requireDeviceKey, async (req: Request, res: Res
     }
 
     // ── 3. Parse command intent via LLM ──────────────────────────────────────
-    const { invokeAnthropic } = await import('./_core/llm.js');
-    const llmResp = await invokeAnthropic({
+    const { invokeLLM } = await import('./_core/llm.js');
+    const llmResp = await invokeLLM({
       messages: [
         {
           role: 'system',
