@@ -20,6 +20,7 @@
     "qr": "node scripts/generate_qr.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@aws-sdk/client-s3": "^3.1010.0",
     "@aws-sdk/s3-request-presigner": "^3.1010.0",
     "@expo/vector-icons": "^15.0.3",

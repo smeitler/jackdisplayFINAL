@@ -312,3 +312,109 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   return (await response.json()) as InvokeResult;
 }
+
+// ─── Anthropic Claude integration ─────────────────────────────────────────────
+// Drop-in replacement for invokeLLM that routes to Anthropic Claude instead of
+// the Manus forge. Returns the same InvokeResult shape so callers need no changes
+// other than swapping the function name.
+
+const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
+const ANTHROPIC_FAST_MODEL = "claude-haiku-4-5-20251001";
+const ANTHROPIC_SMART_MODEL = "claude-sonnet-4-5-20250929";
+
+function toAnthropicMessages(messages: Message[]): { system?: string; messages: Array<{ role: "user" | "assistant"; content: string }> } {
+  let system: string | undefined;
+  const out: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+  for (const msg of messages) {
+    if (msg.role === "system") {
+      // Anthropic takes system as a top-level param
+      const parts = Array.isArray(msg.content) ? msg.content : [msg.content];
+      system = parts.map((p) => (typeof p === "string" ? p : (p as TextContent).text ?? JSON.stringify(p))).join("\n");
+      continue;
+    }
+    const role = (msg.role === "assistant" ? "assistant" : "user") as "user" | "assistant";
+    const parts = Array.isArray(msg.content) ? msg.content : [msg.content];
+    const text = parts.map((p) => (typeof p === "string" ? p : (p as TextContent).text ?? JSON.stringify(p))).join("\n");
+    out.push({ role, content: text });
+  }
+
+  // Anthropic requires the conversation to start with a user message
+  if (out.length === 0 || out[0].role !== "user") {
+    out.unshift({ role: "user", content: "(begin)" });
+  }
+
+  return { system, messages: out };
+}
+
+export async function invokeAnthropic(
+  params: InvokeParams & { smart?: boolean },
+): Promise<InvokeResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+
+  const model = params.smart ? ANTHROPIC_SMART_MODEL : ANTHROPIC_FAST_MODEL;
+  const maxTokens = params.maxTokens ?? params.max_tokens ?? 4096;
+  const wantsJson = params.responseFormat?.type === "json_object" ||
+    params.response_format?.type === "json_object";
+
+  const { system, messages: anthropicMessages } = toAnthropicMessages(params.messages);
+
+  // If JSON output is requested, append a reminder to the last user message
+  if (wantsJson && anthropicMessages.length > 0) {
+    const last = anthropicMessages[anthropicMessages.length - 1];
+    if (!last.content.includes("JSON")) {
+      last.content += "\n\nRespond with valid JSON only, no markdown fences.";
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: maxTokens,
+    messages: anthropicMessages,
+  };
+  if (system) body.system = system;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic invoke failed: ${response.status} – ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+
+  // Normalise to InvokeResult shape (OpenAI-compatible)
+  const text = (data.content as any[])
+    .filter((c: any) => c.type === "text")
+    .map((c: any) => c.text)
+    .join("");
+
+  return {
+    id: data.id ?? "anthropic",
+    created: Math.floor(Date.now() / 1000),
+    model: data.model ?? model,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: text },
+        finish_reason: data.stop_reason ?? null,
+      },
+    ],
+    usage: data.usage
+      ? {
+          prompt_tokens: data.usage.input_tokens ?? 0,
+          completion_tokens: data.usage.output_tokens ?? 0,
+          total_tokens: (data.usage.input_tokens ?? 0) + (data.usage.output_tokens ?? 0),
+        }
+      : undefined,
+  };
+}

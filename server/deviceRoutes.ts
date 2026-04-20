@@ -436,8 +436,8 @@ async function processRecordingAsync(
     const habitJsonExample = habitList ? `, "habitResults": {"habit_id": {"rating": "green", "note": "Hit the gym for about 45 minutes."}}` : '';
 
     // 4. LLM extraction — full analysis matching voiceJournal.transcribeAndAnalyze
-    const { invokeLLM } = await import('./_core/llm.js');
-    const llmResp = await invokeLLM({
+    const { invokeAnthropic } = await import('./_core/llm.js');
+    const llmResp = await invokeAnthropic({
       messages: [
         {
           role: 'system',
@@ -781,8 +781,8 @@ router.post("/voice/transcribe", requireDeviceKey, async (req: Request, res: Res
     }
 
     // ── 3. Parse command intent via LLM ──────────────────────────────────────
-    const { invokeLLM } = await import('./_core/llm.js');
-    const llmResp = await invokeLLM({
+    const { invokeAnthropic } = await import('./_core/llm.js');
+    const llmResp = await invokeAnthropic({
       messages: [
         {
           role: 'system',
