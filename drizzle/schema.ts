@@ -109,8 +109,8 @@ export const alarmConfigs = mysqlTable("alarmConfigs", {
   elevenLabsVoice: varchar("elevenLabsVoice", { length: 32 }).default("rachel"),
   soundId: varchar("soundId", { length: 64 }).default("drumming"),
   snoozeMinutes: int("snoozeMinutes").default(10),
-  assignedStackId: varchar("assignedStackId", { length: 64 }).default(null),
-  label: varchar("label", { length: 64 }).default(null),
+  assignedStackId: varchar("assignedStackId", { length: 64 }),
+  label: varchar("label", { length: 64 }),
   requireCheckin: boolean("requireCheckin").default(false),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
