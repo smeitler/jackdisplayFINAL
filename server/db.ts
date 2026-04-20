@@ -992,6 +992,24 @@ export async function claimDeviceByApiKey(apiKey: string, userId: number): Promi
   return { deviceId: device.id };
 }
 
+/** Claim a device by its MAC address — links it to the given userId.
+ * The device must already exist in the DB (registered or pending).
+ * Returns the device id and apiKey if found, null otherwise.
+ */
+export async function claimDeviceByMac(macAddress: string, userId: number): Promise<{ deviceId: number; apiKey: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ id: devices.id, apiKey: devices.apiKey, userId: devices.userId })
+    .from(devices)
+    .where(eq(devices.macAddress, macAddress))
+    .limit(1);
+  if (rows.length === 0) return null;
+  const device = rows[0];
+  // Link to this user
+  await db.update(devices).set({ userId, pairingToken: null, pairingTokenExpiresAt: null }).where(eq(devices.id, device.id));
+  return { deviceId: device.id, apiKey: device.apiKey };
+}
+
 /** Get all devices for a user */
 export async function getUserDevices(userId: number) {
   const db = await getDb();

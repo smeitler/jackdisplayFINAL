@@ -480,6 +480,15 @@ export const appRouter = router({
       db.createDevicePairingToken(ctx.user.id)
     ),
 
+    /** Claim a device by its MAC address (scanned from QR code on the panel) */
+    claimByMac: protectedProcedure
+      .input(z.object({ macAddress: z.string().min(1).max(32) }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await db.claimDeviceByMac(input.macAddress, ctx.user.id);
+        if (!result) throw new Error("Device not found. Make sure the panel has been powered on and connected to WiFi at least once.");
+        return result;
+      }),
+
     /** List all physical devices linked to the current user's account */
     list: protectedProcedure.query(({ ctx }) =>
       db.getUserDevices(ctx.user.id)

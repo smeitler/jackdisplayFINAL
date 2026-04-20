@@ -1724,3 +1724,7 @@
 - [x] Journal header: replace week strip with single day label + left/right arrows, tap label opens calendar
 - [x] Journal header: show actual date (e.g. "April 14") instead of "Today"/"Yesterday"/weekday
 - [ ] Calendar modal: make date numbers brighter and centered in cells, add today indicator (circle outline)
+- [x] QR pairing: server claimDeviceByMac DB function + tRPC procedure added
+- [x] QR pairing: firmware QR code display screen (Settings → Pair with App shows JACK:<MAC> QR)
+- [x] QR pairing: app Panel Settings camera scanner — scan panel QR to call claimByMac and link device
+- [x] Add expo-camera dependency + plugin to app.config.ts for QR scanning

@@ -1,7 +1,7 @@
 /**
  * Panel Settings Screen
  * Controls audio, voice, Low EMF mode, and shows device info for the Jack Alarm display.
- * 4 sections: Audio, Voice, Low EMF Mode, About
+ * Sections: Audio, Low EMF Mode, Habits, About, Pair Panel
  */
 import { useEffect, useRef, useState } from "react";
 import {
@@ -14,10 +14,10 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   ToastAndroid,
   View,
 } from "react-native";
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
@@ -38,7 +38,6 @@ function showToast(msg: string) {
   if (Platform.OS === "android") {
     ToastAndroid.show(msg, ToastAndroid.SHORT);
   }
-  // iOS: we use a small inline banner (see InlineToast component)
 }
 
 // ─── InlineToast ─────────────────────────────────────────────────────────────
@@ -174,6 +173,97 @@ function ToggleRow({
   );
 }
 
+// ─── QR Scanner Modal ─────────────────────────────────────────────────────────
+
+function QrScannerModal({
+  visible,
+  onScanned,
+  onClose,
+  colors,
+}: {
+  visible: boolean;
+  onScanned: (mac: string) => void;
+  onClose: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+
+  useEffect(() => {
+    if (visible) setScanned(false);
+  }, [visible]);
+
+  if (!visible) return null;
+
+  if (!permission) {
+    return (
+      <View style={styles.scannerOverlay}>
+        <ActivityIndicator color="#fff" />
+      </View>
+    );
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.scannerOverlay}>
+        <View style={styles.scannerPermBox}>
+          <Text style={styles.scannerPermTitle}>Camera Permission Required</Text>
+          <Text style={styles.scannerPermDesc}>
+            To pair your panel, allow camera access to scan the QR code displayed on the panel screen.
+          </Text>
+          <Pressable
+            style={[styles.scannerBtn, { backgroundColor: colors.primary }]}
+            onPress={requestPermission}
+          >
+            <Text style={styles.scannerBtnText}>Allow Camera</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.scannerBtn, { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.border, marginTop: 8 }]}
+            onPress={onClose}
+          >
+            <Text style={[styles.scannerBtnText, { color: colors.muted }]}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  function handleBarcode({ data }: BarcodeScanningResult) {
+    if (scanned) return;
+    // Payload format: "JACK:AA:BB:CC:DD:EE:FF"
+    if (!data.startsWith("JACK:")) {
+      Alert.alert("Invalid QR Code", "This QR code is not from a DayCheck panel. Make sure you're scanning the panel's pairing screen.");
+      return;
+    }
+    const mac = data.slice(5); // strip "JACK:" prefix
+    setScanned(true);
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onScanned(mac);
+  }
+
+  return (
+    <View style={styles.scannerOverlay}>
+      <CameraView
+        style={StyleSheet.absoluteFillObject}
+        facing="back"
+        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+        onBarcodeScanned={scanned ? undefined : handleBarcode}
+      />
+      {/* Dim overlay with cut-out hint */}
+      <View style={styles.scannerFrame} pointerEvents="none">
+        <View style={[styles.scannerCorner, styles.scannerCornerTL]} />
+        <View style={[styles.scannerCorner, styles.scannerCornerTR]} />
+        <View style={[styles.scannerCorner, styles.scannerCornerBL]} />
+        <View style={[styles.scannerCorner, styles.scannerCornerBR]} />
+      </View>
+      <Text style={styles.scannerHint}>Point camera at the QR code on your panel</Text>
+      <Pressable style={styles.scannerCloseBtn} onPress={onClose}>
+        <Text style={styles.scannerCloseBtnText}>✕ Cancel</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function PanelSettingsScreen() {
@@ -186,10 +276,9 @@ export default function PanelSettingsScreen() {
   const updateMutation = trpc.devices.updateSettings.useMutation();
   const habitsBulkSync = trpc.habits.bulkSync.useMutation();
   const rotateKeyMutation = trpc.devices.rotateKey.useMutation();
-  const claimDeviceMutation = trpc.devices.claimDevice.useMutation();
+  const claimByMacMutation = trpc.devices.claimByMac.useMutation();
 
-  const [claimKey, setClaimKey] = useState("");
-  const [claimError, setClaimError] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [syncingHabits, setSyncingHabits] = useState(false);
@@ -220,7 +309,7 @@ export default function PanelSettingsScreen() {
   async function save(patch: Parameters<typeof updateMutation.mutateAsync>[0]) {
     try {
       await updateMutation.mutateAsync(patch);
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Failed to save setting. Please try again.");
     }
   }
@@ -249,11 +338,24 @@ export default function PanelSettingsScreen() {
           monthlyGoal: h.monthlyGoal ?? null,
         }))
       );
-      toast(`${habits.length} habit${habits.length !== 1 ? 's' : ''} synced to panel`);
-    } catch (e: any) {
-      Alert.alert("Sync Failed", e?.message ?? "Could not sync habits. Make sure you're logged in.");
+      toast(`${habits.length} habit${habits.length !== 1 ? "s" : ""} synced to panel`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Could not sync habits. Make sure you're logged in.";
+      Alert.alert("Sync Failed", msg);
     } finally {
       setSyncingHabits(false);
+    }
+  }
+
+  async function handleQrScanned(mac: string) {
+    setShowScanner(false);
+    try {
+      await claimByMacMutation.mutateAsync({ macAddress: mac });
+      await devicesQuery.refetch();
+      toast("Panel paired successfully! 🎉");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Pairing failed. Make sure the panel is online.";
+      Alert.alert("Pairing Failed", msg);
     }
   }
 
@@ -295,6 +397,14 @@ export default function PanelSettingsScreen() {
 
   return (
     <ScreenContainer>
+      {/* QR Scanner overlay (full-screen) */}
+      <QrScannerModal
+        visible={showScanner}
+        onScanned={handleQrScanned}
+        onClose={() => setShowScanner(false)}
+        colors={colors}
+      />
+
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
@@ -330,7 +440,6 @@ export default function PanelSettingsScreen() {
           <Text style={[styles.sectionDesc, { color: colors.muted }]}>
             Panel plays a short audio cue for each habit when you rate it. Disable to rate habits silently.
           </Text>
-
         </SectionCard>
 
         {/* Section 2: Low EMF Mode */}
@@ -375,7 +484,7 @@ export default function PanelSettingsScreen() {
           colors={colors}
         >
           <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 10 }]}>
-                Panel fetches your habits from the server when you start a recording. If the panel shows generic habits instead of yours, tap below to push your {appHabits.length} habit{appHabits.length !== 1 ? 's' : ''} to the server.
+            Panel fetches your habits from the server when you start a recording. If the panel shows generic habits instead of yours, tap below to push your {appHabits.length} habit{appHabits.length !== 1 ? "s" : ""} to the server.
           </Text>
           <Pressable
             onPress={handleSyncHabits}
@@ -467,58 +576,46 @@ export default function PanelSettingsScreen() {
           )}
         </SectionCard>
 
-        {/* Section 5: Claim Panel */}
-        {!device && (
-          <SectionCard
-            title="Link Your Panel"
-            icon="link"
-            iconColor={colors.primary}
-            colors={colors}
-          >
-            <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 10 }]}>
-              Enter the API key shown in your panel's serial log ([NVS] apiKey loaded: ...) to link it to your account.
+        {/* Section 5: Pair Panel — always visible so user can re-pair */}
+        <SectionCard
+          title={device ? "Re-pair Panel" : "Pair Your Panel"}
+          icon="link"
+          iconColor={colors.primary}
+          colors={colors}
+        >
+          {device ? (
+            <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 12 }]}>
+              Your panel is already linked. To link a different panel, scan its QR code below.
             </Text>
-            <TextInput
-              value={claimKey}
-              onChangeText={(t) => { setClaimKey(t); setClaimError(""); }}
-              placeholder="Paste API key here"
-              placeholderTextColor={colors.muted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              style={[
-                styles.claimInput,
-                { color: colors.foreground, borderColor: claimError ? colors.error : colors.border, backgroundColor: colors.surface },
-              ]}
-            />
-            {claimError ? (
-              <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{claimError}</Text>
-            ) : null}
-            <Pressable
-              onPress={async () => {
-                if (!claimKey.trim()) { setClaimError("Please enter the API key"); return; }
-                try {
-                  await claimDeviceMutation.mutateAsync({ apiKey: claimKey.trim() });
-                  devicesQuery.refetch();
-                  setClaimKey("");
-                  toast("Panel linked successfully!");
-                } catch (err: any) {
-                  setClaimError(err.message ?? "Failed to link panel");
-                }
-              }}
-              style={({ pressed }) => [
-                styles.claimBtn,
-                { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              {claimDeviceMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.claimBtnText}>Link Panel</Text>
-              )}
-            </Pressable>
-          </SectionCard>
-        )}
+          ) : (
+            <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 12 }]}>
+              On your panel, go to Settings → Pair with Jack App. A QR code will appear — scan it here to link the panel to your account.
+            </Text>
+          )}
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setShowScanner(true);
+            }}
+            style={({ pressed }) => [
+              styles.claimBtn,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            {claimByMacMutation.isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.claimBtnText}>
+                {device ? "Scan Panel QR to Re-pair" : "Scan Panel QR Code"}
+              </Text>
+            )}
+          </Pressable>
+          {claimByMacMutation.isError && (
+            <Text style={[styles.sectionDesc, { color: colors.error, marginTop: 8 }]}>
+              {claimByMacMutation.error?.message ?? "Pairing failed. Try again."}
+            </Text>
+          )}
+        </SectionCard>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -620,24 +717,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
   },
-  claimInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
-    fontFamily: 'monospace',
-    marginBottom: 8,
-  },
   claimBtn: {
     borderRadius: 10,
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 4,
   },
   claimBtnText: {
-    color: '#fff',
-    fontWeight: '700',
+    color: "#fff",
+    fontWeight: "700",
     fontSize: 15,
   },
   aboutRow: {
@@ -665,5 +753,112 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     lineHeight: 18,
+  },
+  // ── QR Scanner styles ──
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scannerFrame: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    alignSelf: "center",
+    top: "50%",
+    marginTop: -120,
+  },
+  scannerCorner: {
+    position: "absolute",
+    width: 32,
+    height: 32,
+    borderColor: "#fff",
+    borderWidth: 3,
+  },
+  scannerCornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 6,
+  },
+  scannerCornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 6,
+  },
+  scannerCornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 6,
+  },
+  scannerCornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 6,
+  },
+  scannerHint: {
+    position: "absolute",
+    bottom: 160,
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingHorizontal: 32,
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  scannerCloseBtn: {
+    position: "absolute",
+    bottom: 80,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 30,
+  },
+  scannerCloseBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  scannerPermBox: {
+    backgroundColor: "#1e2022",
+    borderRadius: 20,
+    padding: 24,
+    margin: 24,
+    alignItems: "center",
+    gap: 12,
+  },
+  scannerPermTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  scannerPermDesc: {
+    color: "#9BA1A6",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  scannerBtn: {
+    width: "100%",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  scannerBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

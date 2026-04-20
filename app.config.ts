@@ -43,7 +43,7 @@ const config: ExpoConfig = {
       // Bundle custom notification sounds (.caf format required by iOS)
       UISupportedExternalAccessoryProtocols: [],
       NSMicrophoneUsageDescription: "Jack uses your microphone to record voice check-ins and analyze your daily progress.",
-      NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries.",
+      NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries and to scan the panel QR code for pairing.",
       NSPhotoLibraryUsageDescription: "Jack accesses your photo library to attach images to journal entries.",
       NSPhotoLibraryAddUsageDescription: "Jack saves photos to your library from journal entries.",
     },
@@ -81,6 +81,12 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-apple-authentication",
+    [
+      "expo-camera",
+      {
+        "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan the panel QR code for pairing."
+      }
+    ],
     [
       "expo-asset",
       {
