@@ -32,6 +32,7 @@ import { WheelTimePicker } from '@/components/wheel-time-picker';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { loadStacks, type RitualStack } from '@/lib/stacks';
+import { trpc } from '@/lib/trpc';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -676,6 +677,14 @@ export default function AlarmsScreen() {
   const { alarms, updateAlarms } = useApp();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAlarm, setEditingAlarm] = useState<AlarmEntry | null>(null);
+  const syncStacksMutation = trpc.devices.syncStacks.useMutation();
+  // Sync stacks to panel on screen mount so the panel always has the latest ritual stacks
+  useEffect(() => {
+    loadStacks().then((stacks) => {
+      if (stacks.length > 0) syncStacksMutation.mutate({ stacks });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openAdd() {
     if (alarms.length >= MAX_ALARMS) {
