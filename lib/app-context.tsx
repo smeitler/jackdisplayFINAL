@@ -619,6 +619,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncFromServer]);
 
+  // ── Periodic foreground poll ───────────────────────────────────────────────
+  // Poll every 30 seconds while the app is in the foreground so that check-ins
+  // submitted from the Jack Alarm panel appear in the app within ~30 seconds
+  // without requiring the user to background/foreground the app.
+  const POLL_INTERVAL_MS = 30_000;
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (RNAppState.currentState === 'active') {
+        const now = Date.now();
+        if (now - lastSyncTimeRef.current > SYNC_COOLDOWN_MS) {
+          lastSyncTimeRef.current = now;
+          syncFromServer();
+        }
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncFromServer]);
+
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const addHabit = useCallback(async (name: string, emoji: string, category: Category, description?: string, weeklyGoal?: number, frequencyType?: import('@/lib/storage').FrequencyType, monthlyGoal?: number, teamProposalId?: number, teamId?: number, rewardName?: string, rewardEmoji?: string, rewardDescription?: string, rewardImageUri?: string) => {
