@@ -158,10 +158,22 @@ router.get("/schedule", requireDeviceKey, async (req: Request, res: Response) =>
     // Mark device as having seen this version so needsSync clears
     await db.markDeviceScheduleSeen(device.id, device.scheduleVersion ?? 1).catch(() => {});
 
-    // Parse stacks from JSON — send as array (empty if not set)
-    let stacks: any[] = [];
+    // Parse stacks from JSON — always include default wakeup/sleep stacks as fallback
+    const DEFAULT_STACKS = [
+      { id: 'wakeup', name: 'Wake Up Stack', emoji: '☀️', steps: [], isEnabled: true },
+      { id: 'sleep',  name: 'Sleep Stack',   emoji: '🌙', steps: [], isEnabled: true },
+    ];
+    let stacks: any[] = DEFAULT_STACKS;
     if (schedule.stacksJson) {
-      try { stacks = JSON.parse(schedule.stacksJson); } catch {}
+      try {
+        const parsed = JSON.parse(schedule.stacksJson);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Merge: use saved stacks, ensure default IDs always present
+          const savedIds = new Set(parsed.map((s: any) => s.id));
+          const missing = DEFAULT_STACKS.filter((d) => !savedIds.has(d.id));
+          stacks = [...parsed, ...missing];
+        }
+      } catch {}
     }
 
     res.json({
