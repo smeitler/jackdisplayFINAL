@@ -1531,15 +1531,17 @@ export async function saveDeviceRecording(
     contentType: string;
     data: Buffer;
   }
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; insertId?: number }> {
   const db = await getDb();
   if (!db) return { ok: false };
   try {
-    await db.execute(
+    const result = await db.execute(
       sql`INSERT INTO deviceRecordings (deviceId, filename, category, sizeBytes, contentType, data, createdAt)
           VALUES (${deviceId}, ${recording.filename}, ${recording.category}, ${recording.sizeBytes}, ${recording.contentType}, ${recording.data}, NOW())`
-    );
-    return { ok: true };
+    ) as any;
+    // mysql2 returns insertId on the result object
+    const insertId: number | undefined = result?.insertId ?? result?.[0]?.insertId ?? undefined;
+    return { ok: true, insertId };
   } catch (err: any) {
     console.warn("[db/saveDeviceRecording] skipped:", err?.message);
     return { ok: false };

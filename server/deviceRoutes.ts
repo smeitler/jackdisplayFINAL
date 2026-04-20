@@ -371,20 +371,8 @@ router.post("/upload", requireDeviceKey, async (req: Request, res: Response) => 
       return { ok: false };
     });
 
-    // Get the inserted ID so we can update it after transcription
-    let recordingId: number | null = null;
-    if (saveResult.ok) {
-      try {
-        const mysql = await import('mysql2/promise');
-        const conn = await mysql.createConnection(process.env.DATABASE_URL!);
-        const [rows] = await conn.execute(
-          'SELECT id FROM deviceRecordings WHERE deviceId = ? ORDER BY id DESC LIMIT 1',
-          [device.id]
-        ) as any;
-        await conn.end();
-        recordingId = rows[0]?.id ?? null;
-      } catch {}
-    }
+    // Use insertId returned directly from saveDeviceRecording (no separate query, no race condition)
+    const recordingId: number | null = (saveResult.ok && (saveResult as any).insertId) ? (saveResult as any).insertId : null;
 
     console.log(`[device/upload] device=${device.id} file=${filename} size=${body.length} id=${recordingId}`);
 
