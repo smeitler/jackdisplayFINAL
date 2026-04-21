@@ -1,7 +1,8 @@
 /**
  * live-activity.ts — Safe wrapper for the AlarmActivity Live Activity.
  *
- * All methods are no-ops on Android and web — only runs on iOS.
+ * Uses ONLY dynamic imports so expo-widgets (which calls requireNativeModule)
+ * is never loaded on web or Android. All methods are no-ops on non-iOS platforms.
  *
  * Usage:
  *   import { startAlarmActivity, updateAlarmActivitySnoozed, endAlarmActivity } from '@/lib/live-activity';
@@ -16,15 +17,16 @@
  *   await endAlarmActivity();
  */
 import { Platform } from 'react-native';
-import type { LiveActivity } from 'expo-widgets';
-import type { AlarmActivityProps } from '../widgets/AlarmActivity';
-import { formatAlarmTime } from './notifications';
 
-// Keep a reference to the active Live Activity instance
-// so we can update/end it later from alarm-ring.tsx
-let activeInstance: LiveActivity<AlarmActivityProps> | null = null;
+// Use `any` for the instance type to avoid static imports of expo-widgets
+// (which calls requireNativeModule and crashes on web)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let activeInstance: any = null;
 
-// Lazy-load the AlarmActivity factory only on iOS
+/**
+ * Lazily load the AlarmActivity factory — only on iOS.
+ * Dynamic import ensures expo-widgets is never bundled/evaluated on web.
+ */
 async function getFactory() {
   if (Platform.OS !== 'ios') return null;
   try {
@@ -81,7 +83,12 @@ export async function updateAlarmActivitySnoozed(params: {
   if (!activeInstance) return;
   try {
     const snoozeDate = new Date(Date.now() + params.snoozeMinutes * 60 * 1000);
-    const snoozeUntil = formatAlarmTime(snoozeDate.getHours(), snoozeDate.getMinutes());
+    const h = snoozeDate.getHours();
+    const m = snoozeDate.getMinutes();
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hh = h % 12 === 0 ? 12 : h % 12;
+    const snoozeUntil = `${hh}:${String(m).padStart(2, '0')} ${period}`;
+
     await activeInstance.update({
       alarmLabel: params.alarmLabel,
       alarmTime: params.alarmTime,

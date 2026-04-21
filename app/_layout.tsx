@@ -24,7 +24,22 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { useRouter, usePathname } from "expo-router";
-import { startAlarmActivity, endAlarmActivity } from "@/lib/live-activity";
+// Live Activity helpers — loaded dynamically so expo-widgets (iOS-only native module)
+// is never evaluated on web or Android, preventing the LinkingContext crash.
+async function startAlarmActivitySafe(params: { alarmLabel: string; alarmTime: string }) {
+  if (Platform.OS !== 'ios') return;
+  try {
+    const { startAlarmActivity } = await import('@/lib/live-activity');
+    await startAlarmActivity(params);
+  } catch {}
+}
+async function endAlarmActivitySafe() {
+  if (Platform.OS !== 'ios') return;
+  try {
+    const { endAlarmActivity } = await import('@/lib/live-activity');
+    await endAlarmActivity();
+  } catch {}
+}
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -87,7 +102,7 @@ function NotificationHandler() {
       const data = notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
       if (data?.action === 'open_alarm_ring') {
         // Start Live Activity on lock screen / Dynamic Island
-        startAlarmActivity({
+        startAlarmActivitySafe({
           alarmLabel: data.alarmLabel ?? 'Alarm',
           alarmTime: data.alarmTime ?? '',
         }).catch(() => {});
@@ -111,7 +126,7 @@ function NotificationHandler() {
       const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
       if (data?.action === 'open_alarm_ring') {
         // Start Live Activity when user taps the notification (app was backgrounded)
-        startAlarmActivity({
+        startAlarmActivitySafe({
           alarmLabel: data.alarmLabel ?? 'Alarm',
           alarmTime: data.alarmTime ?? '',
         }).catch(() => {});
@@ -139,7 +154,7 @@ function NotificationHandler() {
           const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
           if (data?.action === 'open_alarm_ring') {
             // Start Live Activity on cold launch (app was killed)
-            startAlarmActivity({
+            startAlarmActivitySafe({
               alarmLabel: data.alarmLabel ?? 'Alarm',
               alarmTime: data.alarmTime ?? '',
             }).catch(() => {});

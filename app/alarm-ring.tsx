@@ -29,7 +29,15 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 import { useApp } from '@/lib/app-context';
-import { endAlarmActivity, updateAlarmActivitySnoozed } from '@/lib/live-activity';
+// Dynamic imports so expo-widgets is never loaded on web
+async function endAlarmActivitySafe() {
+  if (Platform.OS !== 'ios') return;
+  try { const { endAlarmActivity } = await import('@/lib/live-activity'); await endAlarmActivity(); } catch {}
+}
+async function updateAlarmActivitySnoozedSafe(p: { alarmLabel: string; alarmTime: string; snoozeMinutes: number }) {
+  if (Platform.OS !== 'ios') return;
+  try { const { updateAlarmActivitySnoozed } = await import('@/lib/live-activity'); await updateAlarmActivitySnoozed(p); } catch {}
+}
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -129,7 +137,7 @@ export default function AlarmRingScreen() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     stopSound();
     // End Live Activity when user dismisses the alarm
-    endAlarmActivity().catch(() => {});
+    endAlarmActivitySafe().catch(() => {});
     // If a ritual stack is assigned, launch it directly; otherwise go home
     if (assignedStackId) {
       router.replace({
@@ -149,7 +157,7 @@ export default function AlarmRingScreen() {
     // alarmLabel and alarmTime come from the notification data payload (set in notifications.ts)
     const alarmLabel = params.alarmLabel ?? (alarm as typeof alarm & { label?: string }).label ?? 'Alarm';
     const alarmTime = params.alarmTime ?? 'Alarm'; // original alarm time e.g. "7:00 AM"
-    updateAlarmActivitySnoozed({
+    updateAlarmActivitySnoozedSafe({
       alarmLabel,
       alarmTime,
       snoozeMinutes,
