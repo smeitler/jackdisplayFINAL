@@ -34,8 +34,10 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       allowAlert: true,
       allowBadge: true,
       allowSound: true,
-      // Requests Time-Sensitive notification level (iOS 15+)
-      // Breaks through Focus modes and Do Not Disturb
+      // Critical alerts bypass DND and silent mode at the OS level (iOS 12+)
+      // Note: requires Apple entitlement for App Store; works in dev/TestFlight builds
+      allowCriticalAlerts: true,
+      // Time-Sensitive breaks through Focus modes (iOS 15+)
       provideAppNotificationSettings: true,
     },
   });
@@ -88,8 +90,9 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
           assignedStackId: (config as AlarmConfig & { assignedStackId?: string }).assignedStackId ?? '',
         },
         sound: soundFile,
-        // Time-Sensitive: breaks through Focus modes and DND on iOS 15+
-        ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+        // Critical: bypasses DND, silent mode, and Focus on iOS 15+
+        // Falls back gracefully on older iOS / Expo Go (still delivers notification)
+        ...(Platform.OS === 'ios' ? { interruptionLevel: 'critical' as const } : {}),
         // Android: highest priority channel ensures alarm-level delivery
         priority: 'max',
       },

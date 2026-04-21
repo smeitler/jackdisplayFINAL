@@ -1047,4 +1047,166 @@ router.post('/voice/debug-upload', requireDeviceKey, async (req: Request, res: R
   }
 });
 
+// ─── POST /api/device/practice/generate ─────────────────────────────────────
+// Returns audio URL(s) for any practice/content type.
+// CDN-backed types (motivational, affirmations, jokes, spiritual, bom, bible)
+// return a pre-recorded URL instantly.
+// TTS-generated types (meditation, priming, breathwork, visualization) call
+// buildScript + generateSpeech using the device's linked user context.
+//
+// Body: { type, category?, lengthMinutes?, breathworkStyle?, voiceId?, index? }
+// Response: { type, title, audioUrls, pausesBetween, totalDurationMinutes, index, totalCount }
+router.post("/practice/generate", requireDeviceKey, async (req: Request, res: Response) => {
+  try {
+    const device = (req as any).device as { id: number; userId: number | null };
+    const { type, category, lengthMinutes, breathworkStyle, voiceId, index } = req.body as {
+      type: string;
+      category?: string;
+      lengthMinutes?: number;
+      breathworkStyle?: string;
+      voiceId?: string;
+      index?: number;
+    };
+
+    if (!type) return res.status(400).json({ error: "type is required" });
+
+    const CDN_TYPES = ['motivational', 'affirmations', 'jokes', 'spiritual', 'bible', 'bom'];
+    if (CDN_TYPES.includes(type)) {
+      const { MOTIVATIONAL_SPEECHES, SPEECH_CATEGORIES } = await import('../app/data/motivational-speeches.js');
+      const { AFFIRMATIONS, AFFIRMATION_CATEGORIES } = await import('../app/data/affirmations.js');
+      const { JOKES, JOKE_CATEGORIES } = await import('../app/data/jokes.js');
+      const { BOOK_OF_MORMON_SECTIONS } = await import('../app/data/spiritual-scriptures.js');
+      const { BOM_VERSES } = await import('../app/data/bom-verses.js');
+      const { BIBLE_VERSES } = await import('../app/data/bible-verses.js');
+
+      let pool: Array<{ url: string; title?: string; label?: string }> = [];
+      let title = '';
+
+      if (type === 'motivational') {
+        pool = category ? MOTIVATIONAL_SPEECHES.filter((s: any) => s.category === category) : MOTIVATIONAL_SPEECHES;
+        title = 'Motivational Speech';
+      } else if (type === 'affirmations') {
+        pool = category ? AFFIRMATIONS.filter((a: any) => a.category === category) : AFFIRMATIONS;
+        title = 'Affirmations';
+      } else if (type === 'jokes') {
+        pool = category ? JOKES.filter((j: any) => j.category === category) : JOKES;
+        title = 'Jokes & Puns';
+      } else if (type === 'spiritual') {
+        pool = BOOK_OF_MORMON_SECTIONS.map((s: any) => ({ url: s.url, title: s.title }));
+        title = 'Book of Mormon';
+      } else if (type === 'bom') {
+        pool = BOM_VERSES.map((s: any) => ({ url: s.url, title: s.title }));
+        title = 'Book of Mormon';
+      } else if (type === 'bible') {
+        pool = BIBLE_VERSES.map((v: any) => ({ url: v.url, title: v.title ?? `Verse ${v.id}` }));
+        title = 'Bible';
+      }
+
+      if (pool.length === 0) return res.status(404).json({ error: `No content for type=${type} category=${category}` });
+
+      const idx = (index !== undefined && index >= 0 && index < pool.length)
+        ? index
+        : Math.floor(Math.random() * pool.length);
+      const item = pool[idx];
+      const itemTitle = (item as any).title ?? (item as any).label ?? title;
+
+      return res.json({
+        type,
+        title: itemTitle,
+        audioUrls: [item.url],
+        pausesBetween: [],
+        totalDurationMinutes: 5,
+        index: idx,
+        totalCount: pool.length,
+      });
+    }
+
+    // TTS-generated types
+    const TTS_TYPES = ['meditation', 'priming', 'breathwork', 'visualization'];
+    if (!TTS_TYPES.includes(type)) return res.status(400).json({ error: `Unknown type: ${type}` });
+
+    if (!device.userId) return res.status(403).json({ error: "Device not linked to a user account" });
+
+    // Load user context for personalization
+    const { getDb } = await import('./db.js');
+    const { users } = await import('../drizzle/schema.js');
+    const { eq } = await import('drizzle-orm');
+    const drizzleDb = await getDb();
+    const userRows = drizzleDb ? await drizzleDb.select().from(users).where(eq(users.id, device.userId)).limit(1) : [];
+    const userName = userRows[0]?.name ?? 'Friend';
+
+    const habits = await db.getUserHabits(device.userId);
+    const rewards = await db.getUserRewards(device.userId);
+    const habitNames = habits.filter((h: any) => h.isActive !== false).map((h: any) => h.name).slice(0, 8);
+    const rewardNames = rewards.filter((r: any) => !r.deletedAt).map((r: any) => r.name).slice(0, 5);
+
+    const { buildScript } = await import('./practiceScripts.js');
+    const { generateSpeech } = await import('./audioService.js');
+    const { storagePut } = await import('./storage.js');
+    const crypto = await import('crypto');
+
+    const script = buildScript(
+      type as any,
+      { name: userName, goals: [], rewards: rewardNames, habits: habitNames, gratitudes: [] },
+      { lengthMinutes: lengthMinutes as any, breathworkStyle: breathworkStyle as any },
+    );
+
+    const selectedVoice = voiceId ?? 'rachel';
+    const chunkUrls: string[] = await Promise.all(
+      script.chunks.map(async (chunkText: string, i: number) => {
+        const hash = crypto.createHash('sha256').update(`${selectedVoice}:${chunkText}`).digest('hex').slice(0, 16);
+        const storageKey = `practice/${type}/chunk_${i}_${hash}.mp3`;
+        const mp3Buffer = await generateSpeech(chunkText, selectedVoice);
+        const { url } = await storagePut(storageKey, mp3Buffer, 'audio/mpeg');
+        return url;
+      }),
+    );
+
+    return res.json({
+      type: script.type,
+      title: type.charAt(0).toUpperCase() + type.slice(1),
+      audioUrls: chunkUrls,
+      pausesBetween: script.pausesBetweenChunks ?? [],
+      totalDurationMinutes: script.totalDurationMinutes ?? lengthMinutes ?? 5,
+      index: 0,
+      totalCount: 1,
+    });
+
+  } catch (err: any) {
+    console.error('[device/practice/generate]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── GET /api/device/practice/catalog ────────────────────────────────────────
+// Returns the full catalog of available content types and categories.
+router.get("/practice/catalog", requireDeviceKey, async (_req: Request, res: Response) => {
+  try {
+    const { MOTIVATIONAL_SPEECHES, SPEECH_CATEGORIES } = await import('../app/data/motivational-speeches.js');
+    const { AFFIRMATION_CATEGORIES, AFFIRMATIONS } = await import('../app/data/affirmations.js');
+    const { JOKE_CATEGORIES, JOKES } = await import('../app/data/jokes.js');
+    const { BOOK_OF_MORMON_SECTIONS } = await import('../app/data/spiritual-scriptures.js');
+    const { BOM_VERSES } = await import('../app/data/bom-verses.js');
+    const { BIBLE_VERSES } = await import('../app/data/bible-verses.js');
+
+    res.json({
+      types: [
+        { id: 'motivational', label: 'Motivational Speech', emoji: '\ud83d\udcaa', categories: SPEECH_CATEGORIES, totalCount: MOTIVATIONAL_SPEECHES.length, requiresGeneration: false },
+        { id: 'affirmations', label: 'Affirmations', emoji: '\ud83d\udde3', categories: AFFIRMATION_CATEGORIES, totalCount: AFFIRMATIONS.length, requiresGeneration: false },
+        { id: 'jokes', label: 'Jokes & Puns', emoji: '\ud83d\ude02', categories: JOKE_CATEGORIES, totalCount: JOKES.length, requiresGeneration: false },
+        { id: 'spiritual', label: 'Book of Mormon (Sections)', emoji: '\ud83d\udcd6', categories: [], totalCount: BOOK_OF_MORMON_SECTIONS.length, requiresGeneration: false },
+        { id: 'bom', label: 'Book of Mormon (Verses)', emoji: '\ud83d\udcd6', categories: [], totalCount: BOM_VERSES.length, requiresGeneration: false },
+        { id: 'bible', label: 'Bible', emoji: '\u271d\ufe0f', categories: [], totalCount: BIBLE_VERSES.length, requiresGeneration: false },
+        { id: 'meditation', label: 'Meditation', emoji: '\ud83e\uddd8', categories: [], totalCount: -1, requiresGeneration: true, lengthOptions: [5, 10, 15, 20] },
+        { id: 'priming', label: 'Priming', emoji: '\ud83d\udd25', categories: [], totalCount: -1, requiresGeneration: true, lengthOptions: [10, 15, 20] },
+        { id: 'breathwork', label: 'Breathwork', emoji: '\ud83d\udca8', categories: [], totalCount: -1, requiresGeneration: true, breathworkStyles: ['wim_hof', 'box', '4_7_8'] },
+        { id: 'visualization', label: 'Visualization', emoji: '\ud83c\udf1f', categories: [], totalCount: -1, requiresGeneration: true, lengthOptions: [5, 10, 15] },
+      ],
+    });
+  } catch (err: any) {
+    console.error('[device/practice/catalog]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;

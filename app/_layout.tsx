@@ -1,6 +1,7 @@
 import "@/global.css";
 import { useRef } from "react";
 import * as Notifications from "expo-notifications";
+import { setAudioModeAsync } from "expo-audio";
 import { AppProvider, useApp } from "@/lib/app-context";
 import { JournalProvider } from "@/lib/journal-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -56,19 +57,45 @@ function CheckinGate() {
 function NotificationHandler() {
   const router = useRouter();
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const receivedListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
-    // Handle notification tapped while app was running (warm launch)
-      responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string };
+    // Set audio mode at startup so alarm audio plays through silent mode immediately
+    if (Platform.OS !== 'web') {
+      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    }
+
+    // ── Notification RECEIVED (fires while app is foregrounded) ──────────────
+    // This is the key fix: when the alarm notification fires and the app is
+    // already open, navigate directly to alarm-ring without requiring a tap.
+    receivedListener.current = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string };
       if (data?.action === 'open_alarm_ring') {
         router.push({
           pathname: '/alarm-ring',
           params: {
-            soundId: data.soundId ?? 'classic',
+            soundId: data.soundId ?? 'edm',
             snoozeMinutes: data.snoozeMinutes ?? '10',
             meditationId: data.meditationId ?? 'none',
             practiceDuration: data.practiceDuration ?? '10',
+            assignedStackId: data.assignedStackId ?? '',
+          },
+        } as never);
+      }
+    });
+
+    // ── Notification TAPPED (app was backgrounded or killed) ─────────────────
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string };
+      if (data?.action === 'open_alarm_ring') {
+        router.push({
+          pathname: '/alarm-ring',
+          params: {
+            soundId: data.soundId ?? 'edm',
+            snoozeMinutes: data.snoozeMinutes ?? '10',
+            meditationId: data.meditationId ?? 'none',
+            practiceDuration: data.practiceDuration ?? '10',
+            assignedStackId: data.assignedStackId ?? '',
           },
         } as never);
       } else if (data?.action === 'open_checkin') {
@@ -76,30 +103,33 @@ function NotificationHandler() {
       }
     });
 
-      // Handle notification tapped from killed state (cold launch)
-      // getLastNotificationResponseAsync is not available on web
-      if (Platform.OS !== 'web') {
-        Notifications.getLastNotificationResponseAsync().then((response) => {
-          if (response) {
-            const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string };
-            if (data?.action === 'open_alarm_ring') {
-              router.push({
-                pathname: '/alarm-ring',
-                params: {
-                  soundId: data.soundId ?? 'classic',
-                  snoozeMinutes: data.snoozeMinutes ?? '10',
-                  meditationId: data.meditationId ?? 'none',
-                  practiceDuration: data.practiceDuration ?? '10',
-                },
-              } as never);
-            } else if (data?.action === 'open_checkin') {
-              router.push('/checkin?fromAlarm=1' as never);
-            }
+    // ── Cold launch: app opened by tapping a notification ────────────────────
+    if (Platform.OS !== 'web') {
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response) {
+          const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string };
+          if (data?.action === 'open_alarm_ring') {
+            router.push({
+              pathname: '/alarm-ring',
+              params: {
+                soundId: data.soundId ?? 'edm',
+                snoozeMinutes: data.snoozeMinutes ?? '10',
+                meditationId: data.meditationId ?? 'none',
+                practiceDuration: data.practiceDuration ?? '10',
+                assignedStackId: data.assignedStackId ?? '',
+              },
+            } as never);
+          } else if (data?.action === 'open_checkin') {
+            router.push('/checkin?fromAlarm=1' as never);
           }
-        });
-      }
+        }
+      });
+    }
 
-    return () => { responseListener.current?.remove(); };
+    return () => {
+      responseListener.current?.remove();
+      receivedListener.current?.remove();
+    };
   }, [router]);
 
   return null;

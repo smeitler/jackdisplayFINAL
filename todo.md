@@ -1728,3 +1728,6 @@
 - [x] QR pairing: firmware QR code display screen (Settings → Pair with App shows JACK:<MAC> QR)
 - [x] QR pairing: app Panel Settings camera scanner — scan panel QR to call claimByMac and link device
 - [x] Add expo-camera dependency + plugin to app.config.ts for QR scanning
+
+- [x] Fix alarm not firing loudly in Expo Go: set setAudioModeAsync at app startup, use addNotificationReceivedListener to auto-navigate to alarm-ring screen (not just on tap), add in-app alarm trigger fallback
+- [x] Improve alarm notification: request allowCriticalAlerts on iOS, use 'critical' interruptionLevel for alarm notifications
