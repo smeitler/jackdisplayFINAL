@@ -24,6 +24,7 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { useRouter, usePathname } from "expo-router";
+import { startAlarmActivity, endAlarmActivity } from "@/lib/live-activity";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -83,8 +84,13 @@ function NotificationHandler() {
     // This is the key fix: when the alarm notification fires and the app is
     // already open, navigate directly to alarm-ring without requiring a tap.
     receivedListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string };
+      const data = notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
       if (data?.action === 'open_alarm_ring') {
+        // Start Live Activity on lock screen / Dynamic Island
+        startAlarmActivity({
+          alarmLabel: data.alarmLabel ?? 'Alarm',
+          alarmTime: data.alarmTime ?? '',
+        }).catch(() => {});
         router.push({
           pathname: '/alarm-ring',
           params: {
@@ -100,8 +106,13 @@ function NotificationHandler() {
 
     // ── Notification TAPPED (app was backgrounded or killed) ─────────────────
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string };
+      const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
       if (data?.action === 'open_alarm_ring') {
+        // Start Live Activity when user taps the notification (app was backgrounded)
+        startAlarmActivity({
+          alarmLabel: data.alarmLabel ?? 'Alarm',
+          alarmTime: data.alarmTime ?? '',
+        }).catch(() => {});
         router.push({
           pathname: '/alarm-ring',
           params: {
@@ -121,8 +132,13 @@ function NotificationHandler() {
     if (Platform.OS !== 'web') {
       Notifications.getLastNotificationResponseAsync().then((response) => {
         if (response) {
-          const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string };
+          const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
           if (data?.action === 'open_alarm_ring') {
+            // Start Live Activity on cold launch (app was killed)
+            startAlarmActivity({
+              alarmLabel: data.alarmLabel ?? 'Alarm',
+              alarmTime: data.alarmTime ?? '',
+            }).catch(() => {});
             router.push({
               pathname: '/alarm-ring',
               params: {

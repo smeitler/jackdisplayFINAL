@@ -29,6 +29,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 import { useApp } from '@/lib/app-context';
+import { endAlarmActivity, updateAlarmActivitySnoozed } from '@/lib/live-activity';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -127,6 +128,8 @@ export default function AlarmRingScreen() {
   async function handleWakeUp() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     stopSound();
+    // End Live Activity when user dismisses the alarm
+    endAlarmActivity().catch(() => {});
     // If a ritual stack is assigned, launch it directly; otherwise go home
     if (assignedStackId) {
       router.replace({
@@ -142,6 +145,14 @@ export default function AlarmRingScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     stopSound();
     setSnoozed(true);
+    // Update Live Activity to show snoozed state
+    const alarmLabel = (alarm as typeof alarm & { label?: string }).label ?? 'Alarm';
+    const alarmTime = `${params.snoozeMinutes ?? '10'} min`; // shows original alarm time
+    updateAlarmActivitySnoozed({
+      alarmLabel,
+      alarmTime,
+      snoozeMinutes,
+    }).catch(() => {});
 
     // Schedule a one-time notification in snoozeMinutes
     if (Platform.OS !== 'web') {

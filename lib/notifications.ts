@@ -96,6 +96,9 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
           ),
           // Pass the assigned stack ID so the alarm ring screen can launch it
           assignedStackId: (config as AlarmConfig & { assignedStackId?: string }).assignedStackId ?? '',
+          // Live Activity: label and formatted time for lock screen / Dynamic Island
+          alarmLabel: (config as AlarmConfig & { label?: string }).label ?? 'Alarm',
+          alarmTime: formatAlarmTime(config.hour, config.minute),
         },
         sound: soundFile,
         // timeSensitive: breaks through Focus modes (Sleep Focus, Work Focus, etc.) on iOS 15+
