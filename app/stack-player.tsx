@@ -1025,7 +1025,17 @@ export default function StackPlayerScreen() {
     );
   }
 
-  const step = currentStep!;
+  // Guard: if currentStep is null or has an invalid type, show loading state
+  // (sanitizeSteps in loadStacks should prevent this, but belt-and-suspenders)
+  if (!currentStep || !currentStep.type || !STEP_TYPE_META[currentStep.type]) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <Text style={[styles.loadingText, { color: colors.muted }]}>Loading step…</Text>
+      </View>
+    );
+  }
+
+  const step = currentStep;
   const meta = STEP_TYPE_META[step.type];
   const iconName = (STEP_ICON[step.type] ?? 'sparkles') as any;
   const duration = stepDefaultDuration(step);

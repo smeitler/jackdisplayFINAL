@@ -188,13 +188,22 @@ const DEFAULT_STACKS: RitualStack[] = [
   { id: 'sleep',  name: 'Sleep Stack',   emoji: '🌙', isEnabled: true, steps: [] },
 ];
 
+const VALID_STEP_TYPES = new Set<string>(Object.keys(STEP_TYPE_META));
+
+/** Remove any steps whose type is null, undefined, or not in the registry. */
+function sanitizeSteps(steps: RitualStep[]): RitualStep[] {
+  return steps.filter((s) => s?.type && VALID_STEP_TYPES.has(s.type));
+}
+
 export async function loadStacks(): Promise<RitualStack[]> {
   try {
     const raw = await AsyncStorage.getItem(STACKS_KEY);
     if (!raw) return DEFAULT_STACKS;
     const parsed: RitualStack[] = JSON.parse(raw);
-    const ids = parsed.map((s) => s.id);
-    const merged = [...parsed];
+    // Sanitize: drop steps with null/invalid type so the player never crashes
+    const sanitized = parsed.map((s) => ({ ...s, steps: sanitizeSteps(s.steps ?? []) }));
+    const ids = sanitized.map((s) => s.id);
+    const merged = [...sanitized];
     for (const def of DEFAULT_STACKS) {
       if (!ids.includes(def.id)) merged.push(def);
     }
