@@ -11,6 +11,9 @@ const bundleId = "com.jackalarm.app";
 const manusScheme = "manus20260220151145";
 // jackalarm is kept as the primary app scheme for deep links; manus scheme is used only for OAuth
 const schemeFromBundleId = manusScheme;
+// jackalarm scheme is registered as a secondary scheme so Live Activity
+// tap URLs (jackalarm://alarm-ring) open the app correctly from the lock screen
+const jackalarmScheme = 'jackalarm';
 
 const env = {
   // App branding - update these values directly (do not use env vars)
@@ -30,12 +33,12 @@ const config: ExpoConfig = {
   version: "1.0.25",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
-  scheme: env.scheme,
+  scheme: [env.scheme, jackalarmScheme],
   userInterfaceStyle: "automatic",
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10030",
+    buildNumber: "10031",
     usesAppleSignIn: true,
     // Time Sensitive Notifications entitlement — required for the "Alarms" toggle
     // to appear in iOS Settings → Jack → Notifications.
@@ -46,6 +49,10 @@ const config: ExpoConfig = {
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       UISupportedExternalAccessoryProtocols: [],
+      // Required for Live Activities — expo-widgets plugin also sets this,
+      // but we set it here explicitly as a safety net
+      NSSupportsLiveActivities: true,
+      NSSupportsLiveActivitiesFrequentUpdates: true,
       // Background modes: audio keeps alarm playing when app is backgrounded;
       // remote-notification enables silent push for background data sync
       UIBackgroundModes: ["audio", "remote-notification"],
@@ -91,6 +98,9 @@ const config: ExpoConfig = {
       {
         bundleIdentifier: `${bundleId}.ExpoWidgetsTarget`,
         groupIdentifier: `group.${bundleId}`,
+        // frequentUpdates: true allows the Live Activity to update more than
+        // once per minute so the snooze countdown stays accurate
+        frequentUpdates: true,
       },
     ],
     "expo-apple-authentication",

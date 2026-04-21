@@ -99,6 +99,8 @@ function NotificationHandler() {
             meditationId: data.meditationId ?? 'none',
             practiceDuration: data.practiceDuration ?? '10',
             assignedStackId: data.assignedStackId ?? '',
+            alarmLabel: data.alarmLabel ?? 'Alarm',
+            alarmTime: data.alarmTime ?? '',
           },
         } as never);
       }
@@ -121,6 +123,8 @@ function NotificationHandler() {
             meditationId: data.meditationId ?? 'none',
             practiceDuration: data.practiceDuration ?? '10',
             assignedStackId: data.assignedStackId ?? '',
+            alarmLabel: data.alarmLabel ?? 'Alarm',
+            alarmTime: data.alarmTime ?? '',
           },
         } as never);
       } else if (data?.action === 'open_checkin') {
@@ -147,6 +151,8 @@ function NotificationHandler() {
                 meditationId: data.meditationId ?? 'none',
                 practiceDuration: data.practiceDuration ?? '10',
                 assignedStackId: data.assignedStackId ?? '',
+                alarmLabel: data.alarmLabel ?? 'Alarm',
+                alarmTime: data.alarmTime ?? '',
               },
             } as never);
           } else if (data?.action === 'open_checkin') {

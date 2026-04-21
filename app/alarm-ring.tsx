@@ -63,7 +63,7 @@ export default function AlarmRingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alarm } = useApp();
-  const params = useLocalSearchParams<{ soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string }>();
+  const params = useLocalSearchParams<{ soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string }>();
 
   const soundId = params.soundId ?? alarm.soundId ?? 'edm';
   const snoozeMinutes = parseInt(params.snoozeMinutes ?? String(alarm.snoozeMinutes ?? 10), 10);
@@ -146,8 +146,9 @@ export default function AlarmRingScreen() {
     stopSound();
     setSnoozed(true);
     // Update Live Activity to show snoozed state
-    const alarmLabel = (alarm as typeof alarm & { label?: string }).label ?? 'Alarm';
-    const alarmTime = `${params.snoozeMinutes ?? '10'} min`; // shows original alarm time
+    // alarmLabel and alarmTime come from the notification data payload (set in notifications.ts)
+    const alarmLabel = params.alarmLabel ?? (alarm as typeof alarm & { label?: string }).label ?? 'Alarm';
+    const alarmTime = params.alarmTime ?? 'Alarm'; // original alarm time e.g. "7:00 AM"
     updateAlarmActivitySnoozed({
       alarmLabel,
       alarmTime,
