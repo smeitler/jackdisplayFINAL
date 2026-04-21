@@ -877,20 +877,42 @@ export default function AlarmsScreen() {
                 </Text>
               </View>
             )}
-            {/* Test Alarm Flow button */}
+            {/* Test Alarm Notification button — fires a real notification in 5 seconds */}
             {alarms.length > 0 && (
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   const a = alarms[0];
-                  router.push({
-                    pathname: '/alarm-ring',
-                    params: {
-                      soundId: a.soundId ?? 'classic',
-                      snoozeMinutes: String(a.snoozeMinutes ?? 10),
-                      meditationId: a.meditationId ?? 'none',
-                      practiceDuration: String(a.practiceDurations?.[a.meditationId ?? 'none'] ?? 10),
-                    },
-                  } as never);
+                  if (Platform.OS === 'web') {
+                    // Web: navigate directly (no notifications on web)
+                    router.push({ pathname: '/alarm-ring', params: { soundId: a.soundId ?? 'edm', snoozeMinutes: String(a.snoozeMinutes ?? 10), meditationId: a.meditationId ?? 'none', practiceDuration: String(a.practiceDurations?.[a.meditationId ?? 'none'] ?? 10) } } as never);
+                    return;
+                  }
+                  try {
+                    await Notifications.scheduleNotificationAsync({
+                      content: {
+                        title: '⏰ Test Alarm',
+                        body: 'This is your test alarm — tap to open.',
+                        data: {
+                          action: 'open_alarm_ring',
+                          soundId: a.soundId ?? 'edm',
+                          snoozeMinutes: String(a.snoozeMinutes ?? 10),
+                          meditationId: a.meditationId ?? 'none',
+                          practiceDuration: String(a.practiceDurations?.[a.meditationId ?? 'none'] ?? 10),
+                          assignedStackId: (a as typeof a & { assignedStackId?: string }).assignedStackId ?? '',
+                        },
+                        sound: 'alarm_classic.wav',
+                        ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+                      },
+                      trigger: {
+                        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+                        seconds: 5,
+                        repeats: false,
+                      },
+                    });
+                    Alert.alert('Test alarm set', 'A notification will fire in 5 seconds. Background the app now to test delivery.');
+                  } catch (e) {
+                    Alert.alert('Error', String(e));
+                  }
                 }}
                 style={({ pressed }) => [{
                   marginTop: 8,
@@ -904,8 +926,8 @@ export default function AlarmsScreen() {
                   opacity: pressed ? 0.7 : 1,
                 }]}
               >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.muted }}>⏰ Test Alarm Flow</Text>
-                <Text style={{ fontSize: 12, color: colors.muted, opacity: 0.6, marginTop: 2 }}>Preview wake up → journal → meditation</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.muted }}>⏰ Test Alarm (5 sec)</Text>
+                <Text style={{ fontSize: 12, color: colors.muted, opacity: 0.6, marginTop: 2 }}>Fires a real notification in 5 seconds — background the app first</Text>
               </Pressable>
             )}
           </View>

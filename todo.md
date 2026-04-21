@@ -1732,3 +1732,4 @@
 - [x] Fix alarm not firing loudly in Expo Go: set setAudioModeAsync at app startup, use addNotificationReceivedListener to auto-navigate to alarm-ring screen (not just on tap), add in-app alarm trigger fallback
 - [x] Improve alarm notification: request allowCriticalAlerts on iOS, use 'critical' interruptionLevel for alarm notifications
 - [x] Add critical alerts permission banner to alarm settings screen: detect if allowsCriticalAlerts is false and show a prompt directing user to iOS Settings to enable the Alarms toggle
+- [ ] Bug: Alarm fires nothing in TestFlight build — no sound, no alarm-ring screen. Fix notification scheduling, background task handler, and ensure alarm-ring launches from killed/backgrounded state.
