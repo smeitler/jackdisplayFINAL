@@ -2099,7 +2099,7 @@ const pillStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingTop: 24, paddingBottom: 40 },
+  scroll: { padding: 20, paddingTop: 24, paddingBottom: 40, flexGrow: 1 },
 
   // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },

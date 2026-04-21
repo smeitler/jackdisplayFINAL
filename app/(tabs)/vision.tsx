@@ -931,7 +931,7 @@ export default function VisionBoardScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  scroll: { padding: PADDING, paddingBottom: 40 },
+  scroll: { padding: PADDING, paddingBottom: 40 , flexGrow: 1 },
   pageTitle: { fontSize: 28, fontWeight: "800", letterSpacing: -0.5, marginBottom: 4 },
   pageSubtitle: { fontSize: 14, marginBottom: 20 },
   catSection: {
@@ -976,7 +976,7 @@ const detailStyles = StyleSheet.create({
   },
   headerEmoji: { fontSize: 26 },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: "700" },
-  scroll: { padding: 20, paddingBottom: 60 },
+  scroll: { padding: 20, paddingBottom: 60 , flexGrow: 1 },
   sectionLabel: {
     fontSize: 11, fontWeight: "700", letterSpacing: 1.2,
     marginBottom: 10, marginTop: 6,

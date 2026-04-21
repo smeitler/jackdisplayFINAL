@@ -1836,7 +1836,7 @@ const styles = StyleSheet.create({
   legendDot: { width: 7, height: 7, borderRadius: 4 },
   legendText: { fontSize: 12, fontWeight: '500' },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
+  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 , flexGrow: 1 },
 
   section: { marginBottom: 18 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },

@@ -558,7 +558,7 @@ export default function HabitDetailScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  scroll: { padding: 20, paddingBottom: 40 },
+  scroll: { padding: 20, paddingBottom: 40 , flexGrow: 1 },
 
   navBar: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",

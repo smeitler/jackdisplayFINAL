@@ -1254,7 +1254,7 @@ const styles = StyleSheet.create({
   addCatBtn: { padding: 4, minWidth: 60, alignItems: 'flex-end' },
   headerIconBtn: { padding: 6 },
 
-  scroll: { padding: 16 },
+  scroll: { padding: 16 , flexGrow: 1 },
   hint: { fontSize: 13, marginBottom: 14, lineHeight: 18 },
 
   // Category block

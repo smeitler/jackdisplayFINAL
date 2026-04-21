@@ -273,7 +273,7 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 40 },
+  scroll: { padding: 20, paddingBottom: 40 , flexGrow: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   loadingText: { fontSize: 16 },
   pageTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5, marginBottom: 16 },

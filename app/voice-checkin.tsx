@@ -2079,7 +2079,7 @@ const classicStyles = StyleSheet.create({
   },
   rateAllLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
+  scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 , flexGrow: 1 },
   section: { marginBottom: 18 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },

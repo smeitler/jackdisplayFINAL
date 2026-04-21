@@ -753,7 +753,7 @@ export default function YouSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 40 },
+  scroll: { padding: 20, paddingBottom: 40 , flexGrow: 1 },
   demoCard: { borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 20 },
   header: { marginBottom: 20 },
   title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },

@@ -743,7 +743,7 @@ const rStyles = StyleSheet.create({
 });
 
 const vStyles = StyleSheet.create({
-  scroll: { padding: PADDING, paddingBottom: 40 },
+  scroll: { padding: PADDING, paddingBottom: 40 , flexGrow: 1 },
   pageSubtitle: { fontSize: 14, marginBottom: 20 },
   catSection: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: "hidden", paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
   catHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -765,7 +765,7 @@ const vStyles = StyleSheet.create({
 const dStyles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1 },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: "700" },
-  scroll: { padding: 20, paddingBottom: 60 },
+  scroll: { padding: 20, paddingBottom: 60 , flexGrow: 1 },
   sectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 10, marginTop: 6 },
   emptyMotive: { fontSize: 14, fontStyle: "italic", marginBottom: 12 },
   motiveRow: { flexDirection: "row", alignItems: "center", borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, gap: 6 },

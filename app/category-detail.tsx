@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: "row", alignItems: "center", gap: 4, minWidth: 70 },
   backText: { fontSize: 16 },
   navTitle: { fontSize: 16, fontWeight: "700", flex: 1, textAlign: "center" },
-  scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { padding: 16, paddingBottom: 40 , flexGrow: 1 },
 
   heroCard: {
     flexDirection: "row", alignItems: "flex-start", gap: 14,

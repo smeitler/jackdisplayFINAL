@@ -530,7 +530,7 @@ const em = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '700' },
   saveBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 10, minWidth: 60, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 8 },
+  scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 8 , flexGrow: 1 },
   section: {
     borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 8,
   },
