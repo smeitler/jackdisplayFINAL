@@ -8,7 +8,7 @@ import {
   SPEECH_CATEGORIES,
   getSpeechesByCategory,
   getRandomSpeech,
-} from '../app/data/motivational-speeches';
+} from '../lib/data/motivational-speeches';
 import {
   AFFIRMATIONS,
   AFFIRMATION_CATEGORIES,
@@ -16,7 +16,7 @@ import {
   getAffirmationsByCategory,
   getRandomAffirmation,
   AFFIRMATION_CHAPTERS,
-} from '../app/data/affirmations';
+} from '../lib/data/affirmations';
 
 describe('Motivational Speeches data', () => {
   it('has 51 speeches', () => {
@@ -133,7 +133,7 @@ import {
   BOOK_OF_MORMON_SECTIONS,
   ALL_BOM_CHAPTERS,
   BOOK_OF_MORMON_CHAPTERS,
-} from '../app/data/spiritual-scriptures';
+} from '../lib/data/spiritual-scriptures';
 
 describe('Book of Mormon sections data', () => {
   it('has exactly 60 sections', () => {

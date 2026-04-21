@@ -29,11 +29,11 @@ import {
   type RitualStack, type RitualStep, type StepType, type StepConfig,
 } from '@/lib/stacks';
 import { loadHabits, type Habit } from '@/lib/storage';
-import { SPEECH_CATEGORIES } from '@/app/data/motivational-speeches';
-import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/app/data/affirmations';
-import { JOKE_CATEGORIES, type JokeCategory } from '@/app/data/jokes';
-import { BOOK_OF_MORMON_SECTIONS, type ScriptureSection } from '@/app/data/spiritual-scriptures';
-import { BOM_VERSES } from '@/app/data/bom-verses';
+import { SPEECH_CATEGORIES } from '@/lib/data/motivational-speeches';
+import { AFFIRMATION_CATEGORIES, type AffirmationCategory } from '@/lib/data/affirmations';
+import { JOKE_CATEGORIES, type JokeCategory } from '@/lib/data/jokes';
+import { BOOK_OF_MORMON_SECTIONS, type ScriptureSection } from '@/lib/data/spiritual-scriptures';
+import { BOM_VERSES } from '@/lib/data/bom-verses';
 import { BIBLE_SECTIONS, BIBLE_BOOKS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
 import { loadCustomAudioFiles, addCustomAudioFile, removeCustomAudioFile, type CustomAudioFile } from '@/lib/custom-audio';
 import { trpc } from '@/lib/trpc';

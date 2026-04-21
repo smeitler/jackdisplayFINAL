@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useApp } from '@/lib/app-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AlarmEntry, MAX_ALARMS, DEFAULT_ALARM } from '@/lib/storage';
 import { scheduleAlarm, cancelAlarm, DAY_LABELS, formatAlarmTime } from '@/lib/notifications';
 import { WheelTimePicker } from '@/components/wheel-time-picker';
@@ -684,6 +685,9 @@ export default function AlarmsScreen() {
   const [criticalAlertsGranted, setCriticalAlertsGranted] = useState<boolean | null>(null);
   // Track notification permission status for the banner
   const [notifPermission, setNotifPermission] = useState<string | null>(null);
+  // Mute switch warning — shown once on iOS when the first alarm is enabled
+  const MUTE_WARNING_KEY = 'daycheck:muteWarningShown';
+  const [showMuteWarning, setShowMuteWarning] = useState(false);
 
   // Sync stacks to panel on screen mount so the panel always has the latest ritual stacks
   useEffect(() => {
@@ -766,6 +770,14 @@ export default function AlarmsScreen() {
   }
 
   const enabledCount = alarms.filter((a) => a.isEnabled).length;
+  // Show mute warning on iOS when the first alarm is enabled (only once)
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AsyncStorage.getItem(MUTE_WARNING_KEY).then((val) => {
+      if (!val && enabledCount > 0) setShowMuteWarning(true);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabledCount]);
   // Show the critical-alerts banner only on iOS when permission is explicitly false
   const showCriticalBanner = Platform.OS === 'ios' && criticalAlertsGranted === false;
   // Show a notification permission denied banner if notifications are not granted
@@ -871,6 +883,41 @@ export default function AlarmsScreen() {
         </Pressable>
       )}
 
+      {/* Mute switch warning — shown once on iOS after the first alarm is enabled */}
+      {showMuteWarning && (
+        <Pressable
+          onPress={() => {
+            AsyncStorage.setItem(MUTE_WARNING_KEY, '1');
+            setShowMuteWarning(false);
+          }}
+          style={({ pressed }) => [{
+            marginHorizontal: 16,
+            marginTop: 10,
+            borderRadius: 12,
+            padding: 14,
+            backgroundColor: '#8B5CF618',
+            borderWidth: 1,
+            borderColor: '#8B5CF650',
+            flexDirection: 'row' as const,
+            alignItems: 'flex-start' as const,
+            gap: 10,
+            opacity: pressed ? 0.75 : 1,
+          }]}
+        >
+          <Text style={{ fontSize: 20, lineHeight: 24 }}>🔕</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#8B5CF6', marginBottom: 3 }}>
+              Check your mute switch
+            </Text>
+            <Text style={{ fontSize: 12, color: '#8B5CF6', opacity: 0.85, lineHeight: 17 }}>
+              If your iPhone’s side mute switch is on (orange dot visible), alarms may be silent. Flip the switch to the unmuted position so your alarm rings at full volume.
+            </Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#8B5CF6', marginTop: 6 }}>
+              Tap to dismiss
+            </Text>
+          </View>
+        </Pressable>
+      )}
       {/* Alarm list */}
       <ScrollView
         contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + 32 }]}

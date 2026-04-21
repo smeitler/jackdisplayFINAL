@@ -107,6 +107,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   "backward.end.fill": "skip-previous",
   "forward.end.fill": "skip-next",
   "arrow.counterclockwise": "replay",
+  "arrow.clockwise": "refresh",
   "self.improvement": "self-improvement",
   "fast.forward": "fast-forward",
   "nightlight": "nightlight",

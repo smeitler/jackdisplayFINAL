@@ -1072,12 +1072,12 @@ router.post("/practice/generate", requireDeviceKey, async (req: Request, res: Re
 
     const CDN_TYPES = ['motivational', 'affirmations', 'jokes', 'spiritual', 'bible', 'bom'];
     if (CDN_TYPES.includes(type)) {
-      const { MOTIVATIONAL_SPEECHES, SPEECH_CATEGORIES } = await import('../app/data/motivational-speeches.js');
-      const { AFFIRMATIONS, AFFIRMATION_CATEGORIES } = await import('../app/data/affirmations.js');
-      const { JOKES, JOKE_CATEGORIES } = await import('../app/data/jokes.js');
-      const { BOOK_OF_MORMON_SECTIONS } = await import('../app/data/spiritual-scriptures.js');
-      const { BOM_VERSES } = await import('../app/data/bom-verses.js');
-      const { BIBLE_VERSES } = await import('../app/data/bible-verses.js');
+      const { MOTIVATIONAL_SPEECHES, SPEECH_CATEGORIES } = await import('../lib/data/motivational-speeches.js');
+      const { AFFIRMATIONS, AFFIRMATION_CATEGORIES } = await import('../lib/data/affirmations.js');
+      const { JOKES, JOKE_CATEGORIES } = await import('../lib/data/jokes.js');
+      const { BOOK_OF_MORMON_SECTIONS } = await import('../lib/data/spiritual-scriptures.js');
+      const { BOM_VERSES } = await import('../lib/data/bom-verses.js');
+      const { BIBLE_VERSES } = await import('../lib/data/bible-verses.js');
 
       let pool: Array<{ url: string; title?: string; label?: string }> = [];
       let title = '';
@@ -1182,12 +1182,12 @@ router.post("/practice/generate", requireDeviceKey, async (req: Request, res: Re
 // Returns the full catalog of available content types and categories.
 router.get("/practice/catalog", requireDeviceKey, async (_req: Request, res: Response) => {
   try {
-    const { MOTIVATIONAL_SPEECHES, SPEECH_CATEGORIES } = await import('../app/data/motivational-speeches.js');
-    const { AFFIRMATION_CATEGORIES, AFFIRMATIONS } = await import('../app/data/affirmations.js');
-    const { JOKE_CATEGORIES, JOKES } = await import('../app/data/jokes.js');
-    const { BOOK_OF_MORMON_SECTIONS } = await import('../app/data/spiritual-scriptures.js');
-    const { BOM_VERSES } = await import('../app/data/bom-verses.js');
-    const { BIBLE_VERSES } = await import('../app/data/bible-verses.js');
+    const { MOTIVATIONAL_SPEECHES, SPEECH_CATEGORIES } = await import('../lib/data/motivational-speeches.js');
+    const { AFFIRMATION_CATEGORIES, AFFIRMATIONS } = await import('../lib/data/affirmations.js');
+    const { JOKE_CATEGORIES, JOKES } = await import('../lib/data/jokes.js');
+    const { BOOK_OF_MORMON_SECTIONS } = await import('../lib/data/spiritual-scriptures.js');
+    const { BOM_VERSES } = await import('../lib/data/bom-verses.js');
+    const { BIBLE_VERSES } = await import('../lib/data/bible-verses.js');
 
     res.json({
       types: [

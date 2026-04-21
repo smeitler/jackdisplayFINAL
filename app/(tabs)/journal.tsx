@@ -1512,9 +1512,9 @@ function CalendarTab({ entries, onDayPress, colors }: {
                           fontWeight: isToday ? "800" : "600",
                           color: '#ffffff',
                           opacity: isFuture ? 0.35 : 1,
-                          textShadowColor: 'rgba(0,0,0,0.8)',
-                          textShadowOffset: { width: 0, height: 1 },
-                          textShadowRadius: 2,
+                          ...(Platform.OS === 'web'
+                            ? { textShadow: '0px 1px 2px rgba(0,0,0,0.8)' } as object
+                            : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }),
                         }}>{day}</Text>
                       </Pressable>
                     );
@@ -2127,7 +2127,7 @@ function JournalCalendarView({ colors, onDayPress, entries: calEntries, fullScre
                         }]} pointerEvents="none" />
                       ) : null}
                       {/* Date number — top-left */}
-                      <Text style={{ position: 'absolute', top: 3, left: 4, fontSize: 11, fontWeight: isToday ? '800' : '600', color: '#ffffff', opacity: isFuture ? 0.35 : 1, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{day}</Text>
+                      <Text style={{ position: 'absolute', top: 3, left: 4, fontSize: 11, fontWeight: isToday ? '800' : '600', color: '#ffffff', opacity: isFuture ? 0.35 : 1, ...(Platform.OS === 'web' ? { textShadow: '0px 1px 2px rgba(0,0,0,0.8)' } as object : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }) }}>{day}</Text>
                     </Pressable>
                   );
                 })}

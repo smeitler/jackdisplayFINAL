@@ -30,27 +30,27 @@ import {
   MOTIVATIONAL_SPEECHES,
   getSpeechesByCategory,
   type SpeechCategory,
-} from '@/app/data/motivational-speeches';
+} from '@/lib/data/motivational-speeches';
 import {
   AFFIRMATIONS,
   getAffirmationsByCategory,
   type AffirmationCategory,
   type Affirmation,
-} from '@/app/data/affirmations';
+} from '@/lib/data/affirmations';
 import {
   JOKES,
   getJokesByCategory,
   type JokeCategory,
   type JokeTrack,
-} from '@/app/data/jokes';
+} from '@/lib/data/jokes';
 import {
   BOOK_OF_MORMON_SECTIONS,
   ALL_BOM_CHAPTERS,
   type ScriptureSection,
-} from '@/app/data/spiritual-scriptures';
+} from '@/lib/data/spiritual-scriptures';
 import { BIBLE_SECTIONS, getBibleSectionsByBook } from '@/lib/bible-scriptures';
-import { BOM_VERSES } from '@/app/data/bom-verses';
-import { BIBLE_VERSES } from '@/app/data/bible-verses';
+import { BOM_VERSES } from '@/lib/data/bom-verses';
+import { BIBLE_VERSES } from '@/lib/data/bible-verses';
 import { loadCustomAudioFiles } from '@/lib/custom-audio';
 import { ScriptureReadingPlayer } from '@/components/scripture-reading-player';
 import { getScripturePosition } from '@/lib/scripture-position';

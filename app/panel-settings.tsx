@@ -256,7 +256,7 @@ function QrScannerModal({
         <View style={[styles.scannerCorner, styles.scannerCornerBL]} />
         <View style={[styles.scannerCorner, styles.scannerCornerBR]} />
       </View>
-      <Text style={styles.scannerHint}>Point camera at the QR code on your panel</Text>
+      <Text style={[styles.scannerHint, Platform.OS === 'web' ? { textShadow: '0px 1px 4px rgba(0,0,0,0.8)' } as object : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }]}>Point camera at the QR code on your panel</Text>
       <Pressable style={styles.scannerCloseBtn} onPress={onClose}>
         <Text style={styles.scannerCloseBtnText}>✕ Cancel</Text>
       </Pressable>
@@ -813,9 +813,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     paddingHorizontal: 32,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    // textShadow applied inline (platform-specific, see usage)
   },
   scannerCloseBtn: {
     position: "absolute",

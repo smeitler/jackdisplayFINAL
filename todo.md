@@ -1733,3 +1733,11 @@
 - [x] Improve alarm notification: request allowCriticalAlerts on iOS, use 'critical' interruptionLevel for alarm notifications
 - [x] Add critical alerts permission banner to alarm settings screen: detect if allowsCriticalAlerts is false and show a prompt directing user to iOS Settings to enable the Alarms toggle
 - [ ] Bug: Alarm fires nothing in TestFlight build — no sound, no alarm-ring screen. Fix notification scheduling, background task handler, and ensure alarm-ring launches from killed/backgrounded state.
+- [x] Add Reschedule All Alarms button in Settings (you-settings.tsx) — re-registers all enabled alarms with latest payload
+- [x] Add mute switch warning banner in Alarms screen — shown once on iOS when first alarm is enabled, dismissible, persisted in AsyncStorage
+- [x] Fix textShadow deprecation warnings: replace textShadowColor/Offset/Radius with platform-specific inline approach (web uses textShadow shorthand, native keeps old props)
+- [x] Move data files from app/data/ to lib/data/ to eliminate Expo Router route warnings for non-route files
+- [x] Add Reschedule All Alarms button in Settings (you-settings.tsx) — re-registers all enabled alarms with latest payload
+- [x] Add mute switch warning banner in Alarms screen — shown once on iOS when first alarm is enabled, dismissible, persisted in AsyncStorage
+- [x] Fix textShadow deprecation warnings: replace textShadowColor/Offset/Radius with platform-specific inline approach (web uses textShadow shorthand, native keeps old props)
+- [x] Move data files from app/data/ to lib/data/ to eliminate Expo Router route warnings for non-route files

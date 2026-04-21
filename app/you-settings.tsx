@@ -8,13 +8,13 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useApp } from "@/lib/app-context";
 import { useColors } from "@/hooks/use-colors";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { DAY_LABELS, formatAlarmTime } from "@/lib/notifications";
+import { DAY_LABELS, formatAlarmTime, applyAlarm } from "@/lib/notifications";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/hooks/use-auth";
 import * as Auth from "@/lib/_core/auth";
 import { useThemeContext } from "@/lib/theme-provider";
 import { type AppTheme } from "@/constants/theme";
-import { clearLocalData } from "@/lib/storage";
+import { clearLocalData, loadAlarms } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 
 import * as WebBrowser from "expo-web-browser";
@@ -140,7 +140,7 @@ function DevicePairingSection({ colors }: { colors: ReturnType<typeof import('@/
             onBarcodeScanned={scannerScanned ? undefined : handleBarcode}
           />
           <View style={{ position: 'absolute', bottom: 80, left: 0, right: 0, alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', textShadowColor: '#000', textShadowRadius: 4 }}>
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', ...(Platform.OS === 'web' ? { textShadow: '0px 0px 4px #000' } as object : { textShadowColor: '#000', textShadowRadius: 4 }) }}>
               Point at the QR code on your panel
             </Text>
           </View>
@@ -306,7 +306,9 @@ const THEMES: { id: AppTheme; label: string; preview: string; description: strin
 ];
 
 export default function YouSettingsScreen() {
-  const { alarm, updateAlarm, activeHabits, isDemoMode, exitDemo } = useApp();
+  const { alarm, updateAlarm, alarms, updateAlarms, activeHabits, isDemoMode, exitDemo } = useApp();
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduled, setRescheduled] = useState(false);
   const colors = useColors();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
@@ -719,6 +721,53 @@ export default function YouSettingsScreen() {
               <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Audio, voice, Low EMF mode</Text>
             </View>
             <IconSymbol name="chevron.right" size={18} color={colors.muted} />
+          </Pressable>
+        )}
+
+        {/* Reschedule All Alarms — helps users upgrading from older builds pick up new notification payload fields */}
+        {Platform.OS !== 'web' && alarms.length > 0 && (
+          <Pressable
+            onPress={async () => {
+              if (rescheduling) return;
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setRescheduling(true);
+              try {
+                const freshAlarms = await loadAlarms();
+                const enabledAlarms = freshAlarms.filter((a) => a.isEnabled);
+                for (const a of enabledAlarms) {
+                  await applyAlarm(a);
+                }
+                setRescheduled(true);
+                setTimeout(() => setRescheduled(false), 3000);
+                Alert.alert(
+                  'Alarms Rescheduled',
+                  `${enabledAlarms.length} alarm${enabledAlarms.length !== 1 ? 's' : ''} rescheduled successfully. They will fire at their next scheduled time.`,
+                );
+              } catch (e) {
+                Alert.alert('Error', String(e));
+              } finally {
+                setRescheduling(false);
+              }
+            }}
+            style={({ pressed }) => [{
+              flexDirection: 'row', alignItems: 'center', gap: 12,
+              backgroundColor: colors.surface,
+              borderRadius: 16, borderWidth: 1, borderColor: colors.border,
+              padding: 16, marginBottom: 12, opacity: pressed || rescheduling ? 0.7 : 1,
+            }]}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22' }}>
+              {rescheduling
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <IconSymbol name="arrow.clockwise" size={18} color={rescheduled ? (colors.success ?? '#22C55E') : colors.primary} />
+              }
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>
+                {rescheduled ? '✓ Alarms Rescheduled' : 'Reschedule All Alarms'}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>Re-registers all enabled alarms with the latest settings</Text>
+            </View>
           </Pressable>
         )}
 
