@@ -76,9 +76,10 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
 
   if (!config.isEnabled || config.days.length === 0) return [];
 
-  // Use the registered .wav sound file on both platforms.
-  // On Android, the channel sound is 'default' but per-notification sound overrides it.
-  const soundFile = getSoundFilename(config.soundId);
+  // NOTE: We intentionally do NOT play a sound on the notification banner.
+  // The in-app alarm-ring screen handles audio via expo-audio with
+  // playsInSilentModeIOS: true, which bypasses the hardware mute switch.
+  // A banner sound would be silenced by the mute switch and create a double-sound.
   const ids: string[] = [];
 
   for (const day of config.days) {
@@ -100,7 +101,7 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
           alarmLabel: (config as AlarmConfig & { label?: string }).label ?? 'Alarm',
           alarmTime: formatAlarmTime(config.hour, config.minute),
         },
-        sound: soundFile,
+        sound: false,
         // timeSensitive: breaks through Focus modes (Sleep Focus, Work Focus, etc.) on iOS 15+
         // without requiring a special Apple entitlement.
         // NOTE: timeSensitive does NOT bypass the hardware mute switch — only 'critical' does,

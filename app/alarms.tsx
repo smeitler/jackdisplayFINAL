@@ -986,7 +986,7 @@ export default function AlarmsScreen() {
                           practiceDuration: String(a.practiceDurations?.[a.meditationId ?? 'none'] ?? 10),
                           assignedStackId: (a as typeof a & { assignedStackId?: string }).assignedStackId ?? '',
                         },
-                        sound: 'alarm_classic.wav',
+                        sound: false,
                         ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
                         priority: 'max',
                       },
