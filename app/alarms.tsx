@@ -31,6 +31,8 @@ import { scheduleAlarm, cancelAlarm, DAY_LABELS, formatAlarmTime } from '@/lib/n
 import { WheelTimePicker } from '@/components/wheel-time-picker';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
+import * as Linking from 'expo-linking';
 import { loadStacks, type RitualStack } from '@/lib/stacks';
 import { trpc } from '@/lib/trpc';
 
@@ -678,12 +680,23 @@ export default function AlarmsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAlarm, setEditingAlarm] = useState<AlarmEntry | null>(null);
   const syncStacksMutation = trpc.devices.syncStacks.useMutation();
+  // Critical alerts permission state (iOS only — the "Alarms" toggle in iOS Settings)
+  const [criticalAlertsGranted, setCriticalAlertsGranted] = useState<boolean | null>(null);
+
   // Sync stacks to panel on screen mount so the panel always has the latest ritual stacks
   useEffect(() => {
     loadStacks().then((stacks) => {
       if (stacks.length > 0) syncStacksMutation.mutate({ stacks });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Check critical alerts permission on mount (iOS only)
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    Notifications.getPermissionsAsync().then((perms) => {
+      setCriticalAlertsGranted(perms.ios?.allowsCriticalAlerts ?? false);
+    });
   }, []);
 
   function openAdd() {
@@ -749,6 +762,8 @@ export default function AlarmsScreen() {
   }
 
   const enabledCount = alarms.filter((a) => a.isEnabled).length;
+  // Show the critical-alerts banner only on iOS when permission is explicitly false
+  const showCriticalBanner = Platform.OS === 'ios' && criticalAlertsGranted === false;
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -783,6 +798,39 @@ export default function AlarmsScreen() {
           {alarms.length >= MAX_ALARMS ? ' · Max 4 reached' : ''}
         </Text>
       </View>
+
+      {/* Critical alerts permission banner (iOS only) */}
+      {showCriticalBanner && (
+        <Pressable
+          onPress={() => Linking.openSettings()}
+          style={({ pressed }) => [{
+            marginHorizontal: 16,
+            marginTop: 10,
+            borderRadius: 12,
+            padding: 14,
+            backgroundColor: '#F59E0B18',
+            borderWidth: 1,
+            borderColor: '#F59E0B50',
+            flexDirection: 'row' as const,
+            alignItems: 'flex-start' as const,
+            gap: 10,
+            opacity: pressed ? 0.75 : 1,
+          }]}
+        >
+          <Text style={{ fontSize: 20, lineHeight: 24 }}>⚠️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#F59E0B', marginBottom: 3 }}>
+              Enable Alarm Alerts to bypass Do Not Disturb
+            </Text>
+            <Text style={{ fontSize: 12, color: '#F59E0B', opacity: 0.85, lineHeight: 17 }}>
+              Go to Settings → Jack → Alarms and turn on the toggle. This lets your alarm ring even when your phone is silenced or Focus is on.
+            </Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#F59E0B', marginTop: 6 }}>
+              Tap to open Settings →
+            </Text>
+          </View>
+        </Pressable>
+      )}
 
       {/* Alarm list */}
       <ScrollView
