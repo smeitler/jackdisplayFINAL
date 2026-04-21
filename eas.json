@@ -5,7 +5,21 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.jackalarm.com",
+        "EXPO_PUBLIC_APP_ID": "bFcyWdAL5JXed3bpyDvBEf",
+        "EXPO_PUBLIC_OAUTH_PORTAL_URL": "https://manus.im",
+        "EXPO_PUBLIC_OAUTH_SERVER_URL": "https://api.manus.im"
+      },
+      "ios": {
+        "targets": {
+          "ExpoWidgetsTarget": {
+            "bundleIdentifier": "com.jackalarm.app.ExpoWidgetsTarget",
+            "credentialsSource": "remote"
+          }
+        }
+      }
     },
     "preview": {
       "distribution": "internal",
@@ -22,6 +36,14 @@
         "EXPO_PUBLIC_APP_ID": "bFcyWdAL5JXed3bpyDvBEf",
         "EXPO_PUBLIC_OAUTH_PORTAL_URL": "https://manus.im",
         "EXPO_PUBLIC_OAUTH_SERVER_URL": "https://api.manus.im"
+      },
+      "ios": {
+        "targets": {
+          "ExpoWidgetsTarget": {
+            "bundleIdentifier": "com.jackalarm.app.ExpoWidgetsTarget",
+            "credentialsSource": "remote"
+          }
+        }
       }
     }
   },
