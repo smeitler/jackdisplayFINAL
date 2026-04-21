@@ -112,6 +112,12 @@ const config: ExpoConfig = {
         // frequentUpdates: true allows the Live Activity to update more than
         // once per minute so the snooze countdown stays accurate
         frequentUpdates: true,
+        // appGroups must be listed here so EAS syncs the App Group capability
+        // to com.jackalarm.app.ExpoWidgetsTarget on Apple Developer Portal
+        // before generating the ad-hoc provisioning profile.
+        // Without this, the profile is created without the entitlement and the
+        // Xcode build fails with "doesn't support the group.com.jackalarm.app App Group".
+        appGroups: [`group.${bundleId}`],
       },
     ],
     "expo-apple-authentication",
