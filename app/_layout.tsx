@@ -13,7 +13,7 @@ import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
-
+import { useColors } from "@/hooks/use-colors";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime } from "@/lib/_core/manus-runtime";
 import { useRouter, usePathname } from "expo-router";
@@ -165,6 +165,37 @@ function NotificationHandler() {
   return null;
 }
 
+// ThemedStack is inside ThemeProvider so it can read the active theme colors
+// and pass them as contentStyle to prevent react-navigation's default
+// grey (rgb(242,242,242)) background from showing through.
+function ThemedStack() {
+  const colors = useColors();
+  const bgStyle = { backgroundColor: colors.background };
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: bgStyle }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="login" options={{ presentation: 'fullScreenModal', contentStyle: bgStyle }} />
+      <Stack.Screen name="oauth/callback" />
+      <Stack.Screen name="checkin" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="habits" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="alarm-preview" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="crowpanel-preview" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="category-detail" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="habit-detail" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="mind-dump" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="team/[id]" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="team/chat/[id]" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="permissions-setup" options={{ presentation: 'fullScreenModal', contentStyle: bgStyle }} />
+      <Stack.Screen name="practice-player" options={{ presentation: 'fullScreenModal', contentStyle: bgStyle }} />
+      <Stack.Screen name="morning-practice-catalog" options={{ presentation: 'modal', contentStyle: bgStyle }} />
+      <Stack.Screen name="voice-checkin" options={{ presentation: 'fullScreenModal', headerShown: false, contentStyle: bgStyle }} />
+      <Stack.Screen name="alarm-ring" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false, contentStyle: bgStyle }} />
+      <Stack.Screen name="alarm-journal" options={{ presentation: 'fullScreenModal', headerShown: false, contentStyle: bgStyle }} />
+      <Stack.Screen name="alarm-meditation" options={{ presentation: 'fullScreenModal', headerShown: false, contentStyle: bgStyle }} />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -198,27 +229,7 @@ export default function RootLayout() {
               <JournalProvider>
                 <NotificationHandler />
                 <CheckinGate />
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="login" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="oauth/callback" />
-                  <Stack.Screen name="checkin" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="habits" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="alarm-preview" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="crowpanel-preview" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="category-detail" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="habit-detail" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="mind-dump" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="team/[id]" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="team/chat/[id]" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="permissions-setup" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="practice-player" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="morning-practice-catalog" options={{ presentation: 'modal' }} />
-                  <Stack.Screen name="voice-checkin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
-                  <Stack.Screen name="alarm-ring" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
-                  <Stack.Screen name="alarm-journal" options={{ presentation: 'fullScreenModal', headerShown: false }} />
-                  <Stack.Screen name="alarm-meditation" options={{ presentation: 'fullScreenModal', headerShown: false }} />
-                </Stack>
+                <ThemedStack />
                 <StatusBar style="auto" />
               </JournalProvider>
             </AppProvider>

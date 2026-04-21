@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Appearance, View } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ThemeProvider as NavThemeProvider } from "@react-navigation/core";
 
 import {
   AppTheme,
@@ -109,9 +110,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [colorScheme, appTheme, setAppTheme, colors],
   );
 
+  // Build a react-navigation Theme object so the NavigationContainer
+  // uses our palette instead of the default grey (rgb(242,242,242)) background.
+  const navTheme = useMemo(() => ({
+    dark: colorScheme === "dark",
+    colors: {
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.foreground,
+      border: colors.border,
+      notification: colors.error,
+    },
+    fonts: {
+      regular: { fontFamily: 'System', fontWeight: '400' as const },
+      medium: { fontFamily: 'System', fontWeight: '500' as const },
+      bold: { fontFamily: 'System', fontWeight: '700' as const },
+      heavy: { fontFamily: 'System', fontWeight: '900' as const },
+    },
+  }), [colorScheme, colors]);
+
   return (
     <ThemeContext.Provider value={value}>
-      <View style={[{ flex: 1, backgroundColor: colors.background }, themeVariables]}>{children}</View>
+      <NavThemeProvider value={navTheme}>
+        <View style={[{ flex: 1, backgroundColor: colors.background }, themeVariables]}>{children}</View>
+      </NavThemeProvider>
     </ThemeContext.Provider>
   );
 }
