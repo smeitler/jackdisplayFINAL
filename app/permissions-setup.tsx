@@ -11,6 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { requestAlarmPermission, isAvailable as isAlarmKitAvailable } from 'react-native-nitro-ios-alarm-kit';
 import {
   Animated,
   Linking,
@@ -66,6 +67,15 @@ const STEPS: Step[] = [
     description:
       'This lets Jack break through Focus modes and Do Not Disturb so your alarm always wakes you up — even when your phone is on silent.',
     actionLabel: 'Enable Time-Sensitive',
+    skipLabel: 'Skip for now',
+  },
+  {
+    id: 'alarmKit',
+    icon: '⏰',
+    title: 'Allow System Alarms',
+    description:
+      'Jack uses iOS AlarmKit to fire alarms that bypass the mute switch and work even when the app is fully closed. This is required for reliable wake-up.',
+    actionLabel: 'Allow Alarms',
     skipLabel: 'Skip for now',
   },
   {
@@ -164,6 +174,24 @@ export default function PermissionsSetupScreen() {
         setTimeout(() => animateToNext(stepIndex + 1), 400);
       } catch {
         setStatuses(s => ({ ...s, timeSensitive: 'idle' }));
+        animateToNext(stepIndex + 1);
+      }
+
+    } else if (currentStep.id === 'alarmKit') {
+      setStatuses(s => ({ ...s, alarmKit: 'loading' }));
+      try {
+        if (Platform.OS === 'ios' && isAlarmKitAvailable()) {
+          const granted = await requestAlarmPermission();
+          setStatuses(s => ({ ...s, alarmKit: granted ? 'done' : 'denied' }));
+          if (granted) {
+            setTimeout(() => animateToNext(stepIndex + 1), 600);
+          }
+        } else {
+          setStatuses(s => ({ ...s, alarmKit: 'done' }));
+          setTimeout(() => animateToNext(stepIndex + 1), 400);
+        }
+      } catch {
+        setStatuses(s => ({ ...s, alarmKit: 'idle' }));
         animateToNext(stepIndex + 1);
       }
 
@@ -276,6 +304,13 @@ export default function PermissionsSetupScreen() {
             <UnlockRow icon="🌙" text="Breaks through Do Not Disturb" />
             <UnlockRow icon="🎯" text="Breaks through Focus modes (Sleep, Work, etc.)" />
             <UnlockRow icon="📱" text="Appears on lock screen even in Focus" />
+          </>
+        )}
+        {currentStep?.id === 'alarmKit' && (
+          <>
+            <UnlockRow icon="🔇" text="Bypasses the hardware mute switch" />
+            <UnlockRow icon="📱" text="Shows 'Alarms' toggle in iOS Settings → Jack" />
+            <UnlockRow icon="⏰" text="Fires even when app is fully killed" />
           </>
         )}
         {currentStep?.id === 'focus' && (
