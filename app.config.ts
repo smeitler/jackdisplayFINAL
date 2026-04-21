@@ -33,7 +33,8 @@ const config: ExpoConfig = {
   version: "1.0.25",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
-  scheme: [env.scheme, jackalarmScheme],
+  // Single scheme for web/Android compatibility; jackalarm:// registered via ios.infoPlist below
+  scheme: env.scheme,
   userInterfaceStyle: "automatic",
   ios: {
     supportsTablet: true,
@@ -60,6 +61,15 @@ const config: ExpoConfig = {
       NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries and to scan the panel QR code for pairing.",
       NSPhotoLibraryUsageDescription: "Jack accesses your photo library to attach images to journal entries.",
       NSPhotoLibraryAddUsageDescription: "Jack saves photos to your library from journal entries.",
+      // Register jackalarm:// as a secondary URL scheme so Live Activity tap URLs
+      // (jackalarm://alarm-ring) open the app correctly from the lock screen.
+      // This is iOS-only and doesn't affect web or Android.
+      CFBundleURLTypes: [
+        {
+          CFBundleURLSchemes: [jackalarmScheme],
+          CFBundleURLName: 'com.jackalarm.app.deeplink',
+        },
+      ],
     },
   },
   android: {
