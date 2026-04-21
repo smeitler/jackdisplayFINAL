@@ -36,7 +36,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10027",
+    buildNumber: "10028",
     usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -99,14 +99,21 @@ const config: ExpoConfig = {
     [
       "expo-notifications",
       {
-        // Bundle all custom alarm sounds (.caf for iOS, .wav for Android)
-        // These are referenced by filename in scheduleNotificationAsync({ content: { sound: 'alarm_classic.caf' } })
+        // Bundle all custom alarm sounds.
+        // .wav files are used on Android; .caf files are used on iOS (native format, better quality).
+        // Both are referenced by base filename in scheduleNotificationAsync({ content: { sound: 'alarm_classic.wav' } }).
+        // iOS will automatically prefer .caf if both are present in the bundle.
         sounds: [
           "./assets/audio/alarm_classic.wav",
           "./assets/audio/alarm_buzzer.wav",
           "./assets/audio/alarm_digital.wav",
           "./assets/audio/alarm_gentle.wav",
           "./assets/audio/alarm_urgent.wav",
+          "./assets/audio/alarm_classic.caf",
+          "./assets/audio/alarm_buzzer.caf",
+          "./assets/audio/alarm_digital.caf",
+          "./assets/audio/alarm_gentle.caf",
+          "./assets/audio/alarm_urgent.caf",
         ],
       },
     ],

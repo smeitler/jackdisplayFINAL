@@ -208,7 +208,7 @@ export const DEFAULT_ALARM: AlarmConfig = {
   days: [1, 2, 3, 4, 5, 6, 0],
   isEnabled: false,
   notificationIds: [],
-  soundId: 'drumming',
+  soundId: 'edm',
   meditationId: undefined,
   practiceDurations: { priming: 15, meditation: 10, breathwork: 10, visualization: 10, journaling: 10 },
   snoozeMinutes: 10,

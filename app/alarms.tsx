@@ -682,6 +682,8 @@ export default function AlarmsScreen() {
   const syncStacksMutation = trpc.devices.syncStacks.useMutation();
   // Critical alerts permission state (iOS only — the "Alarms" toggle in iOS Settings)
   const [criticalAlertsGranted, setCriticalAlertsGranted] = useState<boolean | null>(null);
+  // Track notification permission status for the banner
+  const [notifPermission, setNotifPermission] = useState<string | null>(null);
 
   // Sync stacks to panel on screen mount so the panel always has the latest ritual stacks
   useEffect(() => {
@@ -691,11 +693,13 @@ export default function AlarmsScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Check critical alerts permission on mount (iOS only)
+  // Check notification permissions on mount
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
     Notifications.getPermissionsAsync().then((perms) => {
-      setCriticalAlertsGranted(perms.ios?.allowsCriticalAlerts ?? false);
+      setNotifPermission(perms.status);
+      if (Platform.OS === 'ios') {
+        setCriticalAlertsGranted(perms.ios?.allowsCriticalAlerts ?? false);
+      }
     });
   }, []);
 
@@ -764,6 +768,8 @@ export default function AlarmsScreen() {
   const enabledCount = alarms.filter((a) => a.isEnabled).length;
   // Show the critical-alerts banner only on iOS when permission is explicitly false
   const showCriticalBanner = Platform.OS === 'ios' && criticalAlertsGranted === false;
+  // Show a notification permission denied banner if notifications are not granted
+  const showPermissionDeniedBanner = notifPermission === 'denied';
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -798,6 +804,39 @@ export default function AlarmsScreen() {
           {alarms.length >= MAX_ALARMS ? ' · Max 4 reached' : ''}
         </Text>
       </View>
+
+      {/* Notification permission completely denied banner */}
+      {showPermissionDeniedBanner && (
+        <Pressable
+          onPress={() => Linking.openSettings()}
+          style={({ pressed }) => [{
+            marginHorizontal: 16,
+            marginTop: 10,
+            borderRadius: 12,
+            padding: 14,
+            backgroundColor: '#EF444418',
+            borderWidth: 1,
+            borderColor: '#EF444450',
+            flexDirection: 'row' as const,
+            alignItems: 'flex-start' as const,
+            gap: 10,
+            opacity: pressed ? 0.75 : 1,
+          }]}
+        >
+          <Text style={{ fontSize: 20, lineHeight: 24 }}>🚫</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF4444', marginBottom: 3 }}>
+              Notifications are disabled — alarms will NOT fire
+            </Text>
+            <Text style={{ fontSize: 12, color: '#EF4444', opacity: 0.85, lineHeight: 17 }}>
+              Go to Settings → Jack → Notifications and turn on Allow Notifications. Without this, no alarm will ever ring.
+            </Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#EF4444', marginTop: 6 }}>
+              Tap to open Settings →
+            </Text>
+          </View>
+        </Pressable>
+      )}
 
       {/* Critical alerts permission banner (iOS only) */}
       {showCriticalBanner && (
@@ -902,11 +941,13 @@ export default function AlarmsScreen() {
                         },
                         sound: 'alarm_classic.wav',
                         ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+                        priority: 'max',
                       },
                       trigger: {
                         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
                         seconds: 5,
                         repeats: false,
+                        channelId: Platform.OS === 'android' ? 'jack-alarm' : undefined,
                       },
                     });
                     Alert.alert('Test alarm set', 'A notification will fire in 5 seconds. Background the app now to test delivery.');

@@ -153,8 +153,14 @@ export default function AlarmRingScreen() {
             data: { action: 'open_alarm_ring', soundId, snoozeMinutes: String(snoozeMinutes), meditationId, practiceDuration: String(practiceDuration), assignedStackId },
             sound: 'alarm_classic.wav',
             ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+            priority: 'max',
           },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: snoozeMinutes * 60, repeats: false },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: snoozeMinutes * 60,
+            repeats: false,
+            channelId: Platform.OS === 'android' ? 'jack-alarm' : undefined,
+          },
         });
       } catch (e) {
         console.warn('[AlarmRing] Snooze schedule error:', e);

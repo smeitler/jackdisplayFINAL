@@ -59,6 +59,20 @@ function NotificationHandler() {
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
   const receivedListener = useRef<Notifications.EventSubscription | null>(null);
 
+  // Configure how notifications appear when the app is in the foreground.
+  // Must be set before any notification fires — doing it here in the root layout
+  // guarantees it runs on every cold launch before listeners are attached.
+  // This is the ONLY place setNotificationHandler should be called.
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+
   useEffect(() => {
     // Set audio mode at startup so alarm audio plays through silent mode immediately
     if (Platform.OS !== 'web') {

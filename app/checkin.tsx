@@ -313,7 +313,9 @@ export default function CheckInScreen() {
         content: {
           title: '⏰ Keep going! Rate your habits.',
           body: 'You stopped interacting — alarm re-fired.',
-          sound: 'default',
+          sound: 'alarm_classic.wav',
+          ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+          priority: 'max',
         },
         trigger: null,
       });
@@ -778,11 +780,14 @@ export default function CheckInScreen() {
             title: "Snooze over — time to check in! ⏰",
             body: "Your daily habit check-in is waiting.",
             data: { action: 'open_checkin' },
-            sound: 'default',
+            sound: 'alarm_classic.wav',
+            ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+            priority: 'max',
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: triggerDate,
+            channelId: Platform.OS === 'android' ? 'jack-alarm' : undefined,
           } as Notifications.DateTriggerInput,
         });
       } catch (e) {
