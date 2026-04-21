@@ -1025,12 +1025,20 @@ export default function StackPlayerScreen() {
     );
   }
 
-  // Guard: if currentStep is null or has an invalid type, show loading state
-  // (sanitizeSteps in loadStacks should prevent this, but belt-and-suspenders)
-  if (!currentStep || !currentStep.type || !STEP_TYPE_META[currentStep.type]) {
+  // Guard: if currentStep has a null/invalid type, auto-advance past it.
+  // We use a useEffect so we don't call advanceStep during render.
+  const stepIsInvalid = !!currentStep && (!currentStep.type || !STEP_TYPE_META[currentStep.type]);
+  useEffect(() => {
+    if (stepIsInvalid) {
+      advanceStep();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepIsInvalid]);
+
+  if (!currentStep || stepIsInvalid) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <Text style={[styles.loadingText, { color: colors.muted }]}>Loading step…</Text>
+        <Text style={[styles.loadingText, { color: colors.muted }]}>Loading…</Text>
       </View>
     );
   }
