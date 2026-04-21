@@ -74,29 +74,53 @@ function NotificationHandler() {
   const router = useRouter();
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
   const receivedListener = useRef<Notifications.EventSubscription | null>(null);
+  // Track whether the router is ready to accept navigation commands.
+  // On cold launch (app killed), the JS bundle reloads and the router
+  // isn't ready immediately — we queue the pending route and fire it
+  // once the layout mounts.
+  const pendingRoute = useRef<{ pathname: string; params?: Record<string, string> } | null>(null);
+  const [routerReady, setRouterReady] = useState(false);
+
+  // Mark router as ready after first render
+  useEffect(() => {
+    setRouterReady(true);
+  }, []);
+
+  // Fire any queued cold-launch navigation once router is ready
+  useEffect(() => {
+    if (!routerReady || !pendingRoute.current) return;
+    const { pathname, params } = pendingRoute.current;
+    pendingRoute.current = null;
+    // Small delay to ensure the navigator stack is fully mounted
+    const t = setTimeout(() => {
+      router.push({ pathname, params } as never);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [routerReady, router]);
+
+  function navigateToAlarmRing(data: { soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string }) {
+    const params = {
+      soundId: data.soundId ?? 'edm',
+      snoozeMinutes: data.snoozeMinutes ?? '10',
+      meditationId: data.meditationId ?? 'none',
+      practiceDuration: data.practiceDuration ?? '10',
+      assignedStackId: data.assignedStackId ?? '',
+      alarmLabel: data.alarmLabel ?? 'Alarm',
+      alarmTime: data.alarmTime ?? '',
+    };
+    startAlarmActivitySafe({
+      alarmLabel: data.alarmLabel ?? 'Alarm',
+      alarmTime: data.alarmTime ?? '',
+    }).catch(() => {});
+    router.push({ pathname: '/alarm-ring', params } as never);
+  }
 
   useEffect(() => {
     // ── Foreground: notification received while app is open ──────────────────
     receivedListener.current = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
       if (data?.action === 'open_alarm_ring') {
-        // Start Live Activity when alarm fires while app is in foreground
-        startAlarmActivitySafe({
-          alarmLabel: data.alarmLabel ?? 'Alarm',
-          alarmTime: data.alarmTime ?? '',
-        }).catch(() => {});
-        router.push({
-          pathname: '/alarm-ring',
-          params: {
-            soundId: data.soundId ?? 'edm',
-            snoozeMinutes: data.snoozeMinutes ?? '10',
-            meditationId: data.meditationId ?? 'none',
-            practiceDuration: data.practiceDuration ?? '10',
-            assignedStackId: data.assignedStackId ?? '',
-            alarmLabel: data.alarmLabel ?? 'Alarm',
-            alarmTime: data.alarmTime ?? '',
-          },
-        } as never);
+        navigateToAlarmRing(data);
       }
     });
 
@@ -104,54 +128,40 @@ function NotificationHandler() {
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
       if (data?.action === 'open_alarm_ring') {
-        // Start Live Activity when user taps the notification banner
-        startAlarmActivitySafe({
-          alarmLabel: data.alarmLabel ?? 'Alarm',
-          alarmTime: data.alarmTime ?? '',
-        }).catch(() => {});
-        router.push({
-          pathname: '/alarm-ring',
-          params: {
-            soundId: data.soundId ?? 'edm',
-            snoozeMinutes: data.snoozeMinutes ?? '10',
-            meditationId: data.meditationId ?? 'none',
-            practiceDuration: data.practiceDuration ?? '10',
-            assignedStackId: data.assignedStackId ?? '',
-            alarmLabel: data.alarmLabel ?? 'Alarm',
-            alarmTime: data.alarmTime ?? '',
-          },
-        } as never);
+        navigateToAlarmRing(data);
       } else if (data?.action === 'open_checkin') {
         router.push('/checkin?fromAlarm=1' as never);
       }
     });
 
     // ── Cold launch: app opened by tapping a notification ────────────────────
+    // getLastNotificationResponseAsync() is called immediately but the router
+    // may not be ready yet (JS bundle just reloaded). We queue the navigation
+    // and fire it once routerReady flips to true (see effect above).
     if (Platform.OS !== 'web') {
       Notifications.getLastNotificationResponseAsync().then((response) => {
-        if (response) {
-          const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
-          if (data?.action === 'open_alarm_ring') {
-            // Start Live Activity on cold launch (app was killed)
-            startAlarmActivitySafe({
+        if (!response) return;
+        const data = response.notification.request.content.data as { action?: string; soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string };
+        if (data?.action === 'open_alarm_ring') {
+          startAlarmActivitySafe({
+            alarmLabel: data.alarmLabel ?? 'Alarm',
+            alarmTime: data.alarmTime ?? '',
+          }).catch(() => {});
+          // Queue the navigation — it will fire once routerReady is true
+          pendingRoute.current = {
+            pathname: '/alarm-ring',
+            params: {
+              soundId: data.soundId ?? 'edm',
+              snoozeMinutes: data.snoozeMinutes ?? '10',
+              meditationId: data.meditationId ?? 'none',
+              practiceDuration: data.practiceDuration ?? '10',
+              assignedStackId: data.assignedStackId ?? '',
               alarmLabel: data.alarmLabel ?? 'Alarm',
               alarmTime: data.alarmTime ?? '',
-            }).catch(() => {});
-            router.push({
-              pathname: '/alarm-ring',
-              params: {
-                soundId: data.soundId ?? 'edm',
-                snoozeMinutes: data.snoozeMinutes ?? '10',
-                meditationId: data.meditationId ?? 'none',
-                practiceDuration: data.practiceDuration ?? '10',
-                assignedStackId: data.assignedStackId ?? '',
-                alarmLabel: data.alarmLabel ?? 'Alarm',
-                alarmTime: data.alarmTime ?? '',
-              },
-            } as never);
-          } else if (data?.action === 'open_checkin') {
-            router.push('/checkin?fromAlarm=1' as never);
-          }
+            },
+          };
+        } else if (data?.action === 'open_checkin') {
+          pendingRoute.current = { pathname: '/checkin', params: { fromAlarm: '1' } };
         }
       });
     }
@@ -160,6 +170,7 @@ function NotificationHandler() {
       responseListener.current?.remove();
       receivedListener.current?.remove();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   return null;
