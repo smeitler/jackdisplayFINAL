@@ -72,33 +72,35 @@ function CheckinGate() {
 
 function NotificationHandler() {
   const router = useRouter();
+  const { isLoaded } = useApp();
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
   const receivedListener = useRef<Notifications.EventSubscription | null>(null);
   // Track whether the router is ready to accept navigation commands.
   // On cold launch (app killed), the JS bundle reloads and the router
   // isn't ready immediately — we queue the pending route and fire it
-  // once the layout mounts.
+  // once the app context has finished loading (isLoaded = true).
   const pendingRoute = useRef<{ pathname: string; params?: Record<string, string> } | null>(null);
-  const [routerReady, setRouterReady] = useState(false);
+  const firedRef = useRef(false);
+  // Prevent double navigation: both responseListener and getLastNotificationResponseAsync
+  // can fire for the same cold-launch tap. This ref ensures we only navigate once.
+  const navigatedRef = useRef(false);
 
-  // Mark router as ready after first render
+  // Fire any queued cold-launch navigation once app context is fully loaded
   useEffect(() => {
-    setRouterReady(true);
-  }, []);
-
-  // Fire any queued cold-launch navigation once router is ready
-  useEffect(() => {
-    if (!routerReady || !pendingRoute.current) return;
+    if (!isLoaded || !pendingRoute.current || firedRef.current) return;
+    firedRef.current = true;
     const { pathname, params } = pendingRoute.current;
     pendingRoute.current = null;
-    // Small delay to ensure the navigator stack is fully mounted
+    // Small extra delay to ensure the navigator stack is fully mounted after providers settle
     const t = setTimeout(() => {
       router.push({ pathname, params } as never);
-    }, 300);
+    }, 150);
     return () => clearTimeout(t);
-  }, [routerReady, router]);
+  }, [isLoaded, router]);
 
   function navigateToAlarmRing(data: { soundId?: string; snoozeMinutes?: string; meditationId?: string; practiceDuration?: string; assignedStackId?: string; alarmLabel?: string; alarmTime?: string }) {
+    if (navigatedRef.current) return; // prevent double navigation
+    navigatedRef.current = true;
     const params = {
       soundId: data.soundId ?? 'edm',
       snoozeMinutes: data.snoozeMinutes ?? '10',
