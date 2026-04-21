@@ -36,12 +36,14 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10024",
+    buildNumber: "10025",
     usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
-      // Bundle custom notification sounds (.caf format required by iOS)
       UISupportedExternalAccessoryProtocols: [],
+      // Background modes: audio keeps alarm playing when app is backgrounded;
+      // remote-notification enables silent push for background data sync
+      UIBackgroundModes: ["audio", "remote-notification"],
       NSMicrophoneUsageDescription: "Jack uses your microphone to record voice check-ins and analyze your daily progress.",
       NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries and to scan the panel QR code for pairing.",
       NSPhotoLibraryUsageDescription: "Jack accesses your photo library to attach images to journal entries.",

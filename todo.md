@@ -1482,7 +1482,7 @@
 - [ ] Fix: Community screen — remove "Family Plan" row entirely
 - [ ] Feature: Community screen — add Leaderboard/Streak Wall section
 - [ ] Fix: Home screen — remove "Move" widget, keep row of 3 widgets (Meditate, Sleep, Focus)
-- [ ] Feature: iOS app.config.ts — add Alarms, Live Activities, Background App Refresh permissions
+- [x] Feature: iOS app.config.ts — add UIBackgroundModes (audio, remote-notification) and bump build number to 10025 for TestFlight
 
 - [x] Fix: All sheets missing drag handle pill — create shared SheetHandle component and apply everywhere
 - [x] Fix: Edit Habit sheet has broken emoji/placeholder icon in top-left — remove it
