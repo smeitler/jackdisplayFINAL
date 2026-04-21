@@ -1,6 +1,12 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { AlarmConfig, saveAlarms, loadAlarms } from './storage';
+import {
+  isAlarmKitAvailable,
+  scheduleAlarmKitRepeating,
+  cancelAlarmKitAlarm,
+  cancelAllAlarmKitAlarms,
+} from './alarm-kit';
 
 // NOTE: setNotificationHandler is called in app/_layout.tsx (NotificationHandler component)
 // so it runs before any notification fires. Do NOT call it here to avoid race conditions.
@@ -10,7 +16,6 @@ export const CHANNEL_ID = 'jack-alarm';
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'android') {
     // On Android 8+, sound is controlled by the channel — must set it here.
-    // Use alarm_classic.wav as the notification sound (bundled via expo-notifications plugin).
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: 'Jack Daily Alarm',
       importance: Notifications.AndroidImportance.MAX,
@@ -29,59 +34,17 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       allowAlert: true,
       allowBadge: true,
       allowSound: true,
-      // provideAppNotificationSettings: shows Jack in iOS Focus filter settings
       provideAppNotificationSettings: true,
     },
   });
   return status === 'granted';
 }
 
-/**
- * Maps a soundId string to the bundled notification sound filename.
- *
- * IMPORTANT: Only sounds listed in the expo-notifications plugin `sounds` array
- * in app.config.ts can be used as notification sounds — they must be bundled
- * into the native app at build time.
- *
- * Remote MP3 URLs (edm, fulltrack, prisonbell, stomp4k, stomp5k) are used for
- * in-app audio playback on the alarm-ring screen, NOT for notification sounds.
- * All soundIds that don't have a bundled .wav fall back to alarm_classic.wav.
- *
- * The notification sound plays when the banner appears; the full alarm track
- * plays when the user taps the notification and the alarm-ring screen opens.
- */
-function getSoundFilename(soundId?: string): string {
-  const map: Record<string, string> = {
-    classic:    'alarm_classic.wav',
-    buzzer:     'alarm_buzzer.wav',
-    digital:    'alarm_digital.wav',
-    gentle:     'alarm_gentle.wav',
-    urgent:     'alarm_urgent.wav',
-    // Remote-only sounds — no bundled .wav, use classic as notification sound
-    // (the actual track plays in alarm-ring screen via expo-audio)
-    edm:        'alarm_classic.wav',
-    fulltrack:  'alarm_classic.wav',
-    prisonbell: 'alarm_classic.wav',
-    stomp4k:    'alarm_classic.wav',
-    stomp5k:    'alarm_classic.wav',
-    drumming:   'alarm_classic.wav',
-  };
-  return map[soundId ?? 'classic'] ?? 'alarm_classic.wav';
-}
-
 /** Schedule one notification per enabled day-of-week. Returns notification IDs. */
-export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
-  // Cancel any previously scheduled alarms
-  await cancelAlarm(config);
-
+async function scheduleLocalAlarm(config: AlarmConfig): Promise<string[]> {
   if (!config.isEnabled || config.days.length === 0) return [];
 
-  // NOTE: We intentionally do NOT play a sound on the notification banner.
-  // The in-app alarm-ring screen handles audio via expo-audio with
-  // playsInSilentModeIOS: true, which bypasses the hardware mute switch.
-  // A banner sound would be silenced by the mute switch and create a double-sound.
   const ids: string[] = [];
-
   for (const day of config.days) {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
@@ -95,27 +58,16 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
           practiceDuration: String(
             config.practiceDurations?.[config.meditationId ?? 'none'] ?? 10
           ),
-          // Pass the assigned stack ID so the alarm ring screen can launch it
           assignedStackId: (config as AlarmConfig & { assignedStackId?: string }).assignedStackId ?? '',
-          // Live Activity: label and formatted time for lock screen / Dynamic Island
           alarmLabel: (config as AlarmConfig & { label?: string }).label ?? 'Alarm',
           alarmTime: formatAlarmTime(config.hour, config.minute),
         },
         sound: false,
-        // timeSensitive: breaks through Focus modes (Sleep Focus, Work Focus, etc.) on iOS 15+
-        // without requiring a special Apple entitlement.
-        // NOTE: timeSensitive does NOT bypass the hardware mute switch — only 'critical' does,
-        // and that requires Apple entitlement approval. The alarm-ring screen plays audio via
-        // expo-audio with playsInSilentMode:true which DOES bypass the mute switch.
         ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
-        // Android: highest priority channel ensures alarm-level delivery
         priority: 'max',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-        // Expo weekday: 1=Sunday, 2=Monday, …, 7=Saturday
-        // Our days array: 0=Sunday, 1=Monday, …, 6=Saturday
-        // Mapping: day + 1 (0→1=Sun, 1→2=Mon, …, 6→7=Sat) ✓
         weekday: day + 1,
         hour: config.hour,
         minute: config.minute,
@@ -125,22 +77,62 @@ export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
     });
     ids.push(id);
   }
-
   return ids;
+}
+
+/**
+ * Schedule an alarm using AlarmKit (iOS 26+) if available, otherwise use local notifications.
+ * Returns notification IDs (local) or AlarmKit IDs prefixed with 'ak:'.
+ */
+export async function scheduleAlarm(config: AlarmConfig): Promise<string[]> {
+  // Cancel any previously scheduled alarms first
+  await cancelAlarm(config);
+
+  if (!config.isEnabled || config.days.length === 0) return [];
+
+  // Try AlarmKit first (iOS 26+) — gives true system alarm that bypasses mute switch
+  if (Platform.OS === 'ios') {
+    const alarmKitAvailable = await isAlarmKitAvailable();
+    if (alarmKitAvailable) {
+      const label = (config as AlarmConfig & { label?: string }).label ?? 'Jack Alarm';
+      const result = await scheduleAlarmKitRepeating({
+        title: label,
+        hour: config.hour,
+        minute: config.minute,
+        days: config.days,
+        soundId: config.soundId ?? 'classic',
+        snoozeMinutes: config.snoozeMinutes ?? 10,
+        tintColor: '#6C63FF',
+      });
+      if (result.usedAlarmKit && result.alarmKitId) {
+        // Return AlarmKit ID prefixed so we know how to cancel it later
+        return [`ak:${result.alarmKitId}`];
+      }
+    }
+  }
+
+  // Fallback: local notifications (iOS 15-25, Android, web)
+  return scheduleLocalAlarm(config);
 }
 
 export async function cancelAlarm(config: AlarmConfig): Promise<void> {
   for (const id of config.notificationIds) {
-    try {
-      await Notifications.cancelScheduledNotificationAsync(id);
-    } catch {
-      // ignore
+    if (id.startsWith('ak:')) {
+      // AlarmKit alarm
+      await cancelAlarmKitAlarm(id.slice(3));
+    } else {
+      try {
+        await Notifications.cancelScheduledNotificationAsync(id);
+      } catch {
+        // ignore
+      }
     }
   }
 }
 
 export async function cancelAllAlarms(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
+  await cancelAllAlarmKitAlarms();
 }
 
 /** Save alarm config with new notification IDs after scheduling. */

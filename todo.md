@@ -1741,3 +1741,9 @@
 - [x] Add mute switch warning banner in Alarms screen — shown once on iOS when first alarm is enabled, dismissible, persisted in AsyncStorage
 - [x] Fix textShadow deprecation warnings: replace textShadowColor/Offset/Radius with platform-specific inline approach (web uses textShadow shorthand, native keeps old props)
 - [x] Move data files from app/data/ to lib/data/ to eliminate Expo Router route warnings for non-route files
+
+- [ ] Integrate react-native-nitro-ios-alarm-kit for iOS 26+ AlarmKit support
+- [ ] Add NSAlarmKitUsageDescription to app.config.ts
+- [ ] Update notifications.ts to use AlarmKit on iOS 26+ with local notification fallback
+- [ ] Bundle alarm sound files in iOS native target via expo plugin
+- [ ] Trigger new EAS dev build with AlarmKit

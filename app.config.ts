@@ -30,7 +30,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.25",
+  version: "1.0.26",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   // Single scheme for web/Android compatibility; jackalarm:// registered via ios.infoPlist below
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10031",
+    buildNumber: "10032",
     usesAppleSignIn: true,
     // Time Sensitive Notifications entitlement — required for the "Alarms" toggle
     // to appear in iOS Settings → Jack → Notifications.
@@ -57,6 +57,8 @@ const config: ExpoConfig = {
       // Background modes: audio keeps alarm playing when app is backgrounded;
       // remote-notification enables silent push for background data sync
       UIBackgroundModes: ["audio", "remote-notification"],
+      // Required for AlarmKit (iOS 26+) — explains why the app schedules system alarms
+      NSAlarmUsageDescription: "Jack uses AlarmKit to schedule reliable wake-up alarms that bypass the mute switch and appear in the Clock app.",
       NSMicrophoneUsageDescription: "Jack uses your microphone to record voice check-ins and analyze your daily progress.",
       NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries and to scan the panel QR code for pairing.",
       NSPhotoLibraryUsageDescription: "Jack accesses your photo library to attach images to journal entries.",
@@ -103,6 +105,8 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-dev-client",
+    // Copy .caf alarm sound files into the iOS bundle root for AlarmKit
+    "./plugins/withAlarmKitSounds.cjs",
     "expo-router",
     [
       "expo-widgets",
@@ -198,7 +202,8 @@ const config: ExpoConfig = {
       "expo-build-properties",
       {
         ios: {
-          deploymentTarget: "16.0",
+          // AlarmKit requires iOS 26.0+
+          deploymentTarget: "26.0",
         },
         android: {
           buildArchs: ["armeabi-v7a", "arm64-v8a"],
