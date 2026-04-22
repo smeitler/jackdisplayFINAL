@@ -59,12 +59,12 @@ function soundIdToNativeFile(soundId: string): string {
     digital:    'alarm_digital',
     gentle:     'alarm_gentle',
     urgent:     'alarm_urgent',
-    // Remote URL sounds — not bundled natively, fall back to classic
-    edm:        'alarm_classic',
-    fulltrack:  'alarm_classic',
-    prisonbell: 'alarm_classic',
-    stomp4k:    'alarm_classic',
-    stomp5k:    'alarm_classic',
+    // Now bundled as .caf — all bypass DND/Silent/Sleep
+    edm:        'alarm_edm',
+    fulltrack:  'alarm_fulltrack',
+    prisonbell: 'alarm_prisonbell',
+    stomp4k:    'alarm_stomp4k',
+    stomp5k:    'alarm_stomp5k',
     drumming:   'alarm_classic',
   };
   return map[soundId] ?? 'alarm_classic';

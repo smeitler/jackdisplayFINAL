@@ -42,19 +42,19 @@ import { trpc } from '@/lib/trpc';
 const DAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_MAP   = [0, 1, 2, 3, 4, 5, 6];
 
-const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: string | ReturnType<typeof require>; bundled?: boolean }[] = [
-  // Bundled .caf sounds — these work natively with AlarmKit (bypass DND/Silent/Sleep)
-  { id: 'classic',     label: 'Classic',      emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3'),  bundled: true },
-  { id: 'buzzer',      label: 'Buzzer',       emoji: '📣', source: require('@/assets/audio/alarm_buzzer.wav'),   bundled: true },
-  { id: 'digital',     label: 'Digital',      emoji: '📱', source: require('@/assets/audio/alarm_digital.wav'),  bundled: true },
-  { id: 'gentle',      label: 'Gentle',       emoji: '🌅', source: require('@/assets/audio/alarm_gentle.wav'),   bundled: true },
-  { id: 'urgent',      label: 'Urgent',       emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav'),   bundled: true },
-  // Streaming sounds — preview only; AlarmKit falls back to Classic for these
-  { id: 'edm',         label: 'EDM House',    emoji: '🎧', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_edm_ce8fe03f.mp3' },
-  { id: 'fulltrack',   label: 'Full Track',   emoji: '🎶', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_fulltrack_6082bd59.mp3' },
-  { id: 'prisonbell',  label: 'Prison Bell',  emoji: '🔔', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_prisonbell_9d68b4d6.mp3' },
-  { id: 'stomp4k',     label: 'Stomp 4K',     emoji: '⏱️', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp4k_be7c271e.mp3' },
-  { id: 'stomp5k',     label: 'Stomp 5K',     emoji: '⏱️', source: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf/alarm_stomp5k_e7c316e0.mp3' },
+// All sounds are now bundled as .caf files — AlarmKit plays them through the system alarm
+// channel, bypassing Silent mode, Focus, and Do Not Disturb on iOS 26+.
+const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
+  { id: 'classic',     label: 'Classic',      emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3')    },
+  { id: 'buzzer',      label: 'Buzzer',       emoji: '📣', source: require('@/assets/audio/alarm_buzzer.wav')     },
+  { id: 'digital',     label: 'Digital',      emoji: '📱', source: require('@/assets/audio/alarm_digital.wav')    },
+  { id: 'gentle',      label: 'Gentle',       emoji: '🌅', source: require('@/assets/audio/alarm_gentle.wav')     },
+  { id: 'urgent',      label: 'Urgent',       emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav')     },
+  { id: 'edm',         label: 'EDM House',    emoji: '🎧', source: require('@/assets/audio/alarm_edm.mp3')        },
+  { id: 'fulltrack',   label: 'Full Track',   emoji: '🎶', source: require('@/assets/audio/alarm_fulltrack.mp3')  },
+  { id: 'prisonbell',  label: 'Prison Bell',  emoji: '🔔', source: require('@/assets/audio/alarm_prisonbell.mp3') },
+  { id: 'stomp4k',     label: 'Stomp 4K',     emoji: '⏱️', source: require('@/assets/audio/alarm_stomp4k.mp3')    },
+  { id: 'stomp5k',     label: 'Stomp 5K',     emoji: '⏱️', source: require('@/assets/audio/alarm_stomp5k.mp3')    },
 ];
 
 const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> | null }[] = [
@@ -461,21 +461,11 @@ function AlarmEditModal({
             </Pressable>
             {soundOpen && (
               <View style={[em.dropdownContent, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}>
-                {ALARM_SOUNDS.map((sound, idx) => {
+                {ALARM_SOUNDS.map((sound) => {
                   const isSelected = soundId === sound.id;
                   const isPreviewing = previewingId === sound.id;
-                  // Show a section divider before the first streaming sound
-                  const prevSound = ALARM_SOUNDS[idx - 1];
-                  const showDivider = idx > 0 && !sound.bundled && prevSound?.bundled;
                   return (
                     <View key={sound.id}>
-                      {showDivider && (
-                        <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }}>
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: colors.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                            Preview Only — AlarmKit uses Classic
-                          </Text>
-                        </View>
-                      )}
                       <Pressable
                         onPress={() => {
                           if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -493,11 +483,9 @@ function AlarmEditModal({
                           <Text style={[em.dropdownItemText, { color: isSelected ? ALARM_COLOR : colors.foreground }]}>
                             {sound.label}
                           </Text>
-                          {sound.bundled && (
-                            <Text style={{ fontSize: 10, color: '#22C55E', fontWeight: '600', marginTop: 1 }}>
-                              Bypasses DND · Silent · Sleep
-                            </Text>
-                          )}
+                          <Text style={{ fontSize: 10, color: '#22C55E', fontWeight: '600', marginTop: 1 }}>
+                            Bypasses DND · Silent · Sleep
+                          </Text>
                         </View>
                         {isSelected && <IconSymbol name="checkmark" size={14} color={ALARM_COLOR} />}
                       </Pressable>
