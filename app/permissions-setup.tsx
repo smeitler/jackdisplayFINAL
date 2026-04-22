@@ -74,7 +74,7 @@ const STEPS: Step[] = [
     icon: '⏰',
     title: 'Allow System Alarms',
     description:
-      'Jack uses iOS AlarmKit to fire alarms that bypass the mute switch and work even when the app is fully closed. This is required for reliable wake-up.',
+      'Jack uses iOS 26 AlarmKit to schedule true system-level alarms — the same technology used by the built-in Clock app. This is required for reliable wake-up.',
     actionLabel: 'Allow Alarms',
     skipLabel: 'Skip for now',
   },
@@ -316,9 +316,9 @@ export default function PermissionsSetupScreen() {
         )}
         {currentStep?.id === 'alarmKit' && (
           <>
-            <UnlockRow icon="🔇" text="Bypasses the hardware mute switch" />
-            <UnlockRow icon="📱" text="Shows 'Alarms' toggle in iOS Settings → Jack" />
-            <UnlockRow icon="⏰" text="Fires even when app is fully killed" />
+            <UnlockRow icon="⏰" text="Same alarm system as the built-in Clock app" />
+            <UnlockRow icon="🔇" text="Fires through Silent mode and Do Not Disturb" />
+            <UnlockRow icon="📱" text="Works even when app is fully closed" />
           </>
         )}
         {currentStep?.id === 'focus' && (

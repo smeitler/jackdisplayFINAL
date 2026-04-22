@@ -681,13 +681,8 @@ export default function AlarmsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAlarm, setEditingAlarm] = useState<AlarmEntry | null>(null);
   const syncStacksMutation = trpc.devices.syncStacks.useMutation();
-  // Critical alerts permission state (iOS only — the "Alarms" toggle in iOS Settings)
-  const [criticalAlertsGranted, setCriticalAlertsGranted] = useState<boolean | null>(null);
   // Track notification permission status for the banner
   const [notifPermission, setNotifPermission] = useState<string | null>(null);
-  // Mute switch warning — shown once on iOS when the first alarm is enabled
-  const MUTE_WARNING_KEY = 'daycheck:muteWarningShown';
-  const [showMuteWarning, setShowMuteWarning] = useState(false);
 
   // Sync stacks to panel on screen mount so the panel always has the latest ritual stacks
   useEffect(() => {
@@ -701,9 +696,6 @@ export default function AlarmsScreen() {
   useEffect(() => {
     Notifications.getPermissionsAsync().then((perms) => {
       setNotifPermission(perms.status);
-      if (Platform.OS === 'ios') {
-        setCriticalAlertsGranted(perms.ios?.allowsCriticalAlerts ?? false);
-      }
     });
   }, []);
 
@@ -770,16 +762,6 @@ export default function AlarmsScreen() {
   }
 
   const enabledCount = alarms.filter((a) => a.isEnabled).length;
-  // Show mute warning on iOS when the first alarm is enabled (only once)
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    AsyncStorage.getItem(MUTE_WARNING_KEY).then((val) => {
-      if (!val && enabledCount > 0) setShowMuteWarning(true);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabledCount]);
-  // Show the critical-alerts banner only on iOS when permission is explicitly false
-  const showCriticalBanner = Platform.OS === 'ios' && criticalAlertsGranted === false;
   // Show a notification permission denied banner if notifications are not granted
   const showPermissionDeniedBanner = notifPermission === 'denied';
 
@@ -850,74 +832,7 @@ export default function AlarmsScreen() {
         </Pressable>
       )}
 
-      {/* Critical alerts permission banner (iOS only) */}
-      {showCriticalBanner && (
-        <Pressable
-          onPress={() => Linking.openSettings()}
-          style={({ pressed }) => [{
-            marginHorizontal: 16,
-            marginTop: 10,
-            borderRadius: 12,
-            padding: 14,
-            backgroundColor: '#F59E0B18',
-            borderWidth: 1,
-            borderColor: '#F59E0B50',
-            flexDirection: 'row' as const,
-            alignItems: 'flex-start' as const,
-            gap: 10,
-            opacity: pressed ? 0.75 : 1,
-          }]}
-        >
-          <Text style={{ fontSize: 20, lineHeight: 24 }}>⚠️</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#F59E0B', marginBottom: 3 }}>
-              Enable Alarm Alerts to bypass Do Not Disturb
-            </Text>
-            <Text style={{ fontSize: 12, color: '#F59E0B', opacity: 0.85, lineHeight: 17 }}>
-              Go to Settings → Jack → Alarms and turn on the toggle. This lets your alarm ring even when your phone is silenced or Focus is on.
-            </Text>
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#F59E0B', marginTop: 6 }}>
-              Tap to open Settings →
-            </Text>
-          </View>
-        </Pressable>
-      )}
 
-      {/* Mute switch warning — shown once on iOS after the first alarm is enabled */}
-      {showMuteWarning && (
-        <Pressable
-          onPress={() => {
-            AsyncStorage.setItem(MUTE_WARNING_KEY, '1');
-            setShowMuteWarning(false);
-          }}
-          style={({ pressed }) => [{
-            marginHorizontal: 16,
-            marginTop: 10,
-            borderRadius: 12,
-            padding: 14,
-            backgroundColor: '#8B5CF618',
-            borderWidth: 1,
-            borderColor: '#8B5CF650',
-            flexDirection: 'row' as const,
-            alignItems: 'flex-start' as const,
-            gap: 10,
-            opacity: pressed ? 0.75 : 1,
-          }]}
-        >
-          <Text style={{ fontSize: 20, lineHeight: 24 }}>🔕</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#8B5CF6', marginBottom: 3 }}>
-              Check your mute switch
-            </Text>
-            <Text style={{ fontSize: 12, color: '#8B5CF6', opacity: 0.85, lineHeight: 17 }}>
-              If your iPhone’s side mute switch is on (orange dot visible), alarms may be silent. Flip the switch to the unmuted position so your alarm rings at full volume.
-            </Text>
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#8B5CF6', marginTop: 6 }}>
-              Tap to dismiss
-            </Text>
-          </View>
-        </Pressable>
-      )}
       {/* Alarm list */}
       <ScrollView
         contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + 32 }]}
