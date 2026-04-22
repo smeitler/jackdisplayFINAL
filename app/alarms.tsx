@@ -42,19 +42,21 @@ import { trpc } from '@/lib/trpc';
 const DAY_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_MAP   = [0, 1, 2, 3, 4, 5, 6];
 
-// All sounds are now bundled as .caf files — AlarmKit plays them through the system alarm
+// All sounds are bundled as .caf files — AlarmKit plays them through the system alarm
 // channel, bypassing Silent mode, Focus, and Do Not Disturb on iOS 26+.
-const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: ReturnType<typeof require> }[] = [
+// Preview sources: bundled files for small sounds, CloudFront URLs for large ones (EDM, Full Track, etc.)
+const CDN = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663287248938/bFcyWdAL5JXed3bpyDvBEf';
+const ALARM_SOUNDS: { id: string; label: string; emoji: string; source: string | ReturnType<typeof require> }[] = [
   { id: 'classic',     label: 'Classic',      emoji: '⏰', source: require('@/assets/audio/alarm_classic.mp3')    },
   { id: 'buzzer',      label: 'Buzzer',       emoji: '📣', source: require('@/assets/audio/alarm_buzzer.wav')     },
   { id: 'digital',     label: 'Digital',      emoji: '📱', source: require('@/assets/audio/alarm_digital.wav')    },
   { id: 'gentle',      label: 'Gentle',       emoji: '🌅', source: require('@/assets/audio/alarm_gentle.wav')     },
   { id: 'urgent',      label: 'Urgent',       emoji: '🚨', source: require('@/assets/audio/alarm_urgent.wav')     },
-  { id: 'edm',         label: 'EDM House',    emoji: '🎧', source: require('@/assets/audio/alarm_edm.mp3')        },
-  { id: 'fulltrack',   label: 'Full Track',   emoji: '🎶', source: require('@/assets/audio/alarm_fulltrack.mp3')  },
-  { id: 'prisonbell',  label: 'Prison Bell',  emoji: '🔔', source: require('@/assets/audio/alarm_prisonbell.mp3') },
+  { id: 'edm',         label: 'EDM House',    emoji: '🎧', source: `${CDN}/alarm_edm_ce8fe03f.mp3`               },
+  { id: 'fulltrack',   label: 'Full Track',   emoji: '🎶', source: `${CDN}/alarm_fulltrack_6082bd59.mp3`          },
+  { id: 'prisonbell',  label: 'Prison Bell',  emoji: '🔔', source: `${CDN}/alarm_prisonbell_9d68b4d6.mp3`         },
   { id: 'stomp4k',     label: 'Stomp 4K',     emoji: '⏱️', source: require('@/assets/audio/alarm_stomp4k.mp3')    },
-  { id: 'stomp5k',     label: 'Stomp 5K',     emoji: '⏱️', source: require('@/assets/audio/alarm_stomp5k.mp3')    },
+  { id: 'stomp5k',     label: 'Stomp 5K',     emoji: '⏱️', source: `${CDN}/alarm_stomp5k_e7c316e0.mp3`           },
 ];
 
 const MEDITATION_OPTIONS: { id: string; label: string; emoji: string; description: string; source: string | ReturnType<typeof require> | null }[] = [
