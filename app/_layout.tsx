@@ -46,8 +46,16 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-// ── Audio mode: allow playback in silent mode ─────────────────────────────────
+// ── Audio mode: allow playback in silent mode ─────────────────────────────────────────────
 setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+
+// ── AlarmKit: configure App Group at startup so getLaunchPayload() works ────────────────────
+// Must run before any AlarmKit API call (including getLaunchPayload).
+if (Platform.OS === 'ios') {
+  import('@/lib/alarm-kit').then(({ configureAlarmKit }) => {
+    configureAlarmKit();
+  }).catch(() => {});
+}
 
 function CheckinGate() {
   const { lastCheckInDate } = useApp();

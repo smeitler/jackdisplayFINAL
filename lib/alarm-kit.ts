@@ -37,28 +37,37 @@ async function getAlarmKit(): Promise<ExpoAlarmKitModule | null> {
   return _kit;
 }
 
+/**
+ * Call this at app startup (e.g., in _layout.tsx) to ensure AlarmKit is configured
+ * before getLaunchPayload() or any other AlarmKit API is called.
+ */
+export async function configureAlarmKit(): Promise<void> {
+  await getAlarmKit();
+}
+
 // ─── Sound mapping ────────────────────────────────────────────────────────────
 /**
- * Map our soundId to the bundled .caf filename (without extension).
- * AlarmKit looks for these files in the main iOS bundle.
- * Remote URL sounds (edm, fulltrack, etc.) are not bundled natively — use classic fallback.
+ * Map our soundId to the bundled sound base name (WITHOUT extension).
+ * AlarmKit requires just the base filename — it looks for the file in the
+ * main iOS bundle and will try .caf, .wav, .mp3 automatically.
+ * Remote URL sounds (edm, fulltrack, etc.) are not bundled natively — fall back to classic.
  */
 function soundIdToNativeFile(soundId: string): string {
   const map: Record<string, string> = {
-    classic:    'alarm_classic.caf',
-    buzzer:     'alarm_buzzer.caf',
-    digital:    'alarm_digital.caf',
-    gentle:     'alarm_gentle.caf',
-    urgent:     'alarm_urgent.caf',
+    classic:    'alarm_classic',
+    buzzer:     'alarm_buzzer',
+    digital:    'alarm_digital',
+    gentle:     'alarm_gentle',
+    urgent:     'alarm_urgent',
     // Remote URL sounds — not bundled natively, fall back to classic
-    edm:        'alarm_classic.caf',
-    fulltrack:  'alarm_classic.caf',
-    prisonbell: 'alarm_classic.caf',
-    stomp4k:    'alarm_classic.caf',
-    stomp5k:    'alarm_classic.caf',
-    drumming:   'alarm_classic.caf',
+    edm:        'alarm_classic',
+    fulltrack:  'alarm_classic',
+    prisonbell: 'alarm_classic',
+    stomp4k:    'alarm_classic',
+    stomp5k:    'alarm_classic',
+    drumming:   'alarm_classic',
   };
-  return map[soundId] ?? 'alarm_classic.caf';
+  return map[soundId] ?? 'alarm_classic';
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
