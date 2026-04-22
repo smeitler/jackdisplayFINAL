@@ -11,19 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-// AlarmKit is a native Nitro module — only available after a native EAS build.
-// We use a try-catch require so the existing dev build doesn't crash if the
-// native module hasn't been linked yet.
-let requestAlarmPermission: (() => Promise<boolean>) | null = null;
-let isAlarmKitAvailable: (() => boolean) | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const alarmKit = require('react-native-nitro-ios-alarm-kit');
-  requestAlarmPermission = alarmKit.requestAlarmPermission ?? null;
-  isAlarmKitAvailable = alarmKit.isAvailable ?? null;
-} catch {
-  // Native module not linked in this build — AlarmKit step will be skipped
-}
+import { requestAlarmKitPermission, isAlarmKitAvailable as checkAlarmKitAvailable } from '@/lib/alarm-kit';
 import {
   Animated,
   Linking,
@@ -192,14 +180,21 @@ export default function PermissionsSetupScreen() {
     } else if (currentStep.id === 'alarmKit') {
       setStatuses(s => ({ ...s, alarmKit: 'loading' }));
       try {
-        if (Platform.OS === 'ios' && isAlarmKitAvailable && isAlarmKitAvailable() && requestAlarmPermission) {
-          const granted = await requestAlarmPermission();
-          setStatuses(s => ({ ...s, alarmKit: granted ? 'done' : 'denied' }));
-          if (granted) {
-            setTimeout(() => animateToNext(stepIndex + 1), 600);
+        if (Platform.OS === 'ios') {
+          const available = await checkAlarmKitAvailable();
+          if (available) {
+            const granted = await requestAlarmKitPermission();
+            setStatuses(s => ({ ...s, alarmKit: granted ? 'done' : 'denied' }));
+            if (granted) {
+              setTimeout(() => animateToNext(stepIndex + 1), 600);
+            }
+          } else {
+            // AlarmKit not available on this iOS version — skip silently
+            setStatuses(s => ({ ...s, alarmKit: 'done' }));
+            setTimeout(() => animateToNext(stepIndex + 1), 400);
           }
         } else {
-          // AlarmKit not available in this build — skip silently
+          // Non-iOS — skip silently
           setStatuses(s => ({ ...s, alarmKit: 'done' }));
           setTimeout(() => animateToNext(stepIndex + 1), 400);
         }

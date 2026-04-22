@@ -2,27 +2,35 @@
  * alarm-kit.ts
  *
  * AlarmKit integration for iOS 26+.
- * On iOS 26+, uses react-native-nitro-ios-alarm-kit for true system-level alarms
- * that bypass the mute switch and appear in the native Clock app.
+ * Uses expo-alarm-kit for true system-level alarms that bypass the mute switch
+ * and appear in the native Clock app.
  * On older iOS / Android / web, falls back to local notifications (existing behavior).
  */
 
 import { Platform } from 'react-native';
-import type { AlarmWeekday } from 'react-native-nitro-ios-alarm-kit';
+
+// App Group identifier — must match the one configured in app.config.ts
+const APP_GROUP = 'group.com.jackalarm.app';
 
 // ─── Lazy import ─────────────────────────────────────────────────────────────
-// We lazy-import to avoid crashing on Android/web where the native module
-// doesn't exist. We cache the result after the first call.
-type AlarmKitModule = typeof import('react-native-nitro-ios-alarm-kit');
-let _kit: AlarmKitModule | null | undefined = undefined; // undefined = not yet checked
+type ExpoAlarmKitModule = typeof import('expo-alarm-kit');
+let _kit: ExpoAlarmKitModule | null | undefined = undefined; // undefined = not yet checked
+let _configured = false;
 
-async function getAlarmKit(): Promise<AlarmKitModule | null> {
+async function getAlarmKit(): Promise<ExpoAlarmKitModule | null> {
   if (Platform.OS !== 'ios') return null;
   if (_kit !== undefined) return _kit;
   try {
-    const mod = await import('react-native-nitro-ios-alarm-kit');
-    // isAvailable() is a top-level function that returns false on iOS < 26
-    _kit = mod.isAvailable() ? mod : null;
+    const mod = await import('expo-alarm-kit');
+    // Configure the module with the App Group identifier
+    if (!_configured) {
+      const ok = mod.configure(APP_GROUP);
+      _configured = ok;
+      if (!ok) {
+        console.warn('[AlarmKit] configure() returned false — App Group may not be set up');
+      }
+    }
+    _kit = mod;
   } catch {
     _kit = null;
   }
@@ -37,20 +45,20 @@ async function getAlarmKit(): Promise<AlarmKitModule | null> {
  */
 function soundIdToNativeFile(soundId: string): string {
   const map: Record<string, string> = {
-    classic:    'alarm_classic',
-    buzzer:     'alarm_buzzer',
-    digital:    'alarm_digital',
-    gentle:     'alarm_gentle',
-    urgent:     'alarm_urgent',
+    classic:    'alarm_classic.caf',
+    buzzer:     'alarm_buzzer.caf',
+    digital:    'alarm_digital.caf',
+    gentle:     'alarm_gentle.caf',
+    urgent:     'alarm_urgent.caf',
     // Remote URL sounds — not bundled natively, fall back to classic
-    edm:        'alarm_classic',
-    fulltrack:  'alarm_classic',
-    prisonbell: 'alarm_classic',
-    stomp4k:    'alarm_classic',
-    stomp5k:    'alarm_classic',
-    drumming:   'alarm_classic',
+    edm:        'alarm_classic.caf',
+    fulltrack:  'alarm_classic.caf',
+    prisonbell: 'alarm_classic.caf',
+    stomp4k:    'alarm_classic.caf',
+    stomp5k:    'alarm_classic.caf',
+    drumming:   'alarm_classic.caf',
   };
-  return map[soundId] ?? 'alarm_classic';
+  return map[soundId] ?? 'alarm_classic.caf';
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -78,7 +86,8 @@ export async function requestAlarmKitPermission(): Promise<boolean> {
   const kit = await getAlarmKit();
   if (!kit) return false;
   try {
-    return await kit.requestAlarmPermission();
+    const status = await kit.requestAuthorization();
+    return status === 'authorized';
   } catch {
     return false;
   }
@@ -102,30 +111,33 @@ export async function scheduleAlarmKitRepeating(params: {
   if (!kit) return { usedAlarmKit: false };
 
   try {
-    const authorized = await kit.requestAlarmPermission();
-    if (!authorized) return { usedAlarmKit: false };
+    const status = await kit.requestAuthorization();
+    if (status !== 'authorized') return { usedAlarmKit: false };
 
-    const weekdayMap: AlarmWeekday[] = [
-      'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
-    ];
-    const repeats: AlarmWeekday[] = params.days.map((d) => weekdayMap[d] ?? 'monday');
+    // expo-alarm-kit weekdays: 1=Sun, 2=Mon, ..., 7=Sat
+    // Our days: 0=Sun, 1=Mon, ..., 6=Sat
+    const weekdays = params.days.map((d) => d + 1) as (1 | 2 | 3 | 4 | 5 | 6 | 7)[];
     const soundFile = soundIdToNativeFile(params.soundId);
+    const alarmId = kit.generateUUID();
 
-    const alarmKitId = await kit.scheduleRelativeAlarm(
-      params.title,
-      { text: 'Wake Up', textColor: '#FFFFFF', icon: 'sun.max.fill' },
-      params.tintColor ?? '#6C63FF',
-      params.hour,
-      params.minute,
-      repeats,
-      { text: `Snooze ${params.snoozeMinutes}m`, textColor: '#FFFFFF', icon: 'moon.zzz.fill' },
-      { postAlert: params.snoozeMinutes * 60 },
-      soundFile
-    );
+    const success = await kit.scheduleRepeatingAlarm({
+      id: alarmId,
+      hour: params.hour,
+      minute: params.minute,
+      weekdays,
+      title: params.title,
+      soundName: soundFile,
+      launchAppOnDismiss: true,
+      dismissPayload: alarmId,
+      doSnoozeIntent: true,
+      launchAppOnSnooze: false,
+      snoozeDuration: params.snoozeMinutes * 60,
+    });
 
-    return { usedAlarmKit: true, alarmKitId: alarmKitId ?? undefined };
+    if (!success) return { usedAlarmKit: false };
+    return { usedAlarmKit: true, alarmKitId: alarmId };
   } catch (err) {
-    console.warn('[AlarmKit] scheduleRelativeAlarm failed, falling back:', err);
+    console.warn('[AlarmKit] scheduleRepeatingAlarm failed, falling back:', err);
     return { usedAlarmKit: false };
   }
 }
@@ -137,9 +149,9 @@ export async function cancelAlarmKitAlarm(alarmKitId: string): Promise<void> {
   const kit = await getAlarmKit();
   if (!kit) return;
   try {
-    await kit.stopAlarm(alarmKitId);
+    await kit.cancelAlarm(alarmKitId);
   } catch (err) {
-    console.warn('[AlarmKit] stopAlarm failed:', err);
+    console.warn('[AlarmKit] cancelAlarm failed:', err);
   }
 }
 
@@ -150,8 +162,16 @@ export async function cancelAllAlarmKitAlarms(): Promise<void> {
   const kit = await getAlarmKit();
   if (!kit) return;
   try {
-    await kit.stopAllAlarms();
+    // Get all active alarms and cancel them
+    const alarms = kit.getAllAlarms();
+    for (const id of alarms) {
+      try {
+        await kit.cancelAlarm(id);
+      } catch {
+        // ignore individual failures
+      }
+    }
   } catch (err) {
-    console.warn('[AlarmKit] stopAllAlarms failed:', err);
+    console.warn('[AlarmKit] cancelAllAlarms failed:', err);
   }
 }

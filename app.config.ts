@@ -45,15 +45,13 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10034",
+    buildNumber: "10035",
     usesAppleSignIn: true,
     // Time Sensitive Notifications entitlement — required for the "Alarms" toggle
     // to appear in iOS Settings → Jack → Notifications.
     // EAS Build will automatically enable this capability on Apple Developer Console.
     entitlements: {
       "com.apple.developer.usernotifications.time-sensitive": true,
-      // AlarmKit entitlement — required for the Alarms toggle in iOS Settings
-      "com.apple.developer.alarm": true,
     },
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -66,7 +64,7 @@ const config: ExpoConfig = {
       // remote-notification enables silent push for background data sync
       UIBackgroundModes: ["audio", "remote-notification"],
       // Required for AlarmKit (iOS 26+) — explains why the app schedules system alarms
-      NSAlarmUsageDescription: "Jack uses AlarmKit to schedule reliable wake-up alarms that bypass the mute switch and appear in the Clock app.",
+      NSAlarmKitUsageDescription: "Jack uses AlarmKit to schedule reliable wake-up alarms that bypass the mute switch and appear in the Clock app.",
       NSMicrophoneUsageDescription: "Jack uses your microphone to record voice check-ins and analyze your daily progress.",
       NSCameraUsageDescription: "Jack uses your camera to add photos to your journal entries and to scan the panel QR code for pairing.",
       NSPhotoLibraryUsageDescription: "Jack accesses your photo library to attach images to journal entries.",
