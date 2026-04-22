@@ -45,13 +45,17 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10037",
+    buildNumber: "10038",
     usesAppleSignIn: true,
     // Time Sensitive Notifications entitlement — required for the "Alarms" toggle
     // to appear in iOS Settings → Jack → Notifications.
     // EAS Build will automatically enable this capability on Apple Developer Console.
     entitlements: {
       "com.apple.developer.usernotifications.time-sensitive": true,
+      // App Group — required for AlarmKit to share state between the main app
+      // and the alarm system. Without this, configure() silently fails and
+      // AlarmKit throws an NSException on expo.controller.errorRecoveryQueue at startup.
+      "com.apple.security.application-groups": [`group.${bundleId}`],
     },
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
