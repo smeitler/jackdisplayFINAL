@@ -31,6 +31,12 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   version: "1.0.27",
+  runtimeVersion: {
+    policy: "appVersion",
+  },
+  updates: {
+    url: "https://u.expo.dev/eae8d203-f1dc-4c5a-942d-eda83c2201ef",
+  },
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   // Single scheme for web/Android compatibility; jackalarm:// registered via ios.infoPlist below
