@@ -49,13 +49,9 @@ export const unstable_settings = {
 // ── Audio mode: allow playback in silent mode ─────────────────────────────────────────────
 setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
 
-// ── AlarmKit: configure App Group at startup so getLaunchPayload() works ────────────────────
-// Must run before any AlarmKit API call (including getLaunchPayload).
-if (Platform.OS === 'ios') {
-  import('@/lib/alarm-kit').then(({ configureAlarmKit }) => {
-    configureAlarmKit();
-  }).catch(() => {});
-}
+// AlarmKit initialization is done inside RootLayout useEffect (see below)
+// DO NOT call AlarmKit at module scope — it runs on a background dispatch queue
+// and throws NSException if entitlements are missing, crashing the app before React mounts.
 
 function CheckinGate() {
   const { lastCheckInDate } = useApp();
@@ -221,6 +217,24 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  // ── AlarmKit: configure App Group after React mounts ──────────────────────
+  // IMPORTANT: Must be inside useEffect, NOT at module scope.
+  // At module scope it runs on a background dispatch queue before React is ready,
+  // and if entitlements are missing it throws NSException crashing the app.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { configureAlarmKit } = await import('@/lib/alarm-kit');
+        if (!cancelled) await configureAlarmKit();
+      } catch {
+        // AlarmKit unavailable or entitlement missing — app continues without it
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Create clients once and reuse them
