@@ -273,19 +273,14 @@ public class ExpoAlarmKitModule: Module {
                 alarmSound = .default
             }
             
-            // Note: AppIntents removed for App Store compatibility
-            // Dismiss/snooze intents require com.apple.developer.alarm entitlement
-            // which is not yet available in the Developer Portal
-            let stopIntent: (any LiveActivityIntent)? = nil
-            let secondaryIntent: (any LiveActivityIntent)? = nil
+            // Note: stopIntent/secondaryIntent omitted — AppIntents/LiveActivityIntent
+            // removed entirely for App Store compatibility (system stop button is automatic)
             
             // Create configuration
             let config = AlarmManager.AlarmConfiguration<Meta>(
                 countdownDuration: countdownDuration,
                 schedule: .fixed(date),
                 attributes: attributes,
-                stopIntent: stopIntent,
-                secondaryIntent: secondaryIntent,
                 sound: alarmSound
             )
             
@@ -382,19 +377,14 @@ public class ExpoAlarmKitModule: Module {
                 alarmSound = .default
             }
             
-            // Note: AppIntents removed for App Store compatibility
-            // Dismiss/snooze intents require com.apple.developer.alarm entitlement
-            // which is not yet available in the Developer Portal
-            let stopIntent: (any LiveActivityIntent)? = nil
-            let secondaryIntent: (any LiveActivityIntent)? = nil
+            // Note: stopIntent/secondaryIntent omitted — AppIntents/LiveActivityIntent
+            // removed entirely for App Store compatibility (system stop button is automatic)
             
             // Create configuration with relative schedule
             let config = AlarmManager.AlarmConfiguration<Meta>(
                 countdownDuration: countdownDuration,
                 schedule: schedule,
                 attributes: attributes,
-                stopIntent: stopIntent,
-                secondaryIntent: secondaryIntent,
                 sound: alarmSound
             )
             
@@ -467,14 +457,13 @@ public class ExpoAlarmKitModule: Module {
                 alarmSound = .default
             }
             
-            // Note: AppIntents removed for App Store compatibility
-            let stopIntent: (any LiveActivityIntent)? = nil
+            // Note: stopIntent omitted — AppIntents/LiveActivityIntent removed entirely
+            // for App Store compatibility (system stop button is automatic)
             
             // Create timer configuration
             let config = AlarmManager.AlarmConfiguration<Meta>.timer(
                 duration: options.duration,
                 attributes: attributes,
-                stopIntent: stopIntent,
                 sound: alarmSound
             )
             
