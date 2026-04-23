@@ -45,7 +45,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10044",
+    buildNumber: "10045",
     usesAppleSignIn: true,
     // Time Sensitive Notifications entitlement — required for the "Alarms" toggle
     // to appear in iOS Settings → Jack → Notifications.
@@ -118,6 +118,8 @@ const config: ExpoConfig = {
     // it crashes on startup in TestFlight/App Store because there is no dev server
     // Copy .caf alarm sound files into the iOS bundle root for AlarmKit
     "./plugins/withAlarmKitSounds.cjs",
+    // Inject native crash reporter into AppDelegate for on-device diagnostics
+    "./plugins/withCrashDiagnostics.cjs",
     "expo-router",
     [
       "expo-widgets",

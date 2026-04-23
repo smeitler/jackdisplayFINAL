@@ -16,6 +16,8 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { useColors } from "@/hooks/use-colors";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime } from "@/lib/_core/manus-runtime";
+import { readAndClearCrashReport, formatCrashReport } from "@/lib/crash-diagnostics";
+import { Alert } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 // Live Activity helpers — loaded dynamically so expo-widgets (iOS-only native module)
 // is never evaluated on web or Android, preventing the LinkingContext crash.
@@ -217,6 +219,38 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  // ── Crash Diagnostics: check for crash report from previous launch ─────────
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    (async () => {
+      try {
+        const report = await readAndClearCrashReport();
+        if (report) {
+          const formatted = formatCrashReport(report);
+          console.error('[CrashDiagnostics] Previous crash:', formatted);
+          Alert.alert(
+            '⚠️ Previous Crash Detected',
+            `Exception: ${report.name}\n\nReason: ${report.reason}`,
+            [
+              {
+                text: 'Copy Full Report',
+                onPress: async () => {
+                  try {
+                    const Clipboard = await import('expo-clipboard');
+                    await Clipboard.setStringAsync(formatted);
+                  } catch { /* clipboard unavailable */ }
+                },
+              },
+              { text: 'Dismiss', style: 'cancel' },
+            ]
+          );
+        }
+      } catch {
+        // Never crash the app trying to read a crash report
+      }
+    })();
   }, []);
 
   // ── AlarmKit: configure App Group after React mounts ──────────────────────
