@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Platform, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
@@ -130,7 +130,12 @@ export default function LoginScreen() {
 
   return (
     <ScreenContainer>
-      <View style={styles.container}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Logo / Hero */}
         <View style={styles.hero}>
           <View style={[styles.logoWrap, { backgroundColor: colors.primary + "22" }]}>
@@ -194,7 +199,7 @@ export default function LoginScreen() {
 
           {/* Show loading state when signing in */}
           {signingIn && (
-            <View style={[styles.loadingRow]}>
+            <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={[styles.loadingText, { color: colors.muted }]}>Signing in…</Text>
             </View>
@@ -261,15 +266,15 @@ export default function LoginScreen() {
             </Pressable>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { flex: 1, paddingHorizontal: 28, paddingTop: 40, paddingBottom: 32, justifyContent: "space-between" },
-  hero: { alignItems: "center", gap: 12, marginTop: 20 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 40, paddingBottom: 32, gap: 32 },
+  hero: { alignItems: "center", gap: 12 },
   logoWrap: { width: 96, height: 96, borderRadius: 28, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   appName: { fontSize: 36, fontWeight: "800", letterSpacing: -1 },
   tagline: { fontSize: 16, textAlign: "center", lineHeight: 22, maxWidth: 260 },

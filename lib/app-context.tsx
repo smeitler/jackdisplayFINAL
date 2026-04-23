@@ -214,6 +214,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // 0b. Save user ID from cached auth token early so Journal/other screens
+      //     can load local data even before the server sync completes.
+      //     This is critical on native where setLastUserId is only called after
+      //     a successful server sync — if the sync fails, userId stays null.
+      try {
+        const { getUserInfo } = await import('./_core/auth');
+        const cachedUser = await getUserInfo();
+        if (cachedUser?.id) {
+          const existingUserId = await getLastUserId();
+          if (!existingUserId) {
+            await setLastUserId(String(cachedUser.id));
+          }
+        }
+      } catch { /* never block startup */ }
+
       // 1. Load from local cache immediately for fast startup
       const [localHabits, localCategories, localCheckIns, localAlarm, localAlarms, lastCheckInDate] = await Promise.all([
         loadHabits(),

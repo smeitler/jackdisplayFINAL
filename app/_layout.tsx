@@ -191,7 +191,10 @@ function ThemedStack() {
   const colors = useColors();
   const bgStyle = { backgroundColor: colors.background };
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: bgStyle }}>
+    // contentStyle is NOT applied to (tabs) — the tab screens manage their own
+    // backgrounds via ScreenContainer. Applying contentStyle to (tabs) caused
+    // blank content areas on native iOS (layout conflict with tab flex tree).
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="login" options={{ presentation: 'fullScreenModal', contentStyle: bgStyle }} />
       <Stack.Screen name="oauth/callback" />

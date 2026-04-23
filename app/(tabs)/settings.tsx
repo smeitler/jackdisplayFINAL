@@ -271,6 +271,7 @@ function AnalyticsTab() {
 
   return (
     <ScrollView
+      style={{ flex: 1 }}
       contentContainerStyle={[aStyles.scroll, { backgroundColor: bgColor }]}
       showsVerticalScrollIndicator={false}
     >
@@ -572,7 +573,7 @@ function VisionBoardTab() {
   const detailCat = detailCatId ? sortedCategories.find((c) => c.id === detailCatId) : null;
 
   return (
-    <ScrollView contentContainerStyle={vStyles.scroll} showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={vStyles.scroll} showsVerticalScrollIndicator={false}>
       <View style={maxWidth ? { maxWidth, alignSelf: 'center', width: '100%' } : undefined}>
         <Text style={[vStyles.pageSubtitle, { color: colors.muted }]}>Tap a goal to add photos and reasons. Swipe photos to browse.</Text>
         {sortedCategories.map((cat) => {

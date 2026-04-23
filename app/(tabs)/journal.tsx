@@ -3034,7 +3034,18 @@ export default function JournalScreen() {
   const pickerTempDate = useRef(selectedDate);
   const [dvRefreshing, setDvRefreshing] = useState(false);
   const panelRefreshRef = useRef<(() => void) | null>(null);
-  const { habits, checkIns, categories, submitCheckIn, streak, updateHabit, updateCategory, deleteHabit, deleteCategory } = useApp();
+  const { habits, checkIns, categories, submitCheckIn, streak, updateHabit, updateCategory, deleteHabit, deleteCategory, isSyncing } = useApp();
+  // Reload journal entries after server sync completes (e.g. first launch on new device)
+  const prevIsSyncing = useRef(false);
+  useEffect(() => {
+    if (prevIsSyncing.current && !isSyncing && userId) {
+      loadEntries(userId).then((loaded) => {
+        loaded.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setEntries(loaded);
+      }).catch(() => {});
+    }
+    prevIsSyncing.current = isSyncing;
+  }, [isSyncing, userId]);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [listModalVisible, setListModalVisible] = useState(false);
   const [tasksModalVisible, setTasksModalVisible] = useState(false);
