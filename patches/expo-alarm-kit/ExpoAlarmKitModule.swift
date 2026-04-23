@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import AlarmKit
 import ActivityKit
+import AppIntents
 import SwiftUI
 
 // MARK: - Storage Keys
@@ -8,7 +9,6 @@ private let alarmKeyPrefix = "ExpoAlarmKit.alarm:"
 private let launchAppKeyPrefix = "ExpoAlarmKit.launchApp:"
 
 // MARK: - App Group Storage Manager
-@available(iOS 26.0, *)
 public class ExpoAlarmKitStorage {
     public static var appGroupIdentifier: String? = nil
     
@@ -63,7 +63,6 @@ public class ExpoAlarmKitStorage {
 }
 
 // MARK: - Record Structs for Expo Module
-@available(iOS 26.0, *)
 struct ScheduleAlarmOptions: Record {
     @Field var id: String
     @Field var epochSeconds: Double
@@ -82,7 +81,6 @@ struct ScheduleAlarmOptions: Record {
     @Field var snoozeDuration: Int?
 }
 
-@available(iOS 26.0, *)
 struct ScheduleRepeatingAlarmOptions: Record {
     @Field var id: String
     @Field var hour: Int
@@ -103,7 +101,6 @@ struct ScheduleRepeatingAlarmOptions: Record {
     @Field var snoozeDuration: Int?
 }
 
-@available(iOS 26.0, *)
 struct ScheduleTimerOptions: Record {
     @Field var id: String
     @Field var duration: Double
@@ -140,8 +137,119 @@ private func buildLaunchPayload(alarmId: String, payload: String?) -> [String: A
     ]
 }
 
+// MARK: - App Intent for Alarm Dismissal (No App Launch)
+public struct AlarmDismissIntent: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Dismiss Alarm"
+    public static var description = IntentDescription("Handles alarm dismissal")
+    public static var openAppWhenRun: Bool = false
+    
+    @Parameter(title: "alarmId")
+    public var alarmId: String
+    
+    @Parameter(title: "payload")
+    public var payload: String?
+    
+    public init() {}
+    
+    public init(alarmId: String, payload: String? = nil) {
+        self.alarmId = alarmId
+        self.payload = payload
+    }
+    
+    public func perform() async throws -> some IntentResult {
+        // Store payload for JS to retrieve
+        ExpoAlarmKitModule.launchPayload = buildLaunchPayload(alarmId: self.alarmId, payload: self.payload)
+        
+        // Clean up App Group storage
+        ExpoAlarmKitStorage.removeAlarm(id: self.alarmId)
+        ExpoAlarmKitStorage.removeLaunchAppOnDismiss(alarmId: self.alarmId)
+        
+        return .result()
+    }
+}
+
+// MARK: - App Intent for Alarm Dismissal (With App Launch)
+public struct AlarmDismissIntentWithLaunch: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Dismiss Alarm"
+    public static var description = IntentDescription("Handles alarm dismissal and opens app")
+    public static var openAppWhenRun: Bool = true
+    
+    @Parameter(title: "alarmId")
+    public var alarmId: String
+    
+    @Parameter(title: "payload")
+    public var payload: String?
+    
+    public init() {}
+    
+    public init(alarmId: String, payload: String? = nil) {
+        self.alarmId = alarmId
+        self.payload = payload
+    }
+    
+    public func perform() async throws -> some IntentResult {
+        // Store payload for JS to retrieve
+        ExpoAlarmKitModule.launchPayload = buildLaunchPayload(alarmId: self.alarmId, payload: self.payload)
+        
+        // Clean up App Group storage
+        ExpoAlarmKitStorage.removeAlarm(id: self.alarmId)
+        ExpoAlarmKitStorage.removeLaunchAppOnDismiss(alarmId: self.alarmId)
+        
+        return .result()
+    }
+}
+
+// MARK: - App Intent for Alarm Snooze (No App Launch)
+public struct AlarmSnoozeIntent: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Snooze Alarm"
+    public static var description = IntentDescription("Handles alarm snooze")
+    public static var openAppWhenRun: Bool = false
+    
+    @Parameter(title: "alarmId")
+    public var alarmId: String
+    
+    @Parameter(title: "payload")
+    public var payload: String?
+    
+    public init() {}
+    
+    public init(alarmId: String, payload: String? = nil) {
+        self.alarmId = alarmId
+        self.payload = payload
+    }
+    
+    public func perform() async throws -> some IntentResult {
+        ExpoAlarmKitModule.launchPayload = buildLaunchPayload(alarmId: self.alarmId, payload: self.payload)
+        return .result()
+    }
+}
+
+// MARK: - App Intent for Alarm Snooze (With App Launch)
+public struct AlarmSnoozeIntentWithLaunch: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Snooze Alarm"
+    public static var description = IntentDescription("Handles alarm snooze and opens app")
+    public static var openAppWhenRun: Bool = true
+    
+    @Parameter(title: "alarmId")
+    public var alarmId: String
+    
+    @Parameter(title: "payload")
+    public var payload: String?
+    
+    public init() {}
+    
+    public init(alarmId: String, payload: String? = nil) {
+        self.alarmId = alarmId
+        self.payload = payload
+    }
+    
+    public func perform() async throws -> some IntentResult {
+        ExpoAlarmKitModule.launchPayload = buildLaunchPayload(alarmId: self.alarmId, payload: self.payload)
+        return .result()
+    }
+}
+
 // MARK: - Expo Module
-@available(iOS 26.0, *)
 public class ExpoAlarmKitModule: Module {
     // Static payload for app launch detection
     public static var launchPayload: [String: Any]? = nil
@@ -273,14 +381,30 @@ public class ExpoAlarmKitModule: Module {
                 alarmSound = .default
             }
             
-            // Note: stopIntent/secondaryIntent omitted — AppIntents/LiveActivityIntent
-            // removed entirely for App Store compatibility (system stop button is automatic)
+            // Choose the appropriate intent based on launchAppOnDismiss
+            // AlarmDismissIntentWithLaunch sets openAppWhenRun=true, AlarmDismissIntent sets it to false
+            let stopIntent: any LiveActivityIntent = launchAppOnDismiss
+                ? AlarmDismissIntentWithLaunch(alarmId: options.id, payload: options.dismissPayload)
+                : AlarmDismissIntent(alarmId: options.id, payload: options.dismissPayload)
+            
+            let secondaryIntent: (any LiveActivityIntent)?
+            if doSnoozeIntent {
+                if launchAppOnSnooze {
+                    secondaryIntent = AlarmSnoozeIntentWithLaunch(alarmId: options.id, payload: options.snoozePayload)
+                } else {
+                    secondaryIntent = AlarmSnoozeIntent(alarmId: options.id, payload: options.snoozePayload)
+                }
+            } else {
+                secondaryIntent = nil
+            }
             
             // Create configuration
             let config = AlarmManager.AlarmConfiguration<Meta>(
                 countdownDuration: countdownDuration,
                 schedule: .fixed(date),
                 attributes: attributes,
+                stopIntent: stopIntent,
+                secondaryIntent: secondaryIntent,
                 sound: alarmSound
             )
             
@@ -377,14 +501,30 @@ public class ExpoAlarmKitModule: Module {
                 alarmSound = .default
             }
             
-            // Note: stopIntent/secondaryIntent omitted — AppIntents/LiveActivityIntent
-            // removed entirely for App Store compatibility (system stop button is automatic)
+            // Choose the appropriate intent based on launchAppOnDismiss
+            // AlarmDismissIntentWithLaunch sets openAppWhenRun=true, AlarmDismissIntent sets it to false
+            let stopIntent: any LiveActivityIntent = launchAppOnDismiss
+                ? AlarmDismissIntentWithLaunch(alarmId: options.id, payload: options.dismissPayload)
+                : AlarmDismissIntent(alarmId: options.id, payload: options.dismissPayload)
+            
+            let secondaryIntent: (any LiveActivityIntent)?
+            if doSnoozeIntent {
+                if launchAppOnSnooze {
+                    secondaryIntent = AlarmSnoozeIntentWithLaunch(alarmId: options.id, payload: options.snoozePayload)
+                } else {
+                    secondaryIntent = AlarmSnoozeIntent(alarmId: options.id, payload: options.snoozePayload)
+                }
+            } else {
+                secondaryIntent = nil
+            }
             
             // Create configuration with relative schedule
             let config = AlarmManager.AlarmConfiguration<Meta>(
                 countdownDuration: countdownDuration,
                 schedule: schedule,
                 attributes: attributes,
+                stopIntent: stopIntent,
+                secondaryIntent: secondaryIntent,
                 sound: alarmSound
             )
             
@@ -457,13 +597,16 @@ public class ExpoAlarmKitModule: Module {
                 alarmSound = .default
             }
             
-            // Note: stopIntent omitted — AppIntents/LiveActivityIntent removed entirely
-            // for App Store compatibility (system stop button is automatic)
+            // Choose intent based on launchAppOnDismiss
+            let stopIntent: any LiveActivityIntent = launchAppOnDismiss
+                ? AlarmDismissIntentWithLaunch(alarmId: options.id, payload: options.dismissPayload)
+                : AlarmDismissIntent(alarmId: options.id, payload: options.dismissPayload)
             
             // Create timer configuration
             let config = AlarmManager.AlarmConfiguration<Meta>.timer(
                 duration: options.duration,
                 attributes: attributes,
+                stopIntent: stopIntent,
                 sound: alarmSound
             )
             
