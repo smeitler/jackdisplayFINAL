@@ -45,7 +45,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    buildNumber: "10046",
+    buildNumber: "10047",
     usesAppleSignIn: true,
     // Time Sensitive Notifications entitlement — required for the "Alarms" toggle
     // to appear in iOS Settings → Jack → Notifications.
@@ -222,7 +222,7 @@ const config: ExpoConfig = {
       {
         ios: {
           // AlarmKit requires iOS 26.0+
-          deploymentTarget: "26.0",
+          deploymentTarget: "26.1",
         },
         android: {
           buildArchs: ["armeabi-v7a", "arm64-v8a"],
